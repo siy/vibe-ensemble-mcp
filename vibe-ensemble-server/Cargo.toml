@@ -1,0 +1,27 @@
+[package]
+name = "vibe-ensemble-server"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "Main server application for Vibe Ensemble MCP"
+rust-version.workspace = true
+
+[[bin]]
+name = "vibe-ensemble-server"
+path = "src/main.rs"
+
+[dependencies]
+vibe-ensemble-core = { path = "../vibe-ensemble-core" }
+vibe-ensemble-mcp = { path = "../vibe-ensemble-mcp" }
+vibe-ensemble-storage = { path = "../vibe-ensemble-storage" }
+vibe-ensemble-web = { path = "../vibe-ensemble-web" }
+vibe-ensemble-prompts = { path = "../vibe-ensemble-prompts" }
+tokio = { workspace = true }
+serde = { workspace = true }
+config = { workspace = true }
+tracing = { workspace = true }
+tracing-subscriber = { workspace = true }
+anyhow = { workspace = true }
+thiserror = { workspace = true }

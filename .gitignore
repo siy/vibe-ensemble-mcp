@@ -1,0 +1,29 @@
+# Rust build artifacts
+/target/
+debug/
+release/
+
+# Lock file (some projects prefer to track this, but for libraries it's often ignored)
+Cargo.lock
+
+# Editor files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Local environment files
+.env
+.env.local
+
+# Database files
+*.db
+*.db-journal
+
+# Log files
+*.log
