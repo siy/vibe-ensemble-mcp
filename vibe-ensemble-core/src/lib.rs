@@ -65,13 +65,16 @@
 //! 
 //! # Features
 //! 
-//! - **Comprehensive Validation**: All models include thorough input validation with detailed error messages
-//! - **Builder Patterns**: Fluent builder APIs for easy and safe model construction
-//! - **Serialization**: All models support JSON serialization via serde
-//! - **Versioning**: Models like Knowledge and SystemPrompt support versioning for change tracking
-//! - **State Management**: Issue and Agent models include proper state transition validation
-//! - **Access Control**: Knowledge models support role-based access control
-//! - **Relationships**: Models can reference each other through UUIDs and maintain relationships
+//! - **Comprehensive Validation**: All models include thorough input validation with detailed error messages and constraint checking
+//! - **Builder Patterns**: Fluent builder APIs for easy and safe model construction with validation at build time
+//! - **Serialization**: All models support JSON serialization via serde with proper field naming
+//! - **Versioning**: Models like Knowledge and SystemPrompt support versioning for change tracking and history
+//! - **State Management**: Issue and Agent models include proper state transition validation with business logic enforcement
+//! - **Access Control**: Knowledge models support role-based access control with public, team, and private access levels
+//! - **Relationships**: Models can reference each other through UUIDs and maintain typed relationships
+//! - **Error Handling**: Rich error types with categorization, recoverability flags, and detailed context
+//! - **Test Coverage**: Comprehensive unit tests covering all validation scenarios, edge cases, and operations
+//! - **Documentation**: Complete API documentation with usage examples and best practices
 //! 
 //! [Agent]: agent::Agent
 //! [Issue]: issue::Issue  
