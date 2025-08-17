@@ -1,6 +1,6 @@
 //! Storage manager for coordinating database operations
 
-use crate::{repositories::*, Error, Result};
+use crate::{migrations::Migrations, repositories::*, Error, Result};
 use sqlx::{Pool, Sqlite, SqlitePool};
 use std::sync::Arc;
 use tracing::{info, warn};
@@ -21,15 +21,16 @@ pub struct StorageManager {
     messages: Arc<MessageRepository>,
     knowledge: Arc<KnowledgeRepository>,
     prompts: Arc<PromptRepository>,
+    templates: Arc<TemplateRepository>,
 }
 
 impl StorageManager {
     /// Create a new storage manager
     pub async fn new(config: &DatabaseConfig) -> Result<Self> {
         info!("Connecting to database: {}", config.url);
-        
+
         let pool = SqlitePool::connect(&config.url).await?;
-        
+
         info!("Database connection established");
 
         // Create repositories
@@ -38,28 +39,44 @@ impl StorageManager {
         let messages = Arc::new(MessageRepository::new(pool.clone()));
         let knowledge = Arc::new(KnowledgeRepository::new(pool.clone()));
         let prompts = Arc::new(PromptRepository::new(pool.clone()));
+        let templates = Arc::new(TemplateRepository::new(pool.clone()));
 
-        Ok(Self {
+        let manager = Self {
             pool,
             agents,
             issues,
             messages,
             knowledge,
             prompts,
-        })
+            templates,
+        };
+
+        // Run migrations if configured to do so
+        if config.migrate_on_startup {
+            manager.migrate().await?;
+        }
+
+        Ok(manager)
     }
 
     /// Run database migrations
     pub async fn migrate(&self) -> Result<()> {
-        info!("Running database migrations");
-        
-        sqlx::migrate!("./migrations")
-            .run(&self.pool)
-            .await
-            .map_err(|e| Error::Migration(e.to_string()))?;
-        
-        info!("Database migrations completed successfully");
-        Ok(())
+        Migrations::run(&self.pool).await
+    }
+
+    /// Check if migrations are needed
+    pub async fn needs_migration(&self) -> Result<bool> {
+        Migrations::needs_migration(&self.pool).await
+    }
+
+    /// Verify database schema integrity
+    pub async fn verify_schema(&self) -> Result<()> {
+        Migrations::verify_schema(&self.pool).await
+    }
+
+    /// Initialize empty database (useful for testing)
+    pub async fn initialize_empty_db(&self) -> Result<()> {
+        Migrations::initialize_empty_db(&self.pool).await
     }
 
     /// Get agent repository
@@ -87,6 +104,11 @@ impl StorageManager {
         self.prompts.clone()
     }
 
+    /// Get template repository
+    pub fn templates(&self) -> Arc<TemplateRepository> {
+        self.templates.clone()
+    }
+
     /// Check database health
     pub async fn health_check(&self) -> Result<()> {
         sqlx::query("SELECT 1")
@@ -103,6 +125,7 @@ impl StorageManager {
         let messages_count = self.messages.count().await?;
         let knowledge_count = self.knowledge.count().await?;
         let prompts_count = self.prompts.count().await?;
+        let templates_count = self.templates.count().await?;
 
         Ok(DatabaseStats {
             agents_count,
@@ -110,6 +133,7 @@ impl StorageManager {
             messages_count,
             knowledge_count,
             prompts_count,
+            templates_count,
         })
     }
 }
@@ -122,4 +146,5 @@ pub struct DatabaseStats {
     pub messages_count: i64,
     pub knowledge_count: i64,
     pub prompts_count: i64,
+    pub templates_count: i64,
 }
