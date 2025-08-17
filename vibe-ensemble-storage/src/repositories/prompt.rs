@@ -1,6 +1,6 @@
 //! Prompt repository implementation
 
-use crate::{Error, Result};
+use crate::Result;
 use sqlx::{Pool, Sqlite};
 use uuid::Uuid;
 use vibe_ensemble_core::prompt::{PromptType, SystemPrompt};

@@ -1,9 +1,9 @@
 //! Message repository implementation
 
-use crate::{Error, Result};
+use crate::Result;
 use sqlx::{Pool, Sqlite};
 use uuid::Uuid;
-use vibe_ensemble_core::message::{Message, MessageMetadata, MessagePriority, MessageType};
+use vibe_ensemble_core::message::Message;
 
 /// Repository for message entities
 pub struct MessageRepository {

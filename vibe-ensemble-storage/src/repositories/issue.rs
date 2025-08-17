@@ -1,9 +1,9 @@
 //! Issue repository implementation
 
-use crate::{Error, Result};
+use crate::Result;
 use sqlx::{Pool, Sqlite};
 use uuid::Uuid;
-use vibe_ensemble_core::issue::{Issue, IssuePriority, IssueStatus};
+use vibe_ensemble_core::issue::Issue;
 
 /// Repository for issue entities
 pub struct IssueRepository {

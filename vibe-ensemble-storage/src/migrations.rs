@@ -2,7 +2,7 @@
 
 use crate::{Error, Result};
 use sqlx::{Pool, Sqlite};
-use tracing::{info, warn};
+use tracing::info;
 
 /// Migration utilities and helpers
 pub struct Migrations;
