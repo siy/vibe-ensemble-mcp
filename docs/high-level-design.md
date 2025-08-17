@@ -12,7 +12,11 @@ The MCP server architecture comprises five primary subsystems working in concert
 
 ### Agent Hierarchy with Configuration Management
 
-The coordinator agent, specifically configured as a Claude Code Team Coordinator, serves as the primary interface between the human user and the worker ecosystem. This coordinator maintains global context, performs strategic planning, manages resource allocation across workers, and serves as the central repository for organizational knowledge and development standards. Worker agents execute individual tasks autonomously while contributing to and consuming shared knowledge repositories, reporting progress, and escalating issues requiring coordination or user input. All agents connect to the same MCP server instance, ensuring unified state management, communication pathways, and access to organizational knowledge assets.
+The coordinator agent, specifically configured as a Claude Code Team Coordinator, serves as the primary interface between the human user and the worker ecosystem. This coordinator maintains global context, performs strategic planning, manages resource allocation across workers, and serves as the central repository for organizational knowledge and development standards. 
+
+Worker agents execute individual tasks autonomously while contributing to and consuming shared knowledge repositories, reporting progress, and escalating issues requiring coordination or user input. **Workers can work on one or more projects in parallel**, enabling efficient resource utilization and cross-project knowledge sharing. **Workers working on the same project use git worktrees** to maintain separate working directories for different branches while sharing the same repository, ensuring clean isolation of concurrent development efforts without the overhead of multiple repository clones.
+
+All agents connect to the same MCP server instance, ensuring unified state management, communication pathways, and access to organizational knowledge assets.
 
 ## Enhanced MCP Server Capabilities
 
