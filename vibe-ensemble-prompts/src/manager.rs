@@ -131,37 +131,35 @@ impl PromptManager {
         );
 
         // Add variables to prompts
-        let mut coordinator_with_vars = coordinator_prompt;
-        coordinator_with_vars.add_variable(PromptVariable {
-            name: "agent_name".to_string(),
-            description: "Name of the agent".to_string(),
-            variable_type: VariableType::String,
-            default_value: Some("Coordinator".to_string()),
-            required: true,
-        });
-        coordinator_with_vars.add_variable(PromptVariable {
-            name: "team_size".to_string(),
-            description: "Number of agents in the team".to_string(),
-            variable_type: VariableType::Number,
-            default_value: Some("1".to_string()),
-            required: false,
-        });
+        let mut coordinator_with_vars = coordinator_prompt?;
+        coordinator_with_vars.add_variable(PromptVariable::new(
+            "agent_name".to_string(),
+            "Name of the agent".to_string(),
+            VariableType::String,
+            true,
+        ).unwrap().with_default_value("Coordinator".to_string()))?;
+        coordinator_with_vars.add_variable(PromptVariable::new(
+            "team_size".to_string(),
+            "Number of agents in the team".to_string(),
+            VariableType::Number,
+            false,
+        ).unwrap().with_default_value("1".to_string()))?;
 
-        let mut worker_with_vars = worker_prompt;
-        worker_with_vars.add_variable(PromptVariable {
-            name: "agent_name".to_string(),
-            description: "Name of the agent".to_string(),
-            variable_type: VariableType::String,
-            default_value: Some("Worker".to_string()),
-            required: true,
-        });
-        worker_with_vars.add_variable(PromptVariable {
-            name: "specialization".to_string(),
-            description: "Agent's area of specialization".to_string(),
-            variable_type: VariableType::String,
-            default_value: Some("General".to_string()),
-            required: false,
-        });
+        let mut worker_with_vars = worker_prompt?;
+        worker_with_vars.add_variable(PromptVariable::new(
+            "agent_name".to_string(),
+            "Name of the agent".to_string(),
+            VariableType::String,
+            true,
+        ).unwrap().with_default_value("Worker".to_string()))?;
+        worker_with_vars.add_variable(PromptVariable::new(
+            "specialization".to_string(),
+            "Agent's area of specialization".to_string(),
+            VariableType::String,
+            false,
+        ).unwrap().with_default_value("General".to_string()))?;
+
+        let universal_prompt = universal_prompt?;
 
         // Create prompts in storage
         self.storage.prompts().create(&coordinator_with_vars).await?;
