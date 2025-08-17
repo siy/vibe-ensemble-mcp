@@ -27,3 +27,8 @@ Thumbs.db
 
 # Log files
 *.log
+
+.claude/
+CLAUDE.md
+code-review-*.md
+
