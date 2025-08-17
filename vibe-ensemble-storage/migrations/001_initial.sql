@@ -59,7 +59,7 @@ CREATE TABLE IF NOT EXISTS knowledge (
 -- System prompts table
 CREATE TABLE IF NOT EXISTS system_prompts (
     id TEXT PRIMARY KEY,
-    name TEXT NOT NULL,
+    name TEXT NOT NULL UNIQUE,
     description TEXT NOT NULL,
     template TEXT NOT NULL,
     prompt_type TEXT NOT NULL,
@@ -67,21 +67,51 @@ CREATE TABLE IF NOT EXISTS system_prompts (
     created_by TEXT NOT NULL,
     created_at TEXT NOT NULL,
     updated_at TEXT NOT NULL,
-    version INTEGER NOT NULL,
-    is_active BOOLEAN NOT NULL,
+    version INTEGER NOT NULL DEFAULT 1,
+    is_active BOOLEAN NOT NULL DEFAULT 1,
     FOREIGN KEY (created_by) REFERENCES agents(id)
+);
+
+-- Agent templates table
+CREATE TABLE IF NOT EXISTS agent_templates (
+    id TEXT PRIMARY KEY,
+    name TEXT NOT NULL UNIQUE,
+    description TEXT NOT NULL,
+    agent_type TEXT NOT NULL,
+    capabilities TEXT NOT NULL,
+    system_prompt_id TEXT,
+    workflow_steps TEXT NOT NULL,
+    configuration_params TEXT NOT NULL,
+    created_by TEXT NOT NULL,
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL,
+    version INTEGER NOT NULL DEFAULT 1,
+    is_active BOOLEAN NOT NULL DEFAULT 1,
+    FOREIGN KEY (created_by) REFERENCES agents(id),
+    FOREIGN KEY (system_prompt_id) REFERENCES system_prompts(id)
 );
 
 -- Indexes for better performance
 CREATE INDEX IF NOT EXISTS idx_agents_status ON agents(status);
 CREATE INDEX IF NOT EXISTS idx_agents_type ON agents(agent_type);
+CREATE INDEX IF NOT EXISTS idx_agents_last_seen ON agents(last_seen);
 CREATE INDEX IF NOT EXISTS idx_issues_status ON issues(status);
 CREATE INDEX IF NOT EXISTS idx_issues_priority ON issues(priority);
 CREATE INDEX IF NOT EXISTS idx_issues_assigned ON issues(assigned_agent_id);
+CREATE INDEX IF NOT EXISTS idx_issues_created ON issues(created_at);
 CREATE INDEX IF NOT EXISTS idx_messages_sender ON messages(sender_id);
 CREATE INDEX IF NOT EXISTS idx_messages_recipient ON messages(recipient_id);
 CREATE INDEX IF NOT EXISTS idx_messages_created ON messages(created_at);
+CREATE INDEX IF NOT EXISTS idx_messages_type ON messages(message_type);
 CREATE INDEX IF NOT EXISTS idx_knowledge_type ON knowledge(knowledge_type);
 CREATE INDEX IF NOT EXISTS idx_knowledge_created_by ON knowledge(created_by);
+CREATE INDEX IF NOT EXISTS idx_knowledge_access_level ON knowledge(access_level);
+CREATE INDEX IF NOT EXISTS idx_knowledge_created ON knowledge(created_at);
 CREATE INDEX IF NOT EXISTS idx_prompts_type ON system_prompts(prompt_type);
 CREATE INDEX IF NOT EXISTS idx_prompts_active ON system_prompts(is_active);
+CREATE INDEX IF NOT EXISTS idx_prompts_name ON system_prompts(name);
+CREATE INDEX IF NOT EXISTS idx_templates_type ON agent_templates(agent_type);
+CREATE INDEX IF NOT EXISTS idx_templates_active ON agent_templates(is_active);
+CREATE INDEX IF NOT EXISTS idx_templates_name ON agent_templates(name);
+CREATE INDEX IF NOT EXISTS idx_templates_prompt ON agent_templates(system_prompt_id);
+CREATE INDEX IF NOT EXISTS idx_templates_created_by ON agent_templates(created_by);
