@@ -1,50 +1,94 @@
 //! MCP protocol message definitions and handling
+//!
+//! This module provides the core MCP protocol types and message handling 
+//! based on JSON-RPC 2.0 specification, compliant with MCP 2024-11-05.
 
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
-/// MCP protocol version
-pub const MCP_VERSION: &str = "1.0.0";
+/// MCP protocol version supported by this implementation
+pub const MCP_VERSION: &str = "2024-11-05";
 
-/// Base MCP message structure
+/// JSON-RPC 2.0 message types for MCP
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct McpMessage {
-    pub id: Uuid,
+#[serde(untagged)]
+pub enum JsonRpcMessage {
+    Request(JsonRpcRequest),
+    Response(JsonRpcResponse),
+    Notification(JsonRpcNotification),
+}
+
+/// JSON-RPC 2.0 request message
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct JsonRpcRequest {
+    pub jsonrpc: String,
+    pub id: serde_json::Value,
     pub method: String,
-    pub params: serde_json::Value,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub params: Option<serde_json::Value>,
+}
+
+/// JSON-RPC 2.0 response message
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct JsonRpcResponse {
+    pub jsonrpc: String,
+    pub id: serde_json::Value,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub result: Option<serde_json::Value>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub error: Option<McpError>,
+    pub error: Option<JsonRpcError>,
 }
 
-/// MCP error structure
+/// JSON-RPC 2.0 notification message (no response expected)
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct McpError {
+pub struct JsonRpcNotification {
+    pub jsonrpc: String,
+    pub method: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub params: Option<serde_json::Value>,
+}
+
+/// JSON-RPC 2.0 error object
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct JsonRpcError {
     pub code: i32,
     pub message: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub data: Option<serde_json::Value>,
 }
 
-/// Standard MCP methods
+/// MCP specific method names
 pub mod methods {
+    // Standard MCP protocol methods
     pub const INITIALIZE: &str = "initialize";
     pub const INITIALIZED: &str = "initialized";
     pub const PING: &str = "ping";
-    pub const PONG: &str = "pong";
-    pub const AGENT_REGISTER: &str = "agent/register";
-    pub const AGENT_STATUS: &str = "agent/status";
-    pub const ISSUE_CREATE: &str = "issue/create";
-    pub const ISSUE_UPDATE: &str = "issue/update";
-    pub const MESSAGE_SEND: &str = "message/send";
-    pub const KNOWLEDGE_QUERY: &str = "knowledge/query";
+    pub const LIST_TOOLS: &str = "tools/list";
+    pub const CALL_TOOL: &str = "tools/call";
+    pub const LIST_RESOURCES: &str = "resources/list";
+    pub const GET_RESOURCE: &str = "resources/get";
+    pub const LIST_PROMPTS: &str = "prompts/list";
+    pub const GET_PROMPT: &str = "prompts/get";
+    
+    // Vibe Ensemble extensions
+    pub const AGENT_REGISTER: &str = "vibe/agent/register";
+    pub const AGENT_STATUS: &str = "vibe/agent/status";
+    pub const AGENT_CAPABILITIES: &str = "vibe/agent/capabilities";
+    pub const ISSUE_CREATE: &str = "vibe/issue/create";
+    pub const ISSUE_UPDATE: &str = "vibe/issue/update";
+    pub const ISSUE_LIST: &str = "vibe/issue/list";
+    pub const MESSAGE_SEND: &str = "vibe/message/send";
+    pub const MESSAGE_BROADCAST: &str = "vibe/message/broadcast";
+    pub const KNOWLEDGE_QUERY: &str = "vibe/knowledge/query";
+    pub const KNOWLEDGE_SUBMIT: &str = "vibe/knowledge/submit";
 }
 
-/// Initialization parameters
+/// MCP initialization parameters
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct InitializeParams {
+    #[serde(rename = "protocolVersion")]
     pub protocol_version: String,
+    #[serde(rename = "clientInfo")]
     pub client_info: ClientInfo,
     pub capabilities: ClientCapabilities,
 }
@@ -56,56 +100,202 @@ pub struct ClientInfo {
     pub version: String,
 }
 
-/// Client capabilities
+/// Client capabilities for MCP
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ClientCapabilities {
-    pub agent_management: bool,
-    pub issue_tracking: bool,
-    pub messaging: bool,
-    pub knowledge_access: bool,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub experimental: Option<serde_json::Value>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub sampling: Option<serde_json::Value>,
 }
 
-impl McpMessage {
-    /// Create a new request message
-    pub fn new_request(method: String, params: serde_json::Value) -> Self {
+/// MCP initialization result
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct InitializeResult {
+    #[serde(rename = "protocolVersion")]
+    pub protocol_version: String,
+    #[serde(rename = "serverInfo")]
+    pub server_info: ServerInfo,
+    pub capabilities: ServerCapabilities,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub instructions: Option<String>,
+}
+
+/// Server information
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ServerInfo {
+    pub name: String,
+    pub version: String,
+}
+
+/// Server capabilities for MCP with Vibe Ensemble extensions
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ServerCapabilities {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub experimental: Option<serde_json::Value>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub logging: Option<serde_json::Value>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub prompts: Option<PromptsCapability>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub resources: Option<ResourcesCapability>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub tools: Option<ToolsCapability>,
+    
+    // Vibe Ensemble specific capabilities
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub vibe_agent_management: Option<bool>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub vibe_issue_tracking: Option<bool>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub vibe_messaging: Option<bool>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub vibe_knowledge_management: Option<bool>,
+}
+
+/// Prompts capability
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PromptsCapability {
+    #[serde(rename = "listChanged")]
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub list_changed: Option<bool>,
+}
+
+/// Resources capability
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ResourcesCapability {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub subscribe: Option<bool>,
+    #[serde(rename = "listChanged")]
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub list_changed: Option<bool>,
+}
+
+/// Tools capability
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ToolsCapability {
+    #[serde(rename = "listChanged")]
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub list_changed: Option<bool>,
+}
+
+/// Agent registration parameters for Vibe Ensemble
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AgentRegisterParams {
+    pub name: String,
+    #[serde(rename = "agentType")]
+    pub agent_type: String,
+    pub capabilities: Vec<String>,
+    #[serde(rename = "connectionMetadata")]
+    pub connection_metadata: serde_json::Value,
+}
+
+/// Agent registration result
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AgentRegisterResult {
+    #[serde(rename = "agentId")]
+    pub agent_id: Uuid,
+    pub status: String,
+    #[serde(rename = "assignedResources")]
+    pub assigned_resources: Vec<String>,
+}
+
+impl JsonRpcRequest {
+    /// Create a new JSON-RPC request
+    pub fn new(method: &str, params: Option<serde_json::Value>) -> Self {
         Self {
-            id: Uuid::new_v4(),
-            method,
+            jsonrpc: "2.0".to_string(),
+            id: serde_json::Value::String(Uuid::new_v4().to_string()),
+            method: method.to_string(),
             params,
-            result: None,
-            error: None,
         }
     }
-
-    /// Create a new response message
-    pub fn new_response(id: Uuid, result: serde_json::Value) -> Self {
+    
+    /// Create a new JSON-RPC request with specific ID
+    pub fn new_with_id(id: serde_json::Value, method: &str, params: Option<serde_json::Value>) -> Self {
         Self {
+            jsonrpc: "2.0".to_string(),
             id,
-            method: String::new(),
-            params: serde_json::Value::Null,
+            method: method.to_string(),
+            params,
+        }
+    }
+}
+
+impl JsonRpcResponse {
+    /// Create a successful response
+    pub fn success(id: serde_json::Value, result: serde_json::Value) -> Self {
+        Self {
+            jsonrpc: "2.0".to_string(),
+            id,
             result: Some(result),
             error: None,
         }
     }
-
-    /// Create a new error response
-    pub fn new_error(id: Uuid, error: McpError) -> Self {
+    
+    /// Create an error response
+    pub fn error(id: serde_json::Value, error: JsonRpcError) -> Self {
         Self {
+            jsonrpc: "2.0".to_string(),
             id,
-            method: String::new(),
-            params: serde_json::Value::Null,
             result: None,
             error: Some(error),
         }
     }
+}
 
-    /// Check if this is a request message
-    pub fn is_request(&self) -> bool {
-        !self.method.is_empty() && self.result.is_none() && self.error.is_none()
+impl JsonRpcNotification {
+    /// Create a new notification
+    pub fn new(method: &str, params: Option<serde_json::Value>) -> Self {
+        Self {
+            jsonrpc: "2.0".to_string(),
+            method: method.to_string(),
+            params,
+        }
     }
+}
 
-    /// Check if this is a response message
-    pub fn is_response(&self) -> bool {
-        self.method.is_empty() && (self.result.is_some() || self.error.is_some())
+impl Default for ServerCapabilities {
+    fn default() -> Self {
+        Self {
+            experimental: None,
+            logging: None,
+            prompts: Some(PromptsCapability { list_changed: Some(true) }),
+            resources: Some(ResourcesCapability { 
+                subscribe: Some(true), 
+                list_changed: Some(true) 
+            }),
+            tools: Some(ToolsCapability { list_changed: Some(true) }),
+            vibe_agent_management: Some(true),
+            vibe_issue_tracking: Some(true),
+            vibe_messaging: Some(true),
+            vibe_knowledge_management: Some(true),
+        }
     }
+}
+
+/// Standard JSON-RPC error codes
+pub mod error_codes {
+    /// Parse error - Invalid JSON
+    pub const PARSE_ERROR: i32 = -32700;
+    /// Invalid request - The JSON sent is not a valid Request object
+    pub const INVALID_REQUEST: i32 = -32600;
+    /// Method not found - The method does not exist / is not available
+    pub const METHOD_NOT_FOUND: i32 = -32601;
+    /// Invalid params - Invalid method parameter(s)
+    pub const INVALID_PARAMS: i32 = -32602;
+    /// Internal error - Internal JSON-RPC error
+    pub const INTERNAL_ERROR: i32 = -32603;
+    
+    // Vibe Ensemble specific error codes (starting from -32000)
+    /// Agent registration failed
+    pub const AGENT_REGISTRATION_FAILED: i32 = -32000;
+    /// Agent not found
+    pub const AGENT_NOT_FOUND: i32 = -32001;
+    /// Issue creation failed
+    pub const ISSUE_CREATION_FAILED: i32 = -32002;
+    /// Knowledge access denied
+    pub const KNOWLEDGE_ACCESS_DENIED: i32 = -32003;
+    /// Transport error
+    pub const TRANSPORT_ERROR: i32 = -32004;
 }

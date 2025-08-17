@@ -275,12 +275,10 @@ impl SystemPrompt {
             return false;
         }
 
-        match (&self.prompt_type, agent_type) {
-            (PromptType::Universal, _) => true,
-            (PromptType::Coordinator, crate::agent::AgentType::Coordinator) => true,
-            (PromptType::Worker, crate::agent::AgentType::Worker) => true,
-            _ => false,
-        }
+        matches!((&self.prompt_type, agent_type), 
+            (PromptType::Universal, _) | 
+            (PromptType::Coordinator, crate::agent::AgentType::Coordinator) | 
+            (PromptType::Worker, crate::agent::AgentType::Worker))
     }
 
     /// Render the prompt with provided variable values
@@ -290,14 +288,10 @@ impl SystemPrompt {
         
         // Check for required variables
         for prompt_var in &self.variables {
-            if prompt_var.required {
-                if !variables.contains_key(&prompt_var.name) {
-                    if prompt_var.default_value.is_none() {
-                        return Err(Error::Validation {
-                            message: format!("Required variable '{}' not provided", prompt_var.name),
-                        });
-                    }
-                }
+            if prompt_var.required && !variables.contains_key(&prompt_var.name) && prompt_var.default_value.is_none() {
+                return Err(Error::Validation {
+                    message: format!("Required variable '{}' not provided", prompt_var.name),
+                });
             }
         }
         
