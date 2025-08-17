@@ -54,5 +54,9 @@ tower-http = { version = "0.5", features = ["cors", "trace"] }
 # Templates
 askama = { version = "0.12", features = ["with-axum"] }
 
-# MCP protocol (placeholder - will be replaced with official SDK when available)
-jsonrpc-core = "18.0"
+# MCP protocol - Official Rust SDK
+rmcp = { version = "0.2.0", features = ["server"] }
+
+# WebSocket support
+tokio-tungstenite = "0.21"
+futures-util = "0.3"

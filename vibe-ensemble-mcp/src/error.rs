@@ -23,6 +23,15 @@ pub enum Error {
     #[error("Authentication error: {0}")]
     Authentication(String),
 
+    #[error("Invalid method: {method}")]
+    InvalidMethod { method: String },
+
+    #[error("Invalid parameters: {message}")]
+    InvalidParams { message: String },
+
+    #[error("Timeout error: {0}")]
+    Timeout(String),
+
     #[error("Internal error: {0}")]
     Internal(#[from] anyhow::Error),
 }
