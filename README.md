@@ -160,9 +160,8 @@ cargo test --all
 
 - [High-Level Design](docs/high-level-design.md) - System architecture and design decisions
 - [Implementation Plan](docs/implementation-plan.md) - Detailed development roadmap
-- [API Documentation](docs/api.md) - MCP protocol and REST API reference
-- [Configuration Guide](docs/configuration.md) - Setup and configuration options
-- [Development Guide](docs/development.md) - Contributing and development practices
+- [Git Worktrees Guide](docs/git-worktrees.md) - Parallel development with multiple agents
+- [Contributing Guide](CONTRIBUTING.md) - Development workflow and standards
 
 ## Contributing
 
