@@ -1,0 +1,24 @@
+[package]
+name = "vibe-ensemble-mcp"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "MCP protocol implementation for Vibe Ensemble"
+rust-version.workspace = true
+
+[dependencies]
+vibe-ensemble-core = { path = "../vibe-ensemble-core" }
+tokio = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+uuid = { workspace = true }
+thiserror = { workspace = true }
+anyhow = { workspace = true }
+tracing = { workspace = true }
+axum = { workspace = true }
+tower = { workspace = true }
+jsonrpc-core = { workspace = true }
+async-trait = "0.1"
+chrono = { workspace = true }

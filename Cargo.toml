@@ -1,0 +1,58 @@
+[workspace]
+members = [
+    "vibe-ensemble-core",
+    "vibe-ensemble-mcp",
+    "vibe-ensemble-server",
+    "vibe-ensemble-storage",
+    "vibe-ensemble-web",
+    "vibe-ensemble-prompts",
+]
+resolver = "2"
+
+[workspace.package]
+version = "0.1.0"
+edition = "2021"
+authors = ["Vibe Ensemble Team"]
+license = "MIT"
+repository = "https://github.com/siy/vibe-ensemble-mcp"
+description = "MCP server for coordinating multiple Claude Code instances"
+rust-version = "1.70"
+
+[workspace.dependencies]
+# Async runtime
+tokio = { version = "1.0", features = ["full"] }
+
+# Serialization
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+
+# Unique identifiers
+uuid = { version = "1.0", features = ["v4", "serde"] }
+
+# Time handling
+chrono = { version = "0.4", features = ["serde"] }
+
+# Logging and observability
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter", "json"] }
+
+# Configuration
+config = "0.14"
+
+# Error handling
+anyhow = "1.0"
+thiserror = "1.0"
+
+# Database
+sqlx = { version = "0.7", features = ["runtime-tokio-rustls", "sqlite", "postgres", "chrono", "uuid"] }
+
+# Web framework
+axum = { version = "0.7", features = ["ws", "tokio"] }
+tower = "0.4"
+tower-http = { version = "0.5", features = ["cors", "trace"] }
+
+# Templates
+askama = { version = "0.12", features = ["with-axum"] }
+
+# MCP protocol (placeholder - will be replaced with official SDK when available)
+jsonrpc-core = "18.0"

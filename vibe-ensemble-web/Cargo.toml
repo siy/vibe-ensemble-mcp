@@ -1,0 +1,25 @@
+[package]
+name = "vibe-ensemble-web"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "Web interface for Vibe Ensemble MCP server"
+rust-version.workspace = true
+
+[dependencies]
+vibe-ensemble-core = { path = "../vibe-ensemble-core" }
+vibe-ensemble-storage = { path = "../vibe-ensemble-storage" }
+tokio = { workspace = true }
+axum = { workspace = true }
+tower = { workspace = true }
+tower-http = { workspace = true }
+askama = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+uuid = { workspace = true }
+chrono = { workspace = true }
+thiserror = { workspace = true }
+anyhow = { workspace = true }
+tracing = { workspace = true }
