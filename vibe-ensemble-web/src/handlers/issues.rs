@@ -109,7 +109,7 @@ pub async fn create(
         _ => return Err(Error::BadRequest("Invalid priority".to_string())),
     };
     
-    let issue = Issue::new(form.title, form.description, priority);
+    let issue = Issue::new(form.title, form.description, priority)?;
     storage.issues().create(&issue).await?;
     
     let html = format!(
