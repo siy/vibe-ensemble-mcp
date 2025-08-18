@@ -1064,11 +1064,14 @@ impl AgentService {
                         // TODO: Get actual prompt IDs from prompt service
                         // For now, using different static UUIDs for different capabilities
                         if agent.has_capability("code-review") {
-                            Some(Uuid::parse_str("12345678-1234-5678-9abc-def012345678").unwrap()) // Code review prompt
+                            Some(Uuid::parse_str("12345678-1234-5678-9abc-def012345678").unwrap())
+                        // Code review prompt
                         } else if agent.has_capability("testing") {
-                            Some(Uuid::parse_str("87654321-4321-8765-cba9-fed987654321").unwrap()) // Testing prompt
+                            Some(Uuid::parse_str("87654321-4321-8765-cba9-fed987654321").unwrap())
+                        // Testing prompt
                         } else {
-                            Some(Uuid::parse_str("11111111-2222-3333-4444-555555555555").unwrap()) // General worker prompt
+                            Some(Uuid::parse_str("11111111-2222-3333-4444-555555555555").unwrap())
+                            // General worker prompt
                         }
                     }
                 };

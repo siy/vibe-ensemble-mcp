@@ -2,6 +2,7 @@
 
 pub mod agent;
 pub mod issue;
+pub mod message;
 
 pub use agent::{
     AgentPool, AgentPoolConfig, AgentPoolPerformance, AgentPoolStatistics, AgentPoolStatus,
@@ -10,3 +11,8 @@ pub use agent::{
 };
 
 pub use issue::{AssignmentRecommendation, IssueService, IssueStatistics, WorkflowTransition};
+
+pub use message::{
+    DeliveryStatus, DeliveryStatusType, MessageEvent, MessageEventType, MessageService,
+    MessageStatistics,
+};

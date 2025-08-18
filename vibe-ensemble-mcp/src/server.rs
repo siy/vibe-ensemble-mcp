@@ -11,7 +11,8 @@ use tracing::{debug, error, info, warn};
 use uuid::Uuid;
 use vibe_ensemble_core::agent::{AgentType, ConnectionMetadata};
 use vibe_ensemble_core::issue::{IssuePriority, IssueStatus};
-use vibe_ensemble_storage::services::{AgentService, IssueService};
+use vibe_ensemble_core::message::{MessagePriority, MessageType};
+use vibe_ensemble_storage::services::{AgentService, IssueService, MessageService};
 
 /// MCP server state and connection manager
 #[derive(Clone)]
@@ -24,6 +25,8 @@ pub struct McpServer {
     agent_service: Option<Arc<AgentService>>,
     /// Issue service for managing issues and workflows
     issue_service: Option<Arc<IssueService>>,
+    /// Message service for real-time messaging
+    message_service: Option<Arc<MessageService>>,
 }
 
 /// Client session information
@@ -44,6 +47,7 @@ impl McpServer {
             capabilities: ServerCapabilities::default(),
             agent_service: None,
             issue_service: None,
+            message_service: None,
         }
     }
 
@@ -54,6 +58,7 @@ impl McpServer {
             capabilities,
             agent_service: None,
             issue_service: None,
+            message_service: None,
         }
     }
 
@@ -64,6 +69,7 @@ impl McpServer {
             capabilities: ServerCapabilities::default(),
             agent_service: Some(agent_service),
             issue_service: None,
+            message_service: None,
         }
     }
 
@@ -77,6 +83,7 @@ impl McpServer {
             capabilities,
             agent_service: Some(agent_service),
             issue_service: None,
+            message_service: None,
         }
     }
 
@@ -87,6 +94,7 @@ impl McpServer {
             capabilities: ServerCapabilities::default(),
             agent_service: None,
             issue_service: Some(issue_service),
+            message_service: None,
         }
     }
 
@@ -100,6 +108,7 @@ impl McpServer {
             capabilities: ServerCapabilities::default(),
             agent_service: Some(agent_service),
             issue_service: Some(issue_service),
+            message_service: None,
         }
     }
 
@@ -114,6 +123,49 @@ impl McpServer {
             capabilities,
             agent_service: Some(agent_service),
             issue_service: Some(issue_service),
+            message_service: None,
+        }
+    }
+
+    /// Create a new MCP server with message service integration
+    pub fn new_with_message_service(message_service: Arc<MessageService>) -> Self {
+        Self {
+            clients: Arc::new(RwLock::new(HashMap::new())),
+            capabilities: ServerCapabilities::default(),
+            agent_service: None,
+            issue_service: None,
+            message_service: Some(message_service),
+        }
+    }
+
+    /// Create a new MCP server with all services
+    pub fn new_with_all_services(
+        agent_service: Arc<AgentService>,
+        issue_service: Arc<IssueService>,
+        message_service: Arc<MessageService>,
+    ) -> Self {
+        Self {
+            clients: Arc::new(RwLock::new(HashMap::new())),
+            capabilities: ServerCapabilities::default(),
+            agent_service: Some(agent_service),
+            issue_service: Some(issue_service),
+            message_service: Some(message_service),
+        }
+    }
+
+    /// Create a new MCP server with custom capabilities and all services
+    pub fn new_with_capabilities_and_all_services(
+        capabilities: ServerCapabilities,
+        agent_service: Arc<AgentService>,
+        issue_service: Arc<IssueService>,
+        message_service: Arc<MessageService>,
+    ) -> Self {
+        Self {
+            clients: Arc::new(RwLock::new(HashMap::new())),
+            capabilities,
+            agent_service: Some(agent_service),
+            issue_service: Some(issue_service),
+            message_service: Some(message_service),
         }
     }
 
@@ -161,6 +213,8 @@ impl McpServer {
             methods::ISSUE_CREATE => self.handle_issue_create(request).await,
             methods::ISSUE_UPDATE => self.handle_issue_update(request).await,
             methods::ISSUE_LIST => self.handle_issue_list(request).await,
+            methods::MESSAGE_SEND => self.handle_message_send(request).await,
+            methods::MESSAGE_BROADCAST => self.handle_message_broadcast(request).await,
             methods::KNOWLEDGE_QUERY => self.handle_knowledge_query(request).await,
 
             _ => {
@@ -562,12 +616,13 @@ impl McpServer {
         request: JsonRpcRequest,
     ) -> Result<Option<JsonRpcResponse>> {
         debug!("Handling issue creation request");
-        
-        let issue_service = self.issue_service.as_ref().ok_or_else(|| {
-            Error::Configuration {
+
+        let issue_service = self
+            .issue_service
+            .as_ref()
+            .ok_or_else(|| Error::Configuration {
                 message: "Issue service not configured".to_string(),
-            }
-        })?;
+            })?;
 
         // Parse request parameters
         #[derive(serde::Deserialize)]
@@ -605,7 +660,10 @@ impl McpServer {
         let tags = params.tags.unwrap_or_default();
 
         // Create the issue
-        match issue_service.create_issue(params.title, params.description, priority, tags).await {
+        match issue_service
+            .create_issue(params.title, params.description, priority, tags)
+            .await
+        {
             Ok(issue) => {
                 let result = serde_json::json!({
                     "issue_id": issue.id,
@@ -639,12 +697,13 @@ impl McpServer {
         request: JsonRpcRequest,
     ) -> Result<Option<JsonRpcResponse>> {
         debug!("Handling issue update request");
-        
-        let issue_service = self.issue_service.as_ref().ok_or_else(|| {
-            Error::Configuration {
+
+        let issue_service = self
+            .issue_service
+            .as_ref()
+            .ok_or_else(|| Error::Configuration {
                 message: "Issue service not configured".to_string(),
-            }
-        })?;
+            })?;
 
         // Parse request parameters
         #[derive(serde::Deserialize)]
@@ -693,34 +752,36 @@ impl McpServer {
                         "assigned_agent_id": issue.assigned_agent_id,
                         "status": format!("{:?}", issue.status)
                     }),
-                    Err(e) => return Ok(Some(JsonRpcResponse::error(
-                        request.id,
-                        JsonRpcError {
-                            code: error_codes::INTERNAL_ERROR,
-                            message: format!("Failed to assign issue: {}", e),
-                            data: None,
-                        },
-                    ))),
+                    Err(e) => {
+                        return Ok(Some(JsonRpcResponse::error(
+                            request.id,
+                            JsonRpcError {
+                                code: error_codes::INTERNAL_ERROR,
+                                message: format!("Failed to assign issue: {}", e),
+                                data: None,
+                            },
+                        )))
+                    }
                 }
             }
-            "unassign" => {
-                match issue_service.unassign_issue(issue_id).await {
-                    Ok(issue) => serde_json::json!({
-                        "message": "Issue unassigned successfully",
-                        "issue_id": issue.id,
-                        "assigned_agent_id": issue.assigned_agent_id,
-                        "status": format!("{:?}", issue.status)
-                    }),
-                    Err(e) => return Ok(Some(JsonRpcResponse::error(
+            "unassign" => match issue_service.unassign_issue(issue_id).await {
+                Ok(issue) => serde_json::json!({
+                    "message": "Issue unassigned successfully",
+                    "issue_id": issue.id,
+                    "assigned_agent_id": issue.assigned_agent_id,
+                    "status": format!("{:?}", issue.status)
+                }),
+                Err(e) => {
+                    return Ok(Some(JsonRpcResponse::error(
                         request.id,
                         JsonRpcError {
                             code: error_codes::INTERNAL_ERROR,
                             message: format!("Failed to unassign issue: {}", e),
                             data: None,
                         },
-                    ))),
+                    )))
                 }
-            }
+            },
             "update_priority" => {
                 let priority_str = params.priority.ok_or_else(|| Error::Protocol {
                     message: "Missing priority for priority update".to_string(),
@@ -730,9 +791,11 @@ impl McpServer {
                     "Medium" => IssuePriority::Medium,
                     "High" => IssuePriority::High,
                     "Critical" => IssuePriority::Critical,
-                    _ => return Err(Error::Protocol {
-                        message: format!("Invalid priority: {}", priority_str),
-                    }),
+                    _ => {
+                        return Err(Error::Protocol {
+                            message: format!("Invalid priority: {}", priority_str),
+                        })
+                    }
                 };
                 match issue_service.update_priority(issue_id, priority).await {
                     Ok(issue) => serde_json::json!({
@@ -740,14 +803,16 @@ impl McpServer {
                         "issue_id": issue.id,
                         "priority": format!("{:?}", issue.priority)
                     }),
-                    Err(e) => return Ok(Some(JsonRpcResponse::error(
-                        request.id,
-                        JsonRpcError {
-                            code: error_codes::INTERNAL_ERROR,
-                            message: format!("Failed to update priority: {}", e),
-                            data: None,
-                        },
-                    ))),
+                    Err(e) => {
+                        return Ok(Some(JsonRpcResponse::error(
+                            request.id,
+                            JsonRpcError {
+                                code: error_codes::INTERNAL_ERROR,
+                                message: format!("Failed to update priority: {}", e),
+                                data: None,
+                            },
+                        )))
+                    }
                 }
             }
             "block" => {
@@ -763,69 +828,71 @@ impl McpServer {
                             other => format!("{:?}", other),
                         }
                     }),
-                    Err(e) => return Ok(Some(JsonRpcResponse::error(
-                        request.id,
-                        JsonRpcError {
-                            code: error_codes::INTERNAL_ERROR,
-                            message: format!("Failed to block issue: {}", e),
-                            data: None,
-                        },
-                    ))),
+                    Err(e) => {
+                        return Ok(Some(JsonRpcResponse::error(
+                            request.id,
+                            JsonRpcError {
+                                code: error_codes::INTERNAL_ERROR,
+                                message: format!("Failed to block issue: {}", e),
+                                data: None,
+                            },
+                        )))
+                    }
                 }
             }
-            "unblock" => {
-                match issue_service.unblock_issue(issue_id).await {
-                    Ok(issue) => serde_json::json!({
-                        "message": "Issue unblocked successfully",
-                        "issue_id": issue.id,
-                        "status": format!("{:?}", issue.status)
-                    }),
-                    Err(e) => return Ok(Some(JsonRpcResponse::error(
+            "unblock" => match issue_service.unblock_issue(issue_id).await {
+                Ok(issue) => serde_json::json!({
+                    "message": "Issue unblocked successfully",
+                    "issue_id": issue.id,
+                    "status": format!("{:?}", issue.status)
+                }),
+                Err(e) => {
+                    return Ok(Some(JsonRpcResponse::error(
                         request.id,
                         JsonRpcError {
                             code: error_codes::INTERNAL_ERROR,
                             message: format!("Failed to unblock issue: {}", e),
                             data: None,
                         },
-                    ))),
+                    )))
                 }
-            }
-            "resolve" => {
-                match issue_service.resolve_issue(issue_id).await {
-                    Ok(issue) => serde_json::json!({
-                        "message": "Issue resolved successfully",
-                        "issue_id": issue.id,
-                        "status": format!("{:?}", issue.status),
-                        "resolved_at": issue.resolved_at
-                    }),
-                    Err(e) => return Ok(Some(JsonRpcResponse::error(
+            },
+            "resolve" => match issue_service.resolve_issue(issue_id).await {
+                Ok(issue) => serde_json::json!({
+                    "message": "Issue resolved successfully",
+                    "issue_id": issue.id,
+                    "status": format!("{:?}", issue.status),
+                    "resolved_at": issue.resolved_at
+                }),
+                Err(e) => {
+                    return Ok(Some(JsonRpcResponse::error(
                         request.id,
                         JsonRpcError {
                             code: error_codes::INTERNAL_ERROR,
                             message: format!("Failed to resolve issue: {}", e),
                             data: None,
                         },
-                    ))),
+                    )))
                 }
-            }
-            "close" => {
-                match issue_service.close_issue(issue_id).await {
-                    Ok(issue) => serde_json::json!({
-                        "message": "Issue closed successfully",
-                        "issue_id": issue.id,
-                        "status": format!("{:?}", issue.status),
-                        "resolved_at": issue.resolved_at
-                    }),
-                    Err(e) => return Ok(Some(JsonRpcResponse::error(
+            },
+            "close" => match issue_service.close_issue(issue_id).await {
+                Ok(issue) => serde_json::json!({
+                    "message": "Issue closed successfully",
+                    "issue_id": issue.id,
+                    "status": format!("{:?}", issue.status),
+                    "resolved_at": issue.resolved_at
+                }),
+                Err(e) => {
+                    return Ok(Some(JsonRpcResponse::error(
                         request.id,
                         JsonRpcError {
                             code: error_codes::INTERNAL_ERROR,
                             message: format!("Failed to close issue: {}", e),
                             data: None,
                         },
-                    ))),
+                    )))
                 }
-            }
+            },
             "add_tag" => {
                 let tag = params.add_tag.ok_or_else(|| Error::Protocol {
                     message: "Missing tag to add".to_string(),
@@ -836,14 +903,16 @@ impl McpServer {
                         "issue_id": issue.id,
                         "tags": issue.tags
                     }),
-                    Err(e) => return Ok(Some(JsonRpcResponse::error(
-                        request.id,
-                        JsonRpcError {
-                            code: error_codes::INTERNAL_ERROR,
-                            message: format!("Failed to add tag: {}", e),
-                            data: None,
-                        },
-                    ))),
+                    Err(e) => {
+                        return Ok(Some(JsonRpcResponse::error(
+                            request.id,
+                            JsonRpcError {
+                                code: error_codes::INTERNAL_ERROR,
+                                message: format!("Failed to add tag: {}", e),
+                                data: None,
+                            },
+                        )))
+                    }
                 }
             }
             "remove_tag" => {
@@ -856,14 +925,16 @@ impl McpServer {
                         "issue_id": issue.id,
                         "tags": issue.tags
                     }),
-                    Err(e) => return Ok(Some(JsonRpcResponse::error(
-                        request.id,
-                        JsonRpcError {
-                            code: error_codes::INTERNAL_ERROR,
-                            message: format!("Failed to remove tag: {}", e),
-                            data: None,
-                        },
-                    ))),
+                    Err(e) => {
+                        return Ok(Some(JsonRpcResponse::error(
+                            request.id,
+                            JsonRpcError {
+                                code: error_codes::INTERNAL_ERROR,
+                                message: format!("Failed to remove tag: {}", e),
+                                data: None,
+                            },
+                        )))
+                    }
                 }
             }
             "add_knowledge_link" => {
@@ -876,14 +947,16 @@ impl McpServer {
                         "issue_id": issue.id,
                         "knowledge_links": issue.knowledge_links
                     }),
-                    Err(e) => return Ok(Some(JsonRpcResponse::error(
-                        request.id,
-                        JsonRpcError {
-                            code: error_codes::INTERNAL_ERROR,
-                            message: format!("Failed to add knowledge link: {}", e),
-                            data: None,
-                        },
-                    ))),
+                    Err(e) => {
+                        return Ok(Some(JsonRpcResponse::error(
+                            request.id,
+                            JsonRpcError {
+                                code: error_codes::INTERNAL_ERROR,
+                                message: format!("Failed to add knowledge link: {}", e),
+                                data: None,
+                            },
+                        )))
+                    }
                 }
             }
             _ => {
@@ -899,12 +972,13 @@ impl McpServer {
     /// Handle issue list request
     async fn handle_issue_list(&self, request: JsonRpcRequest) -> Result<Option<JsonRpcResponse>> {
         debug!("Handling issue list request");
-        
-        let issue_service = self.issue_service.as_ref().ok_or_else(|| {
-            Error::Configuration {
+
+        let issue_service = self
+            .issue_service
+            .as_ref()
+            .ok_or_else(|| Error::Configuration {
                 message: "Issue service not configured".to_string(),
-            }
-        })?;
+            })?;
 
         // Parse optional parameters
         #[derive(serde::Deserialize, Default)]
@@ -930,7 +1004,10 @@ impl McpServer {
                 "Closed" => IssueStatus::Closed,
                 _ => {
                     if status_str.starts_with("Blocked:") {
-                        let reason = status_str.strip_prefix("Blocked:").unwrap_or("").to_string();
+                        let reason = status_str
+                            .strip_prefix("Blocked:")
+                            .unwrap_or("")
+                            .to_string();
                         IssueStatus::Blocked { reason }
                     } else {
                         return Err(Error::Protocol {
@@ -969,27 +1046,30 @@ impl McpServer {
                     issues.truncate(limit);
                 }
 
-                let issue_data: Vec<_> = issues.iter().map(|issue| {
-                    serde_json::json!({
-                        "id": issue.id,
-                        "title": issue.title,
-                        "description": issue.description,
-                        "priority": format!("{:?}", issue.priority),
-                        "status": match &issue.status {
-                            IssueStatus::Blocked { reason } => format!("Blocked: {}", reason),
-                            other => format!("{:?}", other),
-                        },
-                        "assigned_agent_id": issue.assigned_agent_id,
-                        "created_at": issue.created_at,
-                        "updated_at": issue.updated_at,
-                        "resolved_at": issue.resolved_at,
-                        "tags": issue.tags,
-                        "knowledge_links": issue.knowledge_links,
-                        "is_assigned": issue.is_assigned(),
-                        "is_terminal": issue.is_terminal(),
-                        "age_seconds": issue.age_seconds(),
+                let issue_data: Vec<_> = issues
+                    .iter()
+                    .map(|issue| {
+                        serde_json::json!({
+                            "id": issue.id,
+                            "title": issue.title,
+                            "description": issue.description,
+                            "priority": format!("{:?}", issue.priority),
+                            "status": match &issue.status {
+                                IssueStatus::Blocked { reason } => format!("Blocked: {}", reason),
+                                other => format!("{:?}", other),
+                            },
+                            "assigned_agent_id": issue.assigned_agent_id,
+                            "created_at": issue.created_at,
+                            "updated_at": issue.updated_at,
+                            "resolved_at": issue.resolved_at,
+                            "tags": issue.tags,
+                            "knowledge_links": issue.knowledge_links,
+                            "is_assigned": issue.is_assigned(),
+                            "is_terminal": issue.is_terminal(),
+                            "age_seconds": issue.age_seconds(),
+                        })
                     })
-                }).collect();
+                    .collect();
 
                 let result = serde_json::json!({
                     "issues": issue_data,
@@ -1025,6 +1105,232 @@ impl McpServer {
         });
 
         Ok(Some(JsonRpcResponse::success(request.id, result)))
+    }
+
+    /// Handle message send request
+    async fn handle_message_send(
+        &self,
+        request: JsonRpcRequest,
+    ) -> Result<Option<JsonRpcResponse>> {
+        debug!("Handling message send request");
+
+        let message_service =
+            self.message_service
+                .as_ref()
+                .ok_or_else(|| Error::Configuration {
+                    message: "Message service not configured".to_string(),
+                })?;
+
+        // Parse request parameters
+        #[derive(serde::Deserialize)]
+        struct SendMessageParams {
+            recipient_id: String,
+            content: String,
+            message_type: Option<String>,
+            priority: Option<String>,
+        }
+
+        let params: SendMessageParams = if let Some(params) = request.params {
+            serde_json::from_value(params).map_err(|e| Error::Protocol {
+                message: format!("Invalid message send parameters: {}", e),
+            })?
+        } else {
+            return Err(Error::Protocol {
+                message: "Missing message send parameters".to_string(),
+            });
+        };
+
+        // Parse recipient ID
+        let recipient_id = Uuid::parse_str(&params.recipient_id).map_err(|e| Error::Protocol {
+            message: format!("Invalid recipient ID: {}", e),
+        })?;
+
+        // Parse message type
+        let message_type = match params.message_type.as_deref() {
+            Some("Direct") => MessageType::Direct,
+            Some("StatusUpdate") => MessageType::StatusUpdate,
+            Some("IssueNotification") => MessageType::IssueNotification,
+            Some("KnowledgeShare") => MessageType::KnowledgeShare,
+            None => MessageType::Direct, // Default
+            Some(t) => {
+                return Err(Error::Protocol {
+                    message: format!("Invalid message type: {}", t),
+                });
+            }
+        };
+
+        // Parse priority
+        let priority = match params.priority.as_deref() {
+            Some("Low") => MessagePriority::Low,
+            Some("Normal") => MessagePriority::Normal,
+            Some("High") => MessagePriority::High,
+            Some("Urgent") => MessagePriority::Urgent,
+            None => MessagePriority::Normal, // Default
+            Some(p) => {
+                return Err(Error::Protocol {
+                    message: format!("Invalid priority: {}", p),
+                });
+            }
+        };
+
+        // Validate content
+        if let Err(e) = message_service.validate_message_content(&params.content) {
+            return Ok(Some(JsonRpcResponse::error(
+                request.id,
+                JsonRpcError {
+                    code: error_codes::INVALID_PARAMS,
+                    message: format!("Invalid message content: {}", e),
+                    data: None,
+                },
+            )));
+        }
+
+        // TODO: Get sender ID from authenticated session
+        let sender_id = Uuid::new_v4(); // Placeholder
+
+        // Send the message
+        match message_service
+            .send_message(
+                sender_id,
+                recipient_id,
+                params.content,
+                message_type,
+                priority,
+            )
+            .await
+        {
+            Ok(message) => {
+                let result = serde_json::json!({
+                    "message_id": message.id,
+                    "sender_id": message.sender_id,
+                    "recipient_id": message.recipient_id,
+                    "content": message.content,
+                    "message_type": format!("{:?}", message.message_type),
+                    "priority": format!("{:?}", message.metadata.priority),
+                    "created_at": message.created_at,
+                    "status": "sent"
+                });
+                Ok(Some(JsonRpcResponse::success(request.id, result)))
+            }
+            Err(e) => {
+                error!("Failed to send message: {}", e);
+                Ok(Some(JsonRpcResponse::error(
+                    request.id,
+                    JsonRpcError {
+                        code: error_codes::INTERNAL_ERROR,
+                        message: format!("Failed to send message: {}", e),
+                        data: None,
+                    },
+                )))
+            }
+        }
+    }
+
+    /// Handle message broadcast request
+    async fn handle_message_broadcast(
+        &self,
+        request: JsonRpcRequest,
+    ) -> Result<Option<JsonRpcResponse>> {
+        debug!("Handling message broadcast request");
+
+        let message_service =
+            self.message_service
+                .as_ref()
+                .ok_or_else(|| Error::Configuration {
+                    message: "Message service not configured".to_string(),
+                })?;
+
+        // Parse request parameters
+        #[derive(serde::Deserialize)]
+        struct BroadcastMessageParams {
+            content: String,
+            message_type: Option<String>,
+            priority: Option<String>,
+        }
+
+        let params: BroadcastMessageParams = if let Some(params) = request.params {
+            serde_json::from_value(params).map_err(|e| Error::Protocol {
+                message: format!("Invalid broadcast parameters: {}", e),
+            })?
+        } else {
+            return Err(Error::Protocol {
+                message: "Missing broadcast parameters".to_string(),
+            });
+        };
+
+        // Parse message type
+        let message_type = match params.message_type.as_deref() {
+            Some("Broadcast") => MessageType::Broadcast,
+            Some("StatusUpdate") => MessageType::StatusUpdate,
+            Some("IssueNotification") => MessageType::IssueNotification,
+            Some("KnowledgeShare") => MessageType::KnowledgeShare,
+            None => MessageType::Broadcast, // Default
+            Some(t) => {
+                return Err(Error::Protocol {
+                    message: format!("Invalid message type: {}", t),
+                });
+            }
+        };
+
+        // Parse priority
+        let priority = match params.priority.as_deref() {
+            Some("Low") => MessagePriority::Low,
+            Some("Normal") => MessagePriority::Normal,
+            Some("High") => MessagePriority::High,
+            Some("Urgent") => MessagePriority::Urgent,
+            None => MessagePriority::Normal, // Default
+            Some(p) => {
+                return Err(Error::Protocol {
+                    message: format!("Invalid priority: {}", p),
+                });
+            }
+        };
+
+        // Validate content
+        if let Err(e) = message_service.validate_message_content(&params.content) {
+            return Ok(Some(JsonRpcResponse::error(
+                request.id,
+                JsonRpcError {
+                    code: error_codes::INVALID_PARAMS,
+                    message: format!("Invalid message content: {}", e),
+                    data: None,
+                },
+            )));
+        }
+
+        // TODO: Get sender ID from authenticated session
+        let sender_id = Uuid::new_v4(); // Placeholder
+
+        // Send the broadcast
+        match message_service
+            .send_broadcast(sender_id, params.content, message_type, priority)
+            .await
+        {
+            Ok(message) => {
+                let result = serde_json::json!({
+                    "message_id": message.id,
+                    "sender_id": message.sender_id,
+                    "content": message.content,
+                    "message_type": format!("{:?}", message.message_type),
+                    "priority": format!("{:?}", message.metadata.priority),
+                    "created_at": message.created_at,
+                    "delivered_at": message.delivered_at,
+                    "status": "broadcast"
+                });
+                Ok(Some(JsonRpcResponse::success(request.id, result)))
+            }
+            Err(e) => {
+                error!("Failed to send broadcast: {}", e);
+                Ok(Some(JsonRpcResponse::error(
+                    request.id,
+                    JsonRpcError {
+                        code: error_codes::INTERNAL_ERROR,
+                        message: format!("Failed to send broadcast: {}", e),
+                        data: None,
+                    },
+                )))
+            }
+        }
     }
 
     /// Get the number of connected clients
