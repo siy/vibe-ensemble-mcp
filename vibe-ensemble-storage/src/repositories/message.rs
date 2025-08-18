@@ -75,8 +75,8 @@ impl MessageRepository {
         match row {
             Some(row) => {
                 let message = self.parse_message_from_row(
-                    row.id.as_ref().unwrap(),
-                    row.sender_id.as_ref().unwrap(),
+                    &row.id.unwrap(),
+                    &row.sender_id,
                     row.recipient_id.as_deref(),
                     &row.message_type,
                     &row.content,
@@ -168,8 +168,8 @@ impl MessageRepository {
         let mut messages = Vec::new();
         for row in rows {
             let message = self.parse_message_from_row(
-                row.id.as_ref().unwrap(),
-                row.sender_id.as_ref().unwrap(),
+                &row.id.unwrap(),
+                &row.sender_id,
                 row.recipient_id.as_deref(),
                 &row.message_type,
                 &row.content,
@@ -204,8 +204,8 @@ impl MessageRepository {
         let mut messages = Vec::new();
         for row in rows {
             let message = self.parse_message_from_row(
-                row.id.as_ref().unwrap(),
-                row.sender_id.as_ref().unwrap(),
+                &row.id.unwrap(),
+                &row.sender_id,
                 row.recipient_id.as_deref(),
                 &row.message_type,
                 &row.content,
@@ -238,8 +238,8 @@ impl MessageRepository {
         let mut messages = Vec::new();
         for row in rows {
             let message = self.parse_message_from_row(
-                row.id.as_ref().unwrap(),
-                row.sender_id.as_ref().unwrap(),
+                &row.id.unwrap(),
+                &row.sender_id,
                 row.recipient_id.as_deref(),
                 &row.message_type,
                 &row.content,
@@ -269,8 +269,8 @@ impl MessageRepository {
         let mut messages = Vec::new();
         for row in rows {
             let message = self.parse_message_from_row(
-                row.id.as_ref().unwrap(),
-                row.sender_id.as_ref().unwrap(),
+                &row.id.unwrap(),
+                &row.sender_id,
                 row.recipient_id.as_deref(),
                 &row.message_type,
                 &row.content,
@@ -301,8 +301,8 @@ impl MessageRepository {
         let mut messages = Vec::new();
         for row in rows {
             let message = self.parse_message_from_row(
-                row.id.as_ref().unwrap(),
-                row.sender_id.as_ref().unwrap(),
+                &row.id.unwrap(),
+                &row.sender_id,
                 row.recipient_id.as_deref(),
                 &row.message_type,
                 &row.content,
