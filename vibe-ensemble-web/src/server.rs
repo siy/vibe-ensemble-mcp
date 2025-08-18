@@ -37,11 +37,9 @@ impl WebServer {
             // Dashboard routes
             .route("/", get(handlers::dashboard::index))
             .route("/dashboard", get(handlers::dashboard::index))
-            
             // Agent management routes
             .route("/agents", get(handlers::agents::list))
             .route("/agents/:id", get(handlers::agents::detail))
-            
             // Issue management routes
             .route("/issues", get(handlers::issues::list))
             .route("/issues/new", get(handlers::issues::new_form))
@@ -49,23 +47,19 @@ impl WebServer {
             .route("/issues/:id", get(handlers::issues::detail))
             .route("/issues/:id/edit", get(handlers::issues::edit_form))
             .route("/issues/:id", post(handlers::issues::update))
-            
             // Knowledge management routes
             .route("/knowledge", get(handlers::knowledge::list))
             .route("/knowledge/:id", get(handlers::knowledge::detail))
-            
             // API routes
             .route("/api/health", get(handlers::api::health))
             .route("/api/stats", get(handlers::api::stats))
-            
             // Add shared state
             .with_state(self.storage.clone())
-            
             // Add middleware
             .layer(
                 ServiceBuilder::new()
                     .layer(TraceLayer::new_for_http())
-                    .layer(CorsLayer::permissive())
+                    .layer(CorsLayer::permissive()),
             )
     }
 
@@ -73,12 +67,12 @@ impl WebServer {
     pub async fn run(self) -> Result<()> {
         let app = self.build_router();
         let addr = format!("{}:{}", self.config.host, self.config.port);
-        
+
         tracing::info!("Web server starting on {}", addr);
-        
+
         let listener = tokio::net::TcpListener::bind(&addr).await?;
         axum::serve(listener, app).await?;
-        
+
         Ok(())
     }
 }

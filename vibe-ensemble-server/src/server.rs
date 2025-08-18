@@ -28,7 +28,7 @@ impl Server {
             migrate_on_startup: config.database.migrate_on_startup,
         };
         let storage = Arc::new(StorageManager::new(&db_config).await?);
-        
+
         if config.database.migrate_on_startup {
             storage.migrate().await?;
         }
@@ -61,9 +61,12 @@ impl Server {
     pub async fn run(mut self) -> Result<()> {
         info!("Starting Vibe Ensemble MCP Server");
         info!("MCP Server listening on {}", self.config.server_addr());
-        
+
         if let Some(web_server) = &self.web_server {
-            info!("Web interface available at http://{}", self.config.web_addr());
+            info!(
+                "Web interface available at http://{}",
+                self.config.web_addr()
+            );
         }
 
         // Start web server in the background if enabled
@@ -83,7 +86,7 @@ impl Server {
 
         // Graceful shutdown
         info!("Shutting down server...");
-        
+
         if let Some(handle) = web_handle {
             handle.abort();
         }

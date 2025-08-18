@@ -1,7 +1,11 @@
 //! Issue management handlers
 
 use crate::{Error, Result};
-use axum::{extract::{Path, State}, response::Html, Form};
+use axum::{
+    extract::{Path, State},
+    response::Html,
+    Form,
+};
 use serde::Deserialize;
 use std::sync::Arc;
 use uuid::Uuid;
@@ -19,7 +23,7 @@ pub struct IssueForm {
 /// List all issues
 pub async fn list(State(storage): State<Arc<StorageManager>>) -> Result<Html<String>> {
     let issues = storage.issues().list().await?;
-    
+
     let mut html = String::from(
         r#"
         <html>
@@ -37,7 +41,7 @@ pub async fn list(State(storage): State<Arc<StorageManager>>) -> Result<Html<Str
                     </tr>
         "#,
     );
-    
+
     for issue in issues {
         html.push_str(&format!(
             r#"
@@ -56,7 +60,7 @@ pub async fn list(State(storage): State<Arc<StorageManager>>) -> Result<Html<Str
             issue.id
         ));
     }
-    
+
     html.push_str("</table></body></html>");
     Ok(Html(html))
 }
@@ -92,7 +96,7 @@ pub async fn new_form() -> Result<Html<String>> {
             </body>
         </html>
     "#;
-    
+
     Ok(Html(html.to_string()))
 }
 
@@ -108,10 +112,10 @@ pub async fn create(
         "Critical" => IssuePriority::Critical,
         _ => return Err(Error::BadRequest("Invalid priority".to_string())),
     };
-    
+
     let issue = Issue::new(form.title, form.description, priority)?;
     storage.issues().create(&issue).await?;
-    
+
     let html = format!(
         r#"
         <html>
@@ -129,7 +133,7 @@ pub async fn create(
         "#,
         issue.id
     );
-    
+
     Ok(Html(html))
 }
 
@@ -138,9 +142,12 @@ pub async fn detail(
     State(storage): State<Arc<StorageManager>>,
     Path(id): Path<Uuid>,
 ) -> Result<Html<String>> {
-    let issue = storage.issues().find_by_id(id).await?
+    let issue = storage
+        .issues()
+        .find_by_id(id)
+        .await?
         .ok_or_else(|| Error::NotFound(format!("Issue with id {}", id)))?;
-    
+
     let html = format!(
         r#"
         <html>
@@ -169,7 +176,7 @@ pub async fn detail(
         issue.updated_at.format("%Y-%m-%d %H:%M:%S"),
         issue.description
     );
-    
+
     Ok(Html(html))
 }
 
@@ -178,9 +185,12 @@ pub async fn edit_form(
     State(storage): State<Arc<StorageManager>>,
     Path(id): Path<Uuid>,
 ) -> Result<Html<String>> {
-    let _issue = storage.issues().find_by_id(id).await?
+    let _issue = storage
+        .issues()
+        .find_by_id(id)
+        .await?
         .ok_or_else(|| Error::NotFound(format!("Issue with id {}", id)))?;
-    
+
     // Placeholder for edit form
     let html = format!(
         r#"
@@ -195,7 +205,7 @@ pub async fn edit_form(
         "#,
         id
     );
-    
+
     Ok(Html(html))
 }
 
@@ -219,6 +229,6 @@ pub async fn update(
         "#,
         id
     );
-    
+
     Ok(Html(html))
 }

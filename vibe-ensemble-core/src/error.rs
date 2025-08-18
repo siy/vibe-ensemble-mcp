@@ -33,7 +33,10 @@ pub enum Error {
     ResourceExhausted { resource: String, message: String },
 
     #[error("Operation timeout: {operation} exceeded {timeout_seconds}s")]
-    Timeout { operation: String, timeout_seconds: u64 },
+    Timeout {
+        operation: String,
+        timeout_seconds: u64,
+    },
 
     #[error("Permission denied: {action} - {reason}")]
     PermissionDenied { action: String, reason: String },
@@ -63,7 +66,9 @@ impl From<anyhow::Error> for Error {
 impl Error {
     /// Create a validation error with a formatted message
     pub fn validation<S: Into<String>>(message: S) -> Self {
-        Self::Validation { message: message.into() }
+        Self::Validation {
+            message: message.into(),
+        }
     }
 
     /// Create a not found error for a specific entity type and ID
@@ -76,16 +81,23 @@ impl Error {
 
     /// Create a configuration error
     pub fn configuration<S: Into<String>>(message: S) -> Self {
-        Self::Configuration { message: message.into() }
+        Self::Configuration {
+            message: message.into(),
+        }
     }
 
     /// Create a state transition error
     pub fn state_transition<S: Into<String>>(message: S) -> Self {
-        Self::StateTransition { message: message.into() }
+        Self::StateTransition {
+            message: message.into(),
+        }
     }
 
     /// Create a constraint violation error
-    pub fn constraint_violation<S1: Into<String>, S2: Into<String>>(constraint: S1, message: S2) -> Self {
+    pub fn constraint_violation<S1: Into<String>, S2: Into<String>>(
+        constraint: S1,
+        message: S2,
+    ) -> Self {
         Self::ConstraintViolation {
             constraint: constraint.into(),
             message: message.into(),
@@ -93,7 +105,10 @@ impl Error {
     }
 
     /// Create a resource exhausted error
-    pub fn resource_exhausted<S1: Into<String>, S2: Into<String>>(resource: S1, message: S2) -> Self {
+    pub fn resource_exhausted<S1: Into<String>, S2: Into<String>>(
+        resource: S1,
+        message: S2,
+    ) -> Self {
         Self::ResourceExhausted {
             resource: resource.into(),
             message: message.into(),

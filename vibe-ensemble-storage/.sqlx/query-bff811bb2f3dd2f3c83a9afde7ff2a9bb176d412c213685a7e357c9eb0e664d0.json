@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "UPDATE agents SET last_seen = ?1 WHERE id = ?2",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 2
+    },
+    "nullable": []
+  },
+  "hash": "bff811bb2f3dd2f3c83a9afde7ff2a9bb176d412c213685a7e357c9eb0e664d0"
+}

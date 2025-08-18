@@ -20,10 +20,10 @@
 //!     .unwrap();
 //! ```
 
+use crate::{Error, Result};
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
-use crate::{Error, Result};
 
 /// Represents an issue/task in the system
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -74,7 +74,7 @@ impl Issue {
     pub fn new(title: String, description: String, priority: IssuePriority) -> Result<Self> {
         Self::validate_title(&title)?;
         Self::validate_description(&description)?;
-        
+
         let now = Utc::now();
         Ok(Self {
             id: Uuid::new_v4(),
@@ -205,7 +205,9 @@ impl Issue {
                 return Err(Error::state_transition("Cannot reopen a closed issue"));
             }
             (IssueStatus::Resolved, IssueStatus::InProgress) => {
-                return Err(Error::state_transition("Cannot move resolved issue back to in progress"));
+                return Err(Error::state_transition(
+                    "Cannot move resolved issue back to in progress",
+                ));
             }
             (IssueStatus::Resolved, IssueStatus::Open) => {
                 return Err(Error::state_transition("Cannot reopen a resolved issue"));
@@ -215,12 +217,12 @@ impl Issue {
 
         self.status = status;
         self.updated_at = Utc::now();
-        
+
         // Set resolved_at when resolving
         if matches!(self.status, IssueStatus::Resolved) {
             self.resolved_at = Some(Utc::now());
         }
-        
+
         Ok(())
     }
 
@@ -237,7 +239,9 @@ impl Issue {
     /// Unblock the issue and return to open status
     pub fn unblock(&mut self) -> Result<()> {
         if !matches!(self.status, IssueStatus::Blocked { .. }) {
-            return Err(Error::state_transition("Cannot unblock an issue that is not blocked"));
+            return Err(Error::state_transition(
+                "Cannot unblock an issue that is not blocked",
+            ));
         }
         self.status = IssueStatus::Open;
         self.updated_at = Utc::now();
@@ -272,7 +276,9 @@ impl Issue {
     /// Get time to resolution in seconds (if resolved)
     pub fn time_to_resolution_seconds(&self) -> Option<i64> {
         self.resolved_at.map(|resolved| {
-            resolved.signed_duration_since(self.created_at).num_seconds()
+            resolved
+                .signed_duration_since(self.created_at)
+                .num_seconds()
         })
     }
 
@@ -283,7 +289,9 @@ impl Issue {
 
     /// Get the time elapsed since creation in seconds
     pub fn age_seconds(&self) -> i64 {
-        Utc::now().signed_duration_since(self.created_at).num_seconds()
+        Utc::now()
+            .signed_duration_since(self.created_at)
+            .num_seconds()
     }
 
     /// Check if the issue has a specific tag
@@ -410,7 +418,7 @@ impl IssueBuilder {
         })?;
 
         let mut issue = Issue::new(title, description, priority)?;
-        
+
         // Add tags and knowledge links
         for tag in self.tags {
             issue.add_tag(tag)?;
@@ -418,11 +426,11 @@ impl IssueBuilder {
         for link in self.knowledge_links {
             issue.add_knowledge_link(link)?;
         }
-        
+
         if let Some(metadata) = self.web_metadata {
             issue.set_web_metadata(metadata);
         }
-        
+
         Ok(issue)
     }
 }
@@ -510,7 +518,7 @@ mod tests {
             .unwrap();
 
         let agent_id = Uuid::new_v4();
-        
+
         assert!(!issue.is_assigned());
         issue.assign_to(agent_id);
         assert!(issue.is_assigned());
@@ -543,10 +551,10 @@ mod tests {
             .priority(IssuePriority::Medium)
             .build()
             .unwrap();
-        
+
         issue.set_status(IssueStatus::Closed).unwrap();
         assert!(issue.is_terminal());
-        
+
         // Invalid transition: closed -> open
         let result = issue.set_status(IssueStatus::Open);
         assert!(result.is_err());
@@ -562,18 +570,18 @@ mod tests {
             .unwrap();
 
         assert!(!issue.has_tag("test"));
-        
+
         issue.add_tag("test".to_string()).unwrap();
         assert!(issue.has_tag("test"));
-        
+
         // Adding duplicate tag should not error
         issue.add_tag("test".to_string()).unwrap();
         assert_eq!(issue.tags.len(), 1);
-        
+
         // Adding empty tag should fail
         let result = issue.add_tag("".to_string());
         assert!(result.is_err());
-        
+
         issue.remove_tag("test");
         assert!(!issue.has_tag("test"));
     }
@@ -588,14 +596,14 @@ mod tests {
             .unwrap();
 
         assert_eq!(issue.knowledge_links.len(), 0);
-        
+
         issue.add_knowledge_link("pattern-001".to_string()).unwrap();
         assert_eq!(issue.knowledge_links.len(), 1);
-        
+
         // Adding duplicate link should not error
         issue.add_knowledge_link("pattern-001".to_string()).unwrap();
         assert_eq!(issue.knowledge_links.len(), 1);
-        
+
         // Adding empty link should fail
         let result = issue.add_knowledge_link("".to_string());
         assert!(result.is_err());
@@ -648,7 +656,7 @@ mod tests {
 
         let initial_updated_at = issue.updated_at;
         std::thread::sleep(std::time::Duration::from_millis(10));
-        
+
         issue.set_priority(IssuePriority::Critical);
         assert_eq!(issue.priority, IssuePriority::Critical);
         assert!(issue.updated_at > initial_updated_at);
@@ -666,7 +674,10 @@ mod tests {
         // Block the issue
         issue.block("Waiting for dependencies".to_string()).unwrap();
         assert!(matches!(issue.status, IssueStatus::Blocked { .. }));
-        assert_eq!(issue.state_description(), "Blocked: Waiting for dependencies");
+        assert_eq!(
+            issue.state_description(),
+            "Blocked: Waiting for dependencies"
+        );
 
         // Unblock the issue
         issue.unblock().unwrap();
@@ -692,7 +703,7 @@ mod tests {
             .unwrap();
 
         assert!(issue.resolved_at.is_none());
-        
+
         issue.close();
         assert_eq!(issue.status, IssueStatus::Closed);
         assert!(issue.resolved_at.is_some());
@@ -724,9 +735,9 @@ mod tests {
             .priority(IssuePriority::Medium)
             .build()
             .unwrap();
-        
+
         issue.close();
-        
+
         // Cannot reopen closed issue
         let result = issue.set_status(IssueStatus::Open);
         assert!(result.is_err());
@@ -771,7 +782,10 @@ mod tests {
 
         issue.unblock().unwrap();
         issue.resolve();
-        assert_eq!(issue.state_description(), "Resolved and ready for verification");
+        assert_eq!(
+            issue.state_description(),
+            "Resolved and ready for verification"
+        );
 
         issue.close();
         assert_eq!(issue.state_description(), "Closed and completed");

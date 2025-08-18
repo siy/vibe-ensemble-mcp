@@ -1,7 +1,10 @@
 //! Knowledge management handlers
 
 use crate::{Error, Result};
-use axum::{extract::{Path, State}, response::Html};
+use axum::{
+    extract::{Path, State},
+    response::Html,
+};
 use std::sync::Arc;
 use uuid::Uuid;
 use vibe_ensemble_storage::StorageManager;
@@ -10,8 +13,11 @@ use vibe_ensemble_storage::StorageManager;
 pub async fn list(State(storage): State<Arc<StorageManager>>) -> Result<Html<String>> {
     // For now, we'll create a dummy agent ID to list accessible knowledge
     let dummy_agent_id = Uuid::new_v4();
-    let knowledge_entries = storage.knowledge().list_accessible_by(dummy_agent_id).await?;
-    
+    let knowledge_entries = storage
+        .knowledge()
+        .list_accessible_by(dummy_agent_id)
+        .await?;
+
     let mut html = String::from(
         r#"
         <html>
@@ -28,7 +34,7 @@ pub async fn list(State(storage): State<Arc<StorageManager>>) -> Result<Html<Str
                     </tr>
         "#,
     );
-    
+
     for knowledge in knowledge_entries {
         html.push_str(&format!(
             r#"
@@ -47,7 +53,7 @@ pub async fn list(State(storage): State<Arc<StorageManager>>) -> Result<Html<Str
             knowledge.id
         ));
     }
-    
+
     html.push_str("</table></body></html>");
     Ok(Html(html))
 }
@@ -57,9 +63,12 @@ pub async fn detail(
     State(storage): State<Arc<StorageManager>>,
     Path(id): Path<Uuid>,
 ) -> Result<Html<String>> {
-    let knowledge = storage.knowledge().find_by_id(id).await?
+    let knowledge = storage
+        .knowledge()
+        .find_by_id(id)
+        .await?
         .ok_or_else(|| Error::NotFound(format!("Knowledge entry with id {}", id)))?;
-    
+
     let html = format!(
         r#"
         <html>
@@ -91,6 +100,6 @@ pub async fn detail(
         knowledge.updated_at.format("%Y-%m-%d %H:%M:%S"),
         knowledge.content
     );
-    
+
     Ok(Html(html))
 }

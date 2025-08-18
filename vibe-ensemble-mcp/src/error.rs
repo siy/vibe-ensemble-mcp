@@ -17,6 +17,9 @@ pub enum Error {
     #[error("Core domain error: {0}")]
     Core(#[from] vibe_ensemble_core::Error),
 
+    #[error("Storage error: {0}")]
+    Storage(#[from] vibe_ensemble_storage::Error),
+
     #[error("Connection error: {0}")]
     Connection(String),
 

@@ -1,5 +1,4 @@
 /// Tests for agent repository
-
 #[cfg(test)]
 mod tests {
     use super::super::*;
@@ -216,8 +215,15 @@ mod tests {
         repo.create(&agent1).await.expect("Failed to create agent1");
         repo.create(&agent2).await.expect("Failed to create agent2");
 
+        // Transition agents to online first
+        agent1.go_online().expect("Failed to transition agent1 to online");
+        let mut agent2 = agent2;
+        agent2.go_online().expect("Failed to transition agent2 to online");
+        repo.update(&agent1).await.expect("Failed to update agent1");
+        repo.update(&agent2).await.expect("Failed to update agent2");
+
         // Set one agent to busy
-        agent1.set_status(AgentStatus::Busy);
+        agent1.go_busy().expect("Failed to transition agent1 to busy");
         repo.update(&agent1).await.expect("Failed to update agent1");
 
         // List by status

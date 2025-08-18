@@ -28,7 +28,8 @@ impl PromptRenderer {
 
         // Substitute variables
         for variable in &prompt.variables {
-            let value = variables.get(&variable.name)
+            let value = variables
+                .get(&variable.name)
                 .or(variable.default_value.as_ref())
                 .ok_or_else(|| Error::MissingVariable {
                     name: variable.name.clone(),
@@ -57,7 +58,7 @@ impl PromptRenderer {
         variables: HashMap<String, String>,
     ) -> Result<RenderedPrompt> {
         let content = self.render(prompt, variables.clone()).await?;
-        
+
         Ok(RenderedPrompt {
             prompt_id: prompt.id,
             content,
@@ -93,41 +94,51 @@ impl PromptRenderer {
         match variable.variable_type {
             VariableType::String => Ok(()),
             VariableType::Number => {
-                value.parse::<f64>()
-                    .map_err(|_| Error::InvalidTemplate(
-                        format!("Variable '{}' must be a number, got '{}'", variable.name, value)
-                    ))?;
+                value.parse::<f64>().map_err(|_| {
+                    Error::InvalidTemplate(format!(
+                        "Variable '{}' must be a number, got '{}'",
+                        variable.name, value
+                    ))
+                })?;
                 Ok(())
             }
             VariableType::Boolean => {
-                value.parse::<bool>()
-                    .map_err(|_| Error::InvalidTemplate(
-                        format!("Variable '{}' must be a boolean, got '{}'", variable.name, value)
-                    ))?;
+                value.parse::<bool>().map_err(|_| {
+                    Error::InvalidTemplate(format!(
+                        "Variable '{}' must be a boolean, got '{}'",
+                        variable.name, value
+                    ))
+                })?;
                 Ok(())
             }
             VariableType::AgentId => {
                 // Validate UUID format
-                uuid::Uuid::parse_str(value)
-                    .map_err(|_| Error::InvalidTemplate(
-                        format!("Variable '{}' must be a valid UUID, got '{}'", variable.name, value)
-                    ))?;
+                uuid::Uuid::parse_str(value).map_err(|_| {
+                    Error::InvalidTemplate(format!(
+                        "Variable '{}' must be a valid UUID, got '{}'",
+                        variable.name, value
+                    ))
+                })?;
                 Ok(())
             }
             VariableType::IssueId => {
                 // Validate UUID format
-                uuid::Uuid::parse_str(value)
-                    .map_err(|_| Error::InvalidTemplate(
-                        format!("Variable '{}' must be a valid UUID, got '{}'", variable.name, value)
-                    ))?;
+                uuid::Uuid::parse_str(value).map_err(|_| {
+                    Error::InvalidTemplate(format!(
+                        "Variable '{}' must be a valid UUID, got '{}'",
+                        variable.name, value
+                    ))
+                })?;
                 Ok(())
             }
             VariableType::Timestamp => {
                 // Validate ISO 8601 timestamp format
-                chrono::DateTime::parse_from_rfc3339(value)
-                    .map_err(|_| Error::InvalidTemplate(
-                        format!("Variable '{}' must be a valid ISO 8601 timestamp, got '{}'", variable.name, value)
-                    ))?;
+                chrono::DateTime::parse_from_rfc3339(value).map_err(|_| {
+                    Error::InvalidTemplate(format!(
+                        "Variable '{}' must be a valid ISO 8601 timestamp, got '{}'",
+                        variable.name, value
+                    ))
+                })?;
                 Ok(())
             }
         }

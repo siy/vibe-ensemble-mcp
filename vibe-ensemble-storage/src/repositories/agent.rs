@@ -1,6 +1,7 @@
 //! Agent repository implementation
 
 use crate::{Error, Result};
+use anyhow;
 use chrono::{DateTime, Utc};
 use serde_json;
 use sqlx::{Pool, Sqlite};
@@ -23,15 +24,19 @@ impl AgentRepository {
     pub async fn create(&self, agent: &Agent) -> Result<()> {
         debug!("Creating agent: {} ({})", agent.name, agent.id);
 
-        let capabilities_json = serde_json::to_string(&agent.capabilities)
-            .map_err(|e| Error::Internal(format!("Failed to serialize capabilities: {}", e)))?;
+        let capabilities_json = serde_json::to_string(&agent.capabilities).map_err(|e| {
+            Error::Internal(anyhow::anyhow!("Failed to serialize capabilities: {}", e))
+        })?;
 
         let status_json = serde_json::to_string(&agent.status)
-            .map_err(|e| Error::Internal(format!("Failed to serialize status: {}", e)))?;
+            .map_err(|e| Error::Internal(anyhow::anyhow!("Failed to serialize status: {}", e)))?;
 
         let connection_metadata_json =
             serde_json::to_string(&agent.connection_metadata).map_err(|e| {
-                Error::Internal(format!("Failed to serialize connection metadata: {}", e))
+                Error::Internal(anyhow::anyhow!(
+                    "Failed to serialize connection metadata: {}",
+                    e
+                ))
             })?;
 
         let agent_type_str = match agent.agent_type {
@@ -130,15 +135,19 @@ impl AgentRepository {
     pub async fn update(&self, agent: &Agent) -> Result<()> {
         debug!("Updating agent: {} ({})", agent.name, agent.id);
 
-        let capabilities_json = serde_json::to_string(&agent.capabilities)
-            .map_err(|e| Error::Internal(format!("Failed to serialize capabilities: {}", e)))?;
+        let capabilities_json = serde_json::to_string(&agent.capabilities).map_err(|e| {
+            Error::Internal(anyhow::anyhow!("Failed to serialize capabilities: {}", e))
+        })?;
 
         let status_json = serde_json::to_string(&agent.status)
-            .map_err(|e| Error::Internal(format!("Failed to serialize status: {}", e)))?;
+            .map_err(|e| Error::Internal(anyhow::anyhow!("Failed to serialize status: {}", e)))?;
 
         let connection_metadata_json =
             serde_json::to_string(&agent.connection_metadata).map_err(|e| {
-                Error::Internal(format!("Failed to serialize connection metadata: {}", e))
+                Error::Internal(anyhow::anyhow!(
+                    "Failed to serialize connection metadata: {}",
+                    e
+                ))
             })?;
 
         let agent_type_str = match agent.agent_type {
@@ -184,7 +193,7 @@ impl AgentRepository {
         debug!("Updating agent status: {} -> {:?}", id, status);
 
         let status_json = serde_json::to_string(status)
-            .map_err(|e| Error::Internal(format!("Failed to serialize status: {}", e)))?;
+            .map_err(|e| Error::Internal(anyhow::anyhow!("Failed to serialize status: {}", e)))?;
 
         let id_str = id.to_string();
         let last_seen_str = Utc::now().to_rfc3339();
@@ -291,7 +300,7 @@ impl AgentRepository {
         debug!("Listing agents by status: {:?}", status);
 
         let status_json = serde_json::to_string(status)
-            .map_err(|e| Error::Internal(format!("Failed to serialize status: {}", e)))?;
+            .map_err(|e| Error::Internal(anyhow::anyhow!("Failed to serialize status: {}", e)))?;
 
         let rows = sqlx::query!(
             "SELECT id, name, agent_type, capabilities, status, connection_metadata, created_at, last_seen FROM agents WHERE status = ?1 ORDER BY created_at DESC",
@@ -409,7 +418,7 @@ impl AgentRepository {
         debug!("Counting agents by status: {:?}", status);
 
         let status_json = serde_json::to_string(status)
-            .map_err(|e| Error::Internal(format!("Failed to serialize status: {}", e)))?;
+            .map_err(|e| Error::Internal(anyhow::anyhow!("Failed to serialize status: {}", e)))?;
 
         let row = sqlx::query!(
             "SELECT COUNT(*) as count FROM agents WHERE status = ?1",
@@ -448,36 +457,40 @@ impl AgentRepository {
         last_seen: &str,
     ) -> Result<Agent> {
         let parsed_id = Uuid::parse_str(id)
-            .map_err(|e| Error::Internal(format!("Invalid agent UUID: {}", e)))?;
+            .map_err(|e| Error::Internal(anyhow::anyhow!("Invalid agent UUID: {}", e)))?;
 
         let parsed_agent_type = match agent_type {
             "Coordinator" => AgentType::Coordinator,
             "Worker" => AgentType::Worker,
             _ => {
-                return Err(Error::Internal(format!(
+                return Err(Error::Internal(anyhow::anyhow!(
                     "Invalid agent type: {}",
                     agent_type
                 )))
             }
         };
 
-        let parsed_capabilities: Vec<String> = serde_json::from_str(capabilities)
-            .map_err(|e| Error::Internal(format!("Failed to deserialize capabilities: {}", e)))?;
+        let parsed_capabilities: Vec<String> = serde_json::from_str(capabilities).map_err(|e| {
+            Error::Internal(anyhow::anyhow!("Failed to deserialize capabilities: {}", e))
+        })?;
 
         let parsed_status: AgentStatus = serde_json::from_str(status)
-            .map_err(|e| Error::Internal(format!("Failed to deserialize status: {}", e)))?;
+            .map_err(|e| Error::Internal(anyhow::anyhow!("Failed to deserialize status: {}", e)))?;
 
         let parsed_connection_metadata: ConnectionMetadata =
             serde_json::from_str(connection_metadata).map_err(|e| {
-                Error::Internal(format!("Failed to deserialize connection metadata: {}", e))
+                Error::Internal(anyhow::anyhow!(
+                    "Failed to deserialize connection metadata: {}",
+                    e
+                ))
             })?;
 
         let parsed_created_at = DateTime::parse_from_rfc3339(created_at)
-            .map_err(|e| Error::Internal(format!("Failed to parse created_at: {}", e)))?
+            .map_err(|e| Error::Internal(anyhow::anyhow!("Failed to parse created_at: {}", e)))?
             .with_timezone(&Utc);
 
         let parsed_last_seen = DateTime::parse_from_rfc3339(last_seen)
-            .map_err(|e| Error::Internal(format!("Failed to parse last_seen: {}", e)))?
+            .map_err(|e| Error::Internal(anyhow::anyhow!("Failed to parse last_seen: {}", e)))?
             .with_timezone(&Utc);
 
         Ok(Agent {
@@ -489,6 +502,10 @@ impl AgentRepository {
             connection_metadata: parsed_connection_metadata,
             created_at: parsed_created_at,
             last_seen: parsed_last_seen,
+            performance_metrics: vibe_ensemble_core::agent::AgentPerformanceMetrics::default(),
+            resource_allocation: vibe_ensemble_core::agent::ResourceAllocation::default(),
+            health_info: vibe_ensemble_core::agent::HealthInfo::default(),
+            system_prompt_assignment: None,
         })
     }
 }

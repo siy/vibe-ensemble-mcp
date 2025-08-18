@@ -10,7 +10,7 @@ use vibe_ensemble_storage::StorageManager;
 pub async fn health(State(storage): State<Arc<StorageManager>>) -> Result<Json<Value>> {
     // Check database health
     storage.health_check().await?;
-    
+
     Ok(Json(json!({
         "status": "healthy",
         "timestamp": chrono::Utc::now(),
@@ -20,7 +20,7 @@ pub async fn health(State(storage): State<Arc<StorageManager>>) -> Result<Json<V
 /// System statistics endpoint
 pub async fn stats(State(storage): State<Arc<StorageManager>>) -> Result<Json<Value>> {
     let stats = storage.stats().await?;
-    
+
     Ok(Json(json!({
         "agents": stats.agents_count,
         "issues": stats.issues_count,

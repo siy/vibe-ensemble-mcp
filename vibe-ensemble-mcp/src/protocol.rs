@@ -1,6 +1,6 @@
 //! MCP protocol message definitions and handling
 //!
-//! This module provides the core MCP protocol types and message handling 
+//! This module provides the core MCP protocol types and message handling
 //! based on JSON-RPC 2.0 specification, compliant with MCP 2024-11-05.
 
 use serde::{Deserialize, Serialize};
@@ -69,7 +69,7 @@ pub mod methods {
     pub const GET_RESOURCE: &str = "resources/get";
     pub const LIST_PROMPTS: &str = "prompts/list";
     pub const GET_PROMPT: &str = "prompts/get";
-    
+
     // Vibe Ensemble extensions
     pub const AGENT_REGISTER: &str = "vibe/agent/register";
     pub const AGENT_STATUS: &str = "vibe/agent/status";
@@ -141,7 +141,7 @@ pub struct ServerCapabilities {
     pub resources: Option<ResourcesCapability>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub tools: Option<ToolsCapability>,
-    
+
     // Vibe Ensemble specific capabilities
     #[serde(skip_serializing_if = "Option::is_none")]
     pub vibe_agent_management: Option<bool>,
@@ -210,9 +210,13 @@ impl JsonRpcRequest {
             params,
         }
     }
-    
+
     /// Create a new JSON-RPC request with specific ID
-    pub fn new_with_id(id: serde_json::Value, method: &str, params: Option<serde_json::Value>) -> Self {
+    pub fn new_with_id(
+        id: serde_json::Value,
+        method: &str,
+        params: Option<serde_json::Value>,
+    ) -> Self {
         Self {
             jsonrpc: "2.0".to_string(),
             id,
@@ -232,7 +236,7 @@ impl JsonRpcResponse {
             error: None,
         }
     }
-    
+
     /// Create an error response
     pub fn error(id: serde_json::Value, error: JsonRpcError) -> Self {
         Self {
@@ -260,12 +264,16 @@ impl Default for ServerCapabilities {
         Self {
             experimental: None,
             logging: None,
-            prompts: Some(PromptsCapability { list_changed: Some(true) }),
-            resources: Some(ResourcesCapability { 
-                subscribe: Some(true), 
-                list_changed: Some(true) 
+            prompts: Some(PromptsCapability {
+                list_changed: Some(true),
             }),
-            tools: Some(ToolsCapability { list_changed: Some(true) }),
+            resources: Some(ResourcesCapability {
+                subscribe: Some(true),
+                list_changed: Some(true),
+            }),
+            tools: Some(ToolsCapability {
+                list_changed: Some(true),
+            }),
             vibe_agent_management: Some(true),
             vibe_issue_tracking: Some(true),
             vibe_messaging: Some(true),
@@ -286,7 +294,7 @@ pub mod error_codes {
     pub const INVALID_PARAMS: i32 = -32602;
     /// Internal error - Internal JSON-RPC error
     pub const INTERNAL_ERROR: i32 = -32603;
-    
+
     // Vibe Ensemble specific error codes (starting from -32000)
     /// Agent registration failed
     pub const AGENT_REGISTRATION_FAILED: i32 = -32000;

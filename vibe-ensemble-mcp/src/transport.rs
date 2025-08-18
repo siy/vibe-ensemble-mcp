@@ -6,8 +6,8 @@
 use crate::{Error, Result};
 use futures_util::{SinkExt, StreamExt};
 use tokio::sync::mpsc;
-use tokio_tungstenite::{connect_async, accept_async, WebSocketStream};
 use tokio_tungstenite::tungstenite::protocol::Message;
+use tokio_tungstenite::{accept_async, connect_async, WebSocketStream};
 use tracing::{debug, error, info, warn};
 
 /// Transport trait for MCP communication
@@ -15,10 +15,10 @@ use tracing::{debug, error, info, warn};
 pub trait Transport: Send + Sync {
     /// Send a message
     async fn send(&mut self, message: &str) -> Result<()>;
-    
+
     /// Receive a message
     async fn receive(&mut self) -> Result<String>;
-    
+
     /// Close the transport
     async fn close(&mut self) -> Result<()>;
 }
@@ -42,7 +42,9 @@ where
     }
 
     /// Create a WebSocket transport by connecting to a URL (client)
-    pub async fn connect(url: &str) -> Result<WebSocketTransport<tokio_tungstenite::MaybeTlsStream<tokio::net::TcpStream>>> {
+    pub async fn connect(
+        url: &str,
+    ) -> Result<WebSocketTransport<tokio_tungstenite::MaybeTlsStream<tokio::net::TcpStream>>> {
         let (websocket, _) = connect_async(url).await.map_err(|e| {
             error!("Failed to connect to WebSocket: {}", e);
             Error::Transport(format!("WebSocket connection failed: {}", e))
@@ -71,11 +73,13 @@ where
 {
     async fn send(&mut self, message: &str) -> Result<()> {
         if self.is_closed {
-            return Err(Error::Transport("WebSocket connection is closed".to_string()));
+            return Err(Error::Transport(
+                "WebSocket connection is closed".to_string(),
+            ));
         }
 
         debug!("Sending WebSocket message: {}", message);
-        
+
         self.websocket
             .send(Message::Text(message.to_string()))
             .await
@@ -89,7 +93,9 @@ where
 
     async fn receive(&mut self) -> Result<String> {
         if self.is_closed {
-            return Err(Error::Transport("WebSocket connection is closed".to_string()));
+            return Err(Error::Transport(
+                "WebSocket connection is closed".to_string(),
+            ));
         }
 
         loop {
@@ -109,7 +115,9 @@ where
                                 }
                                 Err(e) => {
                                     warn!("Received binary message that couldn't be converted to UTF-8: {}", e);
-                                    return Err(Error::Transport("Received non-UTF-8 binary message".to_string()));
+                                    return Err(Error::Transport(
+                                        "Received non-UTF-8 binary message".to_string(),
+                                    ));
                                 }
                             }
                         }
@@ -120,9 +128,12 @@ where
                         }
                         Message::Ping(payload) => {
                             debug!("Received WebSocket ping, sending pong");
-                            self.websocket.send(Message::Pong(payload)).await.map_err(|e| {
-                                Error::Transport(format!("Failed to send pong: {}", e))
-                            })?;
+                            self.websocket
+                                .send(Message::Pong(payload))
+                                .await
+                                .map_err(|e| {
+                                    Error::Transport(format!("Failed to send pong: {}", e))
+                                })?;
                             // Continue loop to get the next message
                         }
                         Message::Pong(_) => {
@@ -177,7 +188,7 @@ impl InMemoryTransport {
     pub fn pair() -> (Self, Self) {
         let (tx1, rx1) = mpsc::unbounded_channel();
         let (tx2, rx2) = mpsc::unbounded_channel();
-        
+
         (
             Self {
                 sender: tx1,
@@ -197,29 +208,30 @@ impl InMemoryTransport {
 impl Transport for InMemoryTransport {
     async fn send(&mut self, message: &str) -> Result<()> {
         if self.is_closed {
-            return Err(Error::Transport("In-memory transport is closed".to_string()));
+            return Err(Error::Transport(
+                "In-memory transport is closed".to_string(),
+            ));
         }
 
-        self.sender
-            .send(message.to_string())
-            .map_err(|_| Error::Transport("Failed to send message through in-memory transport".to_string()))?;
-        
+        self.sender.send(message.to_string()).map_err(|_| {
+            Error::Transport("Failed to send message through in-memory transport".to_string())
+        })?;
+
         debug!("Sent message through in-memory transport");
         Ok(())
     }
 
     async fn receive(&mut self) -> Result<String> {
         if self.is_closed {
-            return Err(Error::Transport("In-memory transport is closed".to_string()));
+            return Err(Error::Transport(
+                "In-memory transport is closed".to_string(),
+            ));
         }
 
-        self.receiver
-            .recv()
-            .await
-            .ok_or_else(|| {
-                self.is_closed = true;
-                Error::Connection("In-memory transport connection closed".to_string())
-            })
+        self.receiver.recv().await.ok_or_else(|| {
+            self.is_closed = true;
+            Error::Connection("In-memory transport connection closed".to_string())
+        })
     }
 
     async fn close(&mut self) -> Result<()> {
@@ -235,7 +247,10 @@ pub struct TransportFactory;
 impl TransportFactory {
     /// Create a WebSocket client transport
     pub async fn websocket_client(url: &str) -> Result<Box<dyn Transport>> {
-        let transport = WebSocketTransport::<tokio_tungstenite::MaybeTlsStream<tokio::net::TcpStream>>::connect(url).await?;
+        let transport = WebSocketTransport::<
+            tokio_tungstenite::MaybeTlsStream<tokio::net::TcpStream>,
+        >::connect(url)
+        .await?;
         Ok(Box::new(transport))
     }
 

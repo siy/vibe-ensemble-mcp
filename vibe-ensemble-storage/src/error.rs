@@ -23,6 +23,9 @@ pub enum Error {
     #[error("Constraint violation: {0}")]
     ConstraintViolation(String),
 
+    #[error("Conflict: {0}")]
+    Conflict(String),
+
     #[error("Internal error: {0}")]
     Internal(#[from] anyhow::Error),
 }
