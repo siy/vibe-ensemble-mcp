@@ -37,6 +37,9 @@ pub enum Error {
 
     #[error("Internal error: {0}")]
     Internal(#[from] anyhow::Error),
+
+    #[error("Configuration error: {message}")]
+    Configuration { message: String },
 }
 
 /// Convenience result type for MCP operations
