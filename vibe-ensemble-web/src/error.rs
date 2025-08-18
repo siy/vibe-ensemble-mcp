@@ -46,27 +46,45 @@ impl IntoResponse for Error {
             Error::NotFound(msg) => (StatusCode::NOT_FOUND, msg),
             Error::Storage(ref err) => {
                 tracing::error!("Storage error: {}", err);
-                (StatusCode::INTERNAL_SERVER_ERROR, "Internal server error".to_string())
+                (
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    "Internal server error".to_string(),
+                )
             }
             Error::Core(ref err) => {
                 tracing::error!("Core error: {}", err);
-                (StatusCode::INTERNAL_SERVER_ERROR, "Internal server error".to_string())
+                (
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    "Internal server error".to_string(),
+                )
             }
             Error::Template(ref err) => {
                 tracing::error!("Template error: {}", err);
-                (StatusCode::INTERNAL_SERVER_ERROR, "Template rendering error".to_string())
+                (
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    "Template rendering error".to_string(),
+                )
             }
             Error::Serialization(ref err) => {
                 tracing::error!("Serialization error: {}", err);
-                (StatusCode::INTERNAL_SERVER_ERROR, "Serialization error".to_string())
+                (
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    "Serialization error".to_string(),
+                )
             }
             Error::Io(ref err) => {
                 tracing::error!("IO error: {}", err);
-                (StatusCode::INTERNAL_SERVER_ERROR, "Internal server error".to_string())
+                (
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    "Internal server error".to_string(),
+                )
             }
             Error::Internal(ref err) => {
                 tracing::error!("Internal error: {}", err);
-                (StatusCode::INTERNAL_SERVER_ERROR, "Internal server error".to_string())
+                (
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    "Internal server error".to_string(),
+                )
             }
         };
 

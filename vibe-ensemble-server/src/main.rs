@@ -29,9 +29,9 @@ async fn main() -> Result<()> {
 
     // Create and start server
     let server = Server::new(config).await?;
-    
+
     info!("Server initialized, starting...");
-    
+
     if let Err(e) = server.run().await {
         error!("Server error: {}", e);
         return Err(e);

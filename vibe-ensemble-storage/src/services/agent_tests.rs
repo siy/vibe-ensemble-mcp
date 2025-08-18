@@ -1,5 +1,4 @@
 /// Tests for agent service
-
 #[cfg(test)]
 mod tests {
     use super::super::*;

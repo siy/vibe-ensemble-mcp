@@ -11,7 +11,11 @@ pub mod services;
 
 pub use error::{Error, Result};
 pub use manager::StorageManager;
-pub use services::{AgentService, AgentSession, AgentStatistics};
+pub use services::{
+    AgentPool, AgentPoolConfig, AgentPoolPerformance, AgentPoolStatistics, AgentPoolStatus,
+    AgentService, AgentSession, AgentStatistics, CapabilityStats, HealthCheckResult,
+    LoadBalancerRecommendation, SystemHealth, TaskAssignment,
+};
 
 /// Re-export core types for convenience
 pub use vibe_ensemble_core as core;

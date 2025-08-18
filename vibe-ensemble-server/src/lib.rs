@@ -12,6 +12,6 @@ pub use error::{Error, Result};
 /// Re-export all core modules for convenience
 pub use vibe_ensemble_core as core;
 pub use vibe_ensemble_mcp as mcp;
+pub use vibe_ensemble_prompts as prompts;
 pub use vibe_ensemble_storage as storage;
 pub use vibe_ensemble_web as web;
-pub use vibe_ensemble_prompts as prompts;

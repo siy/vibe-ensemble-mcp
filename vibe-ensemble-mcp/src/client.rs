@@ -37,24 +37,20 @@ impl McpClient {
             capabilities: self.capabilities.clone(),
         };
 
-        let request = JsonRpcRequest::new(
-            methods::INITIALIZE,
-            Some(serde_json::to_value(params)?),
-        );
+        let request = JsonRpcRequest::new(methods::INITIALIZE, Some(serde_json::to_value(params)?));
 
         let response = self.send_request(request).await?;
-        
+
         if let Some(error) = response.error {
             return Err(Error::Protocol {
                 message: format!("Initialization failed: {}", error.message),
             });
         }
 
-        let result: InitializeResult = serde_json::from_value(
-            response.result.ok_or_else(|| Error::Protocol {
+        let result: InitializeResult =
+            serde_json::from_value(response.result.ok_or_else(|| Error::Protocol {
                 message: "No result in initialization response".to_string(),
-            })?
-        )?;
+            })?)?;
 
         // Store session ID for future reference
         self.session_id = Some(match &response.id {
@@ -62,12 +58,12 @@ impl McpClient {
             serde_json::Value::Number(n) => n.to_string(),
             _ => "unknown".to_string(),
         });
-        
+
         info!(
             "MCP client initialized successfully with server: {} v{}",
             result.server_info.name, result.server_info.version
         );
-        
+
         Ok(result)
     }
 
@@ -91,11 +87,12 @@ impl McpClient {
     }
 
     /// Register as an agent with the Vibe Ensemble server
-    pub async fn register_agent(&mut self, params: AgentRegisterParams) -> Result<AgentRegisterResult> {
-        let request = JsonRpcRequest::new(
-            methods::AGENT_REGISTER,
-            Some(serde_json::to_value(params)?),
-        );
+    pub async fn register_agent(
+        &mut self,
+        params: AgentRegisterParams,
+    ) -> Result<AgentRegisterResult> {
+        let request =
+            JsonRpcRequest::new(methods::AGENT_REGISTER, Some(serde_json::to_value(params)?));
 
         let response = self.send_request(request).await?;
 
@@ -105,11 +102,10 @@ impl McpClient {
             });
         }
 
-        let result: AgentRegisterResult = serde_json::from_value(
-            response.result.ok_or_else(|| Error::Protocol {
+        let result: AgentRegisterResult =
+            serde_json::from_value(response.result.ok_or_else(|| Error::Protocol {
                 message: "No result in registration response".to_string(),
-            })?
-        )?;
+            })?)?;
 
         info!("Agent registered with ID: {}", result.agent_id);
         Ok(result)
@@ -156,12 +152,16 @@ impl McpClient {
         let response_json = self.transport.receive().await?;
         let response: JsonRpcResponse = serde_json::from_str(&response_json)?;
         debug!("Received response for request ID: {:?}", response.id);
-        
+
         Ok(response)
     }
 
     /// Send a notification (no response expected)
-    pub async fn send_notification(&mut self, method: &str, params: Option<serde_json::Value>) -> Result<()> {
+    pub async fn send_notification(
+        &mut self,
+        method: &str,
+        params: Option<serde_json::Value>,
+    ) -> Result<()> {
         let notification = JsonRpcNotification::new(method, params);
         let notification_json = serde_json::to_string(&notification)?;
         self.transport.send(&notification_json).await?;

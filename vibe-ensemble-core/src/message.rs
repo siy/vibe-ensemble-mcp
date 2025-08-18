@@ -39,10 +39,10 @@
 //!     .unwrap();
 //! ```
 
+use crate::{Error, Result};
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
-use crate::{Error, Result};
 
 /// Represents a message between agents
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -96,7 +96,7 @@ impl Message {
         priority: MessagePriority,
     ) -> Result<Self> {
         Self::validate_content(&content)?;
-        
+
         Ok(Self {
             id: Uuid::new_v4(),
             sender_id,
@@ -142,9 +142,13 @@ impl Message {
     }
 
     /// Create a new broadcast message with validation
-    pub fn new_broadcast(sender_id: Uuid, content: String, priority: MessagePriority) -> Result<Self> {
+    pub fn new_broadcast(
+        sender_id: Uuid,
+        content: String,
+        priority: MessagePriority,
+    ) -> Result<Self> {
         Self::validate_content(&content)?;
-        
+
         Ok(Self {
             id: Uuid::new_v4(),
             sender_id,
@@ -220,7 +224,9 @@ impl Message {
 
     /// Get the age of the message in seconds
     pub fn age_seconds(&self) -> i64 {
-        Utc::now().signed_duration_since(self.created_at).num_seconds()
+        Utc::now()
+            .signed_duration_since(self.created_at)
+            .num_seconds()
     }
 
     /// Check if the message requires delivery confirmation
@@ -231,7 +237,9 @@ impl Message {
     /// Get the delivery time if delivered
     pub fn delivery_time(&self) -> Option<i64> {
         self.delivered_at.map(|delivered| {
-            delivered.signed_duration_since(self.created_at).num_seconds()
+            delivered
+                .signed_duration_since(self.created_at)
+                .num_seconds()
         })
     }
 }
@@ -666,7 +674,9 @@ mod tests {
         assert!(message.requires_confirmation());
 
         // Test adding knowledge references
-        message.add_knowledge_ref("pattern-002".to_string()).unwrap();
+        message
+            .add_knowledge_ref("pattern-002".to_string())
+            .unwrap();
         assert_eq!(message.metadata.knowledge_refs.len(), 2);
 
         // Test adding empty knowledge reference
@@ -741,7 +751,8 @@ mod tests {
             recipient_id,
             "Direct test".to_string(),
             MessagePriority::Normal,
-        ).unwrap();
+        )
+        .unwrap();
         assert!(!message.is_broadcast());
 
         // Test broadcast message legacy constructor
@@ -749,7 +760,8 @@ mod tests {
             sender_id,
             "Broadcast test".to_string(),
             MessagePriority::Low,
-        ).unwrap();
+        )
+        .unwrap();
         assert!(message.is_broadcast());
     }
 }

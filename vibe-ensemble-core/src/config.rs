@@ -31,11 +31,11 @@
 //!     .unwrap();
 //! ```
 
+use crate::{Error, Result};
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use uuid::Uuid;
-use crate::{Error, Result};
 
 /// Represents a configuration for the Vibe Ensemble system
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -76,10 +76,17 @@ pub enum LoadBalancingStrategy {
 /// Failure handling strategies
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub enum FailureHandlingStrategy {
-    Retry { max_attempts: u32, backoff_seconds: u64 },
-    Failover { backup_agents: Vec<Uuid> },
+    Retry {
+        max_attempts: u32,
+        backoff_seconds: u64,
+    },
+    Failover {
+        backup_agents: Vec<Uuid>,
+    },
     Abort,
-    Escalate { escalation_agent_id: Uuid },
+    Escalate {
+        escalation_agent_id: Uuid,
+    },
 }
 
 /// Integration specification for external services
@@ -104,12 +111,9 @@ pub struct RetryPolicy {
 
 impl Configuration {
     /// Create a new configuration with validation
-    pub fn new(
-        name: String,
-        coordination_settings: CoordinationSettings,
-    ) -> Result<Self> {
+    pub fn new(name: String, coordination_settings: CoordinationSettings) -> Result<Self> {
         Self::validate_name(&name)?;
-        
+
         let now = Utc::now();
         Ok(Self {
             id: Uuid::new_v4(),
@@ -142,7 +146,10 @@ impl Configuration {
                 message: "Configuration name cannot exceed 100 characters".to_string(),
             });
         }
-        if !name.chars().all(|c| c.is_alphanumeric() || c == '-' || c == '_') {
+        if !name
+            .chars()
+            .all(|c| c.is_alphanumeric() || c == '-' || c == '_')
+        {
             return Err(Error::Validation {
                 message: "Configuration name can only contain alphanumeric characters, hyphens, and underscores".to_string(),
             });
@@ -239,12 +246,16 @@ impl Configuration {
 
     /// Get the age of the configuration in seconds
     pub fn age_seconds(&self) -> i64 {
-        Utc::now().signed_duration_since(self.created_at).num_seconds()
+        Utc::now()
+            .signed_duration_since(self.created_at)
+            .num_seconds()
     }
 
     /// Get the time since last update in seconds
     pub fn time_since_update_seconds(&self) -> i64 {
-        Utc::now().signed_duration_since(self.updated_at).num_seconds()
+        Utc::now()
+            .signed_duration_since(self.updated_at)
+            .num_seconds()
     }
 }
 
@@ -258,7 +269,7 @@ impl CoordinationSettings {
     pub fn default_settings() -> Self {
         Self {
             max_concurrent_tasks: 5,
-            task_timeout_seconds: 1800, // 30 minutes
+            task_timeout_seconds: 1800,     // 30 minutes
             heartbeat_interval_seconds: 60, // 1 minute
             max_agents: 10,
             auto_scaling_enabled: false,
@@ -298,11 +309,7 @@ impl CoordinationSettings {
 
 impl IntegrationSpec {
     /// Create a new integration spec with validation
-    pub fn new(
-        name: String,
-        endpoint: String,
-        credentials: Vec<(String, String)>,
-    ) -> Result<Self> {
+    pub fn new(name: String, endpoint: String, credentials: Vec<(String, String)>) -> Result<Self> {
         if name.trim().is_empty() {
             return Err(Error::Validation {
                 message: "Integration name cannot be empty".to_string(),
@@ -313,7 +320,7 @@ impl IntegrationSpec {
                 message: "Integration endpoint cannot be empty".to_string(),
             });
         }
-        
+
         Ok(Self {
             name,
             endpoint,
@@ -374,7 +381,7 @@ impl RetryPolicy {
                 message: "Max delay must be greater than or equal to initial delay".to_string(),
             });
         }
-        
+
         Ok(Self {
             max_attempts,
             initial_delay_seconds,
@@ -436,7 +443,11 @@ impl ConfigurationBuilder {
     }
 
     /// Add a behavioral parameter
-    pub fn behavioral_parameter<K: Into<String>, V: Into<String>>(mut self, key: K, value: V) -> Self {
+    pub fn behavioral_parameter<K: Into<String>, V: Into<String>>(
+        mut self,
+        key: K,
+        value: V,
+    ) -> Self {
         self.behavioral_parameters.insert(key.into(), value.into());
         self
     }
@@ -448,9 +459,8 @@ impl ConfigurationBuilder {
         K: Into<String>,
         V: Into<String>,
     {
-        self.behavioral_parameters.extend(
-            params.into_iter().map(|(k, v)| (k.into(), v.into()))
-        );
+        self.behavioral_parameters
+            .extend(params.into_iter().map(|(k, v)| (k.into(), v.into())));
         self
     }
 
@@ -465,26 +475,28 @@ impl ConfigurationBuilder {
         let name = self.name.ok_or_else(|| Error::Validation {
             message: "Configuration name is required".to_string(),
         })?;
-        let coordination_settings = self.coordination_settings.unwrap_or_else(CoordinationSettings::default_settings);
-        
+        let coordination_settings = self
+            .coordination_settings
+            .unwrap_or_else(CoordinationSettings::default_settings);
+
         coordination_settings.validate()?;
-        
+
         let mut config = Configuration::new(name, coordination_settings)?;
-        
+
         if let Some(description) = self.description {
             config.set_description(Some(description));
         }
-        
+
         // Add behavioral parameters
         for (key, value) in self.behavioral_parameters {
             config.add_behavioral_parameter(key, value)?;
         }
-        
+
         // Add integration specs
         for (key, spec) in self.integration_specs {
             config.add_integration_spec(key, spec)?;
         }
-        
+
         Ok(config)
     }
 }
@@ -581,7 +593,7 @@ impl CoordinationSettingsBuilder {
             load_balancing_strategy: self.load_balancing_strategy,
             failure_handling: self.failure_handling,
         };
-        
+
         settings.validate()?;
         Ok(settings)
     }
@@ -621,9 +633,12 @@ mod tests {
         assert_eq!(config.name, "test-config");
         assert!(config.description.is_some());
         assert_eq!(config.coordination_settings.max_concurrent_tasks, 10);
-        assert_eq!(config.coordination_settings.auto_scaling_enabled, true);
+        assert!(config.coordination_settings.auto_scaling_enabled);
         assert_eq!(config.behavioral_parameters.len(), 2);
-        assert_eq!(config.get_behavioral_parameter("max_retries"), Some(&"5".to_string()));
+        assert_eq!(
+            config.get_behavioral_parameter("max_retries"),
+            Some(&"5".to_string())
+        );
         assert!(config.is_active);
         assert_eq!(config.version, 1);
     }
@@ -631,28 +646,20 @@ mod tests {
     #[test]
     fn test_configuration_name_validation() {
         // Empty name should fail
-        let result = Configuration::builder()
-            .name("")
-            .build();
+        let result = Configuration::builder().name("").build();
         assert!(result.is_err());
 
         // Invalid characters should fail
-        let result = Configuration::builder()
-            .name("test@config")
-            .build();
+        let result = Configuration::builder().name("test@config").build();
         assert!(result.is_err());
 
         // Too long name should fail
         let long_name = "a".repeat(101);
-        let result = Configuration::builder()
-            .name(long_name)
-            .build();
+        let result = Configuration::builder().name(long_name).build();
         assert!(result.is_err());
 
         // Valid name should succeed
-        let result = Configuration::builder()
-            .name("valid-config_123")
-            .build();
+        let result = Configuration::builder().name("valid-config_123").build();
         assert!(result.is_ok());
     }
 
@@ -677,9 +684,7 @@ mod tests {
         assert!(result.is_err());
 
         // Zero max agents should fail
-        let result = CoordinationSettings::builder()
-            .max_agents(0)
-            .build();
+        let result = CoordinationSettings::builder().max_agents(0).build();
         assert!(result.is_err());
 
         // Valid settings should succeed
@@ -700,8 +705,13 @@ mod tests {
             .unwrap();
 
         // Add parameter
-        config.add_behavioral_parameter("test_param".to_string(), "test_value".to_string()).unwrap();
-        assert_eq!(config.get_behavioral_parameter("test_param"), Some(&"test_value".to_string()));
+        config
+            .add_behavioral_parameter("test_param".to_string(), "test_value".to_string())
+            .unwrap();
+        assert_eq!(
+            config.get_behavioral_parameter("test_param"),
+            Some(&"test_value".to_string())
+        );
 
         // Remove parameter
         config.remove_behavioral_parameter("test_param");
@@ -727,10 +737,13 @@ mod tests {
             "Test Integration".to_string(),
             "https://api.example.com".to_string(),
             vec![("api_key".to_string(), "secret".to_string())],
-        ).unwrap();
+        )
+        .unwrap();
 
         // Add integration spec
-        config.add_integration_spec("test_integration".to_string(), spec.clone()).unwrap();
+        config
+            .add_integration_spec("test_integration".to_string(), spec.clone())
+            .unwrap();
         assert!(config.get_integration_spec("test_integration").is_some());
 
         // Remove integration spec
@@ -753,11 +766,7 @@ mod tests {
         assert!(result.is_err());
 
         // Empty endpoint should fail
-        let result = IntegrationSpec::new(
-            "Test Integration".to_string(),
-            "".to_string(),
-            vec![],
-        );
+        let result = IntegrationSpec::new("Test Integration".to_string(), "".to_string(), vec![]);
         assert!(result.is_err());
 
         // Valid spec should succeed
@@ -775,13 +784,14 @@ mod tests {
             "Test Integration".to_string(),
             "https://api.example.com".to_string(),
             vec![],
-        ).unwrap();
+        )
+        .unwrap();
 
         assert!(spec.enabled);
-        
+
         spec.disable();
         assert!(!spec.enabled);
-        
+
         spec.enable();
         assert!(spec.enabled);
 
@@ -824,10 +834,10 @@ mod tests {
             .unwrap();
 
         assert!(config.is_active);
-        
+
         config.deactivate();
         assert!(!config.is_active);
-        
+
         config.activate();
         assert!(config.is_active);
 
@@ -850,7 +860,7 @@ mod tests {
             .unwrap();
 
         let initial_version = config.version;
-        
+
         let new_settings = CoordinationSettings::builder()
             .max_concurrent_tasks(20)
             .build()
@@ -869,7 +879,10 @@ mod tests {
         assert_eq!(settings.heartbeat_interval_seconds, 60);
         assert_eq!(settings.max_agents, 10);
         assert!(!settings.auto_scaling_enabled);
-        assert_eq!(settings.load_balancing_strategy, LoadBalancingStrategy::RoundRobin);
+        assert_eq!(
+            settings.load_balancing_strategy,
+            LoadBalancingStrategy::RoundRobin
+        );
     }
 
     #[test]
@@ -878,11 +891,11 @@ mod tests {
             max_attempts: 3,
             backoff_seconds: 5,
         };
-        
+
         let failover_strategy = FailureHandlingStrategy::Failover {
             backup_agents: vec![Uuid::new_v4(), Uuid::new_v4()],
         };
-        
+
         let escalate_strategy = FailureHandlingStrategy::Escalate {
             escalation_agent_id: Uuid::new_v4(),
         };
@@ -890,28 +903,34 @@ mod tests {
         // Test that different strategies can be used
         let config1 = Configuration::builder()
             .name("config1")
-            .coordination_settings(CoordinationSettings::builder()
-                .failure_handling(retry_strategy)
-                .build()
-                .unwrap())
+            .coordination_settings(
+                CoordinationSettings::builder()
+                    .failure_handling(retry_strategy)
+                    .build()
+                    .unwrap(),
+            )
             .build()
             .unwrap();
 
         let config2 = Configuration::builder()
             .name("config2")
-            .coordination_settings(CoordinationSettings::builder()
-                .failure_handling(failover_strategy)
-                .build()
-                .unwrap())
+            .coordination_settings(
+                CoordinationSettings::builder()
+                    .failure_handling(failover_strategy)
+                    .build()
+                    .unwrap(),
+            )
             .build()
             .unwrap();
 
         let config3 = Configuration::builder()
             .name("config3")
-            .coordination_settings(CoordinationSettings::builder()
-                .failure_handling(escalate_strategy)
-                .build()
-                .unwrap())
+            .coordination_settings(
+                CoordinationSettings::builder()
+                    .failure_handling(escalate_strategy)
+                    .build()
+                    .unwrap(),
+            )
             .build()
             .unwrap();
 

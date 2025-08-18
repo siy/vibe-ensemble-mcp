@@ -37,10 +37,10 @@
 //! );
 //! ```
 
+use crate::{Error, Result};
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
-use crate::{Error, Result};
 
 /// Represents a knowledge entry in the system
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -106,7 +106,7 @@ impl Knowledge {
     ) -> Result<Self> {
         Self::validate_title(&title)?;
         Self::validate_content(&content)?;
-        
+
         let now = Utc::now();
         Ok(Self {
             id: Uuid::new_v4(),
@@ -208,12 +208,16 @@ impl Knowledge {
 
     /// Get the age of the knowledge entry in seconds
     pub fn age_seconds(&self) -> i64 {
-        Utc::now().signed_duration_since(self.created_at).num_seconds()
+        Utc::now()
+            .signed_duration_since(self.created_at)
+            .num_seconds()
     }
 
     /// Get the time since last update in seconds
     pub fn time_since_update_seconds(&self) -> i64 {
-        Utc::now().signed_duration_since(self.updated_at).num_seconds()
+        Utc::now()
+            .signed_duration_since(self.updated_at)
+            .num_seconds()
     }
 
     /// Search content for a specific term (case-insensitive)
@@ -221,7 +225,10 @@ impl Knowledge {
         let term_lower = term.to_lowercase();
         self.title.to_lowercase().contains(&term_lower)
             || self.content.to_lowercase().contains(&term_lower)
-            || self.tags.iter().any(|tag| tag.to_lowercase().contains(&term_lower))
+            || self
+                .tags
+                .iter()
+                .any(|tag| tag.to_lowercase().contains(&term_lower))
     }
 
     /// Check if the knowledge is accessible by a given agent
@@ -236,11 +243,7 @@ impl Knowledge {
 
 impl KnowledgeRelation {
     /// Create a new knowledge relation
-    pub fn new(
-        source_id: Uuid,
-        target_id: Uuid,
-        relation_type: RelationType,
-    ) -> Self {
+    pub fn new(source_id: Uuid, target_id: Uuid, relation_type: RelationType) -> Self {
         Self {
             id: Uuid::new_v4(),
             source_id,
@@ -263,7 +266,9 @@ impl KnowledgeRelation {
 
     /// Get the age of the relation in seconds
     pub fn age_seconds(&self) -> i64 {
-        Utc::now().signed_duration_since(self.created_at).num_seconds()
+        Utc::now()
+            .signed_duration_since(self.created_at)
+            .num_seconds()
     }
 }
 
@@ -355,13 +360,14 @@ impl KnowledgeBuilder {
             message: "Access level is required".to_string(),
         })?;
 
-        let mut knowledge = Knowledge::new(title, content, knowledge_type, created_by, access_level)?;
-        
+        let mut knowledge =
+            Knowledge::new(title, content, knowledge_type, created_by, access_level)?;
+
         // Add tags
         for tag in self.tags {
             knowledge.add_tag(tag)?;
         }
-        
+
         Ok(knowledge)
     }
 }
@@ -379,7 +385,7 @@ mod tests {
     #[test]
     fn test_knowledge_creation_with_builder() {
         let creator_id = Uuid::new_v4();
-        
+
         let knowledge = Knowledge::builder()
             .title("Test Pattern")
             .content("This is a test pattern for validation purposes.")
@@ -406,7 +412,7 @@ mod tests {
     #[test]
     fn test_knowledge_title_validation() {
         let creator_id = Uuid::new_v4();
-        
+
         // Empty title should fail
         let result = Knowledge::builder()
             .title("")
@@ -432,7 +438,7 @@ mod tests {
     #[test]
     fn test_knowledge_content_validation() {
         let creator_id = Uuid::new_v4();
-        
+
         // Empty content should fail
         let result = Knowledge::builder()
             .title("Valid Title")
@@ -458,7 +464,7 @@ mod tests {
     #[test]
     fn test_knowledge_content_update() {
         let creator_id = Uuid::new_v4();
-        
+
         let mut knowledge = Knowledge::builder()
             .title("Test Pattern")
             .content("Original content")
@@ -470,10 +476,12 @@ mod tests {
 
         let initial_version = knowledge.version;
         let initial_updated_at = knowledge.updated_at;
-        
+
         std::thread::sleep(std::time::Duration::from_millis(10));
-        knowledge.update_content("Updated content".to_string()).unwrap();
-        
+        knowledge
+            .update_content("Updated content".to_string())
+            .unwrap();
+
         assert_eq!(knowledge.content, "Updated content");
         assert_eq!(knowledge.version, initial_version + 1);
         assert!(knowledge.updated_at > initial_updated_at);
@@ -486,7 +494,7 @@ mod tests {
     #[test]
     fn test_knowledge_tag_operations() {
         let creator_id = Uuid::new_v4();
-        
+
         let mut knowledge = Knowledge::builder()
             .title("Test Pattern")
             .content("Test content")
@@ -497,23 +505,23 @@ mod tests {
             .unwrap();
 
         assert!(!knowledge.has_tag("test"));
-        
+
         knowledge.add_tag("test".to_string()).unwrap();
         assert!(knowledge.has_tag("test"));
-        
+
         // Adding duplicate tag should not error
         knowledge.add_tag("test".to_string()).unwrap();
         assert_eq!(knowledge.tags.len(), 1);
-        
+
         // Adding empty tag should fail
         let result = knowledge.add_tag("".to_string());
         assert!(result.is_err());
-        
+
         // Adding too long tag should fail
         let long_tag = "a".repeat(51);
         let result = knowledge.add_tag(long_tag);
         assert!(result.is_err());
-        
+
         knowledge.remove_tag("test");
         assert!(!knowledge.has_tag("test"));
     }
@@ -522,7 +530,7 @@ mod tests {
     fn test_knowledge_access_control() {
         let creator_id = Uuid::new_v4();
         let other_id = Uuid::new_v4();
-        
+
         // Test public access
         let public_knowledge = Knowledge::builder()
             .title("Public Pattern")
@@ -566,7 +574,7 @@ mod tests {
     #[test]
     fn test_knowledge_search() {
         let creator_id = Uuid::new_v4();
-        
+
         let knowledge = Knowledge::builder()
             .title("REST API Design")
             .content("Guidelines for designing RESTful APIs with proper HTTP methods.")
@@ -582,15 +590,15 @@ mod tests {
         assert!(knowledge.contains_term("REST"));
         assert!(knowledge.contains_term("rest"));
         assert!(knowledge.contains_term("API"));
-        
+
         // Test content search
         assert!(knowledge.contains_term("HTTP"));
         assert!(knowledge.contains_term("guidelines"));
-        
+
         // Test tag search
         assert!(knowledge.contains_term("api"));
         assert!(knowledge.contains_term("rest"));
-        
+
         // Test non-existent term
         assert!(!knowledge.contains_term("python"));
     }
@@ -598,7 +606,7 @@ mod tests {
     #[test]
     fn test_knowledge_age_and_updates() {
         let creator_id = Uuid::new_v4();
-        
+
         let knowledge = Knowledge::builder()
             .title("Test Pattern")
             .content("Test content")
@@ -610,7 +618,7 @@ mod tests {
 
         let age = knowledge.age_seconds();
         let time_since_update = knowledge.time_since_update_seconds();
-        
+
         assert!(age >= 0);
         assert!(age < 60); // Should be very recent
         assert!(time_since_update >= 0);
@@ -620,7 +628,7 @@ mod tests {
     #[test]
     fn test_knowledge_access_level_update() {
         let creator_id = Uuid::new_v4();
-        
+
         let mut knowledge = Knowledge::builder()
             .title("Test Pattern")
             .content("Test content")
@@ -632,7 +640,7 @@ mod tests {
 
         let initial_updated_at = knowledge.updated_at;
         std::thread::sleep(std::time::Duration::from_millis(10));
-        
+
         knowledge.set_access_level(AccessLevel::Private);
         assert_eq!(knowledge.access_level, AccessLevel::Private);
         assert!(knowledge.updated_at > initial_updated_at);
@@ -642,23 +650,19 @@ mod tests {
     fn test_knowledge_relation() {
         let source_id = Uuid::new_v4();
         let target_id = Uuid::new_v4();
-        
-        let relation = KnowledgeRelation::new(
-            source_id,
-            target_id,
-            RelationType::References,
-        );
+
+        let relation = KnowledgeRelation::new(source_id, target_id, RelationType::References);
 
         assert_eq!(relation.source_id, source_id);
         assert_eq!(relation.target_id, target_id);
         assert_eq!(relation.relation_type, RelationType::References);
-        
+
         assert!(relation.connects(source_id, target_id));
         assert!(relation.connects(target_id, source_id));
         assert!(relation.involves(source_id));
         assert!(relation.involves(target_id));
         assert!(!relation.involves(Uuid::new_v4()));
-        
+
         let age = relation.age_seconds();
         assert!(age >= 0);
         assert!(age < 60);
@@ -667,7 +671,7 @@ mod tests {
     #[test]
     fn test_knowledge_builder_validation() {
         let creator_id = Uuid::new_v4();
-        
+
         // Missing title should fail
         let result = Knowledge::builder()
             .content("Valid content")

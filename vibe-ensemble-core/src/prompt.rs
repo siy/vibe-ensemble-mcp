@@ -58,10 +58,10 @@
 //!     .unwrap();
 //! ```
 
+use crate::{Error, Result};
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
-use crate::{Error, Result};
 
 /// Represents a system prompt template
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -176,7 +176,7 @@ impl SystemPrompt {
     ) -> Result<Self> {
         Self::validate_name(&name)?;
         Self::validate_template(&template)?;
-        
+
         let now = Utc::now();
         Ok(Self {
             id: Uuid::new_v4(),
@@ -275,41 +275,53 @@ impl SystemPrompt {
             return false;
         }
 
-        matches!((&self.prompt_type, agent_type), 
-            (PromptType::Universal, _) | 
-            (PromptType::Coordinator, crate::agent::AgentType::Coordinator) | 
-            (PromptType::Worker, crate::agent::AgentType::Worker))
+        matches!(
+            (&self.prompt_type, agent_type),
+            (PromptType::Universal, _)
+                | (
+                    PromptType::Coordinator,
+                    crate::agent::AgentType::Coordinator
+                )
+                | (PromptType::Worker, crate::agent::AgentType::Worker)
+        )
     }
 
     /// Render the prompt with provided variable values
-    pub fn render(&self, variables: &std::collections::HashMap<String, String>) -> Result<RenderedPrompt> {
+    pub fn render(
+        &self,
+        variables: &std::collections::HashMap<String, String>,
+    ) -> Result<RenderedPrompt> {
         let mut content = self.template.clone();
         let mut variables_used = std::collections::HashMap::new();
-        
+
         // Check for required variables
         for prompt_var in &self.variables {
-            if prompt_var.required && !variables.contains_key(&prompt_var.name) && prompt_var.default_value.is_none() {
+            if prompt_var.required
+                && !variables.contains_key(&prompt_var.name)
+                && prompt_var.default_value.is_none()
+            {
                 return Err(Error::Validation {
                     message: format!("Required variable '{}' not provided", prompt_var.name),
                 });
             }
         }
-        
+
         // Replace variables in template
         for prompt_var in &self.variables {
             let placeholder = format!("{{{{{}}}}}", prompt_var.name);
             if content.contains(&placeholder) {
-                let value = variables.get(&prompt_var.name)
+                let value = variables
+                    .get(&prompt_var.name)
                     .or(prompt_var.default_value.as_ref())
                     .ok_or_else(|| Error::Validation {
                         message: format!("No value provided for variable '{}'", prompt_var.name),
                     })?;
-                
+
                 content = content.replace(&placeholder, value);
                 variables_used.insert(prompt_var.name.clone(), value.clone());
             }
         }
-        
+
         Ok(RenderedPrompt {
             prompt_id: self.id,
             content,
@@ -320,12 +332,16 @@ impl SystemPrompt {
 
     /// Get the age of the prompt in seconds
     pub fn age_seconds(&self) -> i64 {
-        Utc::now().signed_duration_since(self.created_at).num_seconds()
+        Utc::now()
+            .signed_duration_since(self.created_at)
+            .num_seconds()
     }
 
     /// Get the time since last update in seconds
     pub fn time_since_update_seconds(&self) -> i64 {
-        Utc::now().signed_duration_since(self.updated_at).num_seconds()
+        Utc::now()
+            .signed_duration_since(self.updated_at)
+            .num_seconds()
     }
 }
 
@@ -349,10 +365,11 @@ impl PromptVariable {
         }
         if !name.chars().all(|c| c.is_alphanumeric() || c == '_') {
             return Err(Error::Validation {
-                message: "Variable name can only contain alphanumeric characters and underscores".to_string(),
+                message: "Variable name can only contain alphanumeric characters and underscores"
+                    .to_string(),
             });
         }
-        
+
         Ok(Self {
             name,
             description,
@@ -378,7 +395,7 @@ impl AgentTemplate {
         created_by: Uuid,
     ) -> Result<Self> {
         Self::validate_name(&name)?;
-        
+
         let now = Utc::now();
         Ok(Self {
             id: Uuid::new_v4(),
@@ -522,18 +539,15 @@ impl AgentTemplate {
 
     /// Get the age of the template in seconds
     pub fn age_seconds(&self) -> i64 {
-        Utc::now().signed_duration_since(self.created_at).num_seconds()
+        Utc::now()
+            .signed_duration_since(self.created_at)
+            .num_seconds()
     }
 }
 
 impl WorkflowStep {
     /// Create a new workflow step with validation
-    pub fn new(
-        id: String,
-        name: String,
-        description: String,
-        order: u32,
-    ) -> Result<Self> {
+    pub fn new(id: String, name: String, description: String, order: u32) -> Result<Self> {
         if id.trim().is_empty() {
             return Err(Error::Validation {
                 message: "Workflow step ID cannot be empty".to_string(),
@@ -544,7 +558,7 @@ impl WorkflowStep {
                 message: "Workflow step name cannot be empty".to_string(),
             });
         }
-        
+
         Ok(Self {
             id,
             name,
@@ -661,12 +675,12 @@ impl SystemPromptBuilder {
         })?;
 
         let mut prompt = SystemPrompt::new(name, description, template, prompt_type, created_by)?;
-        
+
         // Add variables
         for variable in self.variables {
             prompt.add_variable(variable)?;
         }
-        
+
         Ok(prompt)
     }
 }
@@ -741,7 +755,8 @@ impl AgentTemplateBuilder {
         I: IntoIterator<Item = S>,
         S: Into<String>,
     {
-        self.capabilities.extend(capabilities.into_iter().map(|c| c.into()));
+        self.capabilities
+            .extend(capabilities.into_iter().map(|c| c.into()));
         self
     }
 
@@ -779,25 +794,25 @@ impl AgentTemplateBuilder {
         })?;
 
         let mut template = AgentTemplate::new(name, description, agent_type, created_by)?;
-        
+
         // Add capabilities
         for capability in self.capabilities {
             template.add_capability(capability)?;
         }
-        
+
         // Set system prompt ID
         template.set_system_prompt_id(self.system_prompt_id);
-        
+
         // Add workflow steps
         for step in self.workflow_steps {
             template.add_workflow_step(step)?;
         }
-        
+
         // Add configuration parameters
         for (key, value) in self.configuration_params {
             template.add_config_param(key, value)?;
         }
-        
+
         Ok(template)
     }
 }
@@ -815,14 +830,16 @@ mod tests {
     #[test]
     fn test_system_prompt_creation_with_builder() {
         let creator_id = Uuid::new_v4();
-        
+
         let variable = PromptVariable::new(
             "task_type".to_string(),
             "Type of task to perform".to_string(),
             VariableType::String,
             true,
-        ).unwrap().with_default_value("general".to_string());
-        
+        )
+        .unwrap()
+        .with_default_value("general".to_string());
+
         let prompt = SystemPrompt::builder()
             .name("test-coordinator")
             .description("Test coordinator prompt")
@@ -844,7 +861,7 @@ mod tests {
     #[test]
     fn test_system_prompt_validation() {
         let creator_id = Uuid::new_v4();
-        
+
         // Empty name should fail
         let result = SystemPrompt::builder()
             .name("")
@@ -920,21 +937,24 @@ mod tests {
     #[test]
     fn test_prompt_rendering() {
         let creator_id = Uuid::new_v4();
-        
+
         let variable1 = PromptVariable::new(
             "role".to_string(),
             "Role description".to_string(),
             VariableType::String,
             true,
-        ).unwrap();
-        
+        )
+        .unwrap();
+
         let variable2 = PromptVariable::new(
             "optional_param".to_string(),
             "Optional parameter".to_string(),
             VariableType::String,
             false,
-        ).unwrap().with_default_value("default_value".to_string());
-        
+        )
+        .unwrap()
+        .with_default_value("default_value".to_string());
+
         let prompt = SystemPrompt::builder()
             .name("test-prompt")
             .description("Test prompt")
@@ -949,7 +969,7 @@ mod tests {
         // Test successful rendering
         let mut variables = std::collections::HashMap::new();
         variables.insert("role".to_string(), "coordinator".to_string());
-        
+
         let rendered = prompt.render(&variables).unwrap();
         assert!(rendered.content.contains("coordinator"));
         assert!(rendered.content.contains("default_value"));
@@ -964,7 +984,7 @@ mod tests {
     #[test]
     fn test_prompt_variable_operations() {
         let creator_id = Uuid::new_v4();
-        
+
         let mut prompt = SystemPrompt::builder()
             .name("test-prompt")
             .description("Test prompt")
@@ -979,7 +999,8 @@ mod tests {
             "Test variable".to_string(),
             VariableType::String,
             false,
-        ).unwrap();
+        )
+        .unwrap();
 
         // Add variable
         prompt.add_variable(variable.clone()).unwrap();
@@ -999,7 +1020,7 @@ mod tests {
     #[test]
     fn test_prompt_suitability() {
         let creator_id = Uuid::new_v4();
-        
+
         // Test coordinator prompt
         let coordinator_prompt = SystemPrompt::builder()
             .name("coordinator-prompt")
@@ -1036,14 +1057,15 @@ mod tests {
     fn test_agent_template_creation() {
         let creator_id = Uuid::new_v4();
         let prompt_id = Uuid::new_v4();
-        
+
         let step = WorkflowStep::new(
             "analyze".to_string(),
             "Analyze Code".to_string(),
             "Perform static analysis on code".to_string(),
             1,
-        ).unwrap();
-        
+        )
+        .unwrap();
+
         let template = AgentTemplate::builder()
             .name("code-reviewer")
             .description("Specialized code review agent")
@@ -1070,7 +1092,7 @@ mod tests {
     #[test]
     fn test_agent_template_validation() {
         let creator_id = Uuid::new_v4();
-        
+
         // Empty name should fail
         let result = AgentTemplate::builder()
             .name("")
@@ -1081,16 +1103,14 @@ mod tests {
         assert!(result.is_err());
 
         // Missing required fields should fail
-        let result = AgentTemplate::builder()
-            .name("test-template")
-            .build();
+        let result = AgentTemplate::builder().name("test-template").build();
         assert!(result.is_err());
     }
 
     #[test]
     fn test_agent_template_capability_operations() {
         let creator_id = Uuid::new_v4();
-        
+
         let mut template = AgentTemplate::builder()
             .name("test-template")
             .description("Test template")
@@ -1101,19 +1121,23 @@ mod tests {
             .unwrap();
 
         assert!(template.has_capability("initial-capability"));
-        
+
         // Add capability
-        template.add_capability("new-capability".to_string()).unwrap();
+        template
+            .add_capability("new-capability".to_string())
+            .unwrap();
         assert!(template.has_capability("new-capability"));
-        
+
         // Adding duplicate capability should not error
-        template.add_capability("new-capability".to_string()).unwrap();
+        template
+            .add_capability("new-capability".to_string())
+            .unwrap();
         assert_eq!(template.capabilities.len(), 2); // Should still be 2
-        
+
         // Empty capability should fail
         let result = template.add_capability("".to_string());
         assert!(result.is_err());
-        
+
         // Remove capability
         template.remove_capability("new-capability");
         assert!(!template.has_capability("new-capability"));
@@ -1122,7 +1146,7 @@ mod tests {
     #[test]
     fn test_workflow_step_operations() {
         let creator_id = Uuid::new_v4();
-        
+
         let mut template = AgentTemplate::builder()
             .name("test-template")
             .description("Test template")
@@ -1136,38 +1160,41 @@ mod tests {
             "First Step".to_string(),
             "First step description".to_string(),
             1,
-        ).unwrap();
-        
+        )
+        .unwrap();
+
         let step2 = WorkflowStep::new(
             "step2".to_string(),
             "Second Step".to_string(),
             "Second step description".to_string(),
             2,
-        ).unwrap();
+        )
+        .unwrap();
 
         // Add workflow steps
         template.add_workflow_step(step1).unwrap();
         template.add_workflow_step(step2).unwrap();
         assert_eq!(template.workflow_steps.len(), 2);
-        
+
         // Steps should be sorted by order
         assert_eq!(template.workflow_steps[0].id, "step1");
         assert_eq!(template.workflow_steps[1].id, "step2");
-        
+
         // Get step
         assert!(template.get_workflow_step("step1").is_some());
         assert!(template.get_workflow_step("nonexistent").is_none());
-        
+
         // Adding duplicate step should fail
         let duplicate_step = WorkflowStep::new(
             "step1".to_string(),
             "Duplicate Step".to_string(),
             "Duplicate description".to_string(),
             3,
-        ).unwrap();
+        )
+        .unwrap();
         let result = template.add_workflow_step(duplicate_step);
         assert!(result.is_err());
-        
+
         // Remove step
         template.remove_workflow_step("step1");
         assert_eq!(template.workflow_steps.len(), 1);
@@ -1211,12 +1238,11 @@ mod tests {
             "Test Step".to_string(),
             "Test description".to_string(),
             1,
-        ).unwrap();
+        )
+        .unwrap();
 
-        let condition = StepCondition::new(
-            ConditionType::PreviousStepSuccess,
-            "step_id".to_string(),
-        );
+        let condition =
+            StepCondition::new(ConditionType::PreviousStepSuccess, "step_id".to_string());
 
         step.add_condition(condition);
         assert_eq!(step.conditions.len(), 1);
@@ -1225,7 +1251,7 @@ mod tests {
     #[test]
     fn test_configuration_parameter_operations() {
         let creator_id = Uuid::new_v4();
-        
+
         let mut template = AgentTemplate::builder()
             .name("test-template")
             .description("Test template")
@@ -1235,13 +1261,18 @@ mod tests {
             .unwrap();
 
         // Add config parameter
-        template.add_config_param("timeout".to_string(), "300".to_string()).unwrap();
-        assert_eq!(template.get_config_param("timeout"), Some(&"300".to_string()));
-        
+        template
+            .add_config_param("timeout".to_string(), "300".to_string())
+            .unwrap();
+        assert_eq!(
+            template.get_config_param("timeout"),
+            Some(&"300".to_string())
+        );
+
         // Empty key should fail
         let result = template.add_config_param("".to_string(), "value".to_string());
         assert!(result.is_err());
-        
+
         // Remove config parameter
         template.remove_config_param("timeout");
         assert!(template.get_config_param("timeout").is_none());
@@ -1250,7 +1281,7 @@ mod tests {
     #[test]
     fn test_template_lifecycle() {
         let creator_id = Uuid::new_v4();
-        
+
         let mut template = AgentTemplate::builder()
             .name("test-template")
             .description("Test template")
@@ -1260,10 +1291,10 @@ mod tests {
             .unwrap();
 
         assert!(template.is_active);
-        
+
         template.deactivate();
         assert!(!template.is_active);
-        
+
         template.activate();
         assert!(template.is_active);
 
@@ -1274,7 +1305,7 @@ mod tests {
     #[test]
     fn test_prompt_lifecycle() {
         let creator_id = Uuid::new_v4();
-        
+
         let mut prompt = SystemPrompt::builder()
             .name("test-prompt")
             .description("Test prompt")
@@ -1285,7 +1316,7 @@ mod tests {
             .unwrap();
 
         assert!(prompt.is_active);
-        
+
         prompt.deactivate();
         assert!(!prompt.is_active);
 
@@ -1296,7 +1327,9 @@ mod tests {
 
         // Test template update
         let initial_version = prompt.version;
-        prompt.update_template("Updated template".to_string()).unwrap();
+        prompt
+            .update_template("Updated template".to_string())
+            .unwrap();
         assert_eq!(prompt.version, initial_version + 1);
         assert_eq!(prompt.template, "Updated template");
     }
@@ -1306,7 +1339,7 @@ mod tests {
         let creator_id = Uuid::new_v4();
         let prompt_id1 = Uuid::new_v4();
         let prompt_id2 = Uuid::new_v4();
-        
+
         let mut template = AgentTemplate::builder()
             .name("test-template")
             .description("Test template")
@@ -1316,13 +1349,13 @@ mod tests {
             .unwrap();
 
         assert_eq!(template.system_prompt_id, None);
-        
+
         template.set_system_prompt_id(Some(prompt_id1));
         assert_eq!(template.system_prompt_id, Some(prompt_id1));
-        
+
         template.set_system_prompt_id(Some(prompt_id2));
         assert_eq!(template.system_prompt_id, Some(prompt_id2));
-        
+
         template.set_system_prompt_id(None);
         assert_eq!(template.system_prompt_id, None);
     }
