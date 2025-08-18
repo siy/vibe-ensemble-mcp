@@ -28,6 +28,9 @@ pub enum Error {
 
     #[error("Internal error: {0}")]
     Internal(#[from] anyhow::Error),
+
+    #[error("Invalid operation: {0}")]
+    InvalidOperation(String),
 }
 
 /// Convenience result type for storage operations
