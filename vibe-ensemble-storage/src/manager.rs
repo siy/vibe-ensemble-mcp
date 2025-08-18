@@ -1,9 +1,9 @@
 //! Storage manager for coordinating database operations
 
-use crate::{migrations::Migrations, repositories::*, Error, Result};
+use crate::{migrations::Migrations, repositories::*, services::AgentService, Error, Result};
 use sqlx::{Pool, Sqlite, SqlitePool};
 use std::sync::Arc;
-use tracing::{info, warn};
+use tracing::info;
 
 /// Database configuration
 #[derive(Debug, Clone)]
@@ -22,6 +22,7 @@ pub struct StorageManager {
     knowledge: Arc<KnowledgeRepository>,
     prompts: Arc<PromptRepository>,
     templates: Arc<TemplateRepository>,
+    agent_service: Arc<AgentService>,
 }
 
 impl StorageManager {
@@ -41,6 +42,9 @@ impl StorageManager {
         let prompts = Arc::new(PromptRepository::new(pool.clone()));
         let templates = Arc::new(TemplateRepository::new(pool.clone()));
 
+        // Create services
+        let agent_service = Arc::new(AgentService::new(agents.clone()));
+
         let manager = Self {
             pool,
             agents,
@@ -49,6 +53,7 @@ impl StorageManager {
             knowledge,
             prompts,
             templates,
+            agent_service,
         };
 
         // Run migrations if configured to do so
@@ -107,6 +112,11 @@ impl StorageManager {
     /// Get template repository
     pub fn templates(&self) -> Arc<TemplateRepository> {
         self.templates.clone()
+    }
+
+    /// Get agent service
+    pub fn agent_service(&self) -> Arc<AgentService> {
+        self.agent_service.clone()
     }
 
     /// Check database health

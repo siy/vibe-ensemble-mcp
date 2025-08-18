@@ -1,9 +1,9 @@
 //! Knowledge repository implementation
 
-use crate::{Error, Result};
+use crate::Result;
 use sqlx::{Pool, Sqlite};
 use uuid::Uuid;
-use vibe_ensemble_core::knowledge::{AccessLevel, Knowledge, KnowledgeType};
+use vibe_ensemble_core::knowledge::Knowledge;
 
 /// Repository for knowledge entities
 pub struct KnowledgeRepository {
