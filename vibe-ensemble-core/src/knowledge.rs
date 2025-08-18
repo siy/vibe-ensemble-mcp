@@ -34,6 +34,7 @@
 //!     Uuid::new_v4(), // source knowledge ID
 //!     Uuid::new_v4(), // target knowledge ID
 //!     RelationType::References,
+//!     Uuid::new_v4(), // created by agent ID
 //! );
 //! ```
 
@@ -82,6 +83,7 @@ pub struct KnowledgeRelation {
     pub source_id: Uuid,
     pub target_id: Uuid,
     pub relation_type: RelationType,
+    pub created_by: Uuid,
     pub created_at: DateTime<Utc>,
 }
 
@@ -93,6 +95,98 @@ pub enum RelationType {
     Conflicts,
     Complements,
     Implements,
+}
+
+/// Represents a version history entry for knowledge
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct KnowledgeVersion {
+    pub id: Uuid,
+    pub knowledge_id: Uuid,
+    pub version: u32,
+    pub title: String,
+    pub content: String,
+    pub change_summary: Option<String>,
+    pub created_by: Uuid,
+    pub created_at: DateTime<Utc>,
+}
+
+/// Represents usage tracking for knowledge entries
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct KnowledgeUsage {
+    pub id: Uuid,
+    pub knowledge_id: Uuid,
+    pub used_by: Uuid,
+    pub usage_type: UsageType,
+    pub context_data: Option<serde_json::Value>,
+    pub created_at: DateTime<Utc>,
+}
+
+/// Type of knowledge usage
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub enum UsageType {
+    Viewed,
+    Referenced,
+    Applied,
+    Shared,
+    Bookmarked,
+}
+
+/// Represents a knowledge collection/category
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct KnowledgeCollection {
+    pub id: Uuid,
+    pub name: String,
+    pub description: String,
+    pub collection_type: CollectionType,
+    pub metadata: serde_json::Value,
+    pub created_by: Uuid,
+    pub created_at: DateTime<Utc>,
+    pub updated_at: DateTime<Utc>,
+}
+
+/// Type of knowledge collection
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub enum CollectionType {
+    Topic,
+    Project,
+    Team,
+    Workflow,
+    Archive,
+}
+
+/// Represents membership of knowledge in a collection
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct KnowledgeCollectionMember {
+    pub knowledge_id: Uuid,
+    pub collection_id: Uuid,
+    pub added_by: Uuid,
+    pub added_at: DateTime<Utc>,
+}
+
+/// Search result for knowledge queries
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct KnowledgeSearchResult {
+    pub knowledge: Knowledge,
+    pub relevance_score: f64,
+    pub matched_fields: Vec<String>,
+    pub snippet: Option<String>,
+}
+
+/// Search criteria for knowledge queries
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct KnowledgeSearchCriteria {
+    pub query: Option<String>,
+    pub knowledge_types: Option<Vec<KnowledgeType>>,
+    pub tags: Option<Vec<String>>,
+    pub access_levels: Option<Vec<AccessLevel>>,
+    pub created_by: Option<Uuid>,
+    pub created_after: Option<DateTime<Utc>>,
+    pub created_before: Option<DateTime<Utc>>,
+    pub updated_after: Option<DateTime<Utc>>,
+    pub updated_before: Option<DateTime<Utc>>,
+    pub collections: Option<Vec<Uuid>>,
+    pub limit: Option<u32>,
+    pub offset: Option<u32>,
 }
 
 impl Knowledge {
@@ -243,12 +337,18 @@ impl Knowledge {
 
 impl KnowledgeRelation {
     /// Create a new knowledge relation
-    pub fn new(source_id: Uuid, target_id: Uuid, relation_type: RelationType) -> Self {
+    pub fn new(
+        source_id: Uuid,
+        target_id: Uuid,
+        relation_type: RelationType,
+        created_by: Uuid,
+    ) -> Self {
         Self {
             id: Uuid::new_v4(),
             source_id,
             target_id,
             relation_type,
+            created_by,
             created_at: Utc::now(),
         }
     }
@@ -373,6 +473,252 @@ impl KnowledgeBuilder {
 }
 
 impl Default for KnowledgeBuilder {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl KnowledgeVersion {
+    /// Create a new knowledge version entry
+    pub fn new(
+        knowledge_id: Uuid,
+        version: u32,
+        title: String,
+        content: String,
+        change_summary: Option<String>,
+        created_by: Uuid,
+    ) -> Self {
+        Self {
+            id: Uuid::new_v4(),
+            knowledge_id,
+            version,
+            title,
+            content,
+            change_summary,
+            created_by,
+            created_at: Utc::now(),
+        }
+    }
+
+    /// Get the age of this version in seconds
+    pub fn age_seconds(&self) -> i64 {
+        Utc::now()
+            .signed_duration_since(self.created_at)
+            .num_seconds()
+    }
+}
+
+impl KnowledgeUsage {
+    /// Create a new knowledge usage entry
+    pub fn new(
+        knowledge_id: Uuid,
+        used_by: Uuid,
+        usage_type: UsageType,
+        context_data: Option<serde_json::Value>,
+    ) -> Self {
+        Self {
+            id: Uuid::new_v4(),
+            knowledge_id,
+            used_by,
+            usage_type,
+            context_data,
+            created_at: Utc::now(),
+        }
+    }
+
+    /// Get the age of this usage entry in seconds
+    pub fn age_seconds(&self) -> i64 {
+        Utc::now()
+            .signed_duration_since(self.created_at)
+            .num_seconds()
+    }
+}
+
+impl KnowledgeCollection {
+    /// Create a new knowledge collection
+    pub fn new(
+        name: String,
+        description: String,
+        collection_type: CollectionType,
+        created_by: Uuid,
+    ) -> Result<Self> {
+        Self::validate_name(&name)?;
+        Self::validate_description(&description)?;
+
+        let now = Utc::now();
+        Ok(Self {
+            id: Uuid::new_v4(),
+            name,
+            description,
+            collection_type,
+            metadata: serde_json::Value::Object(serde_json::Map::new()),
+            created_by,
+            created_at: now,
+            updated_at: now,
+        })
+    }
+
+    /// Validate collection name
+    fn validate_name(name: &str) -> Result<()> {
+        if name.trim().is_empty() {
+            return Err(Error::Validation {
+                message: "Collection name cannot be empty".to_string(),
+            });
+        }
+        if name.len() > 100 {
+            return Err(Error::Validation {
+                message: "Collection name cannot exceed 100 characters".to_string(),
+            });
+        }
+        Ok(())
+    }
+
+    /// Validate collection description
+    fn validate_description(description: &str) -> Result<()> {
+        if description.len() > 1000 {
+            return Err(Error::Validation {
+                message: "Collection description cannot exceed 1000 characters".to_string(),
+            });
+        }
+        Ok(())
+    }
+
+    /// Update the collection description
+    pub fn update_description(&mut self, description: String) -> Result<()> {
+        Self::validate_description(&description)?;
+        self.description = description;
+        self.updated_at = Utc::now();
+        Ok(())
+    }
+
+    /// Update the collection metadata
+    pub fn update_metadata(&mut self, metadata: serde_json::Value) {
+        self.metadata = metadata;
+        self.updated_at = Utc::now();
+    }
+
+    /// Get the age of the collection in seconds
+    pub fn age_seconds(&self) -> i64 {
+        Utc::now()
+            .signed_duration_since(self.created_at)
+            .num_seconds()
+    }
+}
+
+impl KnowledgeCollectionMember {
+    /// Create a new collection membership
+    pub fn new(knowledge_id: Uuid, collection_id: Uuid, added_by: Uuid) -> Self {
+        Self {
+            knowledge_id,
+            collection_id,
+            added_by,
+            added_at: Utc::now(),
+        }
+    }
+
+    /// Get the age of this membership in seconds
+    pub fn age_seconds(&self) -> i64 {
+        Utc::now()
+            .signed_duration_since(self.added_at)
+            .num_seconds()
+    }
+}
+
+impl KnowledgeSearchCriteria {
+    /// Create a new empty search criteria
+    pub fn new() -> Self {
+        Self {
+            query: None,
+            knowledge_types: None,
+            tags: None,
+            access_levels: None,
+            created_by: None,
+            created_after: None,
+            created_before: None,
+            updated_after: None,
+            updated_before: None,
+            collections: None,
+            limit: None,
+            offset: None,
+        }
+    }
+
+    /// Set the search query
+    pub fn with_query<S: Into<String>>(mut self, query: S) -> Self {
+        self.query = Some(query.into());
+        self
+    }
+
+    /// Filter by knowledge types
+    pub fn with_types(mut self, types: Vec<KnowledgeType>) -> Self {
+        self.knowledge_types = Some(types);
+        self
+    }
+
+    /// Filter by tags
+    pub fn with_tags(mut self, tags: Vec<String>) -> Self {
+        self.tags = Some(tags);
+        self
+    }
+
+    /// Filter by access levels
+    pub fn with_access_levels(mut self, levels: Vec<AccessLevel>) -> Self {
+        self.access_levels = Some(levels);
+        self
+    }
+
+    /// Filter by creator
+    pub fn with_created_by(mut self, created_by: Uuid) -> Self {
+        self.created_by = Some(created_by);
+        self
+    }
+
+    /// Filter by creation date range
+    pub fn with_created_after(mut self, after: DateTime<Utc>) -> Self {
+        self.created_after = Some(after);
+        self
+    }
+
+    /// Filter by creation date range
+    pub fn with_created_before(mut self, before: DateTime<Utc>) -> Self {
+        self.created_before = Some(before);
+        self
+    }
+
+    /// Filter by collections
+    pub fn with_collections(mut self, collections: Vec<Uuid>) -> Self {
+        self.collections = Some(collections);
+        self
+    }
+
+    /// Set result limit
+    pub fn with_limit(mut self, limit: u32) -> Self {
+        self.limit = Some(limit);
+        self
+    }
+
+    /// Set result offset for pagination
+    pub fn with_offset(mut self, offset: u32) -> Self {
+        self.offset = Some(offset);
+        self
+    }
+
+    /// Check if criteria has any filters
+    pub fn has_filters(&self) -> bool {
+        self.query.is_some()
+            || self.knowledge_types.is_some()
+            || self.tags.is_some()
+            || self.access_levels.is_some()
+            || self.created_by.is_some()
+            || self.created_after.is_some()
+            || self.created_before.is_some()
+            || self.updated_after.is_some()
+            || self.updated_before.is_some()
+            || self.collections.is_some()
+    }
+}
+
+impl Default for KnowledgeSearchCriteria {
     fn default() -> Self {
         Self::new()
     }
@@ -650,8 +996,10 @@ mod tests {
     fn test_knowledge_relation() {
         let source_id = Uuid::new_v4();
         let target_id = Uuid::new_v4();
+        let creator_id = Uuid::new_v4();
 
-        let relation = KnowledgeRelation::new(source_id, target_id, RelationType::References);
+        let relation =
+            KnowledgeRelation::new(source_id, target_id, RelationType::References, creator_id);
 
         assert_eq!(relation.source_id, source_id);
         assert_eq!(relation.target_id, target_id);
