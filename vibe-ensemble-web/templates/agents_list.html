@@ -1,0 +1,114 @@
+{% extends "base.html" %}
+
+{% block title %}Agents - Vibe Ensemble{% endblock %}
+{% block page_title %}Agent Management{% endblock %}
+{% block page_description %}Connected Claude Code instances{% endblock %}
+
+{% block content %}
+<div class="card">
+    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
+        <h3>Connected Agents</h3>
+        <div>
+            <span class="status status-online">{{ agents|length }} Connected</span>
+        </div>
+    </div>
+    
+    {% if agents %}
+    <table class="table">
+        <thead>
+            <tr>
+                <th>Name</th>
+                <th>Type</th>
+                <th>Status</th>
+                <th>Capabilities</th>
+                <th>Last Seen</th>
+                <th>Actions</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for agent in agents %}
+            <tr data-agent-id="{{ agent.id }}">
+                <td>
+                    <strong>{{ agent.name }}</strong><br>
+                    <small style="color: var(--gray-600);">{{ agent.id }}</small>
+                </td>
+                <td>
+                    <span class="status">{{ agent.agent_type }}</span>
+                </td>
+                <td>
+                    <span class="agent-status status status-{{ agent.status|lower }}">{{ agent.status }}</span>
+                </td>
+                <td>
+                    {% for capability in agent.capabilities %}
+                        <span style="display: inline-block; background: var(--gray-200); padding: 2px 6px; margin: 1px; border-radius: 3px; font-size: 0.75rem;">{{ capability }}</span>
+                    {% endfor %}
+                </td>
+                <td>{{ agent.last_seen|date("%Y-%m-%d %H:%M") }}</td>
+                <td>
+                    <a href="/agents/{{ agent.id }}" class="btn btn-sm btn-primary">View Details</a>
+                </td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+    {% else %}
+    <div class="alert alert-info" style="text-align: center; padding: 40px;">
+        <h4>No Agents Connected</h4>
+        <p>Agents will appear here once they connect to the MCP server.</p>
+        <p><strong>To connect an agent:</strong></p>
+        <ol style="text-align: left; display: inline-block;">
+            <li>Ensure the MCP server is running</li>
+            <li>Configure Claude Code with the server URL</li>
+            <li>Start a Claude Code session</li>
+        </ol>
+    </div>
+    {% endif %}
+</div>
+
+<div class="card">
+    <h3>Agent Statistics</h3>
+    <div class="grid grid-4">
+        <div class="stat-card">
+            <div class="stat-number">{{ agents|length }}</div>
+            <div class="stat-label">Total Connected</div>
+        </div>
+        <div class="stat-card">
+            <div class="stat-number">{{ agents|selectattr("status", "equalto", "Online")|list|length }}</div>
+            <div class="stat-label">Online</div>
+        </div>
+        <div class="stat-card">
+            <div class="stat-number">{{ agents|selectattr("status", "equalto", "Busy")|list|length }}</div>
+            <div class="stat-label">Busy</div>
+        </div>
+        <div class="stat-card">
+            <div class="stat-number">{{ agents|selectattr("agent_type", "equalto", "Coordinator")|list|length }}</div>
+            <div class="stat-label">Coordinators</div>
+        </div>
+    </div>
+</div>
+
+<div class="card">
+    <h3>Agent Types</h3>
+    <p>The Vibe Ensemble system supports different types of agents with specific roles:</p>
+    <div class="grid grid-2">
+        <div>
+            <h4 style="color: var(--primary-color);">Coordinator Agents</h4>
+            <ul>
+                <li>Serve as primary interface with humans</li>
+                <li>Perform strategic planning and resource allocation</li>
+                <li>Maintain global context and organizational knowledge</li>
+                <li>Coordinate worker agent activities</li>
+            </ul>
+        </div>
+        <div>
+            <h4 style="color: var(--info-color);">Worker Agents</h4>
+            <ul>
+                <li>Execute individual tasks autonomously</li>
+                <li>Contribute to shared knowledge repositories</li>
+                <li>Report progress to coordinator agents</li>
+                <li>Specialize in specific capabilities</li>
+            </ul>
+        </div>
+    </div>
+</div>
+{% endblock %}

@@ -1,6 +1,7 @@
 //! Agent management handlers
 
 use crate::{templates::AgentsTemplate, Error, Result};
+use askama::Template;
 use axum::{
     extract::{Path, State},
     response::Html,
@@ -13,7 +14,7 @@ use vibe_ensemble_storage::StorageManager;
 pub async fn list(State(storage): State<Arc<StorageManager>>) -> Result<Html<String>> {
     let agents = storage.agents().list().await?;
 
-    let template = AgentsTemplate { agents };
+    let template = AgentsTemplate::new(agents);
     let rendered = template
         .render()
         .map_err(|e| crate::Error::Internal(anyhow::anyhow!("{}", e)))?;

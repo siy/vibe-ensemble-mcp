@@ -23,3 +23,9 @@ chrono = { workspace = true }
 thiserror = { workspace = true }
 anyhow = { workspace = true }
 tracing = { workspace = true }
+# WebSocket support
+tokio-tungstenite = { workspace = true }
+futures-util = { workspace = true }
+# Additional web utilities
+regex = { workspace = true }
+rand = { workspace = true }
