@@ -96,3 +96,13 @@ wiremock = "0.6"                    # HTTP mocking
 assert_matches = "1.5"              # Enhanced assertion macros
 rstest = "0.18"                     # Parameterized tests
 tarpaulin = "0.27"                  # Code coverage
+
+# Performance optimization dependencies
+moka = { version = "0.12", features = ["future"] }  # Async caching
+lru = "0.12"                        # LRU cache implementation
+dashmap = "5.5"                     # Concurrent HashMap
+flate2 = "1.0"                      # Compression
+parking_lot = "0.12"                # High-performance synchronization
+rayon = "1.8"                       # Data parallelism
+arc-swap = "1.6"                    # Atomic Arc swapping
+num_cpus = "1.16"                   # CPU core detection

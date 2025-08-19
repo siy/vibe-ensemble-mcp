@@ -23,11 +23,23 @@ use crate::common::{
     assertions::PerformanceAssertions,
 };
 
-/// Benchmark agent registration performance
+/// Benchmark agent registration performance with optimizations
 #[tokio::test]
 async fn benchmark_agent_registration() {
     let db_helper = DatabaseTestHelper::new().await.unwrap();
-    let storage_manager = Arc::new(StorageManager::new(db_helper.pool.clone()).await.unwrap());
+    
+    // Create optimized storage manager with performance config
+    let mut db_config = db_helper.config.clone();
+    db_config.performance_config = Some(vibe_ensemble_storage::PerformanceConfig {
+        agent_cache_size: 2000,
+        max_connections: 30,
+        enable_compression: true,
+        monitoring_enabled: true,
+        batch_size: 50,
+        ..Default::default()
+    });
+    
+    let storage_manager = Arc::new(StorageManager::new(&db_config).await.unwrap());
     
     let agent_counts = [10, 50, 100, 500];
     

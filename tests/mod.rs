@@ -24,6 +24,7 @@ mod e2e {
 #[cfg(test)]
 mod performance {
     pub mod load_tests;
+    pub mod regression_tests;
 }
 
 // Security test modules
