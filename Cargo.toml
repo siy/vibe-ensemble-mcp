@@ -84,3 +84,15 @@ base64 = "0.22"
 # Async traits
 async-trait = "0.1"
 futures = "0.3"
+
+# Testing framework dependencies
+proptest = "1.4"                    # Property-based testing
+criterion = { version = "0.5", features = ["html_reports"] }  # Benchmarking
+mockall = "0.12"                    # Mocking framework
+fake = { version = "2.9", features = ["derive", "chrono"] }  # Test data generation
+testcontainers = "0.15"             # Integration test containers
+tokio-test = "0.4"                  # Async test utilities
+wiremock = "0.6"                    # HTTP mocking
+assert_matches = "1.5"              # Enhanced assertion macros
+rstest = "0.18"                     # Parameterized tests
+tarpaulin = "0.27"                  # Code coverage
