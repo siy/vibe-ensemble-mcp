@@ -6,6 +6,7 @@ members = [
     "vibe-ensemble-storage",
     "vibe-ensemble-web",
     "vibe-ensemble-prompts",
+    "vibe-ensemble-security",
 ]
 resolver = "2"
 
@@ -64,3 +65,17 @@ futures-util = "0.3"
 # Regex and random utilities
 regex = "1.10"
 rand = "0.8"
+
+# Security and authentication
+jsonwebtoken = "9.2"
+bcrypt = "0.15"
+tower-sessions = "0.12"
+tower-sessions-sqlx-store = "0.13"
+governor = "0.6"
+nonzero_ext = "0.3"
+headers = "0.4"
+
+# Encryption
+aes-gcm = "0.10"
+chacha20poly1305 = "0.10"
+base64 = "0.22"

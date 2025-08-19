@@ -11,6 +11,7 @@ rust-version.workspace = true
 [dependencies]
 vibe-ensemble-core = { path = "../vibe-ensemble-core" }
 vibe-ensemble-storage = { path = "../vibe-ensemble-storage" }
+vibe-ensemble-security = { path = "../vibe-ensemble-security" }
 tokio = { workspace = true }
 axum = { workspace = true }
 tower = { workspace = true }
@@ -29,3 +30,5 @@ futures-util = { workspace = true }
 # Additional web utilities
 regex = { workspace = true }
 rand = { workspace = true }
+bcrypt = { workspace = true }
+sqlx = { workspace = true }
