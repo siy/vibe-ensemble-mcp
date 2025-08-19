@@ -3,10 +3,12 @@
 //! This crate provides a web-based interface for managing issues, agents,
 //! and other aspects of the Vibe Ensemble system.
 
+pub mod auth;
 pub mod error;
 pub mod handlers;
 pub mod server;
 pub mod templates;
+pub mod websocket;
 
 pub use error::{Error, Result};
 pub use server::WebServer;

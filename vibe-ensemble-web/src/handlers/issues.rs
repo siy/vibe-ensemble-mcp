@@ -209,25 +209,86 @@ pub async fn edit_form(
     Ok(Html(html))
 }
 
-/// Update an issue (placeholder)
+/// Update an issue
 pub async fn update(
-    State(_storage): State<Arc<StorageManager>>,
+    State(storage): State<Arc<StorageManager>>,
     Path(id): Path<Uuid>,
-    Form(_form): Form<IssueForm>,
+    Form(form): Form<IssueForm>,
 ) -> Result<Html<String>> {
-    // Placeholder for update logic
+    let mut issue = storage
+        .issues()
+        .find_by_id(id)
+        .await?
+        .ok_or_else(|| Error::NotFound(format!("Issue with id {}", id)))?;
+
+    let priority = match form.priority.as_str() {
+        "Low" => IssuePriority::Low,
+        "Medium" => IssuePriority::Medium,
+        "High" => IssuePriority::High,
+        "Critical" => IssuePriority::Critical,
+        _ => return Err(Error::BadRequest("Invalid priority".to_string())),
+    };
+
+    // Update issue fields
+    issue.title = form.title;
+    issue.description = form.description;
+    issue.priority = priority;
+    issue.updated_at = chrono::Utc::now();
+
+    storage.issues().update(&issue).await?;
+
     let html = format!(
         r#"
         <html>
-            <head><title>Issue Updated</title></head>
+            <head>
+                <title>Issue Updated</title>
+                <meta http-equiv="refresh" content="2;url=/issues/{}">
+            </head>
             <body>
-                <h1>Issue Update</h1>
-                <p>Update functionality not implemented yet.</p>
-                <p><a href="/issues/{}">Back to Issue</a></p>
+                <h1>Issue Updated Successfully!</h1>
+                <p>Issue: {}</p>
+                <p>Redirecting to issue details...</p>
+                <a href="/issues/{}">View Issue</a>
             </body>
         </html>
         "#,
+        id,
+        issue.title,
         id
+    );
+
+    Ok(Html(html))
+}
+
+/// Delete an issue
+pub async fn delete(
+    State(storage): State<Arc<StorageManager>>,
+    Path(id): Path<Uuid>,
+) -> Result<Html<String>> {
+    let issue = storage
+        .issues()
+        .find_by_id(id)
+        .await?
+        .ok_or_else(|| Error::NotFound(format!("Issue with id {}", id)))?;
+
+    storage.issues().delete(id).await?;
+
+    let html = format!(
+        r#"
+        <html>
+            <head>
+                <title>Issue Deleted</title>
+                <meta http-equiv="refresh" content="2;url=/issues">
+            </head>
+            <body>
+                <h1>Issue Deleted Successfully!</h1>
+                <p>Issue "{}" has been deleted.</p>
+                <p>Redirecting to issues list...</p>
+                <a href="/issues">Back to Issues</a>
+            </body>
+        </html>
+        "#,
+        issue.title
     );
 
     Ok(Html(html))
