@@ -89,6 +89,7 @@ pub mod config;
 pub mod error;
 pub mod issue;
 pub mod knowledge;
+pub mod knowledge_intelligence;
 pub mod message;
 pub mod prompt;
 

@@ -101,7 +101,9 @@ impl WebServer {
             .route("/api/issues/:id", axum::routing::delete(handlers::api::issue_delete))
             .route("/api/knowledge", get(handlers::api::knowledge_list))
             .route("/api/knowledge/:id", get(handlers::api::knowledge_detail))
-            .route("/api/messages", get(handlers::api::messages_list));
+            .route("/api/messages", get(handlers::api::messages_list))
+            // Knowledge intelligence routes
+            .merge(handlers::knowledge_intelligence_simple::router());
 
         // Combine all routes
         let mut app = Router::new()

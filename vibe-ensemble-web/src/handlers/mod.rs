@@ -7,4 +7,5 @@ pub mod auth;
 pub mod dashboard;
 pub mod issues;
 pub mod knowledge;
+pub mod knowledge_intelligence_simple;
 pub mod tokens;
