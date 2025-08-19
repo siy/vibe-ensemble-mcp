@@ -1,0 +1,301 @@
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: postgres-backup
+  namespace: vibe-ensemble
+  labels:
+    app.kubernetes.io/name: vibe-ensemble
+    app.kubernetes.io/component: backup
+spec:
+  schedule: "0 2 * * *"  # Daily at 2 AM UTC
+  timeZone: "UTC"
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 3
+  jobTemplate:
+    spec:
+      template:
+        metadata:
+          labels:
+            app.kubernetes.io/name: vibe-ensemble
+            app.kubernetes.io/component: backup
+        spec:
+          restartPolicy: OnFailure
+          serviceAccountName: vibe-ensemble-backup-sa
+          securityContext:
+            runAsNonRoot: true
+            runAsUser: 999
+            runAsGroup: 999
+            fsGroup: 999
+          containers:
+          - name: postgres-backup
+            image: postgres:15-alpine
+            imagePullPolicy: IfNotPresent
+            env:
+            - name: PGPASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: vibe-ensemble-secrets
+                  key: postgres-password
+            - name: PGUSER
+              value: "vibe_ensemble"
+            - name: PGHOST
+              value: "postgres-service"
+            - name: PGPORT
+              value: "5432"
+            - name: PGDATABASE
+              value: "vibe_ensemble"
+            - name: AWS_ACCESS_KEY_ID
+              valueFrom:
+                secretKeyRef:
+                  name: backup-secrets
+                  key: aws-access-key-id
+                  optional: true
+            - name: AWS_SECRET_ACCESS_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: backup-secrets
+                  key: aws-secret-access-key
+                  optional: true
+            - name: BACKUP_BUCKET
+              value: "vibe-ensemble-backups"
+            - name: BACKUP_RETENTION_DAYS
+              value: "30"
+            command:
+            - /bin/sh
+            - -c
+            - |
+              set -e
+              
+              echo "Starting PostgreSQL backup at $(date)"
+              
+              # Generate backup filename with timestamp
+              BACKUP_DATE=$(date +%Y%m%d_%H%M%S)
+              BACKUP_FILE="vibe_ensemble_backup_${BACKUP_DATE}.sql"
+              BACKUP_PATH="/tmp/${BACKUP_FILE}"
+              
+              # Create database backup
+              echo "Creating database dump..."
+              pg_dump \
+                --host=$PGHOST \
+                --port=$PGPORT \
+                --username=$PGUSER \
+                --dbname=$PGDATABASE \
+                --no-password \
+                --verbose \
+                --clean \
+                --if-exists \
+                --create \
+                --format=custom \
+                --compress=9 \
+                --file="$BACKUP_PATH"
+              
+              if [ $? -eq 0 ]; then
+                echo "Database backup created successfully: $BACKUP_FILE"
+                
+                # Compress backup
+                gzip "$BACKUP_PATH"
+                BACKUP_PATH="${BACKUP_PATH}.gz"
+                
+                # Calculate backup size and checksum
+                BACKUP_SIZE=$(du -h "$BACKUP_PATH" | cut -f1)
+                BACKUP_CHECKSUM=$(sha256sum "$BACKUP_PATH" | cut -d' ' -f1)
+                
+                echo "Backup size: $BACKUP_SIZE"
+                echo "Backup checksum: $BACKUP_CHECKSUM"
+                
+                # Store backup metadata
+                echo "{\"filename\":\"$(basename $BACKUP_PATH)\",\"size\":\"$BACKUP_SIZE\",\"checksum\":\"$BACKUP_CHECKSUM\",\"timestamp\":\"$(date -Iseconds)\"}" > "/tmp/backup_metadata_${BACKUP_DATE}.json"
+                
+                # Upload to cloud storage if configured
+                if command -v aws >/dev/null 2>&1 && [ -n "$AWS_ACCESS_KEY_ID" ]; then
+                  echo "Uploading backup to S3..."
+                  aws s3 cp "$BACKUP_PATH" "s3://${BACKUP_BUCKET}/postgresql/$(basename $BACKUP_PATH)"
+                  aws s3 cp "/tmp/backup_metadata_${BACKUP_DATE}.json" "s3://${BACKUP_BUCKET}/postgresql/metadata/backup_metadata_${BACKUP_DATE}.json"
+                  
+                  # Clean up old backups
+                  echo "Cleaning up old backups (retention: ${BACKUP_RETENTION_DAYS} days)..."
+                  aws s3 ls "s3://${BACKUP_BUCKET}/postgresql/" | \
+                  while read -r line; do
+                    backup_date=$(echo $line | awk '{print $1}')
+                    backup_file=$(echo $line | awk '{print $4}')
+                    if [ -n "$backup_date" ] && [ -n "$backup_file" ]; then
+                      backup_epoch=$(date -d "$backup_date" +%s)
+                      cutoff_epoch=$(date -d "${BACKUP_RETENTION_DAYS} days ago" +%s)
+                      if [ "$backup_epoch" -lt "$cutoff_epoch" ]; then
+                        echo "Deleting old backup: $backup_file"
+                        aws s3 rm "s3://${BACKUP_BUCKET}/postgresql/$backup_file"
+                      fi
+                    fi
+                  done
+                else
+                  echo "Cloud storage not configured, keeping backup locally"
+                fi
+                
+                echo "Backup completed successfully at $(date)"
+              else
+                echo "Backup failed!"
+                exit 1
+              fi
+            volumeMounts:
+            - name: backup-storage
+              mountPath: /tmp
+            resources:
+              requests:
+                memory: "128Mi"
+                cpu: "100m"
+              limits:
+                memory: "1Gi"
+                cpu: "500m"
+          volumes:
+          - name: backup-storage
+            emptyDir:
+              sizeLimit: 10Gi
+
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: vibe-ensemble-backup-sa
+  namespace: vibe-ensemble
+  labels:
+    app.kubernetes.io/name: vibe-ensemble
+    app.kubernetes.io/component: backup
+automountServiceAccountToken: false
+
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: vibe-ensemble-backup-role
+  namespace: vibe-ensemble
+  labels:
+    app.kubernetes.io/name: vibe-ensemble
+    app.kubernetes.io/component: backup
+rules:
+- apiGroups: [""]
+  resources: ["secrets"]
+  verbs: ["get"]
+- apiGroups: [""]
+  resources: ["pods"]
+  verbs: ["get", "list"]
+
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: vibe-ensemble-backup-rolebinding
+  namespace: vibe-ensemble
+  labels:
+    app.kubernetes.io/name: vibe-ensemble
+    app.kubernetes.io/component: backup
+subjects:
+- kind: ServiceAccount
+  name: vibe-ensemble-backup-sa
+  namespace: vibe-ensemble
+roleRef:
+  kind: Role
+  name: vibe-ensemble-backup-role
+  apiGroup: rbac.authorization.k8s.io
+
+---
+# Weekly full backup with longer retention
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: postgres-weekly-backup
+  namespace: vibe-ensemble
+  labels:
+    app.kubernetes.io/name: vibe-ensemble
+    app.kubernetes.io/component: backup
+    backup-type: weekly
+spec:
+  schedule: "0 1 * * 0"  # Weekly on Sunday at 1 AM UTC
+  timeZone: "UTC"
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 2
+  failedJobsHistoryLimit: 2
+  jobTemplate:
+    spec:
+      template:
+        metadata:
+          labels:
+            app.kubernetes.io/name: vibe-ensemble
+            app.kubernetes.io/component: backup
+            backup-type: weekly
+        spec:
+          restartPolicy: OnFailure
+          serviceAccountName: vibe-ensemble-backup-sa
+          securityContext:
+            runAsNonRoot: true
+            runAsUser: 999
+            runAsGroup: 999
+            fsGroup: 999
+          containers:
+          - name: postgres-weekly-backup
+            image: postgres:15-alpine
+            imagePullPolicy: IfNotPresent
+            env:
+            - name: PGPASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: vibe-ensemble-secrets
+                  key: postgres-password
+            - name: PGUSER
+              value: "vibe_ensemble"
+            - name: PGHOST
+              value: "postgres-service"
+            - name: PGPORT
+              value: "5432"
+            - name: PGDATABASE
+              value: "vibe_ensemble"
+            - name: BACKUP_BUCKET
+              value: "vibe-ensemble-backups"
+            - name: BACKUP_RETENTION_DAYS
+              value: "90"  # Longer retention for weekly backups
+            command:
+            - /bin/sh
+            - -c
+            - |
+              set -e
+              
+              echo "Starting PostgreSQL weekly backup at $(date)"
+              
+              BACKUP_DATE=$(date +%Y%m%d_%H%M%S)
+              BACKUP_FILE="vibe_ensemble_weekly_backup_${BACKUP_DATE}.sql"
+              BACKUP_PATH="/tmp/${BACKUP_FILE}"
+              
+              # Create comprehensive backup with all schemas and data
+              echo "Creating comprehensive database dump..."
+              pg_dump \
+                --host=$PGHOST \
+                --port=$PGPORT \
+                --username=$PGUSER \
+                --dbname=$PGDATABASE \
+                --no-password \
+                --verbose \
+                --clean \
+                --if-exists \
+                --create \
+                --format=custom \
+                --compress=9 \
+                --blobs \
+                --no-privileges \
+                --no-owner \
+                --file="$BACKUP_PATH"
+              
+              echo "Weekly backup completed successfully at $(date)"
+            volumeMounts:
+            - name: backup-storage
+              mountPath: /tmp
+            resources:
+              requests:
+                memory: "256Mi"
+                cpu: "200m"
+              limits:
+                memory: "2Gi"
+                cpu: "1000m"
+          volumes:
+          - name: backup-storage
+            emptyDir:
+              sizeLimit: 20Gi

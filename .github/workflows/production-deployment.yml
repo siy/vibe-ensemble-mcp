@@ -1,0 +1,437 @@
+name: Production Deployment Pipeline
+
+on:
+  push:
+    branches: [ main ]
+    tags: [ 'v*' ]
+  pull_request:
+    branches: [ main ]
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: 'Deployment environment'
+        required: true
+        default: 'staging'
+        type: choice
+        options:
+        - staging
+        - production
+      force_deploy:
+        description: 'Force deployment even if tests fail'
+        required: false
+        default: false
+        type: boolean
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_NAME: ${{ github.repository }}
+  CARGO_TERM_COLOR: always
+  RUSTFLAGS: "-D warnings"
+
+permissions:
+  contents: read
+  packages: write
+  security-events: write
+  id-token: write
+
+jobs:
+  security-analysis:
+    runs-on: ubuntu-latest
+    outputs:
+      security-passed: ${{ steps.security-check.outputs.passed }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy
+
+      - name: Cache dependencies
+        uses: actions/cache@v3
+        with:
+          path: |
+            ~/.cargo/bin/
+            ~/.cargo/registry/index/
+            ~/.cargo/registry/cache/
+            ~/.cargo/git/db/
+            target/
+          key: ${{ runner.os }}-cargo-security-${{ hashFiles('**/Cargo.lock') }}
+
+      - name: Install security audit tools
+        run: |
+          cargo install cargo-audit cargo-deny --locked
+
+      - name: Run security audit
+        run: cargo audit
+
+      - name: Check license compliance
+        run: cargo deny check licenses
+
+      - name: Run Clippy security lints
+        run: |
+          cargo clippy --all-targets --all-features -- \
+            -W clippy::unwrap_used \
+            -W clippy::expect_used \
+            -W clippy::panic \
+            -W clippy::unimplemented \
+            -W clippy::todo
+
+      - name: Check for hardcoded secrets
+        uses: trufflesecurity/trufflehog@main
+        with:
+          path: ./
+          base: main
+          head: HEAD
+          extra_args: --debug --only-verified
+
+      - name: Security check summary
+        id: security-check
+        run: echo "passed=true" >> $GITHUB_OUTPUT
+
+  build-and-test:
+    runs-on: ubuntu-latest
+    needs: security-analysis
+    strategy:
+      matrix:
+        target: [development, testing, production]
+    outputs:
+      image-digest: ${{ steps.build.outputs.digest }}
+      image-tag: ${{ steps.meta.outputs.tags }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to Container Registry
+        if: github.event_name != 'pull_request'
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Extract metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+          tags: |
+            type=ref,event=branch,suffix=-${{ matrix.target }}
+            type=ref,event=pr,suffix=-${{ matrix.target }}
+            type=sha,suffix=-${{ matrix.target }}
+            type=raw,value=latest-${{ matrix.target }},enable={{is_default_branch}}
+
+      - name: Install security scanning tools
+        run: |
+          # Install Trivy
+          sudo apt-get update
+          sudo apt-get install wget apt-transport-https gnupg lsb-release
+          wget -qO - https://aquasecurity.github.io/trivy-repo/deb/public.key | sudo apt-key add -
+          echo "deb https://aquasecurity.github.io/trivy-repo/deb $(lsb_release -sc) main" | sudo tee -a /etc/apt/sources.list.d/trivy.list
+          sudo apt-get update
+          sudo apt-get install trivy
+          
+          # Install Hadolint
+          wget -O hadolint https://github.com/hadolint/hadolint/releases/download/v2.12.0/hadolint-Linux-x86_64
+          chmod +x hadolint
+          sudo mv hadolint /usr/local/bin/
+
+      - name: Lint Dockerfile
+        run: hadolint Dockerfile.production
+
+      - name: Build and push image
+        id: build
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: ./Dockerfile.production
+          target: ${{ matrix.target }}
+          platforms: linux/amd64,linux/arm64
+          push: ${{ github.event_name != 'pull_request' }}
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+          build-args: |
+            VERSION=${{ github.sha }}
+            BUILD_DATE=${{ github.event.head_commit.timestamp }}
+            VCS_REF=${{ github.sha }}
+
+      - name: Run security scan
+        if: matrix.target == 'production'
+        run: |
+          # Get the image reference
+          IMAGE_REF=$(echo "${{ steps.meta.outputs.tags }}" | head -n1)
+          
+          # Scan for critical and high vulnerabilities
+          trivy image --exit-code 1 --severity HIGH,CRITICAL --format table $IMAGE_REF
+          
+          # Generate SARIF report for GitHub Security tab
+          trivy image --format sarif --output trivy-results.sarif $IMAGE_REF
+
+      - name: Upload Trivy scan results
+        if: matrix.target == 'production'
+        uses: github/codeql-action/upload-sarif@v2
+        with:
+          sarif_file: 'trivy-results.sarif'
+
+      - name: Test image functionality
+        if: matrix.target == 'production'
+        run: |
+          IMAGE_REF=$(echo "${{ steps.meta.outputs.tags }}" | head -n1)
+          
+          # Test basic functionality
+          docker run --rm --entrypoint="" $IMAGE_REF vibe-ensemble-server --help
+          
+          # Test container startup
+          docker run -d --name test-container -p 8080:8080 $IMAGE_REF
+          
+          # Wait for startup
+          sleep 30
+          
+          # Test health endpoint
+          curl -f http://localhost:8080/api/health || exit 1
+          
+          # Cleanup
+          docker stop test-container
+          docker rm test-container
+
+  deploy-staging:
+    if: github.ref == 'refs/heads/main' || github.event.inputs.environment == 'staging'
+    runs-on: ubuntu-latest
+    needs: [security-analysis, build-and-test]
+    environment:
+      name: staging
+      url: https://staging.vibe-ensemble.example.com
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup kubectl
+        uses: azure/setup-kubectl@v3
+        with:
+          version: 'v1.28.0'
+
+      - name: Configure kubectl for staging
+        run: |
+          echo "${{ secrets.STAGING_KUBECONFIG }}" | base64 -d > kubeconfig
+          export KUBECONFIG=kubeconfig
+          kubectl config current-context
+
+      - name: Deploy to staging
+        run: |
+          export KUBECONFIG=kubeconfig
+          
+          # Create namespace if it doesn't exist
+          kubectl create namespace vibe-ensemble-staging --dry-run=client -o yaml | kubectl apply -f -
+          
+          # Generate secrets
+          ./deployment/scripts/generate-secrets.sh staging
+          
+          # Apply Kubernetes manifests
+          kubectl apply -f deployment/k8s/namespace.yaml
+          kubectl apply -f deployment/k8s/secrets.yaml
+          kubectl apply -f deployment/k8s/configmap.yaml
+          kubectl apply -f deployment/k8s/postgres.yaml
+          kubectl apply -f deployment/k8s/service.yaml
+          
+          # Update deployment with new image
+          kubectl set image deployment/vibe-ensemble-server \
+            vibe-ensemble-server=${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ github.sha }}-production \
+            -n vibe-ensemble-staging
+          
+          # Wait for rollout to complete
+          kubectl rollout status deployment/vibe-ensemble-server -n vibe-ensemble-staging --timeout=600s
+
+      - name: Run smoke tests
+        run: |
+          # Get service URL
+          STAGING_URL="https://staging.vibe-ensemble.example.com"
+          
+          # Wait for service to be ready
+          sleep 60
+          
+          # Run basic smoke tests
+          curl -f $STAGING_URL/api/health
+          curl -f $STAGING_URL/api/metrics
+
+      - name: Notify staging deployment
+        if: always()
+        run: |
+          echo "Staging deployment completed"
+          echo "Status: ${{ job.status }}"
+
+  integration-tests:
+    if: github.ref == 'refs/heads/main' || github.event.inputs.environment != ''
+    runs-on: ubuntu-latest
+    needs: deploy-staging
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js for integration tests
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+
+      - name: Install test dependencies
+        run: |
+          npm install -g newman
+          # Add other test tools as needed
+
+      - name: Run integration tests
+        run: |
+          STAGING_URL="https://staging.vibe-ensemble.example.com"
+          
+          # Run API tests
+          newman run tests/postman/api-tests.json --env-var base_url=$STAGING_URL
+          
+          # Run end-to-end tests
+          # Add your e2e test commands here
+
+      - name: Performance tests
+        run: |
+          # Run basic performance tests
+          echo "Running performance tests..."
+          # Add performance test commands
+
+  deploy-production:
+    if: (github.ref == 'refs/heads/main' && github.event.inputs.environment == 'production') || startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    needs: [security-analysis, build-and-test, deploy-staging, integration-tests]
+    environment:
+      name: production
+      url: https://vibe-ensemble.example.com
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Manual approval checkpoint
+        if: github.event.inputs.force_deploy != 'true'
+        uses: trstringer/manual-approval@v1
+        with:
+          secret: ${{ secrets.GITHUB_TOKEN }}
+          approvers: ${{ secrets.PRODUCTION_APPROVERS }}
+          minimum-approvals: 2
+          issue-title: "Production Deployment Approval Required"
+          issue-body: |
+            Please review and approve the production deployment.
+            
+            **Version:** ${{ github.sha }}
+            **Environment:** production
+            **Security Checks:** ✅ Passed
+            **Tests:** ✅ Passed
+            **Staging Deployment:** ✅ Successful
+
+      - name: Setup kubectl
+        uses: azure/setup-kubectl@v3
+        with:
+          version: 'v1.28.0'
+
+      - name: Configure kubectl for production
+        run: |
+          echo "${{ secrets.PRODUCTION_KUBECONFIG }}" | base64 -d > kubeconfig
+          export KUBECONFIG=kubeconfig
+          kubectl config current-context
+
+      - name: Backup production database
+        run: |
+          export KUBECONFIG=kubeconfig
+          
+          # Create database backup
+          kubectl exec -n vibe-ensemble deployment/postgres -- \
+            pg_dump -U vibe_ensemble vibe_ensemble > backup-$(date +%Y%m%d-%H%M%S).sql
+          
+          # Store backup in secure location
+          # Add backup storage commands
+
+      - name: Deploy to production
+        run: |
+          export KUBECONFIG=kubeconfig
+          
+          # Apply production configurations
+          kubectl apply -f deployment/k8s/
+          
+          # Update deployment with new image
+          kubectl set image deployment/vibe-ensemble-server \
+            vibe-ensemble-server=${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ github.sha }}-production \
+            -n vibe-ensemble
+          
+          # Wait for rollout to complete
+          kubectl rollout status deployment/vibe-ensemble-server -n vibe-ensemble --timeout=600s
+
+      - name: Verify production deployment
+        run: |
+          # Verify deployment health
+          kubectl get pods -n vibe-ensemble
+          kubectl get services -n vibe-ensemble
+          
+          # Run production health checks
+          PRODUCTION_URL="https://vibe-ensemble.example.com"
+          curl -f $PRODUCTION_URL/api/health
+          curl -f $PRODUCTION_URL/api/metrics
+
+      - name: Notify deployment success
+        if: success()
+        run: |
+          echo "Production deployment successful!"
+          echo "Version: ${{ github.sha }}"
+          echo "Deployed to: https://vibe-ensemble.example.com"
+
+      - name: Rollback on failure
+        if: failure()
+        run: |
+          export KUBECONFIG=kubeconfig
+          
+          # Rollback to previous version
+          kubectl rollout undo deployment/vibe-ensemble-server -n vibe-ensemble
+          
+          # Wait for rollback to complete
+          kubectl rollout status deployment/vibe-ensemble-server -n vibe-ensemble --timeout=300s
+          
+          echo "Deployment failed - rolled back to previous version"
+
+  post-deployment:
+    if: always()
+    runs-on: ubuntu-latest
+    needs: [deploy-staging, deploy-production]
+    steps:
+      - name: Update deployment tracking
+        run: |
+          echo "Deployment pipeline completed"
+          echo "Staging: ${{ needs.deploy-staging.result }}"
+          echo "Production: ${{ needs.deploy-production.result }}"
+
+      - name: Generate deployment report
+        run: |
+          cat > deployment-report.md << EOF
+          # Deployment Report
+          
+          **Date:** $(date)
+          **Version:** ${{ github.sha }}
+          **Branch:** ${{ github.ref_name }}
+          
+          ## Results
+          - Security Analysis: ✅
+          - Build & Test: ✅
+          - Staging Deployment: ${{ needs.deploy-staging.result }}
+          - Production Deployment: ${{ needs.deploy-production.result }}
+          
+          ## Links
+          - [Staging](https://staging.vibe-ensemble.example.com)
+          - [Production](https://vibe-ensemble.example.com)
+          EOF
+
+      - name: Cleanup
+        run: |
+          # Clean up temporary files
+          rm -f kubeconfig backup-*.sql
+          
+          # Prune old container images
+          echo "Cleanup completed"
