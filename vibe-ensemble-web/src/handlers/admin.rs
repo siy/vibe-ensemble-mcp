@@ -368,7 +368,7 @@ pub async fn logs(request: Request) -> Result<Html<String>> {
             <div class="log-entry log-info">[2024-08-19 12:00:01] INFO  vibe_ensemble_web: Web server starting on 127.0.0.1:8081</div>
             <div class="log-entry log-info">[2024-08-19 12:00:01] INFO  vibe_ensemble_web: WebSocket service initialized</div>
             <div class="log-entry log-debug">[2024-08-19 12:00:05] DEBUG vibe_ensemble_web: WebSocket client connected</div>
-            <div class="log-entry log-info">[2024-08-19 12:00:10] INFO  vibe_ensemble_web: User \"admin\" logged in successfully</div>
+            <div class="log-entry log-info">[2024-08-19 12:00:10] INFO  vibe_ensemble_web: User "admin" logged in successfully</div>
             <div class="log-entry log-debug">[2024-08-19 12:00:15] DEBUG vibe_ensemble_web: Stats update broadcast sent to 1 clients</div>
             <div class="log-entry log-warn">[2024-08-19 12:00:30] WARN  vibe_ensemble_storage: Slow query detected (>100ms): SELECT * FROM agents</div>
             <div class="log-entry log-info">[2024-08-19 12:01:00] INFO  vibe_ensemble_web: Periodic stats update sent</div>
@@ -380,23 +380,23 @@ pub async fn logs(request: Request) -> Result<Html<String>> {
     <script>
         function refreshLogs() {
             // In a real system, this would fetch fresh logs
-            alert(\"Log refresh functionality would be implemented here\");
+            alert(&quot;Log refresh functionality would be implemented here&quot;);
         }
 
         function clearLogs() {
-            document.getElementById(\"logContainer\").innerHTML = \"<div class=\\\"log-entry log-info\\\">Log display cleared</div>\";
+            document.getElementById(&quot;logContainer&quot;).innerHTML = &quot;&lt;div class=\\&quot;log-entry log-info\\&quot;&gt;Log display cleared&lt;/div&gt;&quot;;
         }
 
         function filterLogs() {
             // In a real system, this would filter log entries by level
-            const level = document.getElementById(\"logLevel\").value;
-            alert(\"Log filtering by level: \" + level + \" (not yet implemented)\");
+            const level = document.getElementById(&quot;logLevel&quot;).value;
+            alert(&quot;Log filtering by level: &quot; + level + &quot; (not yet implemented)&quot;);
         }
 
         // Auto-refresh logs every 10 seconds
         setInterval(() => {
             // In a real system, this would fetch new log entries
-            console.log(\"Would refresh logs here\");
+            console.log(&quot;Would refresh logs here&quot;);
         }, 10000);
     </script>
 </body>
