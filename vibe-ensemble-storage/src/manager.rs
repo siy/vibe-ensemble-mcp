@@ -1,6 +1,6 @@
 //! Storage manager for coordinating database operations
 
-use crate::{migrations::Migrations, repositories::*, services::AgentService, Error, Result};
+use crate::{migrations::Migrations, repositories::*, services::*, Error, Result};
 use sqlx::{Pool, Sqlite, SqlitePool};
 use std::sync::Arc;
 use tracing::info;
@@ -23,6 +23,9 @@ pub struct StorageManager {
     prompts: Arc<PromptRepository>,
     templates: Arc<TemplateRepository>,
     agent_service: Arc<AgentService>,
+    issue_service: Arc<IssueService>,
+    message_service: Arc<MessageService>,
+    knowledge_service: Arc<KnowledgeService>,
 }
 
 impl StorageManager {
@@ -44,6 +47,9 @@ impl StorageManager {
 
         // Create services
         let agent_service = Arc::new(AgentService::new(agents.clone()));
+        let issue_service = Arc::new(IssueService::new(issues.clone()));
+        let message_service = Arc::new(MessageService::new(messages.clone()));
+        let knowledge_service = Arc::new(KnowledgeService::new((*knowledge).clone()));
 
         let manager = Self {
             pool,
@@ -54,6 +60,9 @@ impl StorageManager {
             prompts,
             templates,
             agent_service,
+            issue_service,
+            message_service,
+            knowledge_service,
         };
 
         // Run migrations if configured to do so
@@ -117,6 +126,21 @@ impl StorageManager {
     /// Get agent service
     pub fn agent_service(&self) -> Arc<AgentService> {
         self.agent_service.clone()
+    }
+
+    /// Get issue service
+    pub fn issue_service(&self) -> Arc<IssueService> {
+        self.issue_service.clone()
+    }
+
+    /// Get message service
+    pub fn message_service(&self) -> Arc<MessageService> {
+        self.message_service.clone()
+    }
+
+    /// Get knowledge service
+    pub fn knowledge_service(&self) -> Arc<KnowledgeService> {
+        self.knowledge_service.clone()
     }
 
     /// Check database health

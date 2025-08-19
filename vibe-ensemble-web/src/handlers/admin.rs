@@ -350,9 +350,9 @@ pub async fn logs(request: Request) -> Result<Html<String>> {
 
     <div class="card">
         <div class="log-controls">
-            <a href="#" class="btn" onclick="refreshLogs()">Refresh</a>
-            <a href="#" class="btn" onclick="clearLogs()">Clear Display</a>
-            <select id="logLevel" onchange="filterLogs()">
+            <a href="#" class="btn btn-primary">Refresh</a>
+            <a href="#" class="btn btn-secondary">Clear Display</a>
+            <select id="logLevel">
                 <option value="all">All Levels</option>
                 <option value="error">Errors Only</option>
                 <option value="warn">Warnings+</option>
@@ -362,16 +362,16 @@ pub async fn logs(request: Request) -> Result<Html<String>> {
         </div>
 
         <div class="log-container" id="logContainer">
-            <div class="log-entry log-info">[2024-08-19 12:00:00] INFO  vibe_ensemble_server: Starting Vibe Ensemble MCP Server</div>
-            <div class="log-entry log-info">[2024-08-19 12:00:00] INFO  vibe_ensemble_storage: Database connection established</div>
-            <div class="log-entry log-info">[2024-08-19 12:00:01] INFO  vibe_ensemble_storage: Running database migrations</div>
-            <div class="log-entry log-info">[2024-08-19 12:00:01] INFO  vibe_ensemble_web: Web server starting on 127.0.0.1:8081</div>
-            <div class="log-entry log-info">[2024-08-19 12:00:01] INFO  vibe_ensemble_web: WebSocket service initialized</div>
-            <div class="log-entry log-debug">[2024-08-19 12:00:05] DEBUG vibe_ensemble_web: WebSocket client connected</div>
-            <div class="log-entry log-info">[2024-08-19 12:00:10] INFO  vibe_ensemble_web: User "admin" logged in successfully</div>
-            <div class="log-entry log-debug">[2024-08-19 12:00:15] DEBUG vibe_ensemble_web: Stats update broadcast sent to 1 clients</div>
-            <div class="log-entry log-warn">[2024-08-19 12:00:30] WARN  vibe_ensemble_storage: Slow query detected (>100ms): SELECT * FROM agents</div>
-            <div class="log-entry log-info">[2024-08-19 12:01:00] INFO  vibe_ensemble_web: Periodic stats update sent</div>
+            <div class="log-entry log-info-entry">[2024-08-19 12:00:00] INFO  vibe_ensemble_server: Starting Vibe Ensemble MCP Server</div>
+            <div class="log-entry log-info-entry">[2024-08-19 12:00:00] INFO  vibe_ensemble_storage: Database connection established</div>
+            <div class="log-entry log-info-entry">[2024-08-19 12:00:01] INFO  vibe_ensemble_storage: Running database migrations</div>
+            <div class="log-entry log-info-entry">[2024-08-19 12:00:01] INFO  vibe_ensemble_web: Web server starting on 127.0.0.1:8081</div>
+            <div class="log-entry log-info-entry">[2024-08-19 12:00:01] INFO  vibe_ensemble_web: WebSocket service initialized</div>
+            <div class="log-entry log-debug-entry">[2024-08-19 12:00:05] DEBUG vibe_ensemble_web: WebSocket client connected</div>
+            <div class="log-entry log-info-entry">[2024-08-19 12:00:10] INFO  vibe_ensemble_web: User admin logged in successfully</div>
+            <div class="log-entry log-debug-entry">[2024-08-19 12:00:15] DEBUG vibe_ensemble_web: Stats update broadcast sent to 1 clients</div>
+            <div class="log-entry log-warn-entry">[2024-08-19 12:00:30] WARN  vibe_ensemble_storage: Slow query detected over 100ms SELECT FROM agents</div>
+            <div class="log-entry log-info-entry">[2024-08-19 12:01:00] INFO  vibe_ensemble_web: Periodic stats update sent</div>
         </div>
 
         <p><em>Note: This is a simulated log view. In a production system, logs would be read from actual log files or a logging service.</em></p>

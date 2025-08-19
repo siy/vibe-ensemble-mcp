@@ -11,6 +11,7 @@ pub struct Config {
     pub mcp: McpConfig,
     pub web: WebConfig,
     pub logging: LoggingConfig,
+    pub monitoring: MonitoringConfig,
 }
 
 /// Server-specific configuration
@@ -53,6 +54,19 @@ pub struct LoggingConfig {
     pub format: String,
 }
 
+/// Monitoring configuration
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct MonitoringConfig {
+    pub enabled: bool,
+    pub metrics_host: String,
+    pub metrics_port: u16,
+    pub health_host: String,
+    pub health_port: u16,
+    pub tracing_enabled: bool,
+    pub jaeger_endpoint: Option<String>,
+    pub alerting_enabled: bool,
+}
+
 impl Default for Config {
     fn default() -> Self {
         Self {
@@ -81,6 +95,16 @@ impl Default for Config {
                 level: "info".to_string(),
                 format: "json".to_string(),
             },
+            monitoring: MonitoringConfig {
+                enabled: true,
+                metrics_host: "127.0.0.1".to_string(),
+                metrics_port: 9090,
+                health_host: "127.0.0.1".to_string(),
+                health_port: 8090,
+                tracing_enabled: true,
+                jaeger_endpoint: None,
+                alerting_enabled: true,
+            },
         }
     }
 }
@@ -104,6 +128,13 @@ impl Config {
             .set_default("web.port", 8081)?
             .set_default("logging.level", "info")?
             .set_default("logging.format", "json")?
+            .set_default("monitoring.enabled", true)?
+            .set_default("monitoring.metrics_host", "127.0.0.1")?
+            .set_default("monitoring.metrics_port", 9090)?
+            .set_default("monitoring.health_host", "127.0.0.1")?
+            .set_default("monitoring.health_port", 8090)?
+            .set_default("monitoring.tracing_enabled", true)?
+            .set_default("monitoring.alerting_enabled", true)?
             .build()?;
 
         settings.try_deserialize()

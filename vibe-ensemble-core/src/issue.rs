@@ -287,6 +287,16 @@ impl Issue {
         matches!(self.status, IssueStatus::Resolved | IssueStatus::Closed)
     }
 
+    /// Check if the issue is open
+    pub fn is_open(&self) -> bool {
+        matches!(self.status, IssueStatus::Open)
+    }
+
+    /// Check if the issue is closed
+    pub fn is_closed(&self) -> bool {
+        matches!(self.status, IssueStatus::Closed)
+    }
+
     /// Get the time elapsed since creation in seconds
     pub fn age_seconds(&self) -> i64 {
         Utc::now()

@@ -320,6 +320,13 @@ impl MessageService {
         self.repository.list_recent(limit).await
     }
 
+    /// Get messages within a specific time period
+    pub async fn list_recent_messages(&self, duration: chrono::Duration) -> Result<Vec<Message>> {
+        debug!("Getting messages from last {:?}", duration);
+        let since = Utc::now() - duration;
+        self.repository.list_since(since).await
+    }
+
     /// Get messages by type
     pub async fn get_messages_by_type(&self, message_type: &MessageType) -> Result<Vec<Message>> {
         debug!("Getting messages by type: {:?}", message_type);
