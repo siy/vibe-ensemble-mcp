@@ -1,15 +1,13 @@
 //! Knowledge repository implementation with core functionality
 //!
-//! This module provides CRUD operations, search capabilities, and 
+//! This module provides CRUD operations, search capabilities, and
 //! basic knowledge management for the Vibe Ensemble system.
 
 use crate::Result;
 use chrono::{DateTime, Utc};
 use sqlx::{Pool, Row, Sqlite};
 use uuid::Uuid;
-use vibe_ensemble_core::knowledge::{
-    Knowledge, KnowledgeSearchCriteria, KnowledgeSearchResult,
-};
+use vibe_ensemble_core::knowledge::{Knowledge, KnowledgeSearchCriteria, KnowledgeSearchResult};
 
 /// Repository for knowledge entities
 pub struct KnowledgeRepository {
@@ -237,7 +235,6 @@ mod tests {
     use uuid::Uuid;
     use vibe_ensemble_core::knowledge::{AccessLevel, Knowledge, KnowledgeType};
 
-
     async fn create_test_agent(pool: &Pool<Sqlite>, agent_id: Uuid) {
         sqlx::query(
             r#"
@@ -258,10 +255,14 @@ mod tests {
         .unwrap();
     }
 
-    async fn create_test_knowledge(repo: &KnowledgeRepository, pool: &Pool<Sqlite>, creator_id: Uuid) -> Knowledge {
+    async fn create_test_knowledge(
+        repo: &KnowledgeRepository,
+        pool: &Pool<Sqlite>,
+        creator_id: Uuid,
+    ) -> Knowledge {
         // Ensure agent exists first
         create_test_agent(pool, creator_id).await;
-        
+
         let knowledge = Knowledge::builder()
             .title("Test Knowledge Entry")
             .content("This is a test knowledge entry for testing purposes.")
