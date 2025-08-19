@@ -31,6 +31,15 @@ pub enum Error {
 
     #[error("Invalid operation: {0}")]
     InvalidOperation(String),
+
+    #[error("UUID parse error: {0}")]
+    UuidParse(#[from] uuid::Error),
+
+    #[error("DateTime parse error: {0}")]
+    DateTimeParse(#[from] chrono::ParseError),
+
+    #[error("Unauthorized: {message}")]
+    Unauthorized { message: String },
 }
 
 /// Convenience result type for storage operations

@@ -101,3 +101,8 @@ impl Migrations {
         Ok(())
     }
 }
+
+/// Convenience function for running migrations
+pub async fn run_migrations(pool: &Pool<Sqlite>) -> Result<()> {
+    Migrations::run(pool).await
+}
