@@ -40,6 +40,9 @@ pub enum Error {
 
     #[error("Unauthorized: {message}")]
     Unauthorized { message: String },
+
+    #[error("Validation error: {message}")]
+    Validation { message: String },
 }
 
 /// Convenience result type for storage operations

@@ -60,3 +60,7 @@ rmcp = { version = "0.2.0", features = ["server"] }
 # WebSocket support
 tokio-tungstenite = "0.21"
 futures-util = "0.3"
+
+# Regex and random utilities
+regex = "1.10"
+rand = "0.8"

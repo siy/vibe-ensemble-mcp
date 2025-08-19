@@ -118,6 +118,122 @@ pub struct RenderedPrompt {
     pub variables_used: std::collections::HashMap<String, String>,
 }
 
+/// Metrics for prompt performance tracking
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct PromptMetrics {
+    pub id: Uuid,
+    pub prompt_id: Uuid,
+    pub agent_id: Option<Uuid>,
+    pub usage_count: u64,
+    pub success_rate: f64,
+    pub average_response_time_ms: f64,
+    pub quality_score: Option<f64>,
+    pub user_feedback_score: Option<f64>,
+    pub created_at: DateTime<Utc>,
+    pub updated_at: DateTime<Utc>,
+    pub period_start: DateTime<Utc>,
+    pub period_end: DateTime<Utc>,
+}
+
+/// A/B test experiment for prompt effectiveness
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct PromptExperiment {
+    pub id: Uuid,
+    pub name: String,
+    pub description: String,
+    pub prompt_a_id: Uuid,
+    pub prompt_b_id: Uuid,
+    pub allocation_percentage: f64, // Percentage of traffic going to B (0-100)
+    pub status: ExperimentStatus,
+    pub start_date: DateTime<Utc>,
+    pub end_date: Option<DateTime<Utc>>,
+    pub created_by: Uuid,
+    pub created_at: DateTime<Utc>,
+    pub updated_at: DateTime<Utc>,
+    pub target_metric: MetricType,
+    pub minimum_sample_size: u64,
+    pub statistical_significance: Option<f64>,
+}
+
+/// Status of an A/B test experiment
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub enum ExperimentStatus {
+    Draft,
+    Running,
+    Paused,
+    Completed,
+    Cancelled,
+}
+
+/// Type of metric used for A/B testing
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub enum MetricType {
+    SuccessRate,
+    ResponseTime,
+    QualityScore,
+    UserFeedback,
+    TaskCompletion,
+}
+
+/// Results of an A/B test experiment
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ExperimentResults {
+    pub experiment_id: Uuid,
+    pub prompt_a_metrics: PromptMetrics,
+    pub prompt_b_metrics: PromptMetrics,
+    pub statistical_significance: f64,
+    pub confidence_interval: (f64, f64),
+    pub recommendation: TestRecommendation,
+    pub analyzed_at: DateTime<Utc>,
+}
+
+/// Recommendation from A/B test analysis
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub enum TestRecommendation {
+    ContinueTest,
+    AdoptPromptA,
+    AdoptPromptB,
+    NoSignificantDifference,
+    InconclusiveData,
+}
+
+/// Feedback data for prompt quality assessment
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PromptFeedback {
+    pub id: Uuid,
+    pub prompt_id: Uuid,
+    pub agent_id: Option<Uuid>,
+    pub task_id: Option<Uuid>,
+    pub feedback_type: FeedbackType,
+    pub score: f64, // 0.0 to 10.0
+    pub comments: Option<String>,
+    pub metadata: std::collections::HashMap<String, String>,
+    pub created_at: DateTime<Utc>,
+}
+
+/// Type of feedback provided
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub enum FeedbackType {
+    AutomaticMetric,
+    UserRating,
+    PeerReview,
+    QualityAssurance,
+    Performance,
+}
+
+/// Cache entry for rendered prompts
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PromptCacheEntry {
+    pub key: String,
+    pub prompt_id: Uuid,
+    pub variables_hash: String,
+    pub rendered_content: String,
+    pub cached_at: DateTime<Utc>,
+    pub access_count: u64,
+    pub last_accessed: DateTime<Utc>,
+    pub expires_at: Option<DateTime<Utc>>,
+}
+
 /// Claude Code agent template configuration
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct AgentTemplate {
@@ -1358,5 +1474,245 @@ mod tests {
 
         template.set_system_prompt_id(None);
         assert_eq!(template.system_prompt_id, None);
+    }
+
+    #[test]
+    fn test_prompt_metrics_creation() {
+        let prompt_id = Uuid::new_v4();
+        let agent_id = Uuid::new_v4();
+        let now = Utc::now();
+
+        let metrics = PromptMetrics {
+            id: Uuid::new_v4(),
+            prompt_id,
+            agent_id: Some(agent_id),
+            usage_count: 100,
+            success_rate: 0.95,
+            average_response_time_ms: 150.0,
+            quality_score: Some(8.5),
+            user_feedback_score: Some(8.2),
+            created_at: now,
+            updated_at: now,
+            period_start: now,
+            period_end: now,
+        };
+
+        assert_eq!(metrics.prompt_id, prompt_id);
+        assert_eq!(metrics.agent_id, Some(agent_id));
+        assert_eq!(metrics.usage_count, 100);
+        assert_eq!(metrics.success_rate, 0.95);
+        assert_eq!(metrics.average_response_time_ms, 150.0);
+        assert_eq!(metrics.quality_score, Some(8.5));
+        assert_eq!(metrics.user_feedback_score, Some(8.2));
+    }
+
+    #[test]
+    fn test_prompt_experiment_creation() {
+        let experiment_id = Uuid::new_v4();
+        let prompt_a_id = Uuid::new_v4();
+        let prompt_b_id = Uuid::new_v4();
+        let created_by = Uuid::new_v4();
+        let now = Utc::now();
+
+        let experiment = PromptExperiment {
+            id: experiment_id,
+            name: "Test Experiment".to_string(),
+            description: "Testing prompt effectiveness".to_string(),
+            prompt_a_id,
+            prompt_b_id,
+            allocation_percentage: 50.0,
+            status: ExperimentStatus::Draft,
+            start_date: now,
+            end_date: None,
+            created_by,
+            created_at: now,
+            updated_at: now,
+            target_metric: MetricType::SuccessRate,
+            minimum_sample_size: 100,
+            statistical_significance: None,
+        };
+
+        assert_eq!(experiment.name, "Test Experiment");
+        assert_eq!(experiment.prompt_a_id, prompt_a_id);
+        assert_eq!(experiment.prompt_b_id, prompt_b_id);
+        assert_eq!(experiment.allocation_percentage, 50.0);
+        assert_eq!(experiment.status, ExperimentStatus::Draft);
+        assert_eq!(experiment.target_metric, MetricType::SuccessRate);
+        assert_eq!(experiment.minimum_sample_size, 100);
+    }
+
+    #[test]
+    fn test_prompt_feedback_creation() {
+        let feedback_id = Uuid::new_v4();
+        let prompt_id = Uuid::new_v4();
+        let agent_id = Uuid::new_v4();
+        let task_id = Uuid::new_v4();
+        let now = Utc::now();
+
+        let mut metadata = std::collections::HashMap::new();
+        metadata.insert("model".to_string(), "claude-sonnet-4".to_string());
+        metadata.insert("version".to_string(), "1.0".to_string());
+
+        let feedback = PromptFeedback {
+            id: feedback_id,
+            prompt_id,
+            agent_id: Some(agent_id),
+            task_id: Some(task_id),
+            feedback_type: FeedbackType::UserRating,
+            score: 8.5,
+            comments: Some("Good performance, clear instructions".to_string()),
+            metadata,
+            created_at: now,
+        };
+
+        assert_eq!(feedback.prompt_id, prompt_id);
+        assert_eq!(feedback.agent_id, Some(agent_id));
+        assert_eq!(feedback.task_id, Some(task_id));
+        assert_eq!(feedback.feedback_type, FeedbackType::UserRating);
+        assert_eq!(feedback.score, 8.5);
+        assert!(feedback.comments.is_some());
+        assert_eq!(feedback.metadata.len(), 2);
+    }
+
+    #[test]
+    fn test_prompt_cache_entry_creation() {
+        let prompt_id = Uuid::new_v4();
+        let now = Utc::now();
+        let expires_at = now + chrono::Duration::hours(1);
+
+        let cache_entry = PromptCacheEntry {
+            key: "test_cache_key".to_string(),
+            prompt_id,
+            variables_hash: "abc123".to_string(),
+            rendered_content: "You are a test agent with role coordinator".to_string(),
+            cached_at: now,
+            access_count: 1,
+            last_accessed: now,
+            expires_at: Some(expires_at),
+        };
+
+        assert_eq!(cache_entry.key, "test_cache_key");
+        assert_eq!(cache_entry.prompt_id, prompt_id);
+        assert_eq!(cache_entry.variables_hash, "abc123");
+        assert!(cache_entry.rendered_content.contains("coordinator"));
+        assert_eq!(cache_entry.access_count, 1);
+        assert_eq!(cache_entry.expires_at, Some(expires_at));
+    }
+
+    #[test]
+    fn test_experiment_results_analysis() {
+        let experiment_id = Uuid::new_v4();
+        let now = Utc::now();
+
+        let prompt_a_metrics = PromptMetrics {
+            id: Uuid::new_v4(),
+            prompt_id: Uuid::new_v4(),
+            agent_id: None,
+            usage_count: 100,
+            success_rate: 0.85,
+            average_response_time_ms: 150.0,
+            quality_score: Some(8.0),
+            user_feedback_score: Some(7.8),
+            created_at: now,
+            updated_at: now,
+            period_start: now,
+            period_end: now,
+        };
+
+        let prompt_b_metrics = PromptMetrics {
+            id: Uuid::new_v4(),
+            prompt_id: Uuid::new_v4(),
+            agent_id: None,
+            usage_count: 95,
+            success_rate: 0.88,
+            average_response_time_ms: 142.0,
+            quality_score: Some(8.3),
+            user_feedback_score: Some(8.1),
+            created_at: now,
+            updated_at: now,
+            period_start: now,
+            period_end: now,
+        };
+
+        let results = ExperimentResults {
+            experiment_id,
+            prompt_a_metrics,
+            prompt_b_metrics,
+            statistical_significance: 0.95,
+            confidence_interval: (0.82, 0.94),
+            recommendation: TestRecommendation::AdoptPromptB,
+            analyzed_at: now,
+        };
+
+        assert_eq!(results.experiment_id, experiment_id);
+        assert_eq!(results.statistical_significance, 0.95);
+        assert_eq!(results.confidence_interval, (0.82, 0.94));
+        assert_eq!(results.recommendation, TestRecommendation::AdoptPromptB);
+    }
+
+    #[test]
+    fn test_experiment_status_transitions() {
+        // Test that we can create different experiment statuses
+        assert_eq!(ExperimentStatus::Draft, ExperimentStatus::Draft);
+        assert_ne!(ExperimentStatus::Draft, ExperimentStatus::Running);
+        assert_ne!(ExperimentStatus::Running, ExperimentStatus::Completed);
+        assert_ne!(ExperimentStatus::Completed, ExperimentStatus::Cancelled);
+    }
+
+    #[test]
+    fn test_metric_types() {
+        // Test that all metric types are available
+        let metric_types = vec![
+            MetricType::SuccessRate,
+            MetricType::ResponseTime,
+            MetricType::QualityScore,
+            MetricType::UserFeedback,
+            MetricType::TaskCompletion,
+        ];
+
+        assert_eq!(metric_types.len(), 5);
+        assert!(metric_types.contains(&MetricType::SuccessRate));
+        assert!(metric_types.contains(&MetricType::ResponseTime));
+        assert!(metric_types.contains(&MetricType::QualityScore));
+        assert!(metric_types.contains(&MetricType::UserFeedback));
+        assert!(metric_types.contains(&MetricType::TaskCompletion));
+    }
+
+    #[test]
+    fn test_feedback_types() {
+        // Test that all feedback types are available
+        let feedback_types = vec![
+            FeedbackType::AutomaticMetric,
+            FeedbackType::UserRating,
+            FeedbackType::PeerReview,
+            FeedbackType::QualityAssurance,
+            FeedbackType::Performance,
+        ];
+
+        assert_eq!(feedback_types.len(), 5);
+        assert!(feedback_types.contains(&FeedbackType::AutomaticMetric));
+        assert!(feedback_types.contains(&FeedbackType::UserRating));
+        assert!(feedback_types.contains(&FeedbackType::PeerReview));
+        assert!(feedback_types.contains(&FeedbackType::QualityAssurance));
+        assert!(feedback_types.contains(&FeedbackType::Performance));
+    }
+
+    #[test]
+    fn test_test_recommendations() {
+        // Test that all recommendation types are available
+        let recommendations = vec![
+            TestRecommendation::ContinueTest,
+            TestRecommendation::AdoptPromptA,
+            TestRecommendation::AdoptPromptB,
+            TestRecommendation::NoSignificantDifference,
+            TestRecommendation::InconclusiveData,
+        ];
+
+        assert_eq!(recommendations.len(), 5);
+        assert!(recommendations.contains(&TestRecommendation::ContinueTest));
+        assert!(recommendations.contains(&TestRecommendation::AdoptPromptA));
+        assert!(recommendations.contains(&TestRecommendation::AdoptPromptB));
+        assert!(recommendations.contains(&TestRecommendation::NoSignificantDifference));
+        assert!(recommendations.contains(&TestRecommendation::InconclusiveData));
     }
 }
