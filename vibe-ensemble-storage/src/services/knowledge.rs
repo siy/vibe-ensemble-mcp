@@ -151,7 +151,7 @@ impl KnowledgeService {
         Ok(KnowledgeStatistics {
             total_accessible,
             total_created,
-            recent_views: 0,   // Simplified for core implementation
+            recent_views: 0,     // Simplified for core implementation
             knowledge_shared: 0, // Simplified for core implementation
         })
     }
@@ -169,7 +169,7 @@ pub struct KnowledgeStatistics {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use sqlx::{Pool, SqlitePool, Sqlite};
+    use sqlx::{Pool, Sqlite, SqlitePool};
 
     async fn setup_test_service() -> Result<(KnowledgeService, Pool<Sqlite>)> {
         let pool = SqlitePool::connect(":memory:").await.unwrap();

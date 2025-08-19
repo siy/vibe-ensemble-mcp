@@ -19,3 +19,5 @@ thiserror = { workspace = true }
 anyhow = { workspace = true }
 tracing = { workspace = true }
 tokio = { workspace = true }
+regex = { workspace = true }
+rand = { workspace = true }
