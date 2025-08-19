@@ -1,6 +1,147 @@
 //! Integration tests for the security module
 
 #[cfg(test)]
+mod security_fixes_tests {
+    use super::*;
+    use crate::{CsrfTokenManager, ErrorResponse, SecurityError};
+    use chrono::Duration;
+    use std::sync::Arc;
+
+    #[tokio::test]
+    async fn test_csrf_token_generation_and_validation() {
+        let csrf_manager = CsrfTokenManager::new(Duration::hours(1));
+        let session_id = "test_session_123";
+
+        // Generate token
+        let token = csrf_manager.generate_token(session_id).await.unwrap();
+        assert!(!token.is_empty());
+        assert!(token.len() >= 32); // Base64 encoded 32 bytes should be longer
+
+        // Validate with correct session
+        assert!(csrf_manager.validate_token(&token, session_id).await);
+
+        // Should fail with wrong session
+        assert!(!csrf_manager.validate_token(&token, "wrong_session").await);
+    }
+
+    #[tokio::test]
+    async fn test_csrf_token_consumption() {
+        let csrf_manager = CsrfTokenManager::new(Duration::hours(1));
+        let session_id = "test_session_456";
+
+        // Generate and consume token
+        let token = csrf_manager.generate_token(session_id).await.unwrap();
+        assert!(csrf_manager.consume_token(&token, session_id).await);
+
+        // Second attempt should fail (single use)
+        assert!(!csrf_manager.consume_token(&token, session_id).await);
+        assert!(!csrf_manager.validate_token(&token, session_id).await);
+    }
+
+    #[tokio::test]
+    async fn test_csrf_token_expiration() {
+        let csrf_manager = CsrfTokenManager::new(Duration::milliseconds(100));
+        let session_id = "test_session_expire";
+
+        // Generate token
+        let token = csrf_manager.generate_token(session_id).await.unwrap();
+        assert!(csrf_manager.validate_token(&token, session_id).await);
+
+        // Wait for expiration
+        tokio::time::sleep(std::time::Duration::from_millis(150)).await;
+
+        // Should now fail validation
+        assert!(!csrf_manager.validate_token(&token, session_id).await);
+        assert!(!csrf_manager.consume_token(&token, session_id).await);
+    }
+
+    #[tokio::test]
+    async fn test_csrf_token_cleanup() {
+        let csrf_manager = CsrfTokenManager::new(Duration::milliseconds(100));
+
+        // Generate multiple tokens
+        for i in 0..3 {
+            let session_id = format!("session_{}", i);
+            csrf_manager.generate_token(&session_id).await.unwrap();
+        }
+
+        let (total, expired) = csrf_manager.get_stats().await;
+        assert_eq!(total, 3);
+        assert_eq!(expired, 0);
+
+        // Wait for expiration
+        tokio::time::sleep(std::time::Duration::from_millis(150)).await;
+
+        // Check stats before cleanup
+        let (total, expired) = csrf_manager.get_stats().await;
+        assert_eq!(total, 3);
+        assert_eq!(expired, 3);
+
+        // Cleanup expired tokens
+        let removed = csrf_manager.cleanup_expired_tokens().await;
+        assert_eq!(removed, 3);
+
+        let (total, expired) = csrf_manager.get_stats().await;
+        assert_eq!(total, 0);
+        assert_eq!(expired, 0);
+    }
+
+    #[tokio::test]
+    async fn test_error_message_sanitization() {
+        // Test database error sanitization
+        let db_error = SecurityError::DatabaseError(sqlx::Error::PoolClosed);
+        assert_eq!(db_error.public_message(), "Internal server error");
+        assert!(db_error.internal_message().contains("PoolClosed"));
+        assert_eq!(db_error.http_status_code(), 500);
+
+        // Test authentication error sanitization
+        let auth_error = SecurityError::AuthenticationFailed(
+            "User not found in database table users".to_string(),
+        );
+        assert_eq!(auth_error.public_message(), "Authentication failed");
+        assert!(auth_error
+            .internal_message()
+            .contains("User not found in database table users"));
+        assert_eq!(auth_error.http_status_code(), 401);
+
+        // Test permission error sanitization
+        let perm_error = SecurityError::InsufficientPermissions {
+            required: "admin".to_string(),
+            current: "user".to_string(),
+        };
+        assert_eq!(perm_error.public_message(), "Insufficient permissions");
+        assert!(perm_error.internal_message().contains("admin"));
+        assert_eq!(perm_error.http_status_code(), 403);
+    }
+
+    #[tokio::test]
+    async fn test_error_response_structure() {
+        let error = SecurityError::AuthenticationFailed("Sensitive internal error".to_string());
+        let error_response = ErrorResponse::from_security_error(&error);
+
+        assert_eq!(error_response.error, "Authentication failed");
+        assert_eq!(error_response.status, 401);
+        assert!(error_response.timestamp <= chrono::Utc::now());
+
+        // Test serialization
+        let json = serde_json::to_string(&error_response).unwrap();
+        assert!(json.contains("Authentication failed"));
+        assert!(!json.contains("Sensitive internal error"));
+    }
+
+    #[tokio::test]
+    async fn test_security_sensitive_errors() {
+        assert!(SecurityError::AuthenticationFailed("test".to_string()).is_security_sensitive());
+        assert!(SecurityError::AuthorizationFailed("test".to_string()).is_security_sensitive());
+        assert!(SecurityError::RateLimitExceeded.is_security_sensitive());
+        assert!(SecurityError::InvalidTokenFormat.is_security_sensitive());
+
+        assert!(!SecurityError::ConfigurationError("test".to_string()).is_security_sensitive());
+        assert!(!SecurityError::EncryptionError("test".to_string()).is_security_sensitive());
+    }
+}
+
+#[cfg(test)]
 mod integration_tests {
     use super::*;
     use crate::{

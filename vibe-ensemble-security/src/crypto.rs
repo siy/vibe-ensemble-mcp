@@ -365,6 +365,159 @@ pub struct KeyMetadata {
     pub is_expired: bool,
 }
 
+/// CSRF token for cross-site request forgery protection
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CsrfToken {
+    /// The actual token value
+    pub token: String,
+    /// When the token was created
+    pub created_at: chrono::DateTime<chrono::Utc>,
+    /// When the token expires
+    pub expires_at: chrono::DateTime<chrono::Utc>,
+    /// Session ID this token is bound to
+    pub session_id: String,
+}
+
+impl CsrfToken {
+    /// Create a new CSRF token
+    pub fn new(session_id: String, duration: chrono::Duration) -> SecurityResult<Self> {
+        let mut token_bytes = [0u8; 32];
+        OsRng.fill_bytes(&mut token_bytes);
+        let token = STANDARD.encode(&token_bytes);
+
+        let created_at = chrono::Utc::now();
+        let expires_at = created_at + duration;
+
+        Ok(Self {
+            token,
+            created_at,
+            expires_at,
+            session_id,
+        })
+    }
+
+    /// Check if token is expired
+    pub fn is_expired(&self) -> bool {
+        chrono::Utc::now() > self.expires_at
+    }
+
+    /// Validate token matches session and is not expired
+    pub fn is_valid(&self, session_id: &str) -> bool {
+        !self.is_expired() && self.session_id == session_id
+    }
+}
+
+/// CSRF token manager for web security
+#[derive(Debug, Clone)]
+pub struct CsrfTokenManager {
+    /// Active tokens (token -> csrf_token)
+    tokens: Arc<RwLock<HashMap<String, CsrfToken>>>,
+    /// Token expiration duration
+    token_duration: chrono::Duration,
+}
+
+impl CsrfTokenManager {
+    /// Create new CSRF token manager
+    pub fn new(token_duration: chrono::Duration) -> Self {
+        Self {
+            tokens: Arc::new(RwLock::new(HashMap::new())),
+            token_duration,
+        }
+    }
+
+    /// Create with default settings (1 hour expiration)
+    pub fn default() -> Self {
+        Self::new(chrono::Duration::hours(1))
+    }
+
+    /// Generate a new CSRF token for a session
+    pub async fn generate_token(&self, session_id: &str) -> SecurityResult<String> {
+        let csrf_token = CsrfToken::new(session_id.to_string(), self.token_duration)?;
+        let token_value = csrf_token.token.clone();
+
+        {
+            let mut tokens = self.tokens.write().await;
+            tokens.insert(token_value.clone(), csrf_token);
+        }
+
+        Ok(token_value)
+    }
+
+    /// Validate a CSRF token
+    pub async fn validate_token(&self, token: &str, session_id: &str) -> bool {
+        let tokens = self.tokens.read().await;
+
+        if let Some(csrf_token) = tokens.get(token) {
+            csrf_token.is_valid(session_id)
+        } else {
+            false
+        }
+    }
+
+    /// Consume a CSRF token (single use)
+    pub async fn consume_token(&self, token: &str, session_id: &str) -> bool {
+        let mut tokens = self.tokens.write().await;
+
+        if let Some(csrf_token) = tokens.get(token) {
+            if csrf_token.is_valid(session_id) {
+                tokens.remove(token);
+                return true;
+            }
+        }
+
+        false
+    }
+
+    /// Clean up expired tokens
+    pub async fn cleanup_expired_tokens(&self) -> usize {
+        let mut tokens = self.tokens.write().await;
+        let before_count = tokens.len();
+
+        tokens.retain(|_, csrf_token| !csrf_token.is_expired());
+
+        let removed = before_count - tokens.len();
+        if removed > 0 {
+            tracing::debug!("Cleaned up {} expired CSRF tokens", removed);
+        }
+
+        removed
+    }
+
+    /// Invalidate all tokens for a session
+    pub async fn invalidate_session_tokens(&self, session_id: &str) -> usize {
+        let mut tokens = self.tokens.write().await;
+        let before_count = tokens.len();
+
+        tokens.retain(|_, csrf_token| csrf_token.session_id != session_id);
+
+        let removed = before_count - tokens.len();
+        if removed > 0 {
+            tracing::debug!(
+                "Invalidated {} CSRF tokens for session {}",
+                removed,
+                session_id
+            );
+        }
+
+        removed
+    }
+
+    /// Get token statistics
+    pub async fn get_stats(&self) -> (usize, usize) {
+        let tokens = self.tokens.read().await;
+        let total = tokens.len();
+        let expired = tokens.values().filter(|t| t.is_expired()).count();
+        (total, expired)
+    }
+}
+
+/// Generate a secure random token
+pub fn generate_secure_token(length: usize) -> String {
+    let mut token_bytes = vec![0u8; length];
+    OsRng.fill_bytes(&mut token_bytes);
+    STANDARD.encode(&token_bytes)
+}
+
 /// Helper functions for common encryption patterns
 impl EncryptionService {
     /// Encrypt password for secure storage
@@ -584,6 +737,86 @@ mod tests {
             .await
             .unwrap();
         assert_eq!(decrypted_content, content);
+    }
+
+    #[tokio::test]
+    async fn test_csrf_token_functionality() {
+        use crate::CsrfToken;
+
+        let session_id = "test_session_123".to_string();
+        let duration = chrono::Duration::hours(1);
+
+        // Create CSRF token
+        let csrf_token = CsrfToken::new(session_id.clone(), duration).unwrap();
+        assert!(!csrf_token.token.is_empty());
+        assert!(csrf_token.token.len() >= 32);
+        assert_eq!(csrf_token.session_id, session_id);
+        assert!(!csrf_token.is_expired());
+
+        // Valid session should pass
+        assert!(csrf_token.is_valid(&session_id));
+
+        // Invalid session should fail
+        assert!(!csrf_token.is_valid("wrong_session"));
+
+        // Test expiration
+        let short_duration = chrono::Duration::milliseconds(1);
+        let short_token = CsrfToken::new(session_id.clone(), short_duration).unwrap();
+
+        // Wait for expiration
+        std::thread::sleep(std::time::Duration::from_millis(10));
+        assert!(short_token.is_expired());
+        assert!(!short_token.is_valid(&session_id));
+    }
+
+    #[tokio::test]
+    async fn test_csrf_token_manager_comprehensive() {
+        let manager = CsrfTokenManager::new(chrono::Duration::hours(1));
+        let session1 = "session_1";
+        let session2 = "session_2";
+
+        // Generate tokens for different sessions
+        let token1 = manager.generate_token(session1).await.unwrap();
+        let token2 = manager.generate_token(session2).await.unwrap();
+
+        // Both tokens should validate for their respective sessions
+        assert!(manager.validate_token(&token1, session1).await);
+        assert!(manager.validate_token(&token2, session2).await);
+
+        // Cross-session validation should fail
+        assert!(!manager.validate_token(&token1, session2).await);
+        assert!(!manager.validate_token(&token2, session1).await);
+
+        // Consume token1
+        assert!(manager.consume_token(&token1, session1).await);
+        assert!(!manager.validate_token(&token1, session1).await); // Should be gone
+
+        // token2 should still be valid
+        assert!(manager.validate_token(&token2, session2).await);
+
+        // Invalidate all tokens for session2
+        let invalidated = manager.invalidate_session_tokens(session2).await;
+        assert_eq!(invalidated, 1);
+        assert!(!manager.validate_token(&token2, session2).await);
+    }
+
+    #[tokio::test]
+    async fn test_secure_token_generation() {
+        let token1 = crate::generate_secure_token(32);
+        let token2 = crate::generate_secure_token(32);
+
+        // Tokens should be different
+        assert_ne!(token1, token2);
+
+        // Should be base64 encoded
+        assert!(base64::decode(&token1).is_ok());
+        assert!(base64::decode(&token2).is_ok());
+
+        // Test different lengths
+        let short_token = crate::generate_secure_token(16);
+        let long_token = crate::generate_secure_token(64);
+
+        assert_ne!(short_token.len(), long_token.len());
     }
 
     #[tokio::test]

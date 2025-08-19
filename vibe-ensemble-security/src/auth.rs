@@ -189,6 +189,17 @@ impl AuthService {
             ));
         }
 
+        // Check for disabled password login (service accounts)
+        if user.password_hash == "DISABLED_PASSWORD_LOGIN" {
+            warn!(
+                "Authentication attempt for service account with disabled password login: {}",
+                username
+            );
+            return Err(SecurityError::AuthenticationFailed(
+                "Password login is disabled for this account".to_string(),
+            ));
+        }
+
         // Verify password
         if !self.verify_password(password, &user.password_hash)? {
             // Increment failed login attempts
@@ -270,6 +281,13 @@ impl AuthService {
             .get_user_by_id(user_id)
             .await?
             .ok_or_else(|| SecurityError::AuthenticationFailed("User not found".to_string()))?;
+
+        // Check for disabled password login
+        if user.password_hash == "DISABLED_PASSWORD_LOGIN" {
+            return Err(SecurityError::AuthenticationFailed(
+                "Password changes are not allowed for service accounts".to_string(),
+            ));
+        }
 
         // Verify current password
         if !self.verify_password(current_password, &user.password_hash)? {
@@ -572,6 +590,56 @@ mod tests {
             .authenticate(username, "wrong_password", None)
             .await;
         assert!(result.is_err());
+    }
+
+    #[tokio::test]
+    async fn test_disabled_password_login() {
+        let pool = setup_test_db().await;
+        let auth_service = AuthService::with_defaults(pool.clone(), "test_secret");
+
+        // Create user with disabled password login marker
+        sqlx::query!(
+            r#"
+            INSERT INTO users (id, username, email, password_hash, role, is_active, created_at, updated_at, failed_login_attempts, created_by)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            "#,
+            "service_user_001",
+            "system_service",
+            "system@vibeensemble.local",
+            "DISABLED_PASSWORD_LOGIN",
+            serde_json::to_string(&UserRole::Coordinator).unwrap(),
+            true,
+            chrono::Utc::now(),
+            chrono::Utc::now(),
+            0,
+            "system"
+        ).execute(&pool).await.unwrap();
+
+        // Authentication should fail with disabled password login
+        let result = auth_service
+            .authenticate("system_service", "any_password", None)
+            .await;
+
+        assert!(result.is_err());
+        match result.unwrap_err() {
+            SecurityError::AuthenticationFailed(msg) => {
+                assert!(msg.contains("Password login is disabled"));
+            }
+            _ => panic!("Expected AuthenticationFailed error"),
+        }
+
+        // Password change should also fail
+        let result = auth_service
+            .change_password("service_user_001", "old_password", "new_password")
+            .await;
+
+        assert!(result.is_err());
+        match result.unwrap_err() {
+            SecurityError::AuthenticationFailed(msg) => {
+                assert!(msg.contains("Password changes are not allowed for service accounts"));
+            }
+            _ => panic!("Expected AuthenticationFailed error"),
+        }
     }
 
     #[tokio::test]

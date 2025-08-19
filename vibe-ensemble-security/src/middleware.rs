@@ -1,8 +1,9 @@
 //! Security middleware for web applications
 
 use crate::{
-    AccessContext, AccessControlService, Action, AuditLogger, AuthService, EncryptionService,
-    JwtManager, Permission, ResourceType, SecurityError, SecurityResult, User, UserRole,
+    AccessContext, AccessControlService, Action, AuditLogger, AuthService, CsrfTokenManager,
+    EncryptionService, ErrorResponse, JwtManager, Permission, ResourceType, SecurityError,
+    SecurityResult, User, UserRole,
 };
 use axum::{
     extract::{Request, State},
@@ -70,6 +71,7 @@ pub struct SecurityMiddleware {
     pub access_control: Arc<AccessControlService>,
     pub audit_logger: Arc<AuditLogger>,
     pub encryption_service: Arc<EncryptionService>,
+    pub csrf_manager: Arc<CsrfTokenManager>,
 }
 
 impl SecurityMiddleware {
@@ -80,6 +82,7 @@ impl SecurityMiddleware {
         access_control: Arc<AccessControlService>,
         audit_logger: Arc<AuditLogger>,
         encryption_service: Arc<EncryptionService>,
+        csrf_manager: Arc<CsrfTokenManager>,
     ) -> Self {
         Self {
             config,
@@ -87,6 +90,7 @@ impl SecurityMiddleware {
             access_control,
             audit_logger,
             encryption_service,
+            csrf_manager,
         }
     }
 }
@@ -128,11 +132,8 @@ pub async fn auth_middleware(
             ));
         }
         Err(e) => {
-            warn!("Authentication error: {}", e);
-            return Ok(create_error_response(
-                StatusCode::UNAUTHORIZED,
-                "Invalid authentication",
-            ));
+            warn!("Authentication error: {}", e.internal_message());
+            return Ok(create_sanitized_error_response(&e));
         }
     };
 
@@ -327,7 +328,7 @@ pub async fn security_headers_middleware(
     Ok(response)
 }
 
-/// CSRF protection middleware (simplified implementation)
+/// CSRF protection middleware
 pub async fn csrf_middleware(
     State(security): State<Arc<SecurityMiddleware>>,
     request: Request,
@@ -340,29 +341,95 @@ pub async fn csrf_middleware(
     let method = request.method();
     let path = request.uri().path();
 
-    // Only check CSRF for state-changing operations
+    // Only check CSRF for state-changing operations and non-API endpoints
     if matches!(method.as_str(), "POST" | "PUT" | "DELETE" | "PATCH") && !is_api_endpoint(path) {
-        // In a real implementation, you would:
-        // 1. Check for CSRF token in headers or form data
-        // 2. Validate token against session
-        // 3. Ensure token is not reused
-
-        // For now, we'll implement a basic check
-        if let Some(token) = request.headers().get("X-CSRF-Token") {
-            // Validate CSRF token (simplified)
-            if !is_valid_csrf_token(token.to_str().unwrap_or("")) {
-                warn!("Invalid CSRF token for {}", path);
+        // Get session ID from user context
+        let session_id = match request.extensions().get::<User>() {
+            Some(user) => &user.id, // Use user ID as session identifier
+            None => {
+                warn!("No user context for CSRF validation on {}", path);
                 return Ok(create_error_response(
-                    StatusCode::FORBIDDEN,
-                    "Invalid CSRF token",
+                    StatusCode::UNAUTHORIZED,
+                    "Authentication required for CSRF protection",
                 ));
             }
-        } else {
-            warn!("Missing CSRF token for {}", path);
-            return Ok(create_error_response(
-                StatusCode::FORBIDDEN,
-                "CSRF token required",
-            ));
+        };
+
+        // Check for CSRF token in headers
+        let csrf_token = request
+            .headers()
+            .get("X-CSRF-Token")
+            .or_else(|| request.headers().get("x-csrf-token"))
+            .and_then(|v| v.to_str().ok());
+
+        match csrf_token {
+            Some(token) => {
+                // Validate CSRF token against session
+                if !security.csrf_manager.consume_token(token, session_id).await {
+                    warn!(
+                        "Invalid or expired CSRF token for {} from session {}",
+                        path, session_id
+                    );
+
+                    // Log security event
+                    if let Err(e) = security
+                        .audit_logger
+                        .log_event(
+                            crate::audit::AuditEvent::new(
+                                crate::audit::AuditEventType::SecurityViolation,
+                                crate::audit::AuditSeverity::Medium,
+                                format!(
+                                    "Invalid CSRF token attempt on {} from session {}",
+                                    path, session_id
+                                ),
+                            )
+                            .with_user(session_id, "unknown")
+                            .with_action("csrf_validation_failed")
+                            .with_resource("web_request", Some(path)),
+                        )
+                        .await
+                    {
+                        error!("Failed to log CSRF violation: {}", e);
+                    }
+
+                    return Ok(create_error_response(
+                        StatusCode::FORBIDDEN,
+                        "Invalid or expired CSRF token",
+                    ));
+                }
+            }
+            None => {
+                warn!(
+                    "Missing CSRF token for {} from session {}",
+                    path, session_id
+                );
+
+                // Log security event
+                if let Err(e) = security
+                    .audit_logger
+                    .log_event(
+                        crate::audit::AuditEvent::new(
+                            crate::audit::AuditEventType::SecurityViolation,
+                            crate::audit::AuditSeverity::Medium,
+                            format!(
+                                "Missing CSRF token for {} from session {}",
+                                path, session_id
+                            ),
+                        )
+                        .with_user(session_id, "unknown")
+                        .with_action("csrf_token_missing")
+                        .with_resource("web_request", Some(path)),
+                    )
+                    .await
+                {
+                    error!("Failed to log CSRF violation: {}", e);
+                }
+
+                return Ok(create_error_response(
+                    StatusCode::FORBIDDEN,
+                    "CSRF token required",
+                ));
+            }
         }
     }
 
@@ -488,19 +555,58 @@ fn extract_resource_id_from_path(path: &str) -> Option<String> {
     None
 }
 
-fn is_valid_csrf_token(token: &str) -> bool {
-    // Simplified CSRF token validation
-    // In production, you would validate against a secure random token stored in session
-    !token.is_empty() && token.len() >= 32
+/// Generate CSRF token endpoint handler
+pub async fn generate_csrf_token_handler(
+    State(security): State<Arc<SecurityMiddleware>>,
+    headers: HeaderMap,
+) -> Result<Json<serde_json::Value>, StatusCode> {
+    // Extract user from JWT token
+    match extract_and_validate_user(&security.auth_service, &headers).await {
+        Ok(Some(user)) => {
+            // Generate CSRF token for user session
+            match security.csrf_manager.generate_token(&user.id).await {
+                Ok(token) => {
+                    Ok(Json(serde_json::json!({
+                        "csrf_token": token,
+                        "expires_in": 3600 // 1 hour in seconds
+                    })))
+                }
+                Err(e) => {
+                    error!("Failed to generate CSRF token: {}", e.internal_message());
+                    let response = create_sanitized_error_response(&e);
+                    // Extract status code from response
+                    Err(StatusCode::INTERNAL_SERVER_ERROR)
+                }
+            }
+        }
+        Ok(None) => Err(StatusCode::UNAUTHORIZED),
+        Err(e) => {
+            error!(
+                "Authentication failed for CSRF token generation: {}",
+                e.internal_message()
+            );
+            Err(StatusCode::UNAUTHORIZED)
+        }
+    }
 }
 
 fn create_error_response(status: StatusCode, message: &str) -> Response {
     let body = json!({
         "error": message,
-        "status": status.as_u16()
+        "status": status.as_u16(),
+        "timestamp": chrono::Utc::now()
     });
 
     (status, Json(body)).into_response()
+}
+
+/// Create sanitized error response from SecurityError
+fn create_sanitized_error_response(error: &SecurityError) -> Response {
+    let error_response = ErrorResponse::from_security_error(error);
+    let status =
+        StatusCode::from_u16(error_response.status).unwrap_or(StatusCode::INTERNAL_SERVER_ERROR);
+
+    (status, Json(error_response)).into_response()
 }
 
 // Extension trait for ResourceType to get string representation

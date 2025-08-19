@@ -122,30 +122,30 @@ CREATE INDEX IF NOT EXISTS idx_rate_limit_identifier ON rate_limit_tracking(iden
 CREATE INDEX IF NOT EXISTS idx_rate_limit_window ON rate_limit_tracking(window_start);
 CREATE INDEX IF NOT EXISTS idx_rate_limit_last_request ON rate_limit_tracking(last_request_at);
 
--- Create default admin user (password: admin - CHANGE IN PRODUCTION!)
-INSERT OR IGNORE INTO users (
-    id, 
-    username, 
-    email, 
-    password_hash, 
-    role, 
-    is_active, 
-    created_at, 
-    updated_at,
-    created_by
-) VALUES (
-    'admin_user_001',
-    'admin',
-    'admin@vibeensemble.local',
-    '$2b$12$LQv3c1yqBWVHxkd0LHAkCOYz6TtxMQJqhN8/LewZyZoUUrL.l./.u', -- bcrypt hash of 'admin'
-    '"Admin"',
-    1,
-    datetime('now'),
-    datetime('now'),
-    'system'
-);
+-- NOTE: Default admin credentials are NOT created automatically for security reasons.
+-- To create an initial admin user, use the following SQL with a secure password:
+--
+-- EXAMPLE (use a secure random password):
+-- INSERT INTO users (
+--     id, username, email, password_hash, role, is_active, 
+--     created_at, updated_at, created_by
+-- ) VALUES (
+--     'admin_user_001',
+--     'admin',
+--     'admin@vibeensemble.local',
+--     '$2b$12$YOUR_SECURE_BCRYPT_HASH_HERE',
+--     '"Admin"',
+--     1,
+--     datetime('now'),
+--     datetime('now'),
+--     'system'
+-- );
+--
+-- To generate a secure password hash, use bcrypt with cost 12 or higher.
+-- Never use default/weak passwords in production environments.
 
--- Create default service account for system operations
+-- Create service account for system operations with disabled password login
+-- This account can only be used for internal system operations, not for login
 INSERT OR IGNORE INTO users (
     id, 
     username, 
@@ -158,9 +158,9 @@ INSERT OR IGNORE INTO users (
     created_by
 ) VALUES (
     'service_user_001',
-    'system',
+    'system_service',
     'system@vibeensemble.local',
-    '$2b$12$LQv3c1yqBWVHxkd0LHAkCOYz6TtxMQJqhN8/LewZyZoUUrL.l./.u', -- bcrypt hash of 'admin'
+    'DISABLED_PASSWORD_LOGIN', -- Special marker indicating password login is disabled
     '"Coordinator"',
     1,
     datetime('now'),
