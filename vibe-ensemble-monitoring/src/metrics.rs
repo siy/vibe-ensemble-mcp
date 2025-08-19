@@ -10,12 +10,10 @@ use std::{
     sync::{Arc, RwLock},
     time::{Duration, Instant},
 };
-use sysinfo::{System, SystemExt};
+use sysinfo::System;
 use tokio::time;
 use tracing::{error, info, warn};
-#[cfg(feature = "storage")]
 use vibe_ensemble_core::{agent::Agent, issue::Issue};
-#[cfg(feature = "storage")]
 use vibe_ensemble_storage::StorageManager;
 
 /// System metrics data

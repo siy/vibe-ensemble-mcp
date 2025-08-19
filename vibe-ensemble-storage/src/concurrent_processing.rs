@@ -5,19 +5,17 @@ use dashmap::DashMap;
 use parking_lot::{Mutex, RwLock};
 use rayon::prelude::*;
 use std::collections::HashMap;
-use std::hash::{DefaultHasher, Hasher};
 use std::sync::{
     atomic::{AtomicU64, AtomicUsize, Ordering},
     Arc,
 };
 use std::time::{Duration, Instant};
-use tokio::sync::{mpsc, RwLock as TokioRwLock, Semaphore};
-use tokio::task::{JoinHandle, JoinSet};
+use tokio::sync::Semaphore;
+use tokio::task::JoinHandle;
 use tracing::{debug, error, info, warn};
 use uuid::Uuid;
 
 use crate::performance::PerformanceMetrics;
-use crate::{Error, Result as StorageResult};
 
 /// Configuration for concurrent processing
 #[derive(Debug, Clone)]
@@ -110,7 +108,7 @@ pub enum WorkPriority {
 }
 
 /// Worker thread statistics
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 pub struct WorkerStats {
     pub worker_id: usize,
     pub tasks_processed: AtomicU64,
@@ -207,7 +205,7 @@ impl<T> PriorityWorkQueue<T> {
 
     pub fn pop(&self) -> Option<WorkItem<T>> {
         // Try critical queue first
-        if let Ok(mut queue) = self.critical_queue.try_lock() {
+        if let Some(mut queue) = self.critical_queue.try_lock() {
             if let Some(item) = queue.pop() {
                 self.total_items.fetch_sub(1, Ordering::Relaxed);
                 return Some(item);
@@ -215,7 +213,7 @@ impl<T> PriorityWorkQueue<T> {
         }
 
         // Then high priority
-        if let Ok(mut queue) = self.high_queue.try_lock() {
+        if let Some(mut queue) = self.high_queue.try_lock() {
             if let Some(item) = queue.pop() {
                 self.total_items.fetch_sub(1, Ordering::Relaxed);
                 return Some(item);
@@ -223,7 +221,7 @@ impl<T> PriorityWorkQueue<T> {
         }
 
         // Then normal priority
-        if let Ok(mut queue) = self.normal_queue.try_lock() {
+        if let Some(mut queue) = self.normal_queue.try_lock() {
             if let Some(item) = queue.pop() {
                 self.total_items.fetch_sub(1, Ordering::Relaxed);
                 return Some(item);
@@ -231,7 +229,7 @@ impl<T> PriorityWorkQueue<T> {
         }
 
         // Finally low priority
-        if let Ok(mut queue) = self.low_queue.try_lock() {
+        if let Some(mut queue) = self.low_queue.try_lock() {
             if let Some(item) = queue.pop() {
                 self.total_items.fetch_sub(1, Ordering::Relaxed);
                 return Some(item);
@@ -631,13 +629,13 @@ impl ParallelProcessor {
     pub fn parallel_reduce<T, R, F, G>(items: Vec<T>, identity: R, map_fn: F, reduce_fn: G) -> R
     where
         T: Send,
-        R: Send + Clone,
+        R: Send + Clone + Sync,
         F: Fn(T) -> R + Send + Sync,
         G: Fn(R, R) -> R + Send + Sync,
     {
         items
             .into_par_iter()
             .map(map_fn)
-            .reduce(|| identity, reduce_fn)
+            .reduce(|| identity.clone(), reduce_fn)
     }
 }

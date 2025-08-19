@@ -8,9 +8,8 @@
 //! - Context-aware suggestions and recommendations
 
 use crate::{
-    issue::{Issue, IssueStatus},
-    knowledge::{AccessLevel, Knowledge, KnowledgeSearchCriteria, KnowledgeType},
-    message::{Message, MessageType},
+    knowledge::{AccessLevel, Knowledge, KnowledgeType},
+    message::Message,
     Error, Result,
 };
 use chrono::{DateTime, Utc};

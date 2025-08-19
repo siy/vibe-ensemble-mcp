@@ -1,23 +1,19 @@
 //! Message batching and compression optimizations
 
 use anyhow::Result;
-use chrono::{DateTime, Utc};
-use dashmap::DashMap;
 use flate2::{read::GzDecoder, write::GzEncoder, Compression};
 use parking_lot::{Mutex, RwLock};
-use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, VecDeque};
 use std::io::{Read, Write};
 use std::sync::Arc;
 use std::time::{Duration, Instant};
-use tokio::sync::{mpsc, RwLock as TokioRwLock, Semaphore};
-use tokio::time::{interval, sleep};
+use tokio::sync::Semaphore;
+use tokio::time::interval;
 use tracing::{debug, error, info, warn};
 use uuid::Uuid;
 use vibe_ensemble_core::message::{Message, MessageType};
 
-use crate::performance::{BatchManager, PerformanceMetrics};
-use crate::{Error, Result as StorageResult};
+use crate::performance::PerformanceMetrics;
 
 /// Configuration for message batching and compression
 #[derive(Debug, Clone)]
@@ -112,7 +108,9 @@ impl From<&MessageType> for MessagePriority {
         match message_type {
             MessageType::Direct => MessagePriority::Normal,
             MessageType::Broadcast => MessagePriority::Low,
-            MessageType::System => MessagePriority::High,
+            MessageType::StatusUpdate => MessagePriority::High,
+            MessageType::IssueNotification => MessagePriority::High,
+            MessageType::KnowledgeShare => MessagePriority::Normal,
         }
     }
 }
@@ -194,13 +192,8 @@ impl MessageCompressor {
         if compressed.len() < message.content.len() {
             message.content = base64::encode(&compressed);
             // Add compression metadata
-            message
-                .metadata
-                .insert("compressed".to_string(), serde_json::Value::Bool(true));
-            message.metadata.insert(
-                "compression_type".to_string(),
-                serde_json::Value::String("gzip".to_string()),
-            );
+            message.metadata.is_compressed = true;
+            message.metadata.compression_type = Some("gzip".to_string());
             debug!(
                 "Compressed message from {} to {} bytes",
                 message.content.len(),
@@ -214,12 +207,7 @@ impl MessageCompressor {
 
     /// Decompress message content
     pub fn decompress_message(&self, message: &mut Message) -> Result<bool> {
-        if !message
-            .metadata
-            .get("compressed")
-            .and_then(|v| v.as_bool())
-            .unwrap_or(false)
-        {
+        if !message.metadata.is_compressed {
             return Ok(false);
         }
 
@@ -229,8 +217,8 @@ impl MessageCompressor {
         decoder.read_to_string(&mut decompressed)?;
 
         message.content = decompressed;
-        message.metadata.remove("compressed");
-        message.metadata.remove("compression_type");
+        message.metadata.is_compressed = false;
+        message.metadata.compression_type = None;
         debug!(
             "Decompressed message from {} to {} bytes",
             compressed.len(),
@@ -307,8 +295,9 @@ impl MessageQueue {
     /// Add message to appropriate priority queue
     pub fn enqueue_message(&self, message: Message) -> Result<()> {
         let prioritized = PrioritizedMessage::new(message);
+        let priority = prioritized.priority;
 
-        match prioritized.priority {
+        match priority {
             MessagePriority::Critical | MessagePriority::High => {
                 let mut queue = self.high_priority.lock();
                 if queue.len() >= queue.capacity() {
@@ -336,7 +325,7 @@ impl MessageQueue {
             }
         }
 
-        debug!("Enqueued message with priority {:?}", prioritized.priority);
+        debug!("Enqueued message with priority {:?}", priority);
         Ok(())
     }
 

@@ -68,9 +68,9 @@ impl TracingSetup {
         resource: Resource,
         jaeger_endpoint: &str,
     ) -> Result<opentelemetry_sdk::trace::TracerProvider> {
-        use opentelemetry_jaeger::JaegerPipeline;
+        use opentelemetry_jaeger::new_agent_pipeline;
 
-        let tracer_provider = JaegerPipeline::new()
+        let tracer_provider = new_agent_pipeline()
             .with_service_name(&self.config.service_name)
             .with_trace_config(
                 trace::Config::default()

@@ -3,10 +3,8 @@
 use anyhow::Result;
 use dashmap::DashMap;
 use flate2::{read::GzDecoder, write::GzEncoder, Compression};
-use futures_util::{SinkExt, StreamExt};
+use futures_util::SinkExt;
 use parking_lot::RwLock;
-use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
 use std::io::{Read, Write};
 use std::sync::{
     atomic::{AtomicU64, AtomicUsize, Ordering},
@@ -14,9 +12,8 @@ use std::sync::{
 };
 use std::time::{Duration, Instant};
 use tokio::net::TcpStream;
-use tokio::sync::{mpsc, RwLock as TokioRwLock, Semaphore};
+use tokio::sync::Semaphore;
 use tokio::task::JoinHandle;
-use tokio::time::timeout;
 use tokio_tungstenite::{tungstenite::Message as WsMessage, WebSocketStream};
 use tracing::{debug, error, info, warn};
 use uuid::Uuid;
@@ -90,7 +87,7 @@ pub struct ConnectionPool {
 }
 
 /// Pooled connection wrapper
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct PooledConnection {
     pub id: Uuid,
     pub host: String,
@@ -213,7 +210,7 @@ impl ConnectionPool {
         let max_idle = Duration::from_secs(self.config.keep_alive_timeout_seconds);
 
         for mut entry in self.connections.iter_mut() {
-            let host = entry.key();
+            let host = entry.key().clone();
             let connections = entry.value_mut();
 
             let original_len = connections.len();
@@ -258,7 +255,7 @@ impl<'a> ConnectionPermit<'a> {
             self.pool
                 .entry(host)
                 .or_insert_with(Vec::new)
-                .push(self.connection);
+                .push(self.connection.clone());
             debug!("Returned connection to pool");
         } else {
             self.stats
@@ -351,7 +348,7 @@ pub struct WebSocketOptimizer {
     metrics: Arc<PerformanceMetrics>,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 pub struct WebSocketStats {
     pub connection_id: Uuid,
     pub connected_at: Instant,
@@ -455,7 +452,17 @@ impl WebSocketOptimizer {
         mut sender: futures_util::stream::SplitSink<WebSocketStream<TcpStream>, WsMessage>,
     ) -> Result<JoinHandle<()>> {
         let interval_duration = Duration::from_secs(self.config.websocket_ping_interval_seconds);
-        let stats = self.connection_stats.get(&connection_id).map(|s| s.clone());
+        let stats = self.connection_stats.get(&connection_id).map(|s| {
+            WebSocketStats {
+                connection_id: s.connection_id,
+                connected_at: s.connected_at,
+                messages_sent: AtomicU64::new(s.messages_sent.load(Ordering::Relaxed)),
+                messages_received: AtomicU64::new(s.messages_received.load(Ordering::Relaxed)),
+                bytes_sent: AtomicU64::new(s.bytes_sent.load(Ordering::Relaxed)),
+                bytes_received: AtomicU64::new(s.bytes_received.load(Ordering::Relaxed)),
+                last_activity: RwLock::new(*s.last_activity.read()),
+            }
+        });
 
         let handle = tokio::spawn(async move {
             let mut interval = tokio::time::interval(interval_duration);
@@ -498,14 +505,33 @@ impl WebSocketOptimizer {
 
     /// Get connection statistics
     pub fn get_connection_stats(&self, connection_id: &Uuid) -> Option<WebSocketStats> {
-        self.connection_stats.get(connection_id).map(|s| s.clone())
+        self.connection_stats.get(connection_id).map(|s| WebSocketStats {
+            connection_id: s.connection_id,
+            connected_at: s.connected_at,
+            messages_sent: AtomicU64::new(s.messages_sent.load(Ordering::Relaxed)),
+            messages_received: AtomicU64::new(s.messages_received.load(Ordering::Relaxed)),
+            bytes_sent: AtomicU64::new(s.bytes_sent.load(Ordering::Relaxed)),
+            bytes_received: AtomicU64::new(s.bytes_received.load(Ordering::Relaxed)),
+            last_activity: RwLock::new(*s.last_activity.read()),
+        })
     }
 
     /// Get all connection statistics
     pub fn get_all_connection_stats(&self) -> Vec<WebSocketStats> {
         self.connection_stats
             .iter()
-            .map(|entry| entry.value().clone())
+            .map(|entry| {
+                let s = entry.value();
+                WebSocketStats {
+                    connection_id: s.connection_id,
+                    connected_at: s.connected_at,
+                    messages_sent: AtomicU64::new(s.messages_sent.load(Ordering::Relaxed)),
+                    messages_received: AtomicU64::new(s.messages_received.load(Ordering::Relaxed)),
+                    bytes_sent: AtomicU64::new(s.bytes_sent.load(Ordering::Relaxed)),
+                    bytes_received: AtomicU64::new(s.bytes_received.load(Ordering::Relaxed)),
+                    last_activity: RwLock::new(*s.last_activity.read()),
+                }
+            })
             .collect()
     }
 

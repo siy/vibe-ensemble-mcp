@@ -648,7 +648,7 @@ impl PerformanceLayer {
 
     fn calculate_compression_ratio(&self) -> f64 {
         let compression_count = self.metrics.compression_count.load(Ordering::Relaxed);
-        let decompression_count = self.metrics.decompression_count.load(Ordering::Relaxed);
+        let _decompression_count = self.metrics.decompression_count.load(Ordering::Relaxed);
 
         if compression_count == 0 {
             1.0

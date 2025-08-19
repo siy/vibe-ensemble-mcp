@@ -1,10 +1,10 @@
 //! Storage manager for coordinating database operations
 
 use crate::{migrations::Migrations, performance::*, repositories::*, services::*, Error, Result};
-use sqlx::{ConnectOptions, Pool, Sqlite, SqlitePool};
+use sqlx::{Pool, Sqlite, SqlitePool};
 use std::sync::Arc;
 use std::time::Duration;
-use tracing::{info, warn};
+use tracing::info;
 
 /// Database configuration
 #[derive(Debug, Clone)]

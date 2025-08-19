@@ -1,6 +1,8 @@
 //! Health checks and readiness probes
 
-use crate::{config::HealthConfig, error::Result, MonitoringError};
+use crate::{config::HealthConfig, error::Result};
+use async_trait::async_trait;
+use futures::future;
 use serde::{Deserialize, Serialize};
 use std::{
     collections::HashMap,
@@ -305,7 +307,7 @@ impl HealthCheck {
             .iter()
             .map(|provider| provider.check())
             .collect();
-        let results = futures::future::join_all(futures).await;
+        let results = future::join_all(futures).await;
 
         // Process results
         for result in results {
