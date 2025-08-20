@@ -75,11 +75,13 @@ impl PromptRenderer {
     ) -> Result<()> {
         for variable in &prompt.variables {
             if variable.required
-                && !variables.contains_key(&variable.name) && variable.default_value.is_none() {
-                    return Err(Error::MissingVariable {
-                        name: variable.name.clone(),
-                    });
-                }
+                && !variables.contains_key(&variable.name)
+                && variable.default_value.is_none()
+            {
+                return Err(Error::MissingVariable {
+                    name: variable.name.clone(),
+                });
+            }
         }
         Ok(())
     }

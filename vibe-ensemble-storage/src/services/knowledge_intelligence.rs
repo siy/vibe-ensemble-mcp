@@ -653,9 +653,7 @@ mod tests {
     use super::*;
     use crate::migrations;
     use sqlx::SqlitePool;
-    use vibe_ensemble_core::{
-        issue::{Issue, IssuePriority, IssueStatus},
-    };
+    use vibe_ensemble_core::issue::{Issue, IssuePriority, IssueStatus};
 
     async fn setup_test_service() -> Result<KnowledgeIntelligenceService> {
         let pool = SqlitePool::connect(":memory:").await.unwrap();

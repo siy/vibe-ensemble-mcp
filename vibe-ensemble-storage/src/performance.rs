@@ -212,9 +212,7 @@ impl CacheManager {
         }
 
         // Try L2 cache
-        let l2_data = {
-            self.l2_cache.read().peek(&key_str).cloned()
-        };
+        let l2_data = { self.l2_cache.read().peek(&key_str).cloned() };
         if let Some(data) = l2_data {
             self.metrics.cache_hits.fetch_add(1, Ordering::Relaxed);
             if let Ok(cached_value) = self.deserialize_cached_value::<T>(&data) {
