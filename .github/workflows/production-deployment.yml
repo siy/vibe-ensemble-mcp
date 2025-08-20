@@ -27,6 +27,7 @@ env:
   IMAGE_NAME: ${{ github.repository }}
   CARGO_TERM_COLOR: always
   RUSTFLAGS: "-D warnings"
+  SQLX_OFFLINE: true
 
 permissions:
   contents: read

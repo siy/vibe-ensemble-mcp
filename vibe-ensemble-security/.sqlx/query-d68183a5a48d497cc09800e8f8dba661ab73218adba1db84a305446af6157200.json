@@ -1,0 +1,20 @@
+{
+  "db_name": "SQLite",
+  "query": "SELECT COUNT(*) FROM audit_events WHERE event_type LIKE '%SuspiciousActivity%' AND timestamp >= ?",
+  "describe": {
+    "columns": [
+      {
+        "name": "COUNT(*)",
+        "ordinal": 0,
+        "type_info": "Int"
+      }
+    ],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "d68183a5a48d497cc09800e8f8dba661ab73218adba1db84a305446af6157200"
+}
