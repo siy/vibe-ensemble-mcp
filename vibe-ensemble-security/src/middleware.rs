@@ -242,6 +242,7 @@ pub async fn security_headers_middleware(
     request: Request,
     next: Next,
 ) -> Result<Response, StatusCode> {
+    let path = request.uri().path().to_string();
     let mut response = next.run(request).await;
 
     // Add security headers
@@ -314,7 +315,7 @@ pub async fn security_headers_middleware(
     );
 
     // Cache Control for sensitive endpoints
-    if is_sensitive_endpoint(request.uri().path()) {
+    if is_sensitive_endpoint(&path) {
         headers.insert(
             HeaderName::from_static("cache-control"),
             HeaderValue::from_static("no-store, no-cache, must-revalidate, max-age=0"),
@@ -376,7 +377,7 @@ pub async fn csrf_middleware(
                         .audit_logger
                         .log_event(
                             crate::audit::AuditEvent::new(
-                                crate::audit::AuditEventType::SecurityViolation,
+                                crate::audit::AuditEventType::SuspiciousActivity,
                                 crate::audit::AuditSeverity::Medium,
                                 format!(
                                     "Invalid CSRF token attempt on {} from session {}",
@@ -385,7 +386,7 @@ pub async fn csrf_middleware(
                             )
                             .with_user(session_id, "unknown")
                             .with_action("csrf_validation_failed")
-                            .with_resource("web_request", Some(path)),
+                            .with_resource("web_request", &path),
                         )
                         .await
                     {
@@ -409,7 +410,7 @@ pub async fn csrf_middleware(
                     .audit_logger
                     .log_event(
                         crate::audit::AuditEvent::new(
-                            crate::audit::AuditEventType::SecurityViolation,
+                            crate::audit::AuditEventType::SuspiciousActivity,
                             crate::audit::AuditSeverity::Medium,
                             format!(
                                 "Missing CSRF token for {} from session {}",
@@ -418,7 +419,7 @@ pub async fn csrf_middleware(
                         )
                         .with_user(session_id, "unknown")
                         .with_action("csrf_token_missing")
-                        .with_resource("web_request", Some(path)),
+                        .with_resource("web_request", &path),
                     )
                     .await
                 {

@@ -2,12 +2,13 @@
 
 use crate::{JwtManager, SecurityError, SecurityResult, TokenPair, User, UserRole};
 use bcrypt::{hash, verify, DEFAULT_COST};
-use chrono::{Duration, Utc};
+use chrono::{DateTime, Duration, Utc};
 use sqlx::{Pool, Sqlite};
 use std::sync::Arc;
 use tracing::{error, info, warn};
 
 /// Password requirements
+#[derive(Debug, Clone)]
 pub struct PasswordRequirements {
     pub min_length: usize,
     pub require_uppercase: bool,
@@ -29,13 +30,25 @@ impl Default for PasswordRequirements {
 }
 
 /// Authentication service
-#[derive(Debug, Clone)]
+#[derive(Clone)]
 pub struct AuthService {
     db_pool: Pool<Sqlite>,
     jwt_manager: Arc<JwtManager>,
     password_requirements: PasswordRequirements,
     max_login_attempts: i32,
     lockout_duration: Duration,
+}
+
+impl std::fmt::Debug for AuthService {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("AuthService")
+            .field("db_pool", &"<database pool>")
+            .field("jwt_manager", &"<jwt manager>")
+            .field("password_requirements", &self.password_requirements)
+            .field("max_login_attempts", &self.max_login_attempts)
+            .field("lockout_duration", &self.lockout_duration)
+            .finish()
+    }
 }
 
 impl AuthService {
@@ -136,10 +149,11 @@ impl AuthService {
             username.to_string(),
             email.map(|e| e.to_string()),
             password_hash,
-            role,
+            role.clone(),
         );
 
         // Insert into database
+        let role_json = serde_json::to_string(&user.role).unwrap();
         sqlx::query!(
             r#"
             INSERT INTO users (id, username, email, password_hash, role, is_active, created_at, updated_at, failed_login_attempts, created_by)
@@ -149,7 +163,7 @@ impl AuthService {
             user.username,
             user.email,
             user.password_hash,
-            user.role as UserRole,
+            role_json,
             user.is_active,
             user.created_at,
             user.updated_at,
@@ -300,10 +314,11 @@ impl AuthService {
         let new_password_hash = self.hash_password(new_password)?;
 
         // Update password in database
+        let updated_at = Utc::now();
         sqlx::query!(
             "UPDATE users SET password_hash = ?, updated_at = ? WHERE id = ?",
             new_password_hash,
-            Utc::now(),
+            updated_at,
             user_id
         )
         .execute(&self.db_pool)
@@ -324,18 +339,39 @@ impl AuthService {
                 SecurityError::Internal(anyhow::anyhow!("Failed to parse user role: {}", e))
             })?;
 
+            let created_at: DateTime<Utc> = row.created_at.parse().map_err(|e| {
+                SecurityError::Internal(anyhow::anyhow!("Failed to parse created_at: {}", e))
+            })?;
+            let updated_at: DateTime<Utc> = row.updated_at.parse().map_err(|e| {
+                SecurityError::Internal(anyhow::anyhow!("Failed to parse updated_at: {}", e))
+            })?;
+            let last_login_at: Option<DateTime<Utc>> = row.last_login_at
+                .as_ref()
+                .map(|s| s.parse())
+                .transpose()
+                .map_err(|e| {
+                    SecurityError::Internal(anyhow::anyhow!("Failed to parse last_login_at: {}", e))
+                })?;
+            let locked_until: Option<DateTime<Utc>> = row.locked_until
+                .as_ref()
+                .map(|s| s.parse())
+                .transpose()
+                .map_err(|e| {
+                    SecurityError::Internal(anyhow::anyhow!("Failed to parse locked_until: {}", e))
+                })?;
+
             Ok(Some(User {
-                id: row.id,
+                id: row.id.unwrap_or_else(|| "".to_string()),
                 username: row.username,
                 email: row.email,
                 password_hash: row.password_hash,
                 role,
                 is_active: row.is_active,
-                created_at: row.created_at,
-                updated_at: row.updated_at,
-                last_login_at: row.last_login_at,
-                failed_login_attempts: row.failed_login_attempts,
-                locked_until: row.locked_until,
+                created_at,
+                updated_at,
+                last_login_at,
+                failed_login_attempts: row.failed_login_attempts as i32,
+                locked_until,
             }))
         } else {
             Ok(None)
@@ -353,18 +389,39 @@ impl AuthService {
                 SecurityError::Internal(anyhow::anyhow!("Failed to parse user role: {}", e))
             })?;
 
+            let created_at: DateTime<Utc> = row.created_at.parse().map_err(|e| {
+                SecurityError::Internal(anyhow::anyhow!("Failed to parse created_at: {}", e))
+            })?;
+            let updated_at: DateTime<Utc> = row.updated_at.parse().map_err(|e| {
+                SecurityError::Internal(anyhow::anyhow!("Failed to parse updated_at: {}", e))
+            })?;
+            let last_login_at: Option<DateTime<Utc>> = row.last_login_at
+                .as_ref()
+                .map(|s| s.parse())
+                .transpose()
+                .map_err(|e| {
+                    SecurityError::Internal(anyhow::anyhow!("Failed to parse last_login_at: {}", e))
+                })?;
+            let locked_until: Option<DateTime<Utc>> = row.locked_until
+                .as_ref()
+                .map(|s| s.parse())
+                .transpose()
+                .map_err(|e| {
+                    SecurityError::Internal(anyhow::anyhow!("Failed to parse locked_until: {}", e))
+                })?;
+
             Ok(Some(User {
-                id: row.id,
+                id: row.id.unwrap_or_else(|| "".to_string()),
                 username: row.username,
                 email: row.email,
                 password_hash: row.password_hash,
                 role,
                 is_active: row.is_active,
-                created_at: row.created_at,
-                updated_at: row.updated_at,
-                last_login_at: row.last_login_at,
-                failed_login_attempts: row.failed_login_attempts,
-                locked_until: row.locked_until,
+                created_at,
+                updated_at,
+                last_login_at,
+                failed_login_attempts: row.failed_login_attempts as i32,
+                locked_until,
             }))
         } else {
             Ok(None)
@@ -373,11 +430,12 @@ impl AuthService {
 
     /// Update login attempts after failed authentication
     async fn update_login_attempts(&self, user: &User) -> SecurityResult<()> {
+        let updated_at = Utc::now();
         sqlx::query!(
             "UPDATE users SET failed_login_attempts = ?, locked_until = ?, updated_at = ? WHERE id = ?",
             user.failed_login_attempts,
             user.locked_until,
-            Utc::now(),
+            updated_at,
             user.id
         ).execute(&self.db_pool).await?;
 
@@ -386,12 +444,13 @@ impl AuthService {
 
     /// Update user after successful login
     async fn update_successful_login(&self, user: &User) -> SecurityResult<()> {
+        let updated_at = Utc::now();
         sqlx::query!(
             "UPDATE users SET failed_login_attempts = ?, locked_until = ?, last_login_at = ?, updated_at = ? WHERE id = ?",
             user.failed_login_attempts,
             user.locked_until,
             user.last_login_at,
-            Utc::now(),
+            updated_at,
             user.id
         ).execute(&self.db_pool).await?;
 
@@ -410,18 +469,39 @@ impl AuthService {
                 SecurityError::Internal(anyhow::anyhow!("Failed to parse user role: {}", e))
             })?;
 
+            let created_at: DateTime<Utc> = row.created_at.parse().map_err(|e| {
+                SecurityError::Internal(anyhow::anyhow!("Failed to parse created_at: {}", e))
+            })?;
+            let updated_at: DateTime<Utc> = row.updated_at.parse().map_err(|e| {
+                SecurityError::Internal(anyhow::anyhow!("Failed to parse updated_at: {}", e))
+            })?;
+            let last_login_at: Option<DateTime<Utc>> = row.last_login_at
+                .as_ref()
+                .map(|s| s.parse())
+                .transpose()
+                .map_err(|e| {
+                    SecurityError::Internal(anyhow::anyhow!("Failed to parse last_login_at: {}", e))
+                })?;
+            let locked_until: Option<DateTime<Utc>> = row.locked_until
+                .as_ref()
+                .map(|s| s.parse())
+                .transpose()
+                .map_err(|e| {
+                    SecurityError::Internal(anyhow::anyhow!("Failed to parse locked_until: {}", e))
+                })?;
+
             users.push(User {
-                id: row.id,
+                id: row.id.unwrap_or_else(|| "".to_string()),
                 username: row.username,
                 email: row.email,
                 password_hash: row.password_hash,
                 role,
                 is_active: row.is_active,
-                created_at: row.created_at,
-                updated_at: row.updated_at,
-                last_login_at: row.last_login_at,
-                failed_login_attempts: row.failed_login_attempts,
-                locked_until: row.locked_until,
+                created_at,
+                updated_at,
+                last_login_at,
+                failed_login_attempts: row.failed_login_attempts as i32,
+                locked_until,
             });
         }
 
@@ -452,10 +532,11 @@ impl AuthService {
         }
         user.updated_at = Utc::now();
 
+        let role_json = serde_json::to_string(&user.role).unwrap();
         sqlx::query!(
             "UPDATE users SET email = ?, role = ?, is_active = ?, updated_at = ? WHERE id = ?",
             user.email,
-            serde_json::to_string(&user.role).unwrap(),
+            role_json,
             user.is_active,
             user.updated_at,
             user.id
@@ -598,6 +679,8 @@ mod tests {
         let auth_service = AuthService::with_defaults(pool.clone(), "test_secret");
 
         // Create user with disabled password login marker
+        let role_json = serde_json::to_string(&UserRole::Coordinator).unwrap();
+        let now = chrono::Utc::now();
         sqlx::query!(
             r#"
             INSERT INTO users (id, username, email, password_hash, role, is_active, created_at, updated_at, failed_login_attempts, created_by)
@@ -607,10 +690,10 @@ mod tests {
             "system_service",
             "system@vibeensemble.local",
             "DISABLED_PASSWORD_LOGIN",
-            serde_json::to_string(&UserRole::Coordinator).unwrap(),
+            role_json,
             true,
-            chrono::Utc::now(),
-            chrono::Utc::now(),
+            now,
+            now,
             0,
             "system"
         ).execute(&pool).await.unwrap();

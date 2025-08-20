@@ -10,7 +10,7 @@ use tracing::{error, info, warn};
 use uuid::Uuid;
 
 /// Audit event types
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Hash)]
 #[serde(rename_all = "snake_case")]
 pub enum AuditEventType {
     // Authentication events
@@ -72,6 +72,55 @@ pub enum AuditEventType {
     Custom(String),
 }
 
+impl std::fmt::Display for AuditEventType {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            AuditEventType::LoginSuccess => write!(f, "LoginSuccess"),
+            AuditEventType::LoginFailure => write!(f, "LoginFailure"),
+            AuditEventType::Logout => write!(f, "Logout"),
+            AuditEventType::PasswordChanged => write!(f, "PasswordChanged"),
+            AuditEventType::TokenRefreshed => write!(f, "TokenRefreshed"),
+            AuditEventType::TokenExpired => write!(f, "TokenExpired"),
+            AuditEventType::AccountLocked => write!(f, "AccountLocked"),
+            AuditEventType::AccountUnlocked => write!(f, "AccountUnlocked"),
+            AuditEventType::PermissionGranted => write!(f, "PermissionGranted"),
+            AuditEventType::PermissionDenied => write!(f, "PermissionDenied"),
+            AuditEventType::RoleChanged => write!(f, "RoleChanged"),
+            AuditEventType::UserCreated => write!(f, "UserCreated"),
+            AuditEventType::UserUpdated => write!(f, "UserUpdated"),
+            AuditEventType::UserDeleted => write!(f, "UserDeleted"),
+            AuditEventType::UserActivated => write!(f, "UserActivated"),
+            AuditEventType::UserDeactivated => write!(f, "UserDeactivated"),
+            AuditEventType::AgentRegistered => write!(f, "AgentRegistered"),
+            AuditEventType::AgentUpdated => write!(f, "AgentUpdated"),
+            AuditEventType::AgentDeactivated => write!(f, "AgentDeactivated"),
+            AuditEventType::AgentTokenCreated => write!(f, "AgentTokenCreated"),
+            AuditEventType::AgentTokenRevoked => write!(f, "AgentTokenRevoked"),
+            AuditEventType::IssueCreated => write!(f, "IssueCreated"),
+            AuditEventType::IssueUpdated => write!(f, "IssueUpdated"),
+            AuditEventType::IssueDeleted => write!(f, "IssueDeleted"),
+            AuditEventType::IssueAssigned => write!(f, "IssueAssigned"),
+            AuditEventType::KnowledgeCreated => write!(f, "KnowledgeCreated"),
+            AuditEventType::KnowledgeUpdated => write!(f, "KnowledgeUpdated"),
+            AuditEventType::KnowledgeDeleted => write!(f, "KnowledgeDeleted"),
+            AuditEventType::MessageSent => write!(f, "MessageSent"),
+            AuditEventType::MessageReceived => write!(f, "MessageReceived"),
+            AuditEventType::SystemConfigChanged => write!(f, "SystemConfigChanged"),
+            AuditEventType::DatabaseMigration => write!(f, "DatabaseMigration"),
+            AuditEventType::BackupCreated => write!(f, "BackupCreated"),
+            AuditEventType::BackupRestored => write!(f, "BackupRestored"),
+            AuditEventType::SuspiciousActivity => write!(f, "SuspiciousActivity"),
+            AuditEventType::RateLimitExceeded => write!(f, "RateLimitExceeded"),
+            AuditEventType::InvalidTokenUsed => write!(f, "InvalidTokenUsed"),
+            AuditEventType::UnauthorizedAccess => write!(f, "UnauthorizedAccess"),
+            AuditEventType::DataExport => write!(f, "DataExport"),
+            AuditEventType::DataImport => write!(f, "DataImport"),
+            AuditEventType::EncryptionKeyRotated => write!(f, "EncryptionKeyRotated"),
+            AuditEventType::Custom(s) => write!(f, "Custom({})", s),
+        }
+    }
+}
+
 /// Audit event severity levels
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, PartialOrd)]
 #[serde(rename_all = "snake_case")]
@@ -80,6 +129,17 @@ pub enum AuditSeverity {
     Medium,
     High,
     Critical,
+}
+
+impl std::fmt::Display for AuditSeverity {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            AuditSeverity::Low => write!(f, "LOW"),
+            AuditSeverity::Medium => write!(f, "MEDIUM"),
+            AuditSeverity::High => write!(f, "HIGH"),
+            AuditSeverity::Critical => write!(f, "CRITICAL"),
+        }
+    }
 }
 
 /// Audit event record
@@ -268,7 +328,7 @@ impl AuditLogger {
         ip_address: Option<IpAddr>,
         user_agent: Option<&str>,
     ) -> SecurityResult<()> {
-        let event = AuditEvent::new(
+        let mut event = AuditEvent::new(
             AuditEventType::LoginFailure,
             AuditSeverity::Medium,
             format!("Authentication failed for user '{}': {}", username, reason),
@@ -276,10 +336,7 @@ impl AuditLogger {
         .with_session("", ip_address, user_agent)
         .with_failure(reason);
 
-        if let Some(username) = Some(username) {
-            let mut event = event;
-            event.username = Some(username.to_string());
-        }
+        event.username = Some(username.to_string());
 
         self.log_event(event).await
     }
@@ -560,10 +617,10 @@ impl AuditLogger {
         .await?;
 
         Ok(AuditStatistics {
-            total_events: total_events.unwrap_or(0) as u64,
-            failed_logins: failed_logins.unwrap_or(0) as u64,
-            permission_denials: permission_denials.unwrap_or(0) as u64,
-            suspicious_activities: suspicious_activities.unwrap_or(0) as u64,
+            total_events: total_events as u64,
+            failed_logins: failed_logins as u64,
+            permission_denials: permission_denials as u64,
+            suspicious_activities: suspicious_activities as u64,
             period_days: days,
         })
     }

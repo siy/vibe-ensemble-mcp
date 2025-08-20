@@ -61,7 +61,7 @@ impl Default for RateLimitConfig {
 }
 
 /// Rate limiting endpoint type
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum RateLimitType {
     General,
     Authentication,
