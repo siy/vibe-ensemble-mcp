@@ -18,7 +18,7 @@ authors = ["Vibe Ensemble Team"]
 license = "MIT"
 repository = "https://github.com/siy/vibe-ensemble-mcp"
 description = "MCP server for coordinating multiple Claude Code instances"
-rust-version = "1.70"
+rust-version = "1.80"
 
 [workspace.dependencies]
 # Async runtime

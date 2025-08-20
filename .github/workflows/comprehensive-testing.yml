@@ -41,7 +41,7 @@ jobs:
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@stable
         with:
-          toolchain: ${{ needs.setup.outputs.rust-version }}
+          toolchain: "stable"
           components: rustfmt, clippy
       
       - name: Cache cargo dependencies
@@ -96,7 +96,7 @@ jobs:
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@stable
         with:
-          toolchain: ${{ needs.setup.outputs.rust-version }}
+          toolchain: "stable"
       
       - name: Cache cargo dependencies
         uses: actions/cache@v3
@@ -147,7 +147,7 @@ jobs:
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@stable
         with:
-          toolchain: ${{ needs.setup.outputs.rust-version }}
+          toolchain: "stable"
       
       - name: Cache cargo dependencies
         uses: actions/cache@v3
@@ -196,7 +196,7 @@ jobs:
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@stable
         with:
-          toolchain: ${{ needs.setup.outputs.rust-version }}
+          toolchain: "stable"
       
       - name: Cache cargo dependencies
         uses: actions/cache@v3
@@ -238,7 +238,7 @@ jobs:
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@stable
         with:
-          toolchain: ${{ needs.setup.outputs.rust-version }}
+          toolchain: "stable"
       
       - name: Cache cargo dependencies
         uses: actions/cache@v3
@@ -286,7 +286,7 @@ jobs:
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@stable
         with:
-          toolchain: ${{ needs.setup.outputs.rust-version }}
+          toolchain: "stable"
       
       - name: Cache cargo dependencies
         uses: actions/cache@v3
@@ -333,7 +333,7 @@ jobs:
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@stable
         with:
-          toolchain: ${{ needs.setup.outputs.rust-version }}
+          toolchain: "stable"
       
       - name: Cache cargo dependencies
         uses: actions/cache@v3
@@ -402,7 +402,7 @@ jobs:
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@stable
         with:
-          toolchain: ${{ needs.setup.outputs.rust-version }}
+          toolchain: "stable"
       
       - name: Cache cargo dependencies
         uses: actions/cache@v3
@@ -433,7 +433,7 @@ jobs:
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@stable
         with:
-          toolchain: ${{ needs.setup.outputs.rust-version }}
+          toolchain: "stable"
       
       - name: Cache cargo dependencies
         uses: actions/cache@v3
