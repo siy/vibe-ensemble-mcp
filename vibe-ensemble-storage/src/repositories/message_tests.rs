@@ -4,6 +4,8 @@
 mod tests {
     use super::super::*;
     use crate::Error;
+    use crate::repositories::AgentRepository;
+    use vibe_ensemble_core::agent::{Agent, AgentType, ConnectionMetadata};
     use vibe_ensemble_core::message::{Message, MessagePriority, MessageType};
     use sqlx::SqlitePool;
     use uuid::Uuid;
@@ -17,13 +19,34 @@ mod tests {
         pool
     }
 
+    async fn create_test_agent(pool: &SqlitePool, name: &str) -> Uuid {
+        let agent_repo = AgentRepository::new(pool.clone());
+        
+        let metadata = ConnectionMetadata::builder()
+            .endpoint("https://localhost:8080")
+            .protocol_version("1.0")
+            .build()
+            .unwrap();
+
+        let agent = Agent::builder()
+            .name(name)
+            .agent_type(AgentType::Worker)
+            .capability("testing")
+            .connection_metadata(metadata)
+            .build()
+            .unwrap();
+
+        agent_repo.create(&agent).await.unwrap();
+        agent.id
+    }
+
     #[tokio::test]
     async fn test_message_create_and_find() {
         let pool = setup_test_db().await;
-        let repository = MessageRepository::new(pool);
+        let repository = MessageRepository::new(pool.clone());
 
-        let sender_id = Uuid::new_v4();
-        let recipient_id = Uuid::new_v4();
+        let sender_id = create_test_agent(&pool, "sender").await;
+        let recipient_id = create_test_agent(&pool, "recipient").await;
 
         let message = Message::builder()
             .sender_id(sender_id)
@@ -53,9 +76,9 @@ mod tests {
     #[tokio::test]
     async fn test_broadcast_message() {
         let pool = setup_test_db().await;
-        let repository = MessageRepository::new(pool);
+        let repository = MessageRepository::new(pool.clone());
 
-        let sender_id = Uuid::new_v4();
+        let sender_id = create_test_agent(&pool, "sender").await;
 
         let message = Message::broadcast_builder()
             .sender_id(sender_id)
@@ -80,10 +103,10 @@ mod tests {
     #[tokio::test]
     async fn test_message_update() {
         let pool = setup_test_db().await;
-        let repository = MessageRepository::new(pool);
+        let repository = MessageRepository::new(pool.clone());
 
-        let sender_id = Uuid::new_v4();
-        let recipient_id = Uuid::new_v4();
+        let sender_id = create_test_agent(&pool, "sender").await;
+        let recipient_id = create_test_agent(&pool, "recipient").await;
 
         let mut message = Message::builder()
             .sender_id(sender_id)
@@ -110,10 +133,10 @@ mod tests {
     #[tokio::test]
     async fn test_message_delete() {
         let pool = setup_test_db().await;
-        let repository = MessageRepository::new(pool);
+        let repository = MessageRepository::new(pool.clone());
 
-        let sender_id = Uuid::new_v4();
-        let recipient_id = Uuid::new_v4();
+        let sender_id = create_test_agent(&pool, "sender").await;
+        let recipient_id = create_test_agent(&pool, "recipient").await;
 
         let message = Message::builder()
             .sender_id(sender_id)
@@ -136,10 +159,10 @@ mod tests {
     #[tokio::test]
     async fn test_list_for_recipient() {
         let pool = setup_test_db().await;
-        let repository = MessageRepository::new(pool);
+        let repository = MessageRepository::new(pool.clone());
 
-        let sender_id = Uuid::new_v4();
-        let recipient_id = Uuid::new_v4();
+        let sender_id = create_test_agent(&pool, "sender").await;
+        let recipient_id = create_test_agent(&pool, "recipient").await;
 
         // Create multiple messages for the same recipient
         for i in 0..3 {
@@ -166,11 +189,11 @@ mod tests {
     #[tokio::test]
     async fn test_list_from_sender() {
         let pool = setup_test_db().await;
-        let repository = MessageRepository::new(pool);
+        let repository = MessageRepository::new(pool.clone());
 
-        let sender_id = Uuid::new_v4();
-        let recipient1 = Uuid::new_v4();
-        let recipient2 = Uuid::new_v4();
+        let sender_id = create_test_agent(&pool, "sender").await;
+        let recipient1 = create_test_agent(&pool, "recipient1").await;
+        let recipient2 = create_test_agent(&pool, "recipient2").await;
 
         // Create multiple messages from the same sender
         for i in 0..2 {
@@ -197,9 +220,9 @@ mod tests {
     #[tokio::test]
     async fn test_list_broadcast_messages() {
         let pool = setup_test_db().await;
-        let repository = MessageRepository::new(pool);
+        let repository = MessageRepository::new(pool.clone());
 
-        let sender_id = Uuid::new_v4();
+        let sender_id = create_test_agent(&pool, "sender").await;
 
         // Create some broadcast messages
         for i in 0..2 {
@@ -213,9 +236,10 @@ mod tests {
         }
 
         // Create a direct message
+        let recipient_id = create_test_agent(&pool, "recipient").await;
         let direct_message = Message::builder()
             .sender_id(sender_id)
-            .recipient_id(Uuid::new_v4())
+            .recipient_id(recipient_id)
             .content("Direct message")
             .build()
             .unwrap();
@@ -235,10 +259,10 @@ mod tests {
     #[tokio::test]
     async fn test_find_by_type() {
         let pool = setup_test_db().await;
-        let repository = MessageRepository::new(pool);
+        let repository = MessageRepository::new(pool.clone());
 
-        let sender_id = Uuid::new_v4();
-        let recipient_id = Uuid::new_v4();
+        let sender_id = create_test_agent(&pool, "sender").await;
+        let recipient_id = create_test_agent(&pool, "recipient").await;
 
         // Create messages of different types
         let types = vec![
@@ -271,10 +295,10 @@ mod tests {
     #[tokio::test]
     async fn test_count_operations() {
         let pool = setup_test_db().await;
-        let repository = MessageRepository::new(pool);
+        let repository = MessageRepository::new(pool.clone());
 
-        let sender_id = Uuid::new_v4();
-        let recipient_id = Uuid::new_v4();
+        let sender_id = create_test_agent(&pool, "sender").await;
+        let recipient_id = create_test_agent(&pool, "recipient").await;
 
         // Initially should be zero
         assert_eq!(repository.count().await.unwrap(), 0);
@@ -314,10 +338,10 @@ mod tests {
     #[tokio::test]
     async fn test_exists() {
         let pool = setup_test_db().await;
-        let repository = MessageRepository::new(pool);
+        let repository = MessageRepository::new(pool.clone());
 
-        let sender_id = Uuid::new_v4();
-        let recipient_id = Uuid::new_v4();
+        let sender_id = create_test_agent(&pool, "sender").await;
+        let recipient_id = create_test_agent(&pool, "recipient").await;
 
         let message = Message::builder()
             .sender_id(sender_id)
@@ -339,10 +363,10 @@ mod tests {
     #[tokio::test]
     async fn test_list_recent() {
         let pool = setup_test_db().await;
-        let repository = MessageRepository::new(pool);
+        let repository = MessageRepository::new(pool.clone());
 
-        let sender_id = Uuid::new_v4();
-        let recipient_id = Uuid::new_v4();
+        let sender_id = create_test_agent(&pool, "sender").await;
+        let recipient_id = create_test_agent(&pool, "recipient").await;
 
         // Create multiple messages
         for i in 0..5 {
@@ -364,10 +388,10 @@ mod tests {
     #[tokio::test]
     async fn test_update_nonexistent() {
         let pool = setup_test_db().await;
-        let repository = MessageRepository::new(pool);
+        let repository = MessageRepository::new(pool.clone());
 
-        let sender_id = Uuid::new_v4();
-        let recipient_id = Uuid::new_v4();
+        let sender_id = create_test_agent(&pool, "sender").await;
+        let recipient_id = create_test_agent(&pool, "recipient").await;
 
         let message = Message::builder()
             .sender_id(sender_id)
@@ -385,7 +409,7 @@ mod tests {
     #[tokio::test]
     async fn test_delete_nonexistent() {
         let pool = setup_test_db().await;
-        let repository = MessageRepository::new(pool);
+        let repository = MessageRepository::new(pool.clone());
 
         let nonexistent_id = Uuid::new_v4();
 
@@ -398,10 +422,10 @@ mod tests {
     #[tokio::test]
     async fn test_message_metadata_serialization() {
         let pool = setup_test_db().await;
-        let repository = MessageRepository::new(pool);
+        let repository = MessageRepository::new(pool.clone());
 
-        let sender_id = Uuid::new_v4();
-        let recipient_id = Uuid::new_v4();
+        let sender_id = create_test_agent(&pool, "sender").await;
+        let recipient_id = create_test_agent(&pool, "recipient").await;
         let correlation_id = Uuid::new_v4();
         let issue_id = Uuid::new_v4();
 

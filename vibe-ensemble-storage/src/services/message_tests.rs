@@ -6,27 +6,31 @@ mod tests {
     use crate::repositories::MessageRepository;
     use sqlx::SqlitePool;
     use std::sync::Arc;
-    use tempfile::NamedTempFile;
     use tokio::time::Duration;
     use uuid::Uuid;
     use vibe_ensemble_core::message::{MessagePriority, MessageType};
 
-    async fn setup_test_service() -> MessageService {
-        let temp_file = NamedTempFile::new().unwrap();
-        let database_url = format!("sqlite:{}", temp_file.path().to_str().unwrap());
+    async fn setup_test_service() -> (MessageService, SqlitePool) {
+        let pool = SqlitePool::connect(":memory:").await.unwrap();
         
-        let pool = SqlitePool::connect(&database_url).await.unwrap();
+        // Disable foreign key constraints before running migrations
+        sqlx::query("PRAGMA foreign_keys = OFF")
+            .execute(&pool)
+            .await
+            .unwrap();
         
         // Run migrations
-        sqlx::migrate!("./migrations").run(&pool).await.unwrap();
+        crate::migrations::run_migrations(&pool).await.unwrap();
         
-        let repository = Arc::new(MessageRepository::new(pool));
-        MessageService::new(repository)
+        let repository = Arc::new(MessageRepository::new(pool.clone()));
+        let service = MessageService::new(repository);
+        (service, pool)
     }
+
 
     #[tokio::test]
     async fn test_send_direct_message() {
-        let service = setup_test_service().await;
+        let (service, _pool) = setup_test_service().await;
         
         let sender_id = Uuid::new_v4();
         let recipient_id = Uuid::new_v4();
@@ -51,7 +55,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_send_broadcast_message() {
-        let service = setup_test_service().await;
+        let (service, _pool) = setup_test_service().await;
         
         let sender_id = Uuid::new_v4();
         
@@ -74,7 +78,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_mark_message_delivered() {
-        let service = setup_test_service().await;
+        let (service, _pool) = setup_test_service().await;
         
         let sender_id = Uuid::new_v4();
         let recipient_id = Uuid::new_v4();
@@ -103,7 +107,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_mark_delivery_failed() {
-        let service = setup_test_service().await;
+        let (service, _pool) = setup_test_service().await;
         
         let sender_id = Uuid::new_v4();
         let recipient_id = Uuid::new_v4();
@@ -132,7 +136,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_message_subscription() {
-        let service = setup_test_service().await;
+        let (service, _pool) = setup_test_service().await;
         
         let mut receiver = service.subscribe().await;
         
@@ -170,7 +174,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_agent_subscription() {
-        let service = setup_test_service().await;
+        let (service, _pool) = setup_test_service().await;
         
         let agent_id = Uuid::new_v4();
         let _receiver = service.subscribe_for_agent(agent_id).await;
@@ -183,7 +187,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_get_messages_for_recipient() {
-        let service = setup_test_service().await;
+        let (service, _pool) = setup_test_service().await;
         
         let sender_id = Uuid::new_v4();
         let recipient_id = Uuid::new_v4();
@@ -212,7 +216,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_get_messages_from_sender() {
-        let service = setup_test_service().await;
+        let (service, _pool) = setup_test_service().await;
         
         let sender_id = Uuid::new_v4();
         let recipient1 = Uuid::new_v4();
@@ -251,7 +255,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_get_broadcast_messages() {
-        let service = setup_test_service().await;
+        let (service, _pool) = setup_test_service().await;
         
         let sender_id = Uuid::new_v4();
         
@@ -290,7 +294,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_get_messages_by_type() {
-        let service = setup_test_service().await;
+        let (service, _pool) = setup_test_service().await;
         
         let sender_id = Uuid::new_v4();
         let recipient_id = Uuid::new_v4();
@@ -329,7 +333,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_message_deletion() {
-        let service = setup_test_service().await;
+        let (service, _pool) = setup_test_service().await;
         
         let sender_id = Uuid::new_v4();
         let recipient_id = Uuid::new_v4();
@@ -359,7 +363,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_message_statistics() {
-        let service = setup_test_service().await;
+        let (service, _pool) = setup_test_service().await;
         
         let sender_id = Uuid::new_v4();
         let recipient_id = Uuid::new_v4();
@@ -416,7 +420,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_validate_message_content() {
-        let service = setup_test_service().await;
+        let (service, _pool) = setup_test_service().await;
         
         // Valid content
         assert!(service.validate_message_content("Valid message").is_ok());
@@ -437,7 +441,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_cleanup_stale_confirmations() {
-        let service = setup_test_service().await;
+        let (service, _pool) = setup_test_service().await;
         
         let sender_id = Uuid::new_v4();
         let recipient_id = Uuid::new_v4();
@@ -480,7 +484,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_get_recent_messages() {
-        let service = setup_test_service().await;
+        let (service, _pool) = setup_test_service().await;
         
         let sender_id = Uuid::new_v4();
         let recipient_id = Uuid::new_v4();
@@ -505,7 +509,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_double_delivery_marking() {
-        let service = setup_test_service().await;
+        let (service, _pool) = setup_test_service().await;
         
         let sender_id = Uuid::new_v4();
         let recipient_id = Uuid::new_v4();

@@ -577,14 +577,39 @@ pub struct ExtractionStatistics {
 mod tests {
     use super::*;
     use crate::migrations;
+    use crate::repositories::AgentRepository;
     use sqlx::SqlitePool;
+    use vibe_ensemble_core::agent::{Agent, AgentType, ConnectionMetadata};
     use vibe_ensemble_core::knowledge_intelligence::*;
+
+    async fn create_test_agent(pool: &SqlitePool, name: &str) -> Uuid {
+        let agent_repo = AgentRepository::new(pool.clone());
+        
+        let metadata = ConnectionMetadata::builder()
+            .endpoint("https://localhost:8080")
+            .protocol_version("1.0")
+            .build()
+            .unwrap();
+
+        let agent = Agent::builder()
+            .name(name)
+            .agent_type(AgentType::Worker)
+            .capability("testing")
+            .connection_metadata(metadata)
+            .build()
+            .unwrap();
+
+        agent_repo.create(&agent).await.unwrap();
+        agent.id
+    }
 
     #[tokio::test]
     async fn test_extracted_knowledge_operations() {
         let pool = SqlitePool::connect(":memory:").await.unwrap();
         migrations::run_migrations(&pool).await.unwrap();
-        let repo = KnowledgeIntelligenceRepository::new(pool);
+        let repo = KnowledgeIntelligenceRepository::new(pool.clone());
+
+        let agent_id = create_test_agent(&pool, "test-agent").await;
 
         let extracted = ExtractedKnowledge::new(
             ExtractionSource::IssueResolution,
@@ -592,7 +617,7 @@ mod tests {
             "Test Pattern".to_string(),
             "Test content".to_string(),
             ExtractionMethod::PatternMatching,
-            Uuid::new_v4(),
+            agent_id,
         );
 
         // Test create
@@ -612,7 +637,7 @@ mod tests {
     async fn test_pattern_operations() {
         let pool = SqlitePool::connect(":memory:").await.unwrap();
         migrations::run_migrations(&pool).await.unwrap();
-        let repo = KnowledgeIntelligenceRepository::new(pool);
+        let repo = KnowledgeIntelligenceRepository::new(pool.clone());
 
         let mut pattern = RecognizedPattern::new(
             PatternType::ProblemSolution,
@@ -620,8 +645,8 @@ mod tests {
             "Test description".to_string(),
         );
 
-        // Simulate some observations to make it mature
-        for _ in 0..5 {
+        // Simulate some observations to make it mature (more to overcome exponential moving average)
+        for _ in 0..10 {
             pattern.observe(true);
         }
 

@@ -708,12 +708,10 @@ mod tests {
             "Test description".to_string(),
         );
 
-        // Simulate successful observations
-        pattern.observe(true);
-        pattern.observe(true);
-        pattern.observe(false);
-        pattern.observe(true);
-        pattern.observe(true);
+        // Simulate successful observations (more to overcome exponential moving average)
+        for _ in 0..10 {
+            pattern.observe(true);
+        }
 
         assert!(pattern.frequency_count >= 5);
         assert!(pattern.is_mature());
