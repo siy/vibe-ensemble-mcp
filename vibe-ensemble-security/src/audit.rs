@@ -1,6 +1,6 @@
 //! Comprehensive audit logging system
 
-use crate::{SecurityError, SecurityResult};
+use crate::SecurityResult;
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use sqlx::{Pool, Sqlite};

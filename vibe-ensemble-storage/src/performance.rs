@@ -212,7 +212,10 @@ impl CacheManager {
         }
 
         // Try L2 cache
-        if let Some(data) = self.l2_cache.read().peek(&key_str).cloned() {
+        let l2_data = {
+            self.l2_cache.read().peek(&key_str).cloned()
+        };
+        if let Some(data) = l2_data {
             self.metrics.cache_hits.fetch_add(1, Ordering::Relaxed);
             if let Ok(cached_value) = self.deserialize_cached_value::<T>(&data) {
                 debug!("L2 cache hit for key: {}", key_str);
@@ -353,6 +356,7 @@ pub struct ConnectionPoolManager {
     /// Connection pool statistics
     stats: Arc<ConnectionPoolStats>,
     /// Configuration
+    #[allow(dead_code)]
     config: PerformanceConfig,
 }
 
@@ -478,6 +482,11 @@ impl<T> BatchManager<T> {
     /// Get current batch size
     pub fn len(&self) -> usize {
         self.items.len()
+    }
+
+    /// Check if batch is empty
+    pub fn is_empty(&self) -> bool {
+        self.items.is_empty()
     }
 }
 

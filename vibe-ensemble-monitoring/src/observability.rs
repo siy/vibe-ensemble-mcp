@@ -16,7 +16,7 @@ use std::{
 };
 use tokio::sync::RwLock;
 use tracing::{error, info, instrument, warn};
-use vibe_ensemble_core::{agent::Agent, issue::Issue, message::Message};
+use vibe_ensemble_core; // Import core types as needed
 use vibe_ensemble_storage::StorageManager;
 
 /// Alert severity levels

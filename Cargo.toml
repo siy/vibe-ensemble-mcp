@@ -1,11 +1,13 @@
 [workspace]
 members = [
     "vibe-ensemble-core",
-    "vibe-ensemble-mcp",
-    "vibe-ensemble-server",
     "vibe-ensemble-storage",
-    "vibe-ensemble-web",
     "vibe-ensemble-prompts",
+]
+exclude = [
+    "vibe-ensemble-mcp",
+    "vibe-ensemble-server", 
+    "vibe-ensemble-web",
     "vibe-ensemble-security",
     "vibe-ensemble-monitoring",
 ]

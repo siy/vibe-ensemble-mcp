@@ -3,6 +3,11 @@
 //! This crate provides functionality for managing system prompts,
 //! rendering templates, and configuring AI agent behavior.
 
+#![allow(unused_imports)]
+#![allow(unused_variables)]
+#![allow(dead_code)]
+#![allow(clippy::too_many_arguments)]
+
 pub mod error;
 pub mod manager;
 pub mod renderer;

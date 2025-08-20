@@ -7,6 +7,7 @@ use vibe_ensemble_core::{agent::AgentType, prompt::AgentTemplate};
 
 /// Repository for agent template entities
 pub struct TemplateRepository {
+    #[allow(dead_code)]
     pool: Pool<Sqlite>,
 }
 

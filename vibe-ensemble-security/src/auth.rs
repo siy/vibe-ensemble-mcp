@@ -5,7 +5,7 @@ use bcrypt::{hash, verify, DEFAULT_COST};
 use chrono::{DateTime, Duration, Utc};
 use sqlx::{Pool, Sqlite};
 use std::sync::Arc;
-use tracing::{error, info, warn};
+use tracing::{info, warn};
 
 /// Password requirements
 #[derive(Debug, Clone)]

@@ -254,7 +254,7 @@ impl<'a> ConnectionPermit<'a> {
 
             self.pool
                 .entry(host)
-                .or_insert_with(Vec::new)
+                .or_default()
                 .push(self.connection.clone());
             debug!("Returned connection to pool");
         } else {
@@ -345,6 +345,7 @@ impl HttpCompression {
 pub struct WebSocketOptimizer {
     config: NetworkOptimizationConfig,
     connection_stats: Arc<DashMap<Uuid, WebSocketStats>>,
+    #[allow(dead_code)]
     metrics: Arc<PerformanceMetrics>,
 }
 
@@ -597,7 +598,9 @@ pub struct NetworkOptimizationManager {
     connection_pool: Arc<ConnectionPool>,
     http_compression: HttpCompression,
     websocket_optimizer: Arc<WebSocketOptimizer>,
+    #[allow(dead_code)]
     config: NetworkOptimizationConfig,
+    #[allow(dead_code)]
     metrics: Arc<PerformanceMetrics>,
     cleanup_handle: Option<tokio::task::JoinHandle<()>>,
 }

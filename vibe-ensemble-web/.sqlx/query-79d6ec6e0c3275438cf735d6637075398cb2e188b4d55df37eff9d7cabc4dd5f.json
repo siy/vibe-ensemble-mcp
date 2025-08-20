@@ -1,0 +1,86 @@
+{
+  "db_name": "SQLite",
+  "query": "SELECT * FROM users ORDER BY created_at DESC",
+  "describe": {
+    "columns": [
+      {
+        "name": "id",
+        "ordinal": 0,
+        "type_info": "Text"
+      },
+      {
+        "name": "username",
+        "ordinal": 1,
+        "type_info": "Text"
+      },
+      {
+        "name": "email",
+        "ordinal": 2,
+        "type_info": "Text"
+      },
+      {
+        "name": "password_hash",
+        "ordinal": 3,
+        "type_info": "Text"
+      },
+      {
+        "name": "role",
+        "ordinal": 4,
+        "type_info": "Text"
+      },
+      {
+        "name": "is_active",
+        "ordinal": 5,
+        "type_info": "Bool"
+      },
+      {
+        "name": "created_at",
+        "ordinal": 6,
+        "type_info": "Text"
+      },
+      {
+        "name": "updated_at",
+        "ordinal": 7,
+        "type_info": "Text"
+      },
+      {
+        "name": "last_login_at",
+        "ordinal": 8,
+        "type_info": "Text"
+      },
+      {
+        "name": "failed_login_attempts",
+        "ordinal": 9,
+        "type_info": "Int64"
+      },
+      {
+        "name": "locked_until",
+        "ordinal": 10,
+        "type_info": "Text"
+      },
+      {
+        "name": "created_by",
+        "ordinal": 11,
+        "type_info": "Text"
+      }
+    ],
+    "parameters": {
+      "Right": 0
+    },
+    "nullable": [
+      true,
+      false,
+      true,
+      false,
+      false,
+      false,
+      false,
+      false,
+      true,
+      false,
+      true,
+      false
+    ]
+  },
+  "hash": "79d6ec6e0c3275438cf735d6637075398cb2e188b4d55df37eff9d7cabc4dd5f"
+}

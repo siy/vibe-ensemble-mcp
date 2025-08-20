@@ -29,6 +29,7 @@ pub struct KnowledgeIntelligenceService {
     knowledge_repository: KnowledgeRepository,
     issue_repository: IssueRepository,
     message_repository: MessageRepository,
+    #[allow(dead_code)]
     agent_repository: AgentRepository,
 }
 
@@ -299,7 +300,7 @@ impl KnowledgeIntelligenceService {
             SuggestionTarget::Issue,
             issue_id,
             knowledge_refs,
-            format!("Suggestions based on issue tags and similar patterns"),
+            "Suggestions based on issue tags and similar patterns".to_string(),
             generator_id,
         );
 
@@ -654,7 +655,6 @@ mod tests {
     use sqlx::SqlitePool;
     use vibe_ensemble_core::{
         issue::{Issue, IssuePriority, IssueStatus},
-        knowledge::AccessLevel,
     };
 
     async fn setup_test_service() -> Result<KnowledgeIntelligenceService> {
@@ -679,7 +679,7 @@ mod tests {
     #[tokio::test]
     async fn test_extract_knowledge_from_issue() {
         let service = setup_test_service().await.unwrap();
-        let agent_id = Uuid::new_v4();
+        let _agent_id = Uuid::new_v4();
 
         // Create a resolved issue
         let mut issue = Issue::builder()
@@ -702,7 +702,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_pattern_recognition() {
-        let service = setup_test_service().await.unwrap();
+        let _service = setup_test_service().await.unwrap();
 
         let mut pattern = RecognizedPattern::new(
             PatternType::ProblemSolution,

@@ -1,21 +1,18 @@
 /// Tests for message repository
 #[cfg(test)]
+#[allow(clippy::module_inception)]
 mod tests {
     use super::super::*;
     use crate::Error;
     use vibe_ensemble_core::message::{Message, MessagePriority, MessageType};
     use sqlx::SqlitePool;
-    use tempfile::NamedTempFile;
     use uuid::Uuid;
 
     async fn setup_test_db() -> SqlitePool {
-        let temp_file = NamedTempFile::new().unwrap();
-        let database_url = format!("sqlite:{}", temp_file.path().to_str().unwrap());
+        let pool = SqlitePool::connect(":memory:").await.unwrap();
         
-        let pool = SqlitePool::connect(&database_url).await.unwrap();
-        
-        // Run migrations
-        sqlx::migrate!("./migrations").run(&pool).await.unwrap();
+        // Run migrations using the proper migrations module
+        crate::migrations::run_migrations(&pool).await.unwrap();
         
         pool
     }

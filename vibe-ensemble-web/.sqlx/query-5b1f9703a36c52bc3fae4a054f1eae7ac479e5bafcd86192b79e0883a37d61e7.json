@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "\n            INSERT INTO audit_events (\n                id, event_type, severity, user_id, username, agent_id, resource_type, \n                resource_id, action, description, metadata, ip_address, user_agent, \n                session_id, result, error_message, timestamp\n            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)\n            ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 17
+    },
+    "nullable": []
+  },
+  "hash": "5b1f9703a36c52bc3fae4a054f1eae7ac479e5bafcd86192b79e0883a37d61e7"
+}

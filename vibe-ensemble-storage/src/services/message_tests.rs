@@ -1,5 +1,6 @@
 /// Tests for message service
 #[cfg(test)]
+#[allow(clippy::module_inception)]
 mod tests {
     use super::super::*;
     use crate::repositories::MessageRepository;

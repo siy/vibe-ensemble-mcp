@@ -1,0 +1,20 @@
+{
+  "db_name": "SQLite",
+  "query": "SELECT COUNT(*) FROM audit_events WHERE event_type LIKE '%LoginFailure%' AND timestamp >= ?",
+  "describe": {
+    "columns": [
+      {
+        "name": "COUNT(*)",
+        "ordinal": 0,
+        "type_info": "Int"
+      }
+    ],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "57b55d6e2d4a09de2f6d9a79c6a325b2afd870234a4cb74a51427b16cdbb4168"
+}

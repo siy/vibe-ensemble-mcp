@@ -445,6 +445,7 @@ impl AgentRepository {
     }
 
     /// Helper method to parse agent from database fields
+    #[allow(clippy::too_many_arguments)]
     fn parse_agent_from_row(
         &self,
         id: &str,

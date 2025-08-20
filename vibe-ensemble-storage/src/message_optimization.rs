@@ -62,6 +62,12 @@ pub struct MessageBatch {
     pub batch_id: Uuid,
 }
 
+impl Default for MessageBatch {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl MessageBatch {
     pub fn new() -> Self {
         Self {

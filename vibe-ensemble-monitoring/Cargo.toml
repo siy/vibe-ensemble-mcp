@@ -48,6 +48,7 @@ procfs = { version = "0.16", optional = true }
 # Async traits and utilities
 async-trait = { workspace = true }
 futures = { workspace = true }
+futures-util = { workspace = true }
 
 [features]
 default = ["system-metrics"]

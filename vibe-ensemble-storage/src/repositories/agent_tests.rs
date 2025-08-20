@@ -1,24 +1,20 @@
 /// Tests for agent repository
 #[cfg(test)]
+#[allow(clippy::module_inception)]
 mod tests {
     use super::super::*;
     use crate::Error;
     use vibe_ensemble_core::agent::{Agent, AgentStatus, AgentType, ConnectionMetadata};
     use sqlx::SqlitePool;
-    use tempfile::NamedTempFile;
     use uuid::Uuid;
 
-    async fn setup_test_db() -> (AgentRepository, NamedTempFile) {
-        let temp_file = NamedTempFile::new().expect("Failed to create temp file");
-        let database_url = format!("sqlite://{}", temp_file.path().display());
+    async fn setup_test_db() -> AgentRepository {
+        let pool = SqlitePool::connect(":memory:").await.expect("Failed to connect to test database");
         
-        let pool = SqlitePool::connect(&database_url).await.expect("Failed to connect to test database");
+        // Run migrations using proper module
+        crate::migrations::run_migrations(&pool).await.expect("Failed to run migrations");
         
-        // Run migrations
-        sqlx::migrate!("./migrations").run(&pool).await.expect("Failed to run migrations");
-        
-        let repository = AgentRepository::new(pool);
-        (repository, temp_file)
+        AgentRepository::new(pool)
     }
 
     fn create_test_agent() -> Agent {
@@ -40,7 +36,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_agent_create_and_find() {
-        let (repo, _temp) = setup_test_db().await;
+        let repo = setup_test_db().await;
         let agent = create_test_agent();
 
         // Create agent
@@ -59,7 +55,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_agent_find_by_name() {
-        let (repo, _temp) = setup_test_db().await;
+        let repo = setup_test_db().await;
         let agent = create_test_agent();
 
         repo.create(&agent).await.expect("Failed to create agent");
@@ -75,7 +71,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_agent_update() {
-        let (repo, _temp) = setup_test_db().await;
+        let repo = setup_test_db().await;
         let mut agent = create_test_agent();
 
         repo.create(&agent).await.expect("Failed to create agent");
@@ -94,7 +90,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_agent_update_status() {
-        let (repo, _temp) = setup_test_db().await;
+        let repo = setup_test_db().await;
         let agent = create_test_agent();
 
         repo.create(&agent).await.expect("Failed to create agent");
@@ -108,7 +104,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_agent_update_last_seen() {
-        let (repo, _temp) = setup_test_db().await;
+        let repo = setup_test_db().await;
         let agent = create_test_agent();
 
         repo.create(&agent).await.expect("Failed to create agent");
@@ -126,7 +122,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_agent_delete() {
-        let (repo, _temp) = setup_test_db().await;
+        let repo = setup_test_db().await;
         let agent = create_test_agent();
 
         repo.create(&agent).await.expect("Failed to create agent");
@@ -145,7 +141,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_agent_list() {
-        let (repo, _temp) = setup_test_db().await;
+        let repo = setup_test_db().await;
         
         // Create multiple agents
         let agent1 = {
@@ -194,7 +190,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_agent_list_by_status() {
-        let (repo, _temp) = setup_test_db().await;
+        let repo = setup_test_db().await;
         let mut agent1 = create_test_agent();
         let agent2 = {
             let metadata = ConnectionMetadata::builder()
@@ -242,7 +238,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_agent_list_by_type() {
-        let (repo, _temp) = setup_test_db().await;
+        let repo = setup_test_db().await;
         let worker_agent = create_test_agent();
         let coordinator_agent = {
             let metadata = ConnectionMetadata::builder()
@@ -275,7 +271,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_agent_find_by_capability() {
-        let (repo, _temp) = setup_test_db().await;
+        let repo = setup_test_db().await;
         let agent1 = {
             let metadata = ConnectionMetadata::builder()
                 .endpoint("https://localhost:8081")
@@ -327,7 +323,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_agent_not_found_errors() {
-        let (repo, _temp) = setup_test_db().await;
+        let repo = setup_test_db().await;
         let fake_id = Uuid::new_v4();
 
         // Update non-existent agent
@@ -350,7 +346,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_agent_exists() {
-        let (repo, _temp) = setup_test_db().await;
+        let repo = setup_test_db().await;
         let agent = create_test_agent();
         let fake_id = Uuid::new_v4();
 
