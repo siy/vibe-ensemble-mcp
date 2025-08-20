@@ -325,8 +325,7 @@ impl ExtractedKnowledge {
             + self.quality_metrics.accuracy_score * 0.3
             + self.quality_metrics.relevance_score * 0.2
             + self.quality_metrics.uniqueness_score * 0.1)
-            .min(1.0)
-            .max(0.0);
+            .clamp(0.0, 1.0);
     }
 
     /// Convert to Knowledge entry if approved
@@ -375,8 +374,7 @@ impl QualityMetrics {
             + self.accuracy_score * 0.3
             + self.relevance_score * 0.2
             + self.uniqueness_score * 0.05)
-            .min(1.0)
-            .max(0.0);
+            .clamp(0.0, 1.0);
     }
 
     /// Check if quality meets minimum threshold
@@ -558,7 +556,7 @@ impl CapabilityEnhancement {
 
     /// Validate enhancement with proficiency assessment
     pub fn validate(&mut self, proficiency_level: f64, verification_method: VerificationMethod) {
-        self.proficiency_level = proficiency_level.min(1.0).max(0.0);
+        self.proficiency_level = proficiency_level.clamp(0.0, 1.0);
         self.verification_method = verification_method;
         self.validated_at = Some(Utc::now());
     }
