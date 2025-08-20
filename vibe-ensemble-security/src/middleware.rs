@@ -609,36 +609,6 @@ fn create_sanitized_error_response(error: &SecurityError) -> Response {
     (status, Json(error_response)).into_response()
 }
 
-// Extension trait for ResourceType to get string representation
-impl ResourceType {
-    pub fn as_str(&self) -> &'static str {
-        match self {
-            ResourceType::Agent => "agent",
-            ResourceType::Issue => "issue",
-            ResourceType::Knowledge => "knowledge",
-            ResourceType::Message => "message",
-            ResourceType::User => "user",
-            ResourceType::System => "system",
-            ResourceType::Dashboard => "dashboard",
-            ResourceType::AuditLog => "audit_log",
-        }
-    }
-}
-
-// Extension trait for Action to get string representation
-impl Action {
-    pub fn as_str(&self) -> &'static str {
-        match self {
-            Action::Create => "create",
-            Action::Read => "read",
-            Action::Update => "update",
-            Action::Delete => "delete",
-            Action::List => "list",
-            Action::Execute => "execute",
-            Action::Manage => "manage",
-        }
-    }
-}
 
 /// Middleware configuration builder
 pub struct SecurityMiddlewareBuilder {

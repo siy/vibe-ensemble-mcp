@@ -4,7 +4,7 @@ use crate::{renderer::PromptRenderer, templates, Error, Result};
 use chrono::{DateTime, Utc};
 use std::{collections::HashMap, sync::Arc, time::Duration};
 use tokio::sync::RwLock;
-use tracing::{error, info, warn};
+use tracing::info;
 use uuid::Uuid;
 use vibe_ensemble_core::{
     agent::AgentType,
@@ -158,10 +158,11 @@ impl PromptManager {
             let cache = self.cache.read().await;
             if let Some(entry) = cache.get(&cache_key) {
                 if !self.is_cache_expired(entry) {
+                    let rendered_content = entry.rendered_content.clone();
                     // Update access statistics
                     drop(cache);
                     self.update_cache_access(&cache_key).await;
-                    return Ok(entry.rendered_content.clone());
+                    return Ok(rendered_content);
                 }
             }
         }

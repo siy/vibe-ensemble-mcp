@@ -8,7 +8,7 @@ use axum::{
     response::{IntoResponse, Response},
 };
 use governor::{
-    clock::{Clock, DefaultClock, QuantaClock},
+    clock::{DefaultClock, QuantaClock},
     middleware::NoOpMiddleware,
     state::{InMemoryState, NotKeyed},
     Jitter, Quota, RateLimiter,

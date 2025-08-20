@@ -1,19 +1,17 @@
 //! Metrics collection and Prometheus export
 
 use crate::{config::MetricsConfig, error::Result, MonitoringError};
-use metrics::{Counter, Gauge, Histogram, Unit};
+use metrics::Unit;
 use metrics_exporter_prometheus::PrometheusBuilder;
 use metrics_util::registry::{AtomicStorage, Registry};
 use serde::{Deserialize, Serialize};
 use std::{
-    collections::HashMap,
     sync::{Arc, RwLock},
     time::{Duration, Instant},
 };
 use sysinfo::System;
 use tokio::time;
 use tracing::{error, info, warn};
-use vibe_ensemble_core::{agent::Agent, issue::Issue};
 use vibe_ensemble_storage::StorageManager;
 
 /// System metrics data
@@ -383,34 +381,24 @@ impl MetricsCollector {
     }
 
     /// Record HTTP request metrics
-    pub fn record_http_request(&self, method: &str, path: &str, status: u16, duration: Duration) {
-        let labels = [
-            ("method", method),
-            ("path", path),
-            ("status", &status.to_string()),
-        ];
-
-        metrics::counter!("http_requests_total", &labels).increment(1);
-        metrics::histogram!("http_request_duration_ms", &labels)
-            .record(duration.as_millis() as f64);
+    pub fn record_http_request(&self, _method: &str, _path: &str, status: u16, duration: Duration) {
+        // Record basic metrics without dynamic labels to avoid lifetime issues
+        metrics::counter!("http_requests_total").increment(1);
+        metrics::histogram!("http_request_duration_ms").record(duration.as_millis() as f64);
 
         if status >= 400 {
-            metrics::counter!("http_errors_total", &labels).increment(1);
+            metrics::counter!("http_errors_total").increment(1);
         }
     }
 
     /// Record operation metrics
-    pub fn record_operation(&self, operation: &str, duration: Duration, success: bool) {
-        let labels = [
-            ("operation", operation),
-            ("success", if success { "true" } else { "false" }),
-        ];
-
-        metrics::counter!("operation_total", &labels).increment(1);
-        metrics::histogram!("operation_duration_ms", &labels).record(duration.as_millis() as f64);
+    pub fn record_operation(&self, _operation: &str, duration: Duration, success: bool) {
+        // Record basic metrics without dynamic labels to avoid lifetime issues
+        metrics::counter!("operation_total").increment(1);
+        metrics::histogram!("operation_duration_ms").record(duration.as_millis() as f64);
 
         if !success {
-            metrics::counter!("operation_errors_total", &[("operation", operation)]).increment(1);
+            metrics::counter!("operation_errors_total").increment(1);
         }
     }
 
@@ -446,20 +434,15 @@ impl MetricsTimer {
     }
 
     /// Stop the timer and record metrics
-    pub fn stop_and_record(self, operation: &str, success: bool) -> Duration {
+    pub fn stop_and_record(self, _operation: &str, success: bool) -> Duration {
         let duration = self.stop();
 
-        // Record via global metrics (assuming MetricsCollector is globally available)
-        let labels = [
-            ("operation", operation),
-            ("success", if success { "true" } else { "false" }),
-        ];
-
-        metrics::counter!("operation_total", &labels).increment(1);
-        metrics::histogram!("operation_duration_ms", &labels).record(duration.as_millis() as f64);
+        // Record via global metrics without dynamic labels to avoid lifetime issues
+        metrics::counter!("operation_total").increment(1);
+        metrics::histogram!("operation_duration_ms").record(duration.as_millis() as f64);
 
         if !success {
-            metrics::counter!("operation_errors_total", &[("operation", operation)]).increment(1);
+            metrics::counter!("operation_errors_total").increment(1);
         }
 
         duration

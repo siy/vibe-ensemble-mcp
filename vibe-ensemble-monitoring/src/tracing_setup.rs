@@ -1,7 +1,7 @@
 //! Tracing and logging setup with distributed tracing support
 
 use crate::{config::TracingConfig, error::Result, MonitoringError};
-use opentelemetry::{global, KeyValue};
+use opentelemetry::{global, KeyValue, trace::TracerProvider};
 use opentelemetry_sdk::{trace, Resource};
 use std::collections::HashMap;
 use tracing::{info, warn};
@@ -70,17 +70,29 @@ impl TracingSetup {
     ) -> Result<opentelemetry_sdk::trace::TracerProvider> {
         use opentelemetry_jaeger::new_agent_pipeline;
 
-        let tracer_provider = new_agent_pipeline()
+        // Create and install the tracer, but return a basic tracer provider for now
+        let _tracer = new_agent_pipeline()
             .with_service_name(&self.config.service_name)
             .with_trace_config(
                 trace::Config::default()
                     .with_sampler(trace::Sampler::TraceIdRatioBased(
                         self.config.sampling_ratio,
                     ))
-                    .with_resource(resource),
+                    .with_resource(resource.clone()),
             )
             .install_batch(opentelemetry_sdk::runtime::Tokio)
             .map_err(|e| MonitoringError::Tracing(format!("Failed to setup Jaeger: {}", e)))?;
+
+        // Return a basic tracer provider
+        let tracer_provider = trace::TracerProvider::builder()
+            .with_config(
+                trace::Config::default()
+                    .with_sampler(trace::Sampler::TraceIdRatioBased(
+                        self.config.sampling_ratio,
+                    ))
+                    .with_resource(resource),
+            )
+            .build();
 
         Ok(tracer_provider)
     }

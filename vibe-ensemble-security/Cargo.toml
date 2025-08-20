@@ -38,7 +38,7 @@ base64 = { workspace = true }
 axum = { workspace = true }
 tower = { workspace = true }
 headers = { workspace = true }
-tower-http = { workspace = true }
+tower-http = { workspace = true, features = ["set-header"] }
 
 # Random utilities
 rand = { workspace = true }

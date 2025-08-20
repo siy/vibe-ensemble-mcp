@@ -134,7 +134,7 @@ impl UserRole {
 }
 
 /// System permissions
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Hash)]
 pub enum Permission {
     // Basic viewing permissions
     ViewDashboard,

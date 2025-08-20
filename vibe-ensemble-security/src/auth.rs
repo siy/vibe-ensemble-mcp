@@ -3,7 +3,7 @@
 use crate::{JwtManager, SecurityError, SecurityResult, TokenPair, User, UserRole};
 use bcrypt::{hash, verify, DEFAULT_COST};
 use chrono::{Duration, Utc};
-use sqlx::{Pool, Row, Sqlite};
+use sqlx::{Pool, Sqlite};
 use std::sync::Arc;
 use tracing::{error, info, warn};
 
