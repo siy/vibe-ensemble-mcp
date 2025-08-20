@@ -176,7 +176,7 @@ jobs:
           sqlx migrate run --source vibe-ensemble-storage/migrations
       
       - name: Run integration tests
-        run: cargo test --test integration --verbose
+        run: cargo test integration --verbose
         env:
           DATABASE_URL: sqlite:./test.db
           POSTGRES_DATABASE_URL: "postgres://postgres:postgres@localhost/vibe_ensemble_test"
@@ -218,7 +218,7 @@ jobs:
           sudo apt-get install -y sqlite3
       
       - name: Run end-to-end tests
-        run: cargo test --test e2e --verbose
+        run: cargo test e2e --verbose
         env:
           DATABASE_URL: sqlite:./test_e2e.db
           RUST_BACKTRACE: 1
@@ -260,7 +260,7 @@ jobs:
           cargo install flamegraph
       
       - name: Run performance benchmarks
-        run: cargo test --test performance --release --verbose
+        run: cargo test performance --release --verbose
         env:
           DATABASE_URL: sqlite:./test_perf.db
         timeout-minutes: 45
@@ -314,7 +314,7 @@ jobs:
         run: cargo deny check licenses
       
       - name: Run security tests
-        run: cargo test --test security --verbose
+        run: cargo test security --verbose
         env:
           DATABASE_URL: sqlite:./test_security.db
           RUST_BACKTRACE: 1
