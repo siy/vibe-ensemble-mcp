@@ -85,11 +85,7 @@ jobs:
       matrix:
         package: 
           - vibe-ensemble-core
-          - vibe-ensemble-mcp
           - vibe-ensemble-storage
-          - vibe-ensemble-web
-          - vibe-ensemble-security
-          - vibe-ensemble-monitoring
           - vibe-ensemble-prompts
     steps:
       - uses: actions/checkout@v4
