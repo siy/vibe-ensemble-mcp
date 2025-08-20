@@ -345,14 +345,16 @@ impl AuthService {
             let updated_at: DateTime<Utc> = row.updated_at.parse().map_err(|e| {
                 SecurityError::Internal(anyhow::anyhow!("Failed to parse updated_at: {}", e))
             })?;
-            let last_login_at: Option<DateTime<Utc>> = row.last_login_at
+            let last_login_at: Option<DateTime<Utc>> = row
+                .last_login_at
                 .as_ref()
                 .map(|s| s.parse())
                 .transpose()
                 .map_err(|e| {
                     SecurityError::Internal(anyhow::anyhow!("Failed to parse last_login_at: {}", e))
                 })?;
-            let locked_until: Option<DateTime<Utc>> = row.locked_until
+            let locked_until: Option<DateTime<Utc>> = row
+                .locked_until
                 .as_ref()
                 .map(|s| s.parse())
                 .transpose()
@@ -395,14 +397,16 @@ impl AuthService {
             let updated_at: DateTime<Utc> = row.updated_at.parse().map_err(|e| {
                 SecurityError::Internal(anyhow::anyhow!("Failed to parse updated_at: {}", e))
             })?;
-            let last_login_at: Option<DateTime<Utc>> = row.last_login_at
+            let last_login_at: Option<DateTime<Utc>> = row
+                .last_login_at
                 .as_ref()
                 .map(|s| s.parse())
                 .transpose()
                 .map_err(|e| {
                     SecurityError::Internal(anyhow::anyhow!("Failed to parse last_login_at: {}", e))
                 })?;
-            let locked_until: Option<DateTime<Utc>> = row.locked_until
+            let locked_until: Option<DateTime<Utc>> = row
+                .locked_until
                 .as_ref()
                 .map(|s| s.parse())
                 .transpose()
@@ -475,14 +479,16 @@ impl AuthService {
             let updated_at: DateTime<Utc> = row.updated_at.parse().map_err(|e| {
                 SecurityError::Internal(anyhow::anyhow!("Failed to parse updated_at: {}", e))
             })?;
-            let last_login_at: Option<DateTime<Utc>> = row.last_login_at
+            let last_login_at: Option<DateTime<Utc>> = row
+                .last_login_at
                 .as_ref()
                 .map(|s| s.parse())
                 .transpose()
                 .map_err(|e| {
                     SecurityError::Internal(anyhow::anyhow!("Failed to parse last_login_at: {}", e))
                 })?;
-            let locked_until: Option<DateTime<Utc>> = row.locked_until
+            let locked_until: Option<DateTime<Utc>> = row
+                .locked_until
                 .as_ref()
                 .map(|s| s.parse())
                 .transpose()

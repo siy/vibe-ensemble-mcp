@@ -610,7 +610,6 @@ fn create_sanitized_error_response(error: &SecurityError) -> Response {
     (status, Json(error_response)).into_response()
 }
 
-
 /// Middleware configuration builder
 pub struct SecurityMiddlewareBuilder {
     config: SecurityConfig,

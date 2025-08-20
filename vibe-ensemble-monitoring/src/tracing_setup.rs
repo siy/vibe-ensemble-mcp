@@ -1,7 +1,7 @@
 //! Tracing and logging setup with distributed tracing support
 
 use crate::{config::TracingConfig, error::Result, MonitoringError};
-use opentelemetry::{global, KeyValue, trace::TracerProvider};
+use opentelemetry::{global, trace::TracerProvider, KeyValue};
 use opentelemetry_sdk::{trace, Resource};
 use std::collections::HashMap;
 use tracing::{info, warn};
