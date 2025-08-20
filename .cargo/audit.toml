@@ -1,0 +1,6 @@
+[advisories]
+# Ignore RUSTSEC-2023-0071: Marvin Attack in RSA crate
+# This vulnerability is present through sqlx-mysql dependency, but we don't use MySQL.
+# Our project only uses SQLite and PostgreSQL. The RSA code is not compiled due to 
+# default-features = false in SQLx configuration, confirmed by cargo tree.
+ignore = ["RUSTSEC-2023-0071"]
