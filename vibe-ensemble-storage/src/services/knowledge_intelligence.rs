@@ -10,17 +10,15 @@ use crate::{
     },
     Error, Result,
 };
-use std::collections::HashMap;
 use uuid::Uuid;
 use vibe_ensemble_core::{
     issue::{Issue, IssueStatus},
-    knowledge::{AccessLevel, Knowledge, KnowledgeSearchCriteria, KnowledgeType},
+    knowledge::{AccessLevel, KnowledgeSearchCriteria, KnowledgeType},
     knowledge_intelligence::{
-        CapabilityEnhancement, ComplexityLevel, ContextAnalysis, ContributionType, EnhancementType,
-        ExtractedKnowledge, ExtractionMethod, ExtractionSource, KnowledgeContribution,
-        KnowledgeReference, KnowledgeSuggestion, OrganizationalLearning, PatternType,
-        QualityMetrics, RecognizedPattern, ReviewStatus, SuggestionTarget, VerificationMethod,
-        WorkflowStatus,
+        CapabilityEnhancement, ContributionType, EnhancementType, ExtractedKnowledge,
+        ExtractionMethod, ExtractionSource, KnowledgeContribution, KnowledgeReference,
+        KnowledgeSuggestion, OrganizationalLearning, PatternType, QualityMetrics,
+        RecognizedPattern, ReviewStatus, SuggestionTarget, VerificationMethod,
     },
     message::{Message, MessageType},
 };
@@ -157,7 +155,7 @@ impl KnowledgeIntelligenceService {
         extracted_id: Uuid,
         reviewer_id: Uuid,
         approved: bool,
-        feedback: Option<String>,
+        _feedback: Option<String>,
     ) -> Result<()> {
         let mut extracted = self
             .ki_repository
@@ -291,7 +289,7 @@ impl KnowledgeIntelligenceService {
         }
 
         // Find patterns that might apply
-        let applicable_patterns = self.find_applicable_patterns(&issue).await?;
+        let _applicable_patterns = self.find_applicable_patterns(&issue).await?;
 
         // Deduplicate and rank suggestions
         knowledge_refs.sort_by(|a, b| b.relevance_score.partial_cmp(&a.relevance_score).unwrap());

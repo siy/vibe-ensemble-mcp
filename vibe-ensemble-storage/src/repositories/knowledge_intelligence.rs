@@ -9,9 +9,8 @@ use chrono::{DateTime, Utc};
 use sqlx::{Pool, Row, Sqlite};
 use uuid::Uuid;
 use vibe_ensemble_core::knowledge_intelligence::{
-    CapabilityEnhancement, ContributionType, EnhancementType, ExtractedKnowledge,
-    KnowledgeContribution, KnowledgeSuggestion, OrganizationalLearning, PatternType,
-    QualityMetrics, RecognizedPattern, ReviewStatus, SuggestionTarget, WorkflowStatus,
+    CapabilityEnhancement, ExtractedKnowledge, KnowledgeContribution, KnowledgeSuggestion,
+    PatternType, RecognizedPattern, ReviewStatus, SuggestionTarget, WorkflowStatus,
 };
 
 /// Repository for knowledge intelligence entities

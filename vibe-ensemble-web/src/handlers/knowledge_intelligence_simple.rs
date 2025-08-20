@@ -50,9 +50,10 @@ pub async fn extract_from_issue(
     // Create repositories directly
     let pool = storage.pool();
     let issue_repo = vibe_ensemble_storage::repositories::IssueRepository::new(pool.clone());
-    
+
     // Get the issue
-    let issue = issue_repo.find_by_id(request.issue_id)
+    let issue = issue_repo
+        .find_by_id(request.issue_id)
         .await?
         .ok_or_else(|| Error::NotFound {
             entity: "Issue".to_string(),
@@ -84,8 +85,9 @@ pub async fn get_extraction_statistics(
     State(storage): State<Arc<StorageManager>>,
 ) -> Result<Json<ExtractionStatsResponse>> {
     let pool = storage.pool();
-    let ki_repo = vibe_ensemble_storage::repositories::KnowledgeIntelligenceRepository::new(pool.clone());
-    
+    let ki_repo =
+        vibe_ensemble_storage::repositories::KnowledgeIntelligenceRepository::new(pool.clone());
+
     let stats = ki_repo.get_extraction_statistics().await?;
 
     let response = ExtractionStatsResponse {
@@ -103,8 +105,9 @@ pub async fn list_patterns(
     State(storage): State<Arc<StorageManager>>,
 ) -> Result<Json<serde_json::Value>> {
     let pool = storage.pool();
-    let ki_repo = vibe_ensemble_storage::repositories::KnowledgeIntelligenceRepository::new(pool.clone());
-    
+    let ki_repo =
+        vibe_ensemble_storage::repositories::KnowledgeIntelligenceRepository::new(pool.clone());
+
     let patterns = ki_repo.find_mature_patterns().await?;
 
     Ok(Json(serde_json::json!({

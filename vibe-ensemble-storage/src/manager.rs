@@ -53,7 +53,7 @@ impl StorageManager {
             .pragma("mmap_size", "268435456") // 256MB mmap
             .pragma("optimize", "1");
 
-        let pool_builder = SqlitePool::connect_with(connect_options);
+        let pool_builder = SqlitePool::connect_with(connect_options.clone());
         let pool = if let Some(max_connections) = config.max_connections {
             info!("Using connection pool with {} connections", max_connections);
             SqlitePool::connect_with(connect_options.clone().create_if_missing(true)).await?

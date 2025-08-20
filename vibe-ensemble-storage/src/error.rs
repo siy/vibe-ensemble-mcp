@@ -38,6 +38,9 @@ pub enum Error {
     #[error("DateTime parse error: {0}")]
     DateTimeParse(#[from] chrono::ParseError),
 
+    #[error("IO error: {0}")]
+    Io(#[from] std::io::Error),
+
     #[error("Unauthorized: {message}")]
     Unauthorized { message: String },
 

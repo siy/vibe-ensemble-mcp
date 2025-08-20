@@ -252,9 +252,7 @@ pub async fn update(
             </body>
         </html>
         "#,
-        id,
-        issue.title,
-        id
+        id, issue.title, id
     );
 
     Ok(Html(html))

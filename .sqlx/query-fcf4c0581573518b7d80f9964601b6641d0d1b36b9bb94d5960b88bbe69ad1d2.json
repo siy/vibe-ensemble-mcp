@@ -1,0 +1,62 @@
+{
+  "db_name": "SQLite",
+  "query": "SELECT id, sender_id, recipient_id, message_type, content, metadata, created_at, delivered_at FROM messages WHERE created_at >= ?1 ORDER BY created_at DESC",
+  "describe": {
+    "columns": [
+      {
+        "name": "id",
+        "ordinal": 0,
+        "type_info": "Text"
+      },
+      {
+        "name": "sender_id",
+        "ordinal": 1,
+        "type_info": "Text"
+      },
+      {
+        "name": "recipient_id",
+        "ordinal": 2,
+        "type_info": "Text"
+      },
+      {
+        "name": "message_type",
+        "ordinal": 3,
+        "type_info": "Text"
+      },
+      {
+        "name": "content",
+        "ordinal": 4,
+        "type_info": "Text"
+      },
+      {
+        "name": "metadata",
+        "ordinal": 5,
+        "type_info": "Text"
+      },
+      {
+        "name": "created_at",
+        "ordinal": 6,
+        "type_info": "Text"
+      },
+      {
+        "name": "delivered_at",
+        "ordinal": 7,
+        "type_info": "Text"
+      }
+    ],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": [
+      true,
+      false,
+      true,
+      false,
+      false,
+      false,
+      false,
+      true
+    ]
+  },
+  "hash": "fcf4c0581573518b7d80f9964601b6641d0d1b36b9bb94d5960b88bbe69ad1d2"
+}

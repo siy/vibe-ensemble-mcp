@@ -1,6 +1,7 @@
 //! Message batching and compression optimizations
 
 use anyhow::Result;
+use base64::Engine;
 use flate2::{read::GzDecoder, write::GzEncoder, Compression};
 use parking_lot::{Mutex, RwLock};
 use std::collections::{HashMap, VecDeque};
@@ -190,7 +191,7 @@ impl MessageCompressor {
         let compressed = encoder.finish()?;
 
         if compressed.len() < message.content.len() {
-            message.content = base64::encode(&compressed);
+            message.content = base64::engine::general_purpose::STANDARD.encode(&compressed);
             // Add compression metadata
             message.metadata.is_compressed = true;
             message.metadata.compression_type = Some("gzip".to_string());
@@ -211,7 +212,7 @@ impl MessageCompressor {
             return Ok(false);
         }
 
-        let compressed = base64::decode(&message.content)?;
+        let compressed = base64::engine::general_purpose::STANDARD.decode(&message.content)?;
         let mut decoder = GzDecoder::new(&compressed[..]);
         let mut decompressed = String::new();
         decoder.read_to_string(&mut decompressed)?;

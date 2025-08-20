@@ -15,7 +15,7 @@ use tokio::net::TcpStream;
 use tokio::sync::Semaphore;
 use tokio::task::JoinHandle;
 use tokio_tungstenite::{tungstenite::Message as WsMessage, WebSocketStream};
-use tracing::{debug, error, info, warn};
+use tracing::{debug, error, info};
 use uuid::Uuid;
 
 use crate::performance::PerformanceMetrics;
@@ -452,8 +452,10 @@ impl WebSocketOptimizer {
         mut sender: futures_util::stream::SplitSink<WebSocketStream<TcpStream>, WsMessage>,
     ) -> Result<JoinHandle<()>> {
         let interval_duration = Duration::from_secs(self.config.websocket_ping_interval_seconds);
-        let stats = self.connection_stats.get(&connection_id).map(|s| {
-            WebSocketStats {
+        let stats = self
+            .connection_stats
+            .get(&connection_id)
+            .map(|s| WebSocketStats {
                 connection_id: s.connection_id,
                 connected_at: s.connected_at,
                 messages_sent: AtomicU64::new(s.messages_sent.load(Ordering::Relaxed)),
@@ -461,8 +463,7 @@ impl WebSocketOptimizer {
                 bytes_sent: AtomicU64::new(s.bytes_sent.load(Ordering::Relaxed)),
                 bytes_received: AtomicU64::new(s.bytes_received.load(Ordering::Relaxed)),
                 last_activity: RwLock::new(*s.last_activity.read()),
-            }
-        });
+            });
 
         let handle = tokio::spawn(async move {
             let mut interval = tokio::time::interval(interval_duration);
@@ -505,15 +506,17 @@ impl WebSocketOptimizer {
 
     /// Get connection statistics
     pub fn get_connection_stats(&self, connection_id: &Uuid) -> Option<WebSocketStats> {
-        self.connection_stats.get(connection_id).map(|s| WebSocketStats {
-            connection_id: s.connection_id,
-            connected_at: s.connected_at,
-            messages_sent: AtomicU64::new(s.messages_sent.load(Ordering::Relaxed)),
-            messages_received: AtomicU64::new(s.messages_received.load(Ordering::Relaxed)),
-            bytes_sent: AtomicU64::new(s.bytes_sent.load(Ordering::Relaxed)),
-            bytes_received: AtomicU64::new(s.bytes_received.load(Ordering::Relaxed)),
-            last_activity: RwLock::new(*s.last_activity.read()),
-        })
+        self.connection_stats
+            .get(connection_id)
+            .map(|s| WebSocketStats {
+                connection_id: s.connection_id,
+                connected_at: s.connected_at,
+                messages_sent: AtomicU64::new(s.messages_sent.load(Ordering::Relaxed)),
+                messages_received: AtomicU64::new(s.messages_received.load(Ordering::Relaxed)),
+                bytes_sent: AtomicU64::new(s.bytes_sent.load(Ordering::Relaxed)),
+                bytes_received: AtomicU64::new(s.bytes_received.load(Ordering::Relaxed)),
+                last_activity: RwLock::new(*s.last_activity.read()),
+            })
     }
 
     /// Get all connection statistics

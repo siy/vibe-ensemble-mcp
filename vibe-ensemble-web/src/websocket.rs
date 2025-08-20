@@ -1,5 +1,5 @@
 //! WebSocket support for real-time updates
-//! 
+//!
 //! Provides real-time communication between the web interface and server
 //! for live updates of system status, agent activity, and issue changes.
 
@@ -106,7 +106,7 @@ impl WebSocketManager {
     /// Create a new WebSocket manager
     pub fn new() -> Self {
         let (sender, _) = broadcast::channel(1000); // Buffer up to 1000 messages
-        
+
         Self {
             sender,
             clients: Arc::new(RwLock::new(HashMap::new())),
@@ -155,13 +155,13 @@ impl WebSocketManager {
     /// Send periodic statistics updates
     pub async fn start_stats_broadcaster(&self, storage: Arc<StorageManager>) {
         let sender = self.sender.clone();
-        
+
         tokio::spawn(async move {
             let mut interval = tokio::time::interval(tokio::time::Duration::from_secs(30));
-            
+
             loop {
                 interval.tick().await;
-                
+
                 // Get current statistics
                 if let Ok(stats) = storage.stats().await {
                     let message = WebSocketMessage::StatsUpdate {
@@ -172,7 +172,7 @@ impl WebSocketManager {
                         prompts_count: stats.prompts_count,
                         timestamp: chrono::Utc::now(),
                     };
-                    
+
                     let _ = sender.send(message);
                 }
             }
@@ -182,17 +182,17 @@ impl WebSocketManager {
     /// Send periodic ping messages
     pub async fn start_ping_sender(&self) {
         let sender = self.sender.clone();
-        
+
         tokio::spawn(async move {
             let mut interval = tokio::time::interval(tokio::time::Duration::from_secs(60));
-            
+
             loop {
                 interval.tick().await;
-                
+
                 let message = WebSocketMessage::Ping {
                     timestamp: chrono::Utc::now(),
                 };
-                
+
                 let _ = sender.send(message);
             }
         });
@@ -219,11 +219,7 @@ pub async fn websocket_handler(
 }
 
 /// Handle individual WebSocket connection
-async fn handle_websocket(
-    socket: WebSocket,
-    ws_manager: Arc<WebSocketManager>,
-    session: Session,
-) {
+async fn handle_websocket(socket: WebSocket, ws_manager: Arc<WebSocketManager>, session: Session) {
     let client_id = Uuid::new_v4();
     let client = WebSocketClient {
         id: client_id,
@@ -237,7 +233,11 @@ async fn handle_websocket(
         return;
     }
 
-    tracing::info!("WebSocket client connected: {} ({})", client_id, session.username);
+    tracing::info!(
+        "WebSocket client connected: {} ({})",
+        client_id,
+        session.username
+    );
 
     let (mut ws_sender, mut ws_receiver) = socket.split();
     let mut message_receiver = ws_manager.subscribe();
@@ -275,7 +275,11 @@ async fn handle_websocket(
                                 tracing::debug!("Received pong from client {}", client_id_clone2);
                             }
                             _ => {
-                                tracing::debug!("Received message from client {}: {:?}", client_id_clone2, message);
+                                tracing::debug!(
+                                    "Received message from client {}: {:?}",
+                                    client_id_clone2,
+                                    message
+                                );
                             }
                         }
                     }
@@ -316,7 +320,12 @@ async fn handle_websocket(
 
 impl WebSocketManager {
     /// Broadcast agent status update
-    pub fn broadcast_agent_status(&self, agent_id: Uuid, name: String, status: String) -> Result<()> {
+    pub fn broadcast_agent_status(
+        &self,
+        agent_id: Uuid,
+        name: String,
+        status: String,
+    ) -> Result<()> {
         let message = WebSocketMessage::AgentStatusUpdate {
             agent_id,
             name,
@@ -328,7 +337,12 @@ impl WebSocketManager {
     }
 
     /// Broadcast new issue created
-    pub fn broadcast_issue_created(&self, issue_id: Uuid, title: String, priority: String) -> Result<()> {
+    pub fn broadcast_issue_created(
+        &self,
+        issue_id: Uuid,
+        title: String,
+        priority: String,
+    ) -> Result<()> {
         let message = WebSocketMessage::IssueCreated {
             issue_id,
             title,
@@ -352,7 +366,7 @@ impl WebSocketManager {
 
     /// Broadcast new message received
     pub fn broadcast_message_received(
-        &self, 
+        &self,
         message_id: Uuid,
         from_agent: String,
         to_agent: Option<String>,

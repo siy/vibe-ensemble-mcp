@@ -1,6 +1,6 @@
 //! Performance optimization utilities and caching layer
 
-use anyhow::Result;
+use crate::error::{Error, Result};
 use chrono::{DateTime, Utc};
 use dashmap::DashMap;
 use flate2::{read::GzDecoder, write::GzEncoder, Compression};
@@ -230,7 +230,7 @@ impl CacheManager {
     /// Store value in cache
     pub async fn set<T>(&self, key: &CacheKey, value: T)
     where
-        T: Serialize,
+        T: Serialize + for<'de> Deserialize<'de>,
     {
         let key_str = key.to_string();
         let cached_value = CachedValue::new(value, self.config.enable_compression);
@@ -379,11 +379,12 @@ impl ConnectionPoolManager {
     /// Acquire a connection permit
     pub async fn acquire_connection(&self) -> Result<ConnectionPermit<'_>> {
         let start_time = Instant::now();
-        let permit = self
-            .semaphore
-            .acquire()
-            .await
-            .map_err(|e| anyhow::anyhow!("Failed to acquire connection permit: {}", e))?;
+        let permit = self.semaphore.acquire().await.map_err(|e| {
+            Error::Internal(anyhow::anyhow!(
+                "Failed to acquire connection permit: {}",
+                e
+            ))
+        })?;
 
         let wait_time = start_time.elapsed().as_millis() as u64;
         self.stats

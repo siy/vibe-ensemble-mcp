@@ -1,5 +1,5 @@
 //! Authentication and session management
-//! 
+//!
 //! Provides basic authentication and session management for the web interface.
 //! For now, implements a simple in-memory session store suitable for development.
 
@@ -135,13 +135,16 @@ impl AuthService {
     /// Create a new auth service with default admin user
     pub fn new() -> Self {
         let mut users = HashMap::new();
-        
+
         // Add a default admin user (in real systems, this would be properly secured)
-        users.insert("admin".to_string(), UserCredentials {
-            username: "admin".to_string(),
-            password_hash: "admin".to_string(), // NEVER do this in production!
-            is_admin: true,
-        });
+        users.insert(
+            "admin".to_string(),
+            UserCredentials {
+                username: "admin".to_string(),
+                password_hash: "admin".to_string(), // NEVER do this in production!
+                is_admin: true,
+            },
+        );
 
         Self {
             session_store: SessionStore::new(),
@@ -151,9 +154,10 @@ impl AuthService {
 
     /// Authenticate user and create session
     pub fn authenticate(&self, username: &str, password: &str) -> Result<Option<Session>> {
-        let users = self.users.read().map_err(|e| {
-            Error::Internal(anyhow::anyhow!("Failed to acquire user lock: {}", e))
-        })?;
+        let users = self
+            .users
+            .read()
+            .map_err(|e| Error::Internal(anyhow::anyhow!("Failed to acquire user lock: {}", e)))?;
 
         if let Some(user) = users.get(username) {
             // In a real system, you would properly hash and compare passwords
@@ -338,10 +342,9 @@ pub async fn login_handler(
         Ok(Some(session)) => {
             let cookie = format!("session_id={}; Path=/; HttpOnly; Max-Age=86400", session.id);
             let mut response = Redirect::to("/dashboard").into_response();
-            response.headers_mut().insert(
-                axum::http::header::SET_COOKIE,
-                cookie.parse().unwrap(),
-            );
+            response
+                .headers_mut()
+                .insert(axum::http::header::SET_COOKIE, cookie.parse().unwrap());
             response
         }
         Ok(None) => {
@@ -362,9 +365,7 @@ pub async fn login_handler(
             "#;
             Html(html.to_string()).into_response()
         }
-        Err(_) => {
-            (StatusCode::INTERNAL_SERVER_ERROR, "Authentication error").into_response()
-        }
+        Err(_) => (StatusCode::INTERNAL_SERVER_ERROR, "Authentication error").into_response(),
     }
 }
 
