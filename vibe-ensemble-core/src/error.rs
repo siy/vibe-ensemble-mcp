@@ -43,6 +43,21 @@ pub enum Error {
 
     #[error("Dependency error: {dependency} - {message}")]
     Dependency { dependency: String, message: String },
+
+    #[error("Execution error: {message}")]
+    Execution { message: String },
+
+    #[error("Parsing error: {message}")]
+    Parsing { message: String },
+
+    #[error("IO error: {message}")]
+    Io { message: String },
+
+    #[error("Rendering error: {message}")]
+    Rendering { message: String },
+
+    #[error("Resource already exists: {resource} with id {id}")]
+    AlreadyExists { resource: String, id: String },
 }
 
 impl From<serde_json::Error> for Error {
@@ -177,6 +192,11 @@ impl Error {
             Error::Timeout { .. } => "timeout",
             Error::PermissionDenied { .. } => "permission_denied",
             Error::Dependency { .. } => "dependency",
+            Error::Execution { .. } => "execution",
+            Error::Parsing { .. } => "parsing",
+            Error::Io { .. } => "io",
+            Error::Rendering { .. } => "rendering",
+            Error::AlreadyExists { .. } => "already_exists",
         }
     }
 }
