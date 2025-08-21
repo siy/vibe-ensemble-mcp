@@ -1,260 +1,190 @@
 # Quick Start Guide
 
-Get up and running with the Vibe Ensemble MCP Server in 5 minutes. This guide covers the fastest way to deploy and test the system.
+Get up and running with Vibe Ensemble in 5 minutes. This guide covers setting up a personal workspace with 5-10 Claude Code agents working on 2-3 projects simultaneously.
 
 ## Prerequisites
 
-Before starting, ensure you have:
-- **Docker** (recommended) or Rust 1.70+
-- **Git** for cloning the repository
-- **curl** for testing endpoints
-- **Claude Code** for agent testing (optional for initial setup)
+- **Rust 1.70+** (install from https://rustup.rs)
+- **Git** for version control
+- **Claude Code** (install from https://claude.ai/code)
 
-## Option 1: Docker Quick Start (Recommended)
+## Setup
 
-### 1. Clone and Start
+### 1. Clone and Build
 
 ```bash
 # Clone the repository
 git clone https://github.com/siy/vibe-ensemble-mcp.git
 cd vibe-ensemble-mcp
 
-# Start with Docker Compose
-docker-compose up -d
-
-# Verify the server is running
-curl http://localhost:8080/api/health
-```
-
-**Expected Response**:
-```json
-{
-  "status": "healthy",
-  "timestamp": "2025-08-19T10:00:00Z"
-}
-```
-
-### 2. Access Web Interface
-
-Open your browser and navigate to:
-- **Web Interface**: http://localhost:8080
-- **API Documentation**: http://localhost:8080/docs (if enabled)
-
-Default login credentials:
-- **Username**: `admin`
-- **Password**: `admin` (change immediately in production)
-
-### 3. Test Basic Functionality
-
-```bash
-# Get system statistics
-curl http://localhost:8080/api/stats
-
-# List agents (should be empty initially)
-curl http://localhost:8080/api/agents
-
-# Create a test issue
-curl -X POST http://localhost:8080/api/issues \
-  -H "Content-Type: application/json" \
-  -H "Authorization: Bearer YOUR_TOKEN_HERE" \
-  -d '{
-    "title": "Test Issue",
-    "description": "Testing the API",
-    "priority": "Medium"
-  }'
-```
-
-## Option 2: Native Installation
-
-### 1. Install Dependencies
-
-```bash
-# Install Rust (if not already installed)
-curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
-source ~/.cargo/env
-
-# Clone and build
-git clone https://github.com/siy/vibe-ensemble-mcp.git
-cd vibe-ensemble-mcp
+# Build the system
 cargo build --release
 ```
 
-### 2. Configure Environment
+### 2. Basic Configuration
 
 ```bash
-# Set required environment variables
+# Set database location (SQLite for single-user)
 export DATABASE_URL="sqlite:./vibe-ensemble.db"
-export JWT_SECRET="development-jwt-secret-change-in-production"
-export ENCRYPTION_KEY="development-key-32-chars-here!!"
 
-# Optional: Enable development features
+# Optional: Enable debug logging
 export RUST_LOG="info,vibe_ensemble=debug"
-export ENABLE_API_DOCS="true"
 ```
 
-### 3. Run the Server
+### 3. Initialize Database
 
 ```bash
-# Run database migrations
-./target/release/vibe-ensemble-server --migrate
-
-# Start the server
-./target/release/vibe-ensemble-server
+# Run migrations to set up the database
+cargo run --bin vibe-ensemble-server -- --migrate
 ```
 
-## Connecting Your First Agent
-
-### 1. Configure Claude Code
+### 4. Start the MCP Server
 
 ```bash
-# Configure Claude Code to connect to your server
-claude-code config set mcp.server_url "http://localhost:8080"
-claude-code config set agent.name "test-agent"
-claude-code config set agent.type "Worker"
-claude-code config set agent.capabilities "testing,development"
+# Start the MCP server (runs in background)
+cargo run --bin vibe-ensemble-mcp &
 ```
 
-### 2. Start Agent
+## Connect Your First Agent
+
+### 1. Create Agent Template
+
+Use one of the built-in templates:
+- `code-writer` - For implementing features and fixing bugs
+- `code-reviewer` - For reviewing code quality and security
+- `test-specialist` - For writing and maintaining tests
+- `docs-specialist` - For documentation tasks
+
+### 2. Start a Worker Agent
 
 ```bash
-# Start Claude Code in agent mode
-claude-code --agent-mode worker
+# Start Claude Code as a code-writer agent
+claude -p "You are a code writer agent for my-project. Focus on implementing features in Rust." \
+  --output-format stream-json \
+  --verbose \
+  --mcp-server http://localhost:8080
 ```
 
-### 3. Verify Registration
+### 3. Verify Connection
 
-Check the web interface at http://localhost:8080/agents or use the API:
-
+Check that your agent is connected:
 ```bash
 curl http://localhost:8080/api/agents
 ```
 
-You should see your agent listed with "Active" status.
+## Typical Usage Pattern
 
-## Quick Test Workflow
+### For 2-3 Projects with 5-10 Agents
 
-### 1. Create an Issue
+1. **Project A** (3-4 agents):
+   - 1x code-writer (main implementation)
+   - 1x code-reviewer (quality checks)
+   - 1x test-specialist (testing)
+   - 1x docs-specialist (documentation)
 
-Via web interface:
-1. Navigate to http://localhost:8080
-2. Click "Create New Issue"
-3. Fill in the form and submit
+2. **Project B** (2-3 agents):
+   - 1x code-writer 
+   - 1x code-reviewer
+   - 1x test-specialist
 
-Via API:
+3. **Project C** (2-3 agents):
+   - 1x code-writer
+   - 1x code-reviewer
+   - 1x docs-specialist
+
+### Example Multi-Agent Setup
+
 ```bash
-curl -X POST http://localhost:8080/api/issues \
-  -H "Content-Type: application/json" \
-  -d '{
-    "title": "Hello World Test",
-    "description": "Testing the system end-to-end",
-    "priority": "Medium"
-  }'
+# Project A agents
+claude -p "Code writer for ProjectA using Rust" --mcp-server localhost:8080 &
+claude -p "Code reviewer for ProjectA focusing on security" --mcp-server localhost:8080 &
+claude -p "Test specialist for ProjectA using cargo test" --mcp-server localhost:8080 &
+
+# Project B agents  
+claude -p "Code writer for ProjectB using Python" --mcp-server localhost:8080 &
+claude -p "Code reviewer for ProjectB following PEP 8" --mcp-server localhost:8080 &
+
+# Documentation agent (shared across projects)
+claude -p "Documentation specialist for technical writing" --mcp-server localhost:8080 &
 ```
 
-### 2. Monitor in Real-time
+## File Structure
 
-Open the web interface and watch for:
-- Real-time updates as agents connect/disconnect
-- Issue status changes
-- System notifications
-
-### 3. Test Knowledge Repository
-
-Add a knowledge entry:
-```bash
-curl -X POST http://localhost:8080/api/knowledge \
-  -H "Content-Type: application/json" \
-  -d '{
-    "title": "Quick Start Test Pattern",
-    "content": "This is a test knowledge entry created during quick start setup.",
-    "category": "testing",
-    "tags": ["quickstart", "test", "documentation"]
-  }'
+Your workspace will look like:
+```
+your-workspace/
+├── vibe-ensemble.db          # SQLite database
+├── agent-templates/          # Agent configurations
+│   ├── code-writer/
+│   ├── code-reviewer/
+│   ├── test-specialist/
+│   └── docs-specialist/
+├── workspaces/              # Agent workspaces
+│   ├── project-a-workspace/
+│   ├── project-b-workspace/
+│   └── shared-docs/
+└── projects/                # Your actual projects
+    ├── project-a/
+    ├── project-b/
+    └── project-c/
 ```
 
-## Verification Checklist
+## Basic Commands
 
-Confirm these items are working:
+```bash
+# Check system health
+curl http://localhost:8080/api/health
 
-- [ ] Server starts without errors
-- [ ] Health endpoint responds
-- [ ] Web interface is accessible
-- [ ] Can create and view issues
-- [ ] Agent registration works (if testing with Claude Code)
-- [ ] Real-time updates work in web interface
-- [ ] API endpoints respond correctly
+# List active agents
+curl http://localhost:8080/api/agents
 
-## Common Issues
+# View recent issues
+curl http://localhost:8080/api/issues
+
+# Check knowledge base
+curl http://localhost:8080/api/knowledge
+```
+
+## Common Workflow
+
+1. **Start your MCP server** once in the morning
+2. **Launch agents** for each project you're working on
+3. **Agents coordinate automatically** through the MCP server
+4. **Work naturally** - agents share knowledge and avoid conflicts
+5. **Stop agents** when switching contexts or done for the day
+
+## Troubleshooting
 
 ### Server Won't Start
-
-**Issue**: `CONNECTION_URL not set` error
-**Solution**:
 ```bash
-export DATABASE_URL="sqlite:./vibe-ensemble.db"
+# Check database path is writable
+touch ./vibe-ensemble.db
+
+# Check port isn't in use
+lsof -i :8080
 ```
 
-**Issue**: Port 8080 already in use
-**Solution**:
+### Agent Won't Connect
 ```bash
-export SERVER_PORT=8081
-# Or kill the process using port 8080
-lsof -ti:8080 | xargs kill
+# Verify MCP server is running
+curl http://localhost:8080/api/health
+
+# Check Claude Code version
+claude --version
 ```
 
-### Cannot Access Web Interface
-
-**Issue**: Connection refused
-**Solution**: Check server is binding to correct interface:
+### Performance Issues
 ```bash
-export SERVER_HOST="0.0.0.0"  # Listen on all interfaces
-```
-
-### Agent Registration Fails
-
-**Issue**: Agent can't connect
-**Solution**: Check firewall and server configuration:
-```bash
-# Check if port is accessible
-telnet localhost 8080
-
-# Check server logs
-docker logs vibe-ensemble  # For Docker
-journalctl -f  # For native installation
+# Monitor resource usage
+ps aux | grep claude
+top -p $(pgrep claude | tr '\n' ',')
 ```
 
 ## Next Steps
 
-Once you have the basic system running:
+- Try different agent templates for different tasks
+- Set up git worktrees for parallel development
+- Explore the knowledge sharing between agents
+- Customize agent configurations for your specific needs
 
-1. **Explore the Web Interface**: Browse all sections (Dashboard, Agents, Issues, Knowledge)
-2. **Try the API**: Use the interactive API documentation at `/docs`
-3. **Set Up Multiple Agents**: Connect additional Claude Code instances
-4. **Read the Documentation**: Check out the comprehensive guides:
-   - [Web Interface Guide](../user/web-interface.md)
-   - [API Documentation](../api/overview.md)
-   - [Deployment Guide](../deployment/deployment.md)
-
-## Production Considerations
-
-This quick start uses development settings. For production:
-
-1. **Change Default Passwords**: Set strong admin credentials
-2. **Use PostgreSQL**: Replace SQLite with PostgreSQL for better performance
-3. **Enable HTTPS**: Set up SSL/TLS certificates
-4. **Configure Secrets**: Use secure values for JWT_SECRET and ENCRYPTION_KEY
-5. **Set Up Monitoring**: Enable metrics and logging
-6. **Review Security**: Follow the [Security Guide](../deployment/security.md)
-
-## Getting Help
-
-If you encounter issues:
-
-1. **Check Logs**: Look for error messages in server logs
-2. **Review Documentation**: See the [Troubleshooting Guide](../troubleshooting/common-issues.md)
-3. **Search Issues**: Check [GitHub Issues](https://github.com/siy/vibe-ensemble-mcp/issues)
-4. **Ask Questions**: Use [GitHub Discussions](https://github.com/siy/vibe-ensemble-mcp/discussions)
-
----
-
-**Congratulations!** You now have a working Vibe Ensemble MCP Server. The system is ready to coordinate multiple Claude Code agents for your development projects.
+That's it! You now have a personal multi-agent development environment running locally.

@@ -264,4 +264,38 @@ test_pipeline:
 - `npm run test:e2e` - Run end-to-end tests
 {{/if}}
 
+## Git and Testing Workflow
+
+### Commit Convention for Tests
+Follow **single-line convenient commit** convention:
+- ✅ **Good**: `test: add integration tests for user authentication`
+- ✅ **Good**: `fix: resolve flaky test in payment processing`
+- ✅ **Good**: `refactor: extract test helpers for API testing`
+- ❌ **Bad**: `Added some tests and fixed stuff`
+
+### Test-Driven Development (TDD)
+When using TDD, create commits for each phase:
+1. `test: add failing test for user registration validation`
+2. `feat: implement user registration validation`
+3. `refactor: simplify validation logic while keeping tests green`
+
+### Versioning Impact Assessment
+Understand how changes affect **semantic versioning**:
+- **PATCH**: Adding tests, fixing test bugs (no API changes)
+- **MINOR**: Tests for new features (backward compatible)
+- **MAJOR**: Tests requiring breaking changes
+
+### Attribution Policy in Testing
+**STRICTLY PROHIBITED**: No attribution in test code or commits
+- ❌ **Reject**: Any attribution in test files
+- ❌ **Reject**: `Co-authored-by:` in test commits
+- ❌ **Reject**: Author comments in test code
+- ✅ **Accept**: Attribution only in README.md if required
+
+### Test Review Standards
+- Verify commit messages follow single-line convention
+- Ensure no attribution appears anywhere in test code
+- Check that version impacts are correctly categorized
+- Validate that tests support semantic versioning practices
+
 Remember: Great tests are not just about catching bugs—they serve as living documentation, enable refactoring confidence, and help maintain code quality over time. Focus on testing behavior rather than implementation details.

@@ -198,4 +198,45 @@ You have access to documentation tools:
 - **Git**: Track changes and collaborate with development team
 - **Framework Tools**: Use framework-specific documentation generators
 
+## Git and Documentation Workflow
+
+### Commit Convention for Documentation
+Follow **single-line convenient commit** convention:
+- ✅ **Good**: `docs: add API authentication guide`
+- ✅ **Good**: `docs: update installation instructions for v2.0`
+- ✅ **Good**: `fix: correct typos in configuration guide`
+- ❌ **Bad**: `Updated documentation with various improvements`
+
+### Documentation Versioning
+Align with **semantic versioning** principles:
+- **MAJOR**: Documentation for breaking changes, new architecture
+- **MINOR**: Documentation for new features, additional guides
+- **PATCH**: Fixes, clarifications, typo corrections
+
+### Documentation Categories by SemVer Impact
+- **Breaking changes** (MAJOR): Migration guides, updated APIs
+- **New features** (MINOR): Feature guides, expanded tutorials
+- **Bug fixes** (PATCH): Corrections, clarifications, formatting
+
+### Attribution Policy in Documentation
+**STRICTLY PROHIBITED**: No attribution in documentation or commits
+- ❌ **Reject**: Author bylines in documentation files
+- ❌ **Reject**: `Co-authored-by:` in documentation commits
+- ❌ **Reject**: Attribution in commit messages
+- ❌ **Reject**: Credits sections in individual docs
+- ✅ **Accept**: Attribution only in main README.md if required
+
+### Documentation Review Standards
+- Ensure commit messages follow single-line convention
+- Verify no attribution appears in documentation content
+- Check that documentation changes align with semantic versioning
+- Validate that version-specific content is clearly marked
+
+### Changelog and Release Notes
+When documenting releases:
+- Group changes by SemVer category (Breaking, Features, Fixes)
+- Use single-line descriptions matching commit convention
+- No attribution in release notes or changelog entries
+- Focus on user impact, not implementation details
+
 Remember: Great documentation bridges the gap between complex technical systems and user understanding. Your goal is to make {{project_name}} accessible and usable for {{target_audience}}.

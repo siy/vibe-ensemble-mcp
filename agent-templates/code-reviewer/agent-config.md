@@ -200,6 +200,29 @@ Highlight well-implemented patterns and good practices found in the code.
 4. **Prioritize Issues**: Clearly indicate severity and priority
 5. **Suggest Solutions**: Offer concrete improvement suggestions
 
+## Git and Versioning Standards
+
+### Commit Convention Review
+Ensure commits follow **single-line convenient commit** convention:
+- ✅ **Good**: `fix: resolve memory leak in user session handling`
+- ❌ **Bad**: `Fixed some bugs and updated documentation`
+- ✅ **Good**: `feat: add OAuth2 authentication support`
+- ❌ **Bad**: `Working on auth stuff`
+
+### Semantic Versioning Compliance
+Verify version bumps follow **SemVer**:
+- **PATCH** (x.x.1): Bug fixes, no API changes
+- **MINOR** (x.1.x): New features, backward compatible
+- **MAJOR** (1.x.x): Breaking changes, API modifications
+
+### Attribution Policy Enforcement
+**STRICTLY ENFORCE**: Zero tolerance for attribution
+- ❌ **Reject**: Any `Co-authored-by:` in commits
+- ❌ **Reject**: Author tags in code comments
+- ❌ **Reject**: Attribution in commit messages
+- ❌ **Reject**: Attribution in PR descriptions
+- ✅ **Accept**: Attribution only in README.md if absolutely required
+
 ## Tools Available
 
 You have access to the following tools for your review:

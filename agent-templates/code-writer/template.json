@@ -1,12 +1,12 @@
 {
-  "name": "code-reviewer",
-  "description": "Specialized agent for comprehensive code review tasks with security and performance analysis",
-  "version": "1.2.0",
+  "name": "code-writer",
+  "description": "Specialized agent for implementing tickets, features, and bug fixes with comprehensive development lifecycle management",
+  "version": "1.0.0",
   "author": "Vibe Ensemble Team",
   "variables": [
     {
       "name": "project_name",
-      "description": "Name of the project being reviewed",
+      "description": "Name of the project being worked on",
       "variable_type": "String",
       "default_value": null,
       "required": true,
@@ -31,71 +31,64 @@
       }
     },
     {
-      "name": "review_depth",
-      "description": "Depth of code review analysis",
+      "name": "development_phase",
+      "description": "Current development phase or approach",
       "variable_type": "String",
-      "default_value": "standard",
+      "default_value": "implementation",
       "required": false,
       "constraints": {
         "min": null,
         "max": null,
         "pattern": null,
-        "allowed_values": ["basic", "standard", "comprehensive", "security-focused"]
+        "allowed_values": ["planning", "implementation", "testing", "refactoring", "debugging"]
       }
     },
     {
-      "name": "target_files",
-      "description": "Specific files or patterns to review (comma-separated)",
+      "name": "test_framework",
+      "description": "Testing framework used in the project",
       "variable_type": "String",
-      "default_value": "**/*",
+      "default_value": null,
       "required": false,
       "constraints": null
     },
     {
-      "name": "exclude_patterns",
-      "description": "File patterns to exclude from review (comma-separated)",
+      "name": "git_workflow",
+      "description": "Git workflow pattern to follow",
       "variable_type": "String",
-      "default_value": "target/**,node_modules/**,*.test.*,*.spec.*,bin/**,obj/**,build/**,dist/**,out/**,.gradle/**,vendor/**,*.o,*.exe,*.dll,*.so,*.dylib",
-      "required": false,
-      "constraints": null
-    },
-    {
-      "name": "max_file_size_kb",
-      "description": "Maximum file size to review in kilobytes",
-      "variable_type": "Number",
-      "default_value": "500",
+      "default_value": "feature-branch",
       "required": false,
       "constraints": {
-        "min": 1,
-        "max": 10000,
+        "min": null,
+        "max": null,
         "pattern": null,
-        "allowed_values": null
+        "allowed_values": ["feature-branch", "git-flow", "github-flow", "trunk-based"]
       }
     }
   ],
   "capabilities": [
-    "code-review",
-    "static-analysis",
-    "security-analysis",
-    "performance-analysis",
-    "style-checking",
-    "documentation-review",
-    "dependency-analysis"
+    "code-implementation",
+    "feature-development",
+    "bug-fixing",
+    "refactoring",
+    "testing",
+    "git-workflow",
+    "documentation-writing",
+    "architecture-design"
   ],
   "tool_permissions": {
     "allowed_tools": [
       "Read",
+      "Write", 
+      "Edit",
+      "MultiEdit",
       "Glob",
       "Grep",
       "Bash"
     ],
-    "denied_tools": [
-      "Write",
-      "Edit"
-    ],
+    "denied_tools": [],
     "file_access": {
       "read": true,
-      "write": false,
+      "write": true,
       "allowed_paths": [],
       "denied_paths": [
         "/etc/**",
@@ -125,23 +118,17 @@
         "git",
         "cargo",
         "rustc",
-        "clippy",
         "npm",
         "yarn",
         "node",
         "python",
         "pip",
-        "pylint",
-        "black",
-        "mypy",
         "java",
         "javac",
         "mvn",
         "gradle",
         "dotnet",
         "go",
-        "golint",
-        "gofmt",
         "gcc",
         "g++",
         "clang",
@@ -149,12 +136,7 @@
         "make",
         "cmake",
         "php",
-        "composer",
-        "phpcs",
-        "phpstan",
-        "sqlite3",
-        "mysql",
-        "psql"
+        "composer"
       ],
       "denied_commands": [
         "rm",
@@ -165,12 +147,12 @@
     }
   },
   "tags": [
-    "code-quality",
-    "security",
-    "review",
-    "analysis"
+    "development",
+    "implementation",
+    "coding",
+    "features"
   ],
   "min_claude_version": "1.0.0",
-  "created_at": "2024-01-15T10:00:00Z",
+  "created_at": "2024-08-21T10:30:00Z",
   "updated_at": "2024-08-21T11:00:00Z"
 }

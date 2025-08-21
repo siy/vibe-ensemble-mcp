@@ -1,0 +1,154 @@
+# Configuration
+
+Simple configuration for single-user Vibe Ensemble setup with 5-10 agents.
+
+## Environment Variables
+
+Only a few variables needed for basic operation:
+
+```bash
+# Required: Database location (SQLite for single-user)
+export DATABASE_URL="sqlite:./vibe-ensemble.db"
+
+# Optional: Server configuration  
+export SERVER_HOST="127.0.0.1"    # localhost only
+export SERVER_PORT="8080"         # default port
+
+# Optional: Logging
+export RUST_LOG="info"             # or "debug" for troubleshooting
+```
+
+## Agent Template Configuration
+
+Templates are in `agent-templates/` directory:
+
+```
+agent-templates/
+├── code-writer/           # Feature implementation
+│   ├── template.json      # Agent metadata and variables
+│   ├── agent-config.md    # Handlebars template for config
+│   └── prompts/          # Additional prompt templates
+├── code-reviewer/         # Code quality and security
+├── test-specialist/       # Testing focus
+└── docs-specialist/       # Documentation
+```
+
+### Creating Custom Templates
+
+1. **Copy existing template**:
+   ```bash
+   cp -r agent-templates/code-writer agent-templates/my-agent
+   ```
+
+2. **Edit `template.json`**:
+   ```json
+   {
+     "name": "my-agent",
+     "description": "My custom agent type",
+     "variables": [
+       {
+         "name": "project_name",
+         "description": "Project being worked on", 
+         "variable_type": "String",
+         "required": true
+       }
+     ],
+     "capabilities": ["custom-task"],
+     "tool_permissions": {
+       "allowed_tools": ["Read", "Write", "Edit", "Bash"]
+     }
+   }
+   ```
+
+3. **Customize `agent-config.md`** with Handlebars templates:
+   ```markdown
+   # {{project_name}} Agent
+   
+   You are working on {{project_name}} with focus on {{capability}}.
+   
+   {{#if (eq primary_language "rust")}}
+   - Use cargo for builds: `cargo build`
+   - Run tests: `cargo test`
+   {{/if}}
+   ```
+
+## Workspace Configuration
+
+Agent workspaces are automatically created in `workspaces/` directory:
+
+```bash
+workspaces/
+├── project-a-writer/      # Isolated workspace for each agent
+├── project-a-reviewer/
+├── project-b-writer/
+└── shared-knowledge/      # Common knowledge base
+```
+
+Each workspace contains:
+- `.claude/agents/agent.md` - Generated agent configuration
+- `project/` - Working directory for the agent
+- `workspace.json` - Workspace metadata
+
+## Runtime Configuration
+
+### Starting MCP Server
+```bash
+# Basic startup
+cargo run --bin vibe-ensemble-mcp
+
+# With custom port
+SERVER_PORT=8081 cargo run --bin vibe-ensemble-mcp
+
+# With debug logging  
+RUST_LOG=debug cargo run --bin vibe-ensemble-mcp
+```
+
+### Agent Startup
+```bash
+# Using template-generated config
+claude -p "$(cat workspaces/my-workspace/.claude/agents/agent.md)" \
+  --mcp-server localhost:8080 \
+  --working-directory workspaces/my-workspace/project
+
+# Direct configuration
+claude -p "You are a Rust developer for my-project" \
+  --output-format stream-json \
+  --verbose \
+  --mcp-server localhost:8080
+```
+
+## Language-Specific Configuration
+
+Built-in support for 11 languages in agent templates:
+- rust, python, javascript, typescript
+- java, csharp, go, php  
+- c, cpp, sql
+
+Each language includes:
+- Appropriate build tools and commands
+- Language-specific analysis patterns  
+- Framework and ecosystem knowledge
+- Security and performance guidelines
+
+## Performance Tuning
+
+For 5-10 agents:
+```bash
+# Increase file descriptor limits
+ulimit -n 4096
+
+# Monitor memory usage
+ps aux | grep claude | awk '{sum+=$6} END {print sum/1024 " MB"}'
+
+# Limit agents per project
+# Recommended: 3-4 agents per active project
+```
+
+## File Locations
+
+- **Database**: `./vibe-ensemble.db` (SQLite file)
+- **Templates**: `./agent-templates/` (version controlled)
+- **Workspaces**: `./workspaces/` (can be temporary)  
+- **Logs**: Console output (use `tee` to save)
+
+This keeps configuration simple and focused on the single-user, multi-agent use case.
