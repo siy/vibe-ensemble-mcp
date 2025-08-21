@@ -75,7 +75,7 @@ impl MessageRepository {
         match row {
             Some(row) => {
                 let message = self.parse_message_from_row(
-                    &row.id,
+                    row.id.as_deref().unwrap_or_default(),
                     &row.sender_id,
                     row.recipient_id.as_deref(),
                     &row.message_type,
@@ -168,7 +168,7 @@ impl MessageRepository {
         let mut messages = Vec::new();
         for row in rows {
             let message = self.parse_message_from_row(
-                row.id.as_ref().unwrap(),
+                row.id.as_deref().unwrap_or_default(),
                 &row.sender_id,
                 row.recipient_id.as_deref(),
                 &row.message_type,
@@ -204,7 +204,7 @@ impl MessageRepository {
         let mut messages = Vec::new();
         for row in rows {
             let message = self.parse_message_from_row(
-                row.id.as_ref().unwrap(),
+                row.id.as_deref().unwrap_or_default(),
                 &row.sender_id,
                 row.recipient_id.as_deref(),
                 &row.message_type,
@@ -238,7 +238,7 @@ impl MessageRepository {
         let mut messages = Vec::new();
         for row in rows {
             let message = self.parse_message_from_row(
-                row.id.as_ref().unwrap(),
+                row.id.as_deref().unwrap_or_default(),
                 &row.sender_id,
                 row.recipient_id.as_deref(),
                 &row.message_type,
@@ -269,7 +269,7 @@ impl MessageRepository {
         let mut messages = Vec::new();
         for row in rows {
             let message = self.parse_message_from_row(
-                row.id.as_ref().unwrap(),
+                row.id.as_deref().unwrap_or_default(),
                 &row.sender_id,
                 row.recipient_id.as_deref(),
                 &row.message_type,
@@ -282,6 +282,38 @@ impl MessageRepository {
         }
 
         debug!("Found {} recent messages", messages.len());
+        Ok(messages)
+    }
+
+    /// List messages since a specific time
+    pub async fn list_since(&self, since: DateTime<Utc>) -> Result<Vec<Message>> {
+        debug!("Listing messages since: {}", since);
+
+        let since_str = since.to_rfc3339();
+        let rows = sqlx::query!(
+            "SELECT id, sender_id, recipient_id, message_type, content, metadata, created_at, delivered_at FROM messages WHERE created_at >= ?1 ORDER BY created_at DESC",
+            since_str
+        )
+        .fetch_all(&self.pool)
+        .await
+        .map_err(Error::Database)?;
+
+        let mut messages = Vec::new();
+        for row in rows {
+            let message = self.parse_message_from_row(
+                row.id.as_deref().unwrap_or_default(),
+                &row.sender_id,
+                row.recipient_id.as_deref(),
+                &row.message_type,
+                &row.content,
+                &row.metadata,
+                &row.created_at,
+                row.delivered_at.as_deref(),
+            )?;
+            messages.push(message);
+        }
+
+        debug!("Found {} messages since {}", messages.len(), since);
         Ok(messages)
     }
 
@@ -301,7 +333,7 @@ impl MessageRepository {
         let mut messages = Vec::new();
         for row in rows {
             let message = self.parse_message_from_row(
-                row.id.as_ref().unwrap(),
+                row.id.as_deref().unwrap_or_default(),
                 &row.sender_id,
                 row.recipient_id.as_deref(),
                 &row.message_type,

@@ -11,9 +11,8 @@ use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::sync::Arc;
 use vibe_ensemble_security::{
-    AuthService, CreateUserRequest, LoginRequest, LoginResponse, 
-    RefreshTokenRequest, ChangePasswordRequest, UserInfo, 
-    UserRole, Permission,
+    AuthService, ChangePasswordRequest, CreateUserRequest, LoginRequest, LoginResponse, Permission,
+    RefreshTokenRequest, UserInfo, UserRole,
 };
 
 /// Authentication handlers state
@@ -54,7 +53,7 @@ impl AuthHandlers {
     pub async fn login_page(Query(query): Query<LoginQuery>) -> Html<String> {
         let error_message = query.error.unwrap_or_default();
         let redirect_url = query.redirect.unwrap_or_else(|| "/dashboard".to_string());
-        
+
         let html = format!(
             r#"
 <!DOCTYPE html>
@@ -230,10 +229,10 @@ impl AuthHandlers {
 </body>
 </html>
             "#,
-            if error_message.is_empty() { 
-                String::new() 
-            } else { 
-                format!(r#"<div class="error">{}</div>"#, error_message) 
+            if error_message.is_empty() {
+                String::new()
+            } else {
+                format!(r#"<div class="error">{}</div>"#, error_message)
             },
             redirect_url
         );
@@ -246,21 +245,23 @@ impl AuthHandlers {
         State(handlers): State<Arc<AuthHandlers>>,
         Form(login_data): Form<LoginRequest>,
     ) -> Result<Response> {
-        match handlers.auth_service.authenticate(&login_data.username, &login_data.password, None).await {
+        match handlers
+            .auth_service
+            .authenticate(&login_data.username, &login_data.password, None)
+            .await
+        {
             Ok(token_pair) => {
                 // Set secure HTTP-only cookie with JWT token
                 let cookie = format!(
                     "session_token={}; Path=/; HttpOnly; SameSite=Strict; Max-Age={}",
-                    token_pair.access_token,
-                    token_pair.expires_in
+                    token_pair.access_token, token_pair.expires_in
                 );
 
                 let mut response = Redirect::to("/dashboard").into_response();
-                response.headers_mut().insert(
-                    axum::http::header::SET_COOKIE,
-                    cookie.parse().unwrap(),
-                );
-                
+                response
+                    .headers_mut()
+                    .insert(axum::http::header::SET_COOKIE, cookie.parse().unwrap());
+
                 Ok(response)
             }
             Err(e) => {
@@ -268,8 +269,12 @@ impl AuthHandlers {
                     vibe_ensemble_security::SecurityError::AuthenticationFailed(msg) => msg,
                     _ => "Authentication failed".to_string(),
                 };
-                
-                Ok(Redirect::to(&format!("/auth/login?error={}", urlencoding::encode(&error_msg))).into_response())
+
+                Ok(Redirect::to(&format!(
+                    "/auth/login?error={}",
+                    urlencoding::encode(&error_msg)
+                ))
+                .into_response())
             }
         }
     }
@@ -279,10 +284,16 @@ impl AuthHandlers {
         State(handlers): State<Arc<AuthHandlers>>,
         Json(login_data): Json<LoginRequest>,
     ) -> Result<Json<LoginResponse>> {
-        let token_pair = handlers.auth_service.authenticate(&login_data.username, &login_data.password, None).await
+        let token_pair = handlers
+            .auth_service
+            .authenticate(&login_data.username, &login_data.password, None)
+            .await
             .map_err(|e| Error::Authentication(e.to_string()))?;
 
-        let user = handlers.auth_service.get_user_by_username(&login_data.username).await
+        let user = handlers
+            .auth_service
+            .get_user_by_username(&login_data.username)
+            .await
             .map_err(|e| Error::Database(e.to_string()))?
             .ok_or_else(|| Error::Authentication("User not found".to_string()))?;
 
@@ -316,14 +327,23 @@ impl AuthHandlers {
         State(handlers): State<Arc<AuthHandlers>>,
         Json(refresh_data): Json<RefreshTokenRequest>,
     ) -> Result<Json<LoginResponse>> {
-        let token_pair = handlers.auth_service.refresh_token(&refresh_data.refresh_token).await
+        let token_pair = handlers
+            .auth_service
+            .refresh_token(&refresh_data.refresh_token)
+            .await
             .map_err(|e| Error::Authentication(e.to_string()))?;
 
         // Get user info from the new token
-        let claims = handlers.auth_service.jwt_manager().validate_access_token(&token_pair.access_token)
+        let claims = handlers
+            .auth_service
+            .jwt_manager()
+            .validate_access_token(&token_pair.access_token)
             .map_err(|e| Error::Authentication(e.to_string()))?;
 
-        let user = handlers.auth_service.get_user_by_id(&claims.sub).await
+        let user = handlers
+            .auth_service
+            .get_user_by_id(&claims.sub)
+            .await
             .map_err(|e| Error::Database(e.to_string()))?
             .ok_or_else(|| Error::Authentication("User not found".to_string()))?;
 
@@ -482,23 +502,32 @@ impl AuthHandlers {
             role: UserRole::Agent,
         };
 
-        match handlers.auth_service.create_user(
-            &create_request.username,
-            create_request.email.as_deref(),
-            &create_request.password,
-            create_request.role,
-            "self_registration", // Special marker for self-registration
-        ).await {
-            Ok(_user) => {
-                Ok(Redirect::to("/auth/login?success=Account created successfully. Please sign in.").into_response())
-            }
+        match handlers
+            .auth_service
+            .create_user(
+                &create_request.username,
+                create_request.email.as_deref(),
+                &create_request.password,
+                create_request.role,
+                "self_registration", // Special marker for self-registration
+            )
+            .await
+        {
+            Ok(_user) => Ok(Redirect::to(
+                "/auth/login?success=Account created successfully. Please sign in.",
+            )
+            .into_response()),
             Err(e) => {
                 let error_msg = match e {
                     vibe_ensemble_security::SecurityError::AuthenticationFailed(msg) => msg,
                     _ => "Registration failed".to_string(),
                 };
-                
-                Ok(Redirect::to(&format!("/auth/register?error={}", urlencoding::encode(&error_msg))).into_response())
+
+                Ok(Redirect::to(&format!(
+                    "/auth/register?error={}",
+                    urlencoding::encode(&error_msg)
+                ))
+                .into_response())
             }
         }
     }
@@ -614,27 +643,38 @@ impl AuthHandlers {
     ) -> Result<Response> {
         // Validate password confirmation
         if password_data.new_password != password_data.confirm_password {
-            return Ok(Redirect::to("/auth/change-password?error=New passwords do not match").into_response());
+            return Ok(
+                Redirect::to("/auth/change-password?error=New passwords do not match")
+                    .into_response(),
+            );
         }
 
         // TODO: Get current user ID from session/JWT
         let user_id = "current_user_id"; // This should come from authentication middleware
-        
-        match handlers.auth_service.change_password(
-            user_id,
-            &password_data.current_password,
-            &password_data.new_password,
-        ).await {
-            Ok(_) => {
-                Ok(Redirect::to("/dashboard?success=Password changed successfully").into_response())
-            }
+
+        match handlers
+            .auth_service
+            .change_password(
+                user_id,
+                &password_data.current_password,
+                &password_data.new_password,
+            )
+            .await
+        {
+            Ok(_) => Ok(
+                Redirect::to("/dashboard?success=Password changed successfully").into_response(),
+            ),
             Err(e) => {
                 let error_msg = match e {
                     vibe_ensemble_security::SecurityError::AuthenticationFailed(msg) => msg,
                     _ => "Password change failed".to_string(),
                 };
-                
-                Ok(Redirect::to(&format!("/auth/change-password?error={}", urlencoding::encode(&error_msg))).into_response())
+
+                Ok(Redirect::to(&format!(
+                    "/auth/change-password?error={}",
+                    urlencoding::encode(&error_msg)
+                ))
+                .into_response())
             }
         }
     }

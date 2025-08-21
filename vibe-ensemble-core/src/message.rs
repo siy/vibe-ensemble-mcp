@@ -76,6 +76,8 @@ pub struct MessageMetadata {
     pub priority: MessagePriority,
     pub delivery_confirmation: bool,
     pub knowledge_context: Option<String>,
+    pub is_compressed: bool,
+    pub compression_type: Option<String>,
 }
 
 /// Priority of a message
@@ -110,6 +112,8 @@ impl Message {
                 priority,
                 delivery_confirmation: false,
                 knowledge_context: None,
+                is_compressed: false,
+                compression_type: None,
             },
             created_at: Utc::now(),
             delivered_at: None,
@@ -162,6 +166,8 @@ impl Message {
                 priority,
                 delivery_confirmation: false,
                 knowledge_context: None,
+                is_compressed: false,
+                compression_type: None,
             },
             created_at: Utc::now(),
             delivered_at: None,
@@ -254,6 +260,8 @@ impl MessageMetadata {
             priority,
             delivery_confirmation: false,
             knowledge_context: None,
+            is_compressed: false,
+            compression_type: None,
         }
     }
 
@@ -272,6 +280,8 @@ pub struct MessageMetadataBuilder {
     priority: MessagePriority,
     delivery_confirmation: bool,
     knowledge_context: Option<String>,
+    is_compressed: bool,
+    compression_type: Option<String>,
 }
 
 impl MessageMetadataBuilder {
@@ -284,6 +294,8 @@ impl MessageMetadataBuilder {
             priority: MessagePriority::Normal,
             delivery_confirmation: false,
             knowledge_context: None,
+            is_compressed: false,
+            compression_type: None,
         }
     }
 
@@ -332,6 +344,8 @@ impl MessageMetadataBuilder {
             priority: self.priority,
             delivery_confirmation: self.delivery_confirmation,
             knowledge_context: self.knowledge_context,
+            is_compressed: self.is_compressed,
+            compression_type: self.compression_type,
         }
     }
 }

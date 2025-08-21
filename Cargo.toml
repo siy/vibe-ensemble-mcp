@@ -1,12 +1,15 @@
 [workspace]
 members = [
     "vibe-ensemble-core",
-    "vibe-ensemble-mcp",
-    "vibe-ensemble-server",
     "vibe-ensemble-storage",
-    "vibe-ensemble-web",
     "vibe-ensemble-prompts",
+]
+exclude = [
+    "vibe-ensemble-mcp",
+    "vibe-ensemble-server", 
+    "vibe-ensemble-web",
     "vibe-ensemble-security",
+    "vibe-ensemble-monitoring",
 ]
 resolver = "2"
 
@@ -17,7 +20,7 @@ authors = ["Vibe Ensemble Team"]
 license = "MIT"
 repository = "https://github.com/siy/vibe-ensemble-mcp"
 description = "MCP server for coordinating multiple Claude Code instances"
-rust-version = "1.70"
+rust-version = "1.80"
 
 [workspace.dependencies]
 # Async runtime
@@ -45,7 +48,7 @@ anyhow = "1.0"
 thiserror = "1.0"
 
 # Database
-sqlx = { version = "0.7", features = ["runtime-tokio-rustls", "sqlite", "postgres", "chrono", "uuid"] }
+sqlx = { version = "0.8", default-features = false, features = ["runtime-tokio-rustls", "sqlite", "postgres", "chrono", "uuid", "macros", "migrate"] }
 
 # Web framework
 axum = { version = "0.7", features = ["ws", "tokio"] }
@@ -79,3 +82,29 @@ headers = "0.4"
 aes-gcm = "0.10"
 chacha20poly1305 = "0.10"
 base64 = "0.22"
+
+# Async traits
+async-trait = "0.1"
+futures = "0.3"
+
+# Testing framework dependencies
+proptest = "1.4"                    # Property-based testing
+criterion = { version = "0.5", features = ["html_reports"] }  # Benchmarking
+mockall = "0.12"                    # Mocking framework
+fake = { version = "2.9", features = ["derive", "chrono"] }  # Test data generation
+testcontainers = "0.15"             # Integration test containers
+tokio-test = "0.4"                  # Async test utilities
+wiremock = "0.6"                    # HTTP mocking
+assert_matches = "1.5"              # Enhanced assertion macros
+rstest = "0.18"                     # Parameterized tests
+tarpaulin = "0.27"                  # Code coverage
+
+# Performance optimization dependencies
+moka = { version = "0.12", features = ["future"] }  # Async caching
+lru = "0.12"                        # LRU cache implementation
+dashmap = "5.5"                     # Concurrent HashMap
+flate2 = "1.0"                      # Compression
+parking_lot = "0.12"                # High-performance synchronization
+rayon = "1.8"                       # Data parallelism
+arc-swap = "1.6"                    # Atomic Arc swapping
+num_cpus = "1.16"                   # CPU core detection

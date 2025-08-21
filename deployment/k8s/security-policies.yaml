@@ -1,0 +1,413 @@
+# Pod Security Policy for Vibe Ensemble
+apiVersion: policy/v1beta1
+kind: PodSecurityPolicy
+metadata:
+  name: vibe-ensemble-psp
+  namespace: vibe-ensemble
+  labels:
+    app.kubernetes.io/name: vibe-ensemble
+    app.kubernetes.io/component: security
+spec:
+  privileged: false
+  allowPrivilegeEscalation: false
+  requiredDropCapabilities:
+    - ALL
+  volumes:
+    - 'configMap'
+    - 'emptyDir'
+    - 'projected'
+    - 'secret'
+    - 'downwardAPI'
+    - 'persistentVolumeClaim'
+  hostNetwork: false
+  hostIPC: false
+  hostPID: false
+  runAsUser:
+    rule: 'MustRunAsNonRoot'
+  supplementalGroups:
+    rule: 'MustRunAs'
+    ranges:
+      - min: 1
+        max: 65535
+  fsGroup:
+    rule: 'MustRunAs'
+    ranges:
+      - min: 1
+        max: 65535
+  readOnlyRootFilesystem: true
+  seLinux:
+    rule: 'RunAsAny'
+
+---
+# Security Context Constraints for OpenShift
+apiVersion: security.openshift.io/v1
+kind: SecurityContextConstraints
+metadata:
+  name: vibe-ensemble-scc
+  labels:
+    app.kubernetes.io/name: vibe-ensemble
+    app.kubernetes.io/component: security
+allowHostDirVolumePlugin: false
+allowHostIPC: false
+allowHostNetwork: false
+allowHostPID: false
+allowHostPorts: false
+allowPrivilegedContainer: false
+allowedCapabilities: []
+defaultAddCapabilities: []
+requiredDropCapabilities:
+- ALL
+fsGroup:
+  type: MustRunAs
+  ranges:
+  - min: 1000
+    max: 65535
+runAsUser:
+  type: MustRunAsNonRoot
+seLinuxContext:
+  type: MustRunAs
+users:
+- system:serviceaccount:vibe-ensemble:vibe-ensemble-sa
+- system:serviceaccount:vibe-ensemble:prometheus-sa
+volumes:
+- configMap
+- downwardAPI
+- emptyDir
+- persistentVolumeClaim
+- projected
+- secret
+
+---
+# Network Policy for database isolation
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: postgres-isolation
+  namespace: vibe-ensemble
+  labels:
+    app.kubernetes.io/name: postgres
+    app.kubernetes.io/component: security
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: postgres
+  policyTypes:
+  - Ingress
+  - Egress
+  ingress:
+  # Only allow connections from vibe-ensemble server
+  - from:
+    - podSelector:
+        matchLabels:
+          app.kubernetes.io/name: vibe-ensemble
+          app.kubernetes.io/component: server
+    ports:
+    - protocol: TCP
+      port: 5432
+  # Allow connections from backup jobs
+  - from:
+    - podSelector:
+        matchLabels:
+          app.kubernetes.io/component: backup
+    ports:
+    - protocol: TCP
+      port: 5432
+  # Allow connections from monitoring
+  - from:
+    - podSelector:
+        matchLabels:
+          app.kubernetes.io/name: postgres-exporter
+    ports:
+    - protocol: TCP
+      port: 9187
+  egress:
+  # Allow DNS resolution
+  - to: []
+    ports:
+    - protocol: UDP
+      port: 53
+    - protocol: TCP
+      port: 53
+
+---
+# RBAC for fine-grained permissions
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: vibe-ensemble-minimal-role
+  namespace: vibe-ensemble
+  labels:
+    app.kubernetes.io/name: vibe-ensemble
+    app.kubernetes.io/component: security
+rules:
+# Read-only access to configmaps and secrets
+- apiGroups: [""]
+  resources: ["configmaps"]
+  verbs: ["get", "list", "watch"]
+- apiGroups: [""]
+  resources: ["secrets"]
+  verbs: ["get"]
+  resourceNames: ["vibe-ensemble-secrets", "vibe-ensemble-tls"]
+# Read access to own pod information
+- apiGroups: [""]
+  resources: ["pods"]
+  verbs: ["get", "list"]
+# No write permissions to any resources
+
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: vibe-ensemble-minimal-rolebinding
+  namespace: vibe-ensemble
+  labels:
+    app.kubernetes.io/name: vibe-ensemble
+    app.kubernetes.io/component: security
+subjects:
+- kind: ServiceAccount
+  name: vibe-ensemble-sa
+  namespace: vibe-ensemble
+roleRef:
+  kind: Role
+  name: vibe-ensemble-minimal-role
+  apiGroup: rbac.authorization.k8s.io
+
+---
+# OPA Gatekeeper constraint template for security policies
+apiVersion: templates.gatekeeper.sh/v1beta1
+kind: ConstraintTemplate
+metadata:
+  name: vibeensemblesecuritypolicy
+  labels:
+    app.kubernetes.io/name: vibe-ensemble
+    app.kubernetes.io/component: security
+spec:
+  crd:
+    spec:
+      names:
+        kind: VibeEnsembleSecurityPolicy
+      validation:
+        type: object
+        properties:
+          allowedImages:
+            type: array
+            items:
+              type: string
+          requireSecurityContext:
+            type: boolean
+          maxReplicas:
+            type: integer
+  targets:
+    - target: admission.k8s.gatekeeper.sh
+      rego: |
+        package vibeensemblesecuritypolicy
+        
+        violation[{"msg": msg}] {
+          container := input.review.object.spec.containers[_]
+          not starts_with(container.image, input.parameters.allowedImages[_])
+          msg := sprintf("Container image %v is not allowed", [container.image])
+        }
+        
+        violation[{"msg": msg}] {
+          input.parameters.requireSecurityContext
+          container := input.review.object.spec.containers[_]
+          not container.securityContext.runAsNonRoot
+          msg := "Container must run as non-root user"
+        }
+        
+        violation[{"msg": msg}] {
+          input.parameters.requireSecurityContext
+          container := input.review.object.spec.containers[_]
+          not container.securityContext.readOnlyRootFilesystem
+          msg := "Container must have read-only root filesystem"
+        }
+        
+        violation[{"msg": msg}] {
+          replicas := input.review.object.spec.replicas
+          replicas > input.parameters.maxReplicas
+          msg := sprintf("Replica count %v exceeds maximum allowed %v", [replicas, input.parameters.maxReplicas])
+        }
+
+---
+# Apply the security constraint
+apiVersion: constraints.gatekeeper.sh/v1beta1
+kind: VibeEnsembleSecurityPolicy
+metadata:
+  name: vibe-ensemble-security-policy
+  labels:
+    app.kubernetes.io/name: vibe-ensemble
+    app.kubernetes.io/component: security
+spec:
+  match:
+    kinds:
+      - apiGroups: ["apps"]
+        kinds: ["Deployment"]
+    namespaces: ["vibe-ensemble"]
+  parameters:
+    allowedImages:
+      - "ghcr.io/siy/vibe-ensemble-mcp"
+      - "postgres:15"
+      - "prom/prometheus"
+      - "grafana/grafana"
+    requireSecurityContext: true
+    maxReplicas: 50
+
+---
+# Falco security monitoring rules
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: falco-rules
+  namespace: vibe-ensemble
+  labels:
+    app.kubernetes.io/name: falco
+    app.kubernetes.io/component: security
+data:
+  vibe_ensemble_rules.yaml: |
+    - rule: Vibe Ensemble Unauthorized File Access
+      desc: Detect unauthorized file access in vibe-ensemble containers
+      condition: >
+        open_read and
+        container.image.repository = "ghcr.io/siy/vibe-ensemble-mcp" and
+        not fd.name startswith "/app/" and
+        not fd.name startswith "/usr/" and
+        not fd.name startswith "/tmp/" and
+        not fd.name startswith "/proc/" and
+        not fd.name startswith "/sys/"
+      output: >
+        Unauthorized file access in vibe-ensemble container
+        (user=%user.name container=%container.name image=%container.image file=%fd.name)
+      priority: WARNING
+      tags: [vibe-ensemble, security, file-access]
+    
+    - rule: Vibe Ensemble Process Spawning
+      desc: Detect unexpected process spawning in vibe-ensemble containers
+      condition: >
+        spawned_process and
+        container.image.repository = "ghcr.io/siy/vibe-ensemble-mcp" and
+        not proc.name in (vibe-ensemble-server, sh, bash, curl, sleep)
+      output: >
+        Unexpected process spawned in vibe-ensemble container
+        (user=%user.name container=%container.name image=%container.image process=%proc.name)
+      priority: ERROR
+      tags: [vibe-ensemble, security, process]
+    
+    - rule: Vibe Ensemble Network Connection
+      desc: Detect unexpected network connections from vibe-ensemble containers
+      condition: >
+        outbound and
+        container.image.repository = "ghcr.io/siy/vibe-ensemble-mcp" and
+        not fd.sip in (postgres-service, prometheus-service) and
+        not fd.sport in (80, 443, 53, 5432, 9090)
+      output: >
+        Unexpected network connection from vibe-ensemble container
+        (user=%user.name container=%container.name dest=%fd.sip:%fd.sport)
+      priority: WARNING
+      tags: [vibe-ensemble, security, network]
+
+---
+# Resource quotas for security and resource management
+apiVersion: v1
+kind: ResourceQuota
+metadata:
+  name: vibe-ensemble-quota
+  namespace: vibe-ensemble
+  labels:
+    app.kubernetes.io/name: vibe-ensemble
+    app.kubernetes.io/component: security
+spec:
+  hard:
+    requests.cpu: "10"
+    requests.memory: 20Gi
+    limits.cpu: "20"
+    limits.memory: 40Gi
+    persistentvolumeclaims: "10"
+    pods: "50"
+    services: "10"
+    secrets: "20"
+    configmaps: "20"
+    replicationcontrollers: "0"
+    deployments.apps: "10"
+    replicasets.apps: "20"
+
+---
+# Limit ranges for individual resources
+apiVersion: v1
+kind: LimitRange
+metadata:
+  name: vibe-ensemble-limits
+  namespace: vibe-ensemble
+  labels:
+    app.kubernetes.io/name: vibe-ensemble
+    app.kubernetes.io/component: security
+spec:
+  limits:
+  - type: Pod
+    max:
+      cpu: "4"
+      memory: 8Gi
+    min:
+      cpu: "10m"
+      memory: 16Mi
+  - type: Container
+    default:
+      cpu: "100m"
+      memory: 128Mi
+    defaultRequest:
+      cpu: "50m"
+      memory: 64Mi
+    max:
+      cpu: "2"
+      memory: 4Gi
+    min:
+      cpu: "10m"
+      memory: 16Mi
+  - type: PersistentVolumeClaim
+    max:
+      storage: 100Gi
+    min:
+      storage: 1Gi
+
+---
+# Certificate management with cert-manager
+apiVersion: cert-manager.io/v1
+kind: ClusterIssuer
+metadata:
+  name: letsencrypt-prod
+  labels:
+    app.kubernetes.io/name: cert-manager
+    app.kubernetes.io/component: security
+spec:
+  acme:
+    server: https://acme-v02.api.letsencrypt.org/directory
+    email: admin@vibe-ensemble.example.com
+    privateKeySecretRef:
+      name: letsencrypt-prod
+    solvers:
+    - http01:
+        ingress:
+          class: nginx
+      selector:
+        dnsNames:
+        - vibe-ensemble.example.com
+        - api.vibe-ensemble.example.com
+        - admin.vibe-ensemble.example.com
+
+---
+apiVersion: cert-manager.io/v1
+kind: ClusterIssuer
+metadata:
+  name: letsencrypt-staging
+  labels:
+    app.kubernetes.io/name: cert-manager
+    app.kubernetes.io/component: security
+spec:
+  acme:
+    server: https://acme-staging-v02.api.letsencrypt.org/directory
+    email: admin@vibe-ensemble.example.com
+    privateKeySecretRef:
+      name: letsencrypt-staging
+    solvers:
+    - http01:
+        ingress:
+          class: nginx

@@ -1,0 +1,263 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: vibe-ensemble-config-production
+  namespace: vibe-ensemble
+  labels:
+    app.kubernetes.io/name: vibe-ensemble
+    app.kubernetes.io/component: config
+    app.kubernetes.io/environment: production
+data:
+  config.toml: |
+    [server]
+    host = "0.0.0.0"
+    port = 8080
+    max_connections = 5000
+    request_timeout_seconds = 60
+    shutdown_timeout_seconds = 60
+    worker_threads = 0  # Use all available cores
+    max_blocking_threads = 512
+
+    [database]
+    max_connections = 100
+    connection_timeout_seconds = 10
+    idle_timeout_seconds = 600
+    min_connections = 20
+    max_lifetime_seconds = 3600
+    test_before_acquire = true
+    migration_lock_timeout_seconds = 300
+
+    [mcp]
+    transport = "websocket"
+    timeout_seconds = 60
+    max_message_size = 10485760  # 10MB
+    heartbeat_interval_seconds = 30
+    max_concurrent_connections = 1000
+    compression_enabled = true
+
+    [security]
+    jwt_expiry_hours = 24
+    refresh_token_expiry_days = 30
+    password_min_length = 12
+    max_login_attempts = 5
+    lockout_duration_minutes = 30
+    rate_limit_requests_per_hour = 10000
+    cors_max_age_seconds = 3600
+    session_timeout_minutes = 480
+    require_https = true
+    secure_cookies = true
+    csrf_protection = true
+
+    [logging]
+    level = "info"
+    format = "json"
+    target = "stdout"
+    include_location = false
+    max_files = 10
+    max_file_size_mb = 100
+
+    [metrics]
+    enabled = true
+    port = 9090
+    path = "/metrics"
+    collect_interval_seconds = 15
+    histogram_buckets = [0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1.0, 2.5, 5.0, 10.0]
+    
+    [metrics.labels]
+    environment = "production"
+    service = "vibe-ensemble-mcp"
+    version = "${VERSION}"
+
+    [features]
+    api_docs = false
+    debug_endpoints = false
+    health_endpoint = true
+    websocket_enabled = true
+    monitoring_enabled = true
+    authentication_required = true
+    audit_logging = true
+
+    [cache]
+    enabled = true
+    default_ttl_seconds = 300
+    max_size = 100000
+    cleanup_interval_seconds = 60
+    compression_enabled = true
+    
+    [cache.redis]
+    enabled = true
+    cluster_mode = true
+    max_retries = 3
+    retry_delay_ms = 100
+
+    [performance]
+    enable_request_compression = true
+    compression_level = 6
+    enable_response_caching = true
+    max_request_size_mb = 50
+    
+    [performance.connection_pool]
+    max_idle_per_host = 100
+    max_idle_timeout_seconds = 90
+    max_conns_per_host = 200
+
+    [monitoring]
+    health_check_interval_seconds = 30
+    metrics_collection_interval_seconds = 15
+    trace_sampling_rate = 0.1
+    enable_distributed_tracing = true
+    
+    [monitoring.alerts]
+    error_rate_threshold = 0.05
+    latency_p99_threshold_ms = 1000
+    memory_usage_threshold = 0.85
+    cpu_usage_threshold = 0.80
+
+    [backup]
+    enabled = true
+    interval_hours = 6
+    retention_days = 30
+    compression_enabled = true
+    encryption_enabled = true
+
+  prometheus.yml: |
+    global:
+      scrape_interval: 15s
+      evaluation_interval: 15s
+      external_labels:
+        environment: 'production'
+        cluster: 'main'
+
+    rule_files:
+      - "rules/*.yml"
+
+    scrape_configs:
+      - job_name: 'vibe-ensemble'
+        kubernetes_sd_configs:
+        - role: endpoints
+          namespaces:
+            names:
+            - vibe-ensemble
+        relabel_configs:
+        - source_labels: [__meta_kubernetes_service_name]
+          action: keep
+          regex: vibe-ensemble-service
+        - source_labels: [__meta_kubernetes_endpoint_port_name]
+          action: keep
+          regex: metrics
+        metrics_path: /metrics
+        scrape_interval: 15s
+        scrape_timeout: 10s
+
+      - job_name: 'postgres-exporter'
+        kubernetes_sd_configs:
+        - role: endpoints
+          namespaces:
+            names:
+            - vibe-ensemble
+        relabel_configs:
+        - source_labels: [__meta_kubernetes_service_name]
+          action: keep
+          regex: postgres-metrics
+
+      - job_name: 'kubernetes-pods'
+        kubernetes_sd_configs:
+        - role: pod
+          namespaces:
+            names:
+            - vibe-ensemble
+        relabel_configs:
+        - source_labels: [__meta_kubernetes_pod_annotation_prometheus_io_scrape]
+          action: keep
+          regex: true
+        - source_labels: [__meta_kubernetes_pod_annotation_prometheus_io_path]
+          action: replace
+          target_label: __metrics_path__
+          regex: (.+)
+        - source_labels: [__address__, __meta_kubernetes_pod_annotation_prometheus_io_port]
+          action: replace
+          regex: ([^:]+)(?::\d+)?;(\d+)
+          replacement: $1:$2
+          target_label: __address__
+
+  grafana-datasources.yml: |
+    apiVersion: 1
+    datasources:
+    - name: Prometheus
+      type: prometheus
+      access: proxy
+      url: http://prometheus:9090
+      isDefault: true
+      editable: false
+      jsonData:
+        timeInterval: "15s"
+        queryTimeout: "300s"
+    - name: Loki
+      type: loki
+      access: proxy
+      url: http://loki:3100
+      editable: false
+
+  alerting-rules.yml: |
+    groups:
+    - name: vibe-ensemble-alerts
+      rules:
+      - alert: HighErrorRate
+        expr: rate(http_requests_total{status=~"5.."}[5m]) > 0.05
+        for: 5m
+        labels:
+          severity: critical
+          service: vibe-ensemble
+        annotations:
+          summary: "High error rate detected"
+          description: "Error rate is {{ $value | humanizePercentage }} for the last 5 minutes"
+
+      - alert: HighLatency
+        expr: histogram_quantile(0.99, rate(http_request_duration_seconds_bucket[5m])) > 1.0
+        for: 5m
+        labels:
+          severity: warning
+          service: vibe-ensemble
+        annotations:
+          summary: "High latency detected"
+          description: "99th percentile latency is {{ $value }}s for the last 5 minutes"
+
+      - alert: HighMemoryUsage
+        expr: container_memory_usage_bytes / container_spec_memory_limit_bytes > 0.85
+        for: 10m
+        labels:
+          severity: warning
+          service: vibe-ensemble
+        annotations:
+          summary: "High memory usage"
+          description: "Memory usage is {{ $value | humanizePercentage }} of limit"
+
+      - alert: HighCPUUsage
+        expr: rate(container_cpu_usage_seconds_total[5m]) > 0.8
+        for: 10m
+        labels:
+          severity: warning
+          service: vibe-ensemble
+        annotations:
+          summary: "High CPU usage"
+          description: "CPU usage is {{ $value | humanizePercentage }}"
+
+      - alert: PodCrashLooping
+        expr: increase(kube_pod_container_status_restarts_total[1h]) > 5
+        for: 5m
+        labels:
+          severity: critical
+          service: vibe-ensemble
+        annotations:
+          summary: "Pod is crash looping"
+          description: "Pod {{ $labels.pod }} has restarted {{ $value }} times in the last hour"
+
+      - alert: DatabaseConnectionFailure
+        expr: up{job="postgres-exporter"} == 0
+        for: 2m
+        labels:
+          severity: critical
+          service: postgres
+        annotations:
+          summary: "Database connection failure"
+          description: "Cannot connect to PostgreSQL database"

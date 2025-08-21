@@ -1,0 +1,3 @@
+ignore = [
+    "vibe-ensemble-web/src/handlers/admin.rs"
+]

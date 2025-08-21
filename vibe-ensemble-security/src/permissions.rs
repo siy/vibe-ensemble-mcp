@@ -277,7 +277,7 @@ impl Default for AccessControlService {
 }
 
 impl ResourceType {
-    fn as_str(&self) -> &'static str {
+    pub fn as_str(&self) -> &'static str {
         match self {
             ResourceType::Agent => "agent",
             ResourceType::Issue => "issue",
@@ -292,7 +292,7 @@ impl ResourceType {
 }
 
 impl Action {
-    fn as_str(&self) -> &'static str {
+    pub fn as_str(&self) -> &'static str {
         match self {
             Action::Create => "create",
             Action::Read => "read",

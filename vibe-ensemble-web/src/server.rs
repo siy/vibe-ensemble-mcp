@@ -33,13 +33,13 @@ impl WebServer {
     pub async fn new(config: WebConfig, storage: Arc<StorageManager>) -> Result<Self> {
         let auth_service = Arc::new(AuthService::new());
         let ws_manager = Arc::new(WebSocketManager::new());
-        
+
         // Start WebSocket background tasks
         ws_manager.start_stats_broadcaster(storage.clone()).await;
         ws_manager.start_ping_sender().await;
-        
-        Ok(Self { 
-            config, 
+
+        Ok(Self {
+            config,
             storage,
             auth_service,
             ws_manager,
@@ -62,14 +62,17 @@ impl WebServer {
             // Agent management routes
             .route("/agents", get(handlers::agents::list))
             .route("/agents/:id", get(handlers::agents::detail))
-            // Issue management routes  
+            // Issue management routes
             .route("/issues", get(handlers::issues::list))
             .route("/issues/new", get(handlers::issues::new_form))
             .route("/issues", post(handlers::issues::create))
             .route("/issues/:id", get(handlers::issues::detail))
             .route("/issues/:id/edit", get(handlers::issues::edit_form))
             .route("/issues/:id", post(handlers::issues::update))
-            .route("/issues/:id", axum::routing::delete(handlers::issues::delete))
+            .route(
+                "/issues/:id",
+                axum::routing::delete(handlers::issues::delete),
+            )
             // Knowledge management routes
             .route("/knowledge", get(handlers::knowledge::list))
             .route("/knowledge/:id", get(handlers::knowledge::detail))
@@ -97,11 +100,19 @@ impl WebServer {
             .route("/api/issues", get(handlers::api::issues_list))
             .route("/api/issues", post(handlers::api::issue_create))
             .route("/api/issues/:id", get(handlers::api::issue_detail))
-            .route("/api/issues/:id", axum::routing::put(handlers::api::issue_update))
-            .route("/api/issues/:id", axum::routing::delete(handlers::api::issue_delete))
+            .route(
+                "/api/issues/:id",
+                axum::routing::put(handlers::api::issue_update),
+            )
+            .route(
+                "/api/issues/:id",
+                axum::routing::delete(handlers::api::issue_delete),
+            )
             .route("/api/knowledge", get(handlers::api::knowledge_list))
             .route("/api/knowledge/:id", get(handlers::api::knowledge_detail))
-            .route("/api/messages", get(handlers::api::messages_list));
+            .route("/api/messages", get(handlers::api::messages_list))
+            // Knowledge intelligence routes
+            .merge(handlers::knowledge_intelligence_simple::router());
 
         // Combine all routes
         let mut app = Router::new()

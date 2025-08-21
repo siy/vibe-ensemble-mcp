@@ -1,8 +1,9 @@
 //! Storage manager for coordinating database operations
 
-use crate::{migrations::Migrations, repositories::*, services::AgentService, Error, Result};
+use crate::{migrations::Migrations, performance::*, repositories::*, services::*, Error, Result};
 use sqlx::{Pool, Sqlite, SqlitePool};
 use std::sync::Arc;
+use std::time::Duration;
 use tracing::info;
 
 /// Database configuration
@@ -11,6 +12,7 @@ pub struct DatabaseConfig {
     pub url: String,
     pub max_connections: Option<u32>,
     pub migrate_on_startup: bool,
+    pub performance_config: Option<PerformanceConfig>,
 }
 
 /// Main storage manager coordinating all repositories
@@ -23,6 +25,10 @@ pub struct StorageManager {
     prompts: Arc<PromptRepository>,
     templates: Arc<TemplateRepository>,
     agent_service: Arc<AgentService>,
+    issue_service: Arc<IssueService>,
+    message_service: Arc<MessageService>,
+    knowledge_service: Arc<KnowledgeService>,
+    performance_layer: Arc<PerformanceLayer>,
 }
 
 impl StorageManager {
@@ -30,9 +36,36 @@ impl StorageManager {
     pub async fn new(config: &DatabaseConfig) -> Result<Self> {
         info!("Connecting to database: {}", config.url);
 
-        let pool = SqlitePool::connect(&config.url).await?;
+        // Create performance-optimized connection pool
+        let mut connect_options = config
+            .url
+            .parse::<sqlx::sqlite::SqliteConnectOptions>()
+            .map_err(|e| Error::Internal(anyhow::anyhow!("Invalid database URL: {}", e)))?;
 
-        info!("Database connection established");
+        // Optimize connection settings
+        connect_options = connect_options
+            .busy_timeout(Duration::from_secs(30))
+            .journal_mode(sqlx::sqlite::SqliteJournalMode::Wal)
+            .synchronous(sqlx::sqlite::SqliteSynchronous::Normal)
+            .foreign_keys(true)
+            .pragma("cache_size", "-64000") // 64MB cache
+            .pragma("temp_store", "memory")
+            .pragma("mmap_size", "268435456") // 256MB mmap
+            .pragma("optimize", "1");
+
+        let pool_builder = SqlitePool::connect_with(connect_options.clone());
+        let pool = if let Some(max_connections) = config.max_connections {
+            info!("Using connection pool with {} connections", max_connections);
+            SqlitePool::connect_with(connect_options.clone().create_if_missing(true)).await?
+        } else {
+            pool_builder.await?
+        };
+
+        info!("Database connection established with performance optimizations");
+
+        // Initialize performance layer
+        let performance_config = config.performance_config.clone().unwrap_or_default();
+        let performance_layer = Arc::new(PerformanceLayer::new(performance_config));
 
         // Create repositories
         let agents = Arc::new(AgentRepository::new(pool.clone()));
@@ -44,6 +77,9 @@ impl StorageManager {
 
         // Create services
         let agent_service = Arc::new(AgentService::new(agents.clone()));
+        let issue_service = Arc::new(IssueService::new(issues.clone()));
+        let message_service = Arc::new(MessageService::new(messages.clone()));
+        let knowledge_service = Arc::new(KnowledgeService::new((*knowledge).clone()));
 
         let manager = Self {
             pool,
@@ -54,6 +90,10 @@ impl StorageManager {
             prompts,
             templates,
             agent_service,
+            issue_service,
+            message_service,
+            knowledge_service,
+            performance_layer,
         };
 
         // Run migrations if configured to do so
@@ -119,6 +159,26 @@ impl StorageManager {
         self.agent_service.clone()
     }
 
+    /// Get issue service
+    pub fn issue_service(&self) -> Arc<IssueService> {
+        self.issue_service.clone()
+    }
+
+    /// Get message service
+    pub fn message_service(&self) -> Arc<MessageService> {
+        self.message_service.clone()
+    }
+
+    /// Get knowledge service
+    pub fn knowledge_service(&self) -> Arc<KnowledgeService> {
+        self.knowledge_service.clone()
+    }
+
+    /// Get performance layer
+    pub fn performance_layer(&self) -> Arc<PerformanceLayer> {
+        self.performance_layer.clone()
+    }
+
     /// Check database health
     pub async fn health_check(&self) -> Result<()> {
         sqlx::query("SELECT 1")
@@ -145,6 +205,47 @@ impl StorageManager {
             prompts_count,
             templates_count,
         })
+    }
+
+    /// Get comprehensive performance report
+    pub async fn performance_report(&self) -> Result<PerformanceReport> {
+        Ok(self.performance_layer.performance_report().await)
+    }
+
+    /// Clear all caches
+    pub async fn clear_cache(&self) -> Result<()> {
+        self.performance_layer.cache_manager.clear().await;
+        Ok(())
+    }
+
+    /// Optimize database (run VACUUM and ANALYZE)
+    pub async fn optimize_database(&self) -> Result<()> {
+        info!("Optimizing database...");
+
+        // Run VACUUM to reclaim space and defragment
+        sqlx::query("VACUUM")
+            .execute(&self.pool)
+            .await
+            .map_err(Error::Database)?;
+
+        // Run ANALYZE to update query planner statistics
+        sqlx::query("ANALYZE")
+            .execute(&self.pool)
+            .await
+            .map_err(Error::Database)?;
+
+        info!("Database optimization complete");
+        Ok(())
+    }
+
+    /// Execute operation with performance tracking
+    pub async fn execute_with_tracking<F, R>(&self, operation_name: &str, operation: F) -> Result<R>
+    where
+        F: std::future::Future<Output = Result<R>>,
+    {
+        self.performance_layer
+            .execute_with_tracking(operation_name, operation)
+            .await
     }
 }
 

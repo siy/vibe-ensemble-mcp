@@ -4,7 +4,7 @@ use crate::{renderer::PromptRenderer, templates, Error, Result};
 use chrono::{DateTime, Utc};
 use std::{collections::HashMap, sync::Arc, time::Duration};
 use tokio::sync::RwLock;
-use tracing::{error, info, warn};
+use tracing::info;
 use uuid::Uuid;
 use vibe_ensemble_core::{
     agent::AgentType,
@@ -158,10 +158,11 @@ impl PromptManager {
             let cache = self.cache.read().await;
             if let Some(entry) = cache.get(&cache_key) {
                 if !self.is_cache_expired(entry) {
+                    let rendered_content = entry.rendered_content.clone();
                     // Update access statistics
                     drop(cache);
                     self.update_cache_access(&cache_key).await;
-                    return Ok(entry.rendered_content.clone());
+                    return Ok(rendered_content);
                 }
             }
         }
@@ -203,7 +204,7 @@ impl PromptManager {
         minimum_sample_size: u64,
         created_by: Uuid,
     ) -> Result<PromptExperiment> {
-        if allocation_percentage < 0.0 || allocation_percentage > 100.0 {
+        if !(0.0..=100.0).contains(&allocation_percentage) {
             return Err(Error::Validation {
                 message: "Allocation percentage must be between 0 and 100".to_string(),
             });
@@ -354,7 +355,7 @@ impl PromptManager {
         comments: Option<String>,
         metadata: HashMap<String, String>,
     ) -> Result<PromptFeedback> {
-        if score < 0.0 || score > 10.0 {
+        if !(0.0..=10.0).contains(&score) {
             return Err(Error::Validation {
                 message: "Feedback score must be between 0.0 and 10.0".to_string(),
             });
@@ -407,8 +408,8 @@ impl PromptManager {
             user_feedback_score: Some(8.1),
             created_at: Utc::now(),
             updated_at: Utc::now(),
-            period_start: period_start.unwrap_or_else(|| Utc::now()),
-            period_end: period_end.unwrap_or_else(|| Utc::now()),
+            period_start: period_start.unwrap_or_else(Utc::now),
+            period_end: period_end.unwrap_or_else(Utc::now),
         })
     }
 

@@ -3,6 +3,7 @@
 pub mod agent;
 pub mod issue;
 pub mod knowledge;
+pub mod knowledge_intelligence;
 pub mod message;
 
 pub use agent::{
@@ -14,6 +15,8 @@ pub use agent::{
 pub use issue::{AssignmentRecommendation, IssueService, IssueStatistics, WorkflowTransition};
 
 pub use knowledge::{KnowledgeService, KnowledgeStatistics};
+
+pub use knowledge_intelligence::KnowledgeIntelligenceService;
 
 pub use message::{
     DeliveryStatus, DeliveryStatusType, MessageEvent, MessageEventType, MessageService,

@@ -6,7 +6,7 @@ use jsonwebtoken::{decode, encode, Algorithm, DecodingKey, EncodingKey, Header, 
 use serde::{Deserialize, Serialize};
 
 /// JWT token manager
-#[derive(Debug, Clone)]
+#[derive(Clone)]
 pub struct JwtManager {
     encoding_key: EncodingKey,
     decoding_key: DecodingKey,

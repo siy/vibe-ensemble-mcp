@@ -10,6 +10,7 @@ use uuid::Uuid;
 use vibe_ensemble_core::knowledge::{Knowledge, KnowledgeSearchCriteria, KnowledgeSearchResult};
 
 /// Repository for knowledge entities
+#[derive(Clone)]
 pub struct KnowledgeRepository {
     pool: Pool<Sqlite>,
 }

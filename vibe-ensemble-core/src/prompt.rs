@@ -1662,7 +1662,7 @@ mod tests {
     #[test]
     fn test_metric_types() {
         // Test that all metric types are available
-        let metric_types = vec![
+        let metric_types = [
             MetricType::SuccessRate,
             MetricType::ResponseTime,
             MetricType::QualityScore,
@@ -1681,7 +1681,7 @@ mod tests {
     #[test]
     fn test_feedback_types() {
         // Test that all feedback types are available
-        let feedback_types = vec![
+        let feedback_types = [
             FeedbackType::AutomaticMetric,
             FeedbackType::UserRating,
             FeedbackType::PeerReview,
@@ -1700,7 +1700,7 @@ mod tests {
     #[test]
     fn test_test_recommendations() {
         // Test that all recommendation types are available
-        let recommendations = vec![
+        let recommendations = [
             TestRecommendation::ContinueTest,
             TestRecommendation::AdoptPromptA,
             TestRecommendation::AdoptPromptB,

@@ -410,7 +410,7 @@ impl AgentRepository {
             .await
             .map_err(Error::Database)?;
 
-        Ok(row.count.into())
+        Ok(row.count as i64)
     }
 
     /// Count agents by status
@@ -428,7 +428,7 @@ impl AgentRepository {
         .await
         .map_err(Error::Database)?;
 
-        Ok(row.count.into())
+        Ok(row.count as i64)
     }
 
     /// Check if agent exists
@@ -441,10 +441,11 @@ impl AgentRepository {
             .await
             .map_err(Error::Database)?;
 
-        Ok(row.count > 0)
+        Ok(row.count as i64 > 0)
     }
 
     /// Helper method to parse agent from database fields
+    #[allow(clippy::too_many_arguments)]
     fn parse_agent_from_row(
         &self,
         id: &str,

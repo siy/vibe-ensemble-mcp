@@ -10,7 +10,12 @@ use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use std::{collections::HashMap, sync::Arc};
 use uuid::Uuid;
-use vibe_ensemble_core::{agent::Agent, issue::{Issue, IssuePriority, IssueStatus}, knowledge::KnowledgeEntry, message::Message};
+use vibe_ensemble_core::{
+    agent::Agent,
+    issue::{Issue, IssuePriority, IssueStatus},
+    knowledge::KnowledgeEntry,
+    message::Message,
+};
 use vibe_ensemble_storage::StorageManager;
 
 /// Health check endpoint
@@ -57,7 +62,7 @@ pub async fn agents_list(
     Query(query): Query<AgentQuery>,
 ) -> Result<Json<Value>> {
     let agents = storage.agents().list().await?;
-    
+
     // Apply basic filtering
     let filtered_agents: Vec<Agent> = agents
         .into_iter()
@@ -132,7 +137,7 @@ pub async fn issues_list(
     Query(query): Query<IssueQuery>,
 ) -> Result<Json<Value>> {
     let issues = storage.issues().list().await?;
-    
+
     // Apply basic filtering
     let filtered_issues: Vec<Issue> = issues
         .into_iter()
@@ -184,20 +189,19 @@ pub async fn issue_create(
 
     let mut issue = Issue::new(request.title.clone(), request.description, priority)?;
     issue.assigned_agent_id = request.assigned_agent_id;
-    
+
     storage.issues().create(&issue).await?;
 
     // Broadcast to WebSocket clients
-    let _ = ws_manager.broadcast_issue_created(
-        issue.id,
-        request.title,
-        format!("{:?}", priority),
-    );
+    let _ = ws_manager.broadcast_issue_created(issue.id, request.title, format!("{:?}", priority));
 
-    Ok((StatusCode::CREATED, Json(json!({
-        "issue": issue,
-        "timestamp": chrono::Utc::now(),
-    }))))
+    Ok((
+        StatusCode::CREATED,
+        Json(json!({
+            "issue": issue,
+            "timestamp": chrono::Utc::now(),
+        })),
+    ))
 }
 
 /// Get specific issue details
@@ -246,10 +250,7 @@ pub async fn issue_update(
     storage.issues().update(&issue).await?;
 
     // Broadcast to WebSocket clients
-    let _ = ws_manager.broadcast_issue_status(
-        issue.id,
-        format!("{:?}", issue.status),
-    );
+    let _ = ws_manager.broadcast_issue_status(issue.id, format!("{:?}", issue.status));
 
     Ok(Json(json!({
         "issue": issue,
@@ -302,7 +303,7 @@ pub async fn knowledge_list(
     Query(query): Query<KnowledgeQuery>,
 ) -> Result<Json<Value>> {
     let entries = storage.knowledge().list().await?;
-    
+
     // Apply basic filtering
     let filtered_entries: Vec<KnowledgeEntry> = entries
         .into_iter()
@@ -322,8 +323,11 @@ pub async fn knowledge_list(
         })
         .filter(|entry| {
             if let Some(search) = &query.search {
-                entry.title.to_lowercase().contains(&search.to_lowercase()) ||
-                entry.content.to_lowercase().contains(&search.to_lowercase())
+                entry.title.to_lowercase().contains(&search.to_lowercase())
+                    || entry
+                        .content
+                        .to_lowercase()
+                        .contains(&search.to_lowercase())
             } else {
                 true
             }
@@ -376,7 +380,7 @@ pub async fn messages_list(
     Query(query): Query<MessageQuery>,
 ) -> Result<Json<Value>> {
     let messages = storage.messages().list().await?;
-    
+
     // Apply basic filtering
     let filtered_messages: Vec<Message> = messages
         .into_iter()
@@ -389,7 +393,11 @@ pub async fn messages_list(
         })
         .filter(|message| {
             if let Some(to_agent) = &query.to_agent {
-                message.to_agent.as_ref().map(|to| to == to_agent).unwrap_or(false)
+                message
+                    .to_agent
+                    .as_ref()
+                    .map(|to| to == to_agent)
+                    .unwrap_or(false)
             } else {
                 true
             }

@@ -14,7 +14,7 @@ use std::collections::HashMap;
 use std::sync::Arc;
 use uuid::Uuid;
 use vibe_ensemble_security::{
-    AuthService, CreateAgentTokenRequest, AgentToken, Permission, SecurityError, User,
+    AgentToken, AuthService, CreateAgentTokenRequest, Permission, SecurityError, User,
 };
 use vibe_ensemble_storage::StorageManager;
 
@@ -69,9 +69,11 @@ impl TokenHandlers {
     ) -> Result<Html<String>> {
         // Get all agents for the dropdown
         let agents = handlers.storage.agents().list().await?;
-        
+
         // Get tokens (filtered by agent if specified)
-        let tokens = handlers.list_tokens_internal(query.agent_id.clone(), query.active_only).await?;
+        let tokens = handlers
+            .list_tokens_internal(query.agent_id.clone(), query.active_only)
+            .await?;
 
         let html = format!(
             r#"
@@ -372,13 +374,14 @@ impl TokenHandlers {
 </html>
             "#,
             // Agent options for create form
-            agents.iter()
+            agents
+                .iter()
                 .map(|agent| format!(r#"<option value="{}">{}</option>"#, agent.id, agent.name))
                 .collect::<Vec<_>>()
                 .join(""),
-            
             // Permission checkboxes
-            get_all_permissions().iter()
+            get_all_permissions()
+                .iter()
                 .map(|perm| format!(
                     r#"<div class="permission-item">
                         <input type="checkbox" id="perm_{}" name="permissions" value="{:?}">
@@ -388,21 +391,27 @@ impl TokenHandlers {
                 ))
                 .collect::<Vec<_>>()
                 .join(""),
-            
             // Agent options for filter
-            agents.iter()
+            agents
+                .iter()
                 .map(|agent| format!(
-                    r#"<option value="{}" {}>{}</option>"#, 
+                    r#"<option value="{}" {}>{}</option>"#,
                     agent.id,
-                    if query.agent_id.as_ref() == Some(&agent.id.to_string()) { "selected" } else { "" },
+                    if query.agent_id.as_ref() == Some(&agent.id.to_string()) {
+                        "selected"
+                    } else {
+                        ""
+                    },
                     agent.name
                 ))
                 .collect::<Vec<_>>()
                 .join(""),
-            
             // Active only checkbox
-            if query.active_only.unwrap_or(false) { "checked" } else { "" },
-            
+            if query.active_only.unwrap_or(false) {
+                "checked"
+            } else {
+                ""
+            },
             // Tokens table
             if tokens.is_empty() {
                 r#"<div class="no-tokens">No tokens found.</div>"#.to_string()
@@ -431,7 +440,6 @@ impl TokenHandlers {
                                 .find(|a| a.id.to_string() == token.agent_id)
                                 .map(|a| a.name.as_str())
                                 .unwrap_or("Unknown");
-                            
                             let status = if !token.is_active {
                                 r#"<span class="status-badge status-inactive">Inactive</span>"#
                             } else if token.expires_at.map(|exp| exp < Utc::now()).unwrap_or(false) {
@@ -439,15 +447,12 @@ impl TokenHandlers {
                             } else {
                                 r#"<span class="status-badge status-active">Active</span>"#
                             };
-                            
                             let last_used = token.last_used_at
                                 .map(|dt| dt.format("%Y-%m-%d %H:%M").to_string())
                                 .unwrap_or_else(|| "Never".to_string());
-                            
                             let expires = token.expires_at
                                 .map(|dt| dt.format("%Y-%m-%d %H:%M").to_string())
                                 .unwrap_or_else(|| "Never".to_string());
-                            
                             format!(
                                 r#"
                                 <tr>
@@ -489,14 +494,20 @@ impl TokenHandlers {
         let current_user_id = "admin_user_001"; // This should come from auth
 
         // Validate agent exists
-        let agent = handlers.storage.agents()
-            .find_by_id(uuid::Uuid::parse_str(&request.agent_id)
-                .map_err(|_| Error::BadRequest("Invalid agent ID".to_string()))?)
+        let agent = handlers
+            .storage
+            .agents()
+            .find_by_id(
+                uuid::Uuid::parse_str(&request.agent_id)
+                    .map_err(|_| Error::BadRequest("Invalid agent ID".to_string()))?,
+            )
             .await?
             .ok_or_else(|| Error::NotFound("Agent not found".to_string()))?;
 
         // Parse permissions
-        let permissions: Vec<Permission> = request.permissions.into_iter()
+        let permissions: Vec<Permission> = request
+            .permissions
+            .into_iter()
             .filter_map(|p| match p {
                 Permission::ViewDashboard => Some(p),
                 Permission::ViewAgents => Some(p),
@@ -510,9 +521,13 @@ impl TokenHandlers {
             .collect();
 
         // Generate JWT token for the agent
-        let jwt_token = handlers.auth_service.jwt_manager()
-            .generate_agent_token(&request.agent_id, 
-                permissions.iter().map(|p| format!("{:?}", p)).collect())
+        let jwt_token = handlers
+            .auth_service
+            .jwt_manager()
+            .generate_agent_token(
+                &request.agent_id,
+                permissions.iter().map(|p| format!("{:?}", p)).collect(),
+            )
             .map_err(|e| Error::Internal(format!("Failed to generate token: {}", e)))?;
 
         // Hash the token for storage
@@ -541,14 +556,19 @@ impl TokenHandlers {
             expires_at,
             now,
             current_user_id
-        ).execute(handlers.storage.pool()).await
+        )
+        .execute(handlers.storage.pool())
+        .await
         .map_err(|e| Error::Database(e.to_string()))?;
 
         let response = TokenResponse {
             id: token_id,
             name: request.name,
             agent_id: request.agent_id,
-            permissions: permissions.into_iter().map(|p| format!("{:?}", p)).collect(),
+            permissions: permissions
+                .into_iter()
+                .map(|p| format!("{:?}", p))
+                .collect(),
             is_active: true,
             expires_at,
             last_used_at: None,
@@ -564,11 +584,13 @@ impl TokenHandlers {
         State(handlers): State<Arc<TokenHandlers>>,
         Form(form): Form<CreateTokenForm>,
     ) -> Result<Response> {
-        let expires_at = form.expires_days.map(|days| {
-            Utc::now() + chrono::Duration::days(days as i64)
-        });
+        let expires_at = form
+            .expires_days
+            .map(|days| Utc::now() + chrono::Duration::days(days as i64));
 
-        let permissions: Vec<Permission> = form.permissions.into_iter()
+        let permissions: Vec<Permission> = form
+            .permissions
+            .into_iter()
             .filter_map(|p| serde_json::from_str(&format!("\"{}\"", p)).ok())
             .collect();
 
@@ -619,12 +641,9 @@ impl TokenHandlers {
                     </body>
                     </html>
                     "#,
-                    token_response.name,
-                    token_response.agent_id,
-                    jwt_token,
-                    jwt_token
+                    token_response.name, token_response.agent_id, jwt_token, jwt_token
                 );
-                
+
                 Ok(Html(success_html).into_response())
             }
             Err(e) => {
@@ -638,8 +657,10 @@ impl TokenHandlers {
         State(handlers): State<Arc<TokenHandlers>>,
         Query(query): Query<TokenQuery>,
     ) -> Result<Json<Value>> {
-        let tokens = handlers.list_tokens_internal(query.agent_id, query.active_only).await?;
-        
+        let tokens = handlers
+            .list_tokens_internal(query.agent_id, query.active_only)
+            .await?;
+
         Ok(Json(json!({
             "tokens": tokens,
             "count": tokens.len(),
@@ -655,21 +676,34 @@ impl TokenHandlers {
         sqlx::query!(
             "UPDATE agent_tokens SET is_active = 0 WHERE id = ?",
             token_id
-        ).execute(handlers.storage.pool()).await
+        )
+        .execute(handlers.storage.pool())
+        .await
         .map_err(|e| Error::Database(e.to_string()))?;
 
         Ok(StatusCode::NO_CONTENT)
     }
 
     /// Internal helper to create token
-    async fn create_token_internal(&self, request: CreateAgentTokenRequest) -> Result<(TokenResponse, String)> {
+    async fn create_token_internal(
+        &self,
+        request: CreateAgentTokenRequest,
+    ) -> Result<(TokenResponse, String)> {
         // TODO: Get current user from authentication middleware
         let current_user_id = "admin_user_001";
 
         // Generate JWT token
-        let jwt_token = self.auth_service.jwt_manager()
-            .generate_agent_token(&request.agent_id, 
-                request.permissions.iter().map(|p| format!("{:?}", p)).collect())
+        let jwt_token = self
+            .auth_service
+            .jwt_manager()
+            .generate_agent_token(
+                &request.agent_id,
+                request
+                    .permissions
+                    .iter()
+                    .map(|p| format!("{:?}", p))
+                    .collect(),
+            )
             .map_err(|e| Error::Internal(format!("Failed to generate token: {}", e)))?;
 
         // Hash the token for storage
@@ -696,14 +730,20 @@ impl TokenHandlers {
             request.expires_at,
             now,
             current_user_id
-        ).execute(self.storage.pool()).await
+        )
+        .execute(self.storage.pool())
+        .await
         .map_err(|e| Error::Database(e.to_string()))?;
 
         let response = TokenResponse {
             id: token_id,
             name: request.name,
             agent_id: request.agent_id,
-            permissions: request.permissions.into_iter().map(|p| format!("{:?}", p)).collect(),
+            permissions: request
+                .permissions
+                .into_iter()
+                .map(|p| format!("{:?}", p))
+                .collect(),
             is_active: true,
             expires_at: request.expires_at,
             last_used_at: None,
@@ -715,7 +755,11 @@ impl TokenHandlers {
     }
 
     /// Internal helper to list tokens
-    async fn list_tokens_internal(&self, agent_id: Option<String>, active_only: Option<bool>) -> Result<Vec<TokenResponse>> {
+    async fn list_tokens_internal(
+        &self,
+        agent_id: Option<String>,
+        active_only: Option<bool>,
+    ) -> Result<Vec<TokenResponse>> {
         let mut query = "SELECT * FROM agent_tokens WHERE 1=1".to_string();
         let mut params = Vec::new();
 
@@ -735,19 +779,24 @@ impl TokenHandlers {
             query_builder = query_builder.bind(param);
         }
 
-        let rows = query_builder.fetch_all(self.storage.pool()).await
+        let rows = query_builder
+            .fetch_all(self.storage.pool())
+            .await
             .map_err(|e| Error::Database(e.to_string()))?;
 
         let mut tokens = Vec::new();
         for row in rows {
-            let permissions: Vec<Permission> = serde_json::from_str(row.get("permissions"))
-                .unwrap_or_default();
+            let permissions: Vec<Permission> =
+                serde_json::from_str(row.get("permissions")).unwrap_or_default();
 
             tokens.push(TokenResponse {
                 id: row.get("id"),
                 name: row.get("name"),
                 agent_id: row.get("agent_id"),
-                permissions: permissions.into_iter().map(|p| format!("{:?}", p)).collect(),
+                permissions: permissions
+                    .into_iter()
+                    .map(|p| format!("{:?}", p))
+                    .collect(),
                 is_active: row.get("is_active"),
                 expires_at: row.get("expires_at"),
                 last_used_at: row.get("last_used_at"),

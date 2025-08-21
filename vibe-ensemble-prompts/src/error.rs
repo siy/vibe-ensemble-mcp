@@ -23,6 +23,9 @@ pub enum Error {
     #[error("Prompt not found: {id}")]
     PromptNotFound { id: String },
 
+    #[error("Validation error: {message}")]
+    Validation { message: String },
+
     #[error("Serialization error: {0}")]
     Serialization(#[from] serde_json::Error),
 

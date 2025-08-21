@@ -18,6 +18,7 @@ vibe-ensemble-mcp = { path = "../vibe-ensemble-mcp" }
 vibe-ensemble-storage = { path = "../vibe-ensemble-storage" }
 vibe-ensemble-web = { path = "../vibe-ensemble-web" }
 vibe-ensemble-prompts = { path = "../vibe-ensemble-prompts" }
+vibe-ensemble-monitoring = { path = "../vibe-ensemble-monitoring" }
 tokio = { workspace = true }
 serde = { workspace = true }
 config = { workspace = true }

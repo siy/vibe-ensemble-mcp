@@ -9,6 +9,11 @@
 //! - Audit logging
 //! - Security middleware
 
+#![allow(unused_imports)]
+#![allow(unused_variables)]
+#![allow(dead_code)]
+#![allow(clippy::too_many_arguments)]
+
 pub mod audit;
 pub mod auth;
 pub mod crypto;
