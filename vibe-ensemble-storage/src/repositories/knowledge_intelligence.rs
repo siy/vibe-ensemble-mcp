@@ -584,7 +584,7 @@ mod tests {
 
     async fn create_test_agent(pool: &SqlitePool, name: &str) -> Uuid {
         let agent_repo = AgentRepository::new(pool.clone());
-        
+
         let metadata = ConnectionMetadata::builder()
             .endpoint("https://localhost:8080")
             .protocol_version("1.0")
