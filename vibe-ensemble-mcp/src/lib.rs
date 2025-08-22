@@ -97,6 +97,9 @@ pub mod transport;
 #[cfg(test)]
 mod integration_tests;
 
+#[cfg(test)]
+mod communication_tests;
+
 pub use error::{Error, Result};
 
 /// Re-export core types for convenience

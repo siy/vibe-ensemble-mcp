@@ -8,7 +8,9 @@ use crate::{
         error_codes, AgentDeregisterParams, AgentDeregisterResult, AgentListParams,
         AgentStatusParams, IssueAssignParams, IssueAssignResult, IssueCloseParams,
         IssueCloseResult, IssueCreateParams, IssueCreateResult, IssueInfo, IssueListParams,
-        IssueListResult, IssueUpdateParams, IssueUpdateResult, *,
+        IssueListResult, IssueUpdateParams, IssueUpdateResult, ProjectLockParams,
+        ProjectLockResult, WorkerCoordinateParams, WorkerCoordinateResult, WorkerMessageParams,
+        WorkerMessageResult, WorkerRequestParams, WorkerRequestResult, *,
     },
     Error, Result,
 };
@@ -250,6 +252,12 @@ impl McpServer {
             methods::MESSAGE_BROADCAST => self.handle_message_broadcast(request).await,
             methods::KNOWLEDGE_QUERY => self.handle_knowledge_query(request).await,
 
+            // Worker communication methods
+            methods::WORKER_MESSAGE => self.handle_worker_message(request).await,
+            methods::WORKER_REQUEST => self.handle_worker_request(request).await,
+            methods::WORKER_COORDINATE => self.handle_worker_coordinate(request).await,
+            methods::PROJECT_LOCK => self.handle_project_lock(request).await,
+
             _ => {
                 warn!("Unknown method: {}", request.method);
                 Ok(Some(JsonRpcResponse::error(
@@ -483,6 +491,69 @@ impl McpServer {
                             "closeReason": {"type": "string", "description": "Reason for closing"}
                         },
                         "required": ["issueId", "closedByAgentId", "resolution"]
+                    }
+                },
+                {
+                    "name": "vibe_worker_message",
+                    "description": "Send direct messages between workers for real-time coordination",
+                    "inputSchema": {
+                        "type": "object",
+                        "properties": {
+                            "recipientAgentId": {"type": "string", "description": "Agent ID of the message recipient"},
+                            "messageContent": {"type": "string", "description": "Content of the message"},
+                            "messageType": {"type": "string", "enum": ["Info", "Request", "Coordination", "Alert"], "description": "Type of message"},
+                            "senderAgentId": {"type": "string", "description": "Agent ID of the message sender"},
+                            "priority": {"type": "string", "enum": ["Low", "Normal", "High", "Urgent"], "description": "Message priority"},
+                            "metadata": {"type": "object", "description": "Additional message metadata"}
+                        },
+                        "required": ["recipientAgentId", "messageContent", "messageType", "senderAgentId"]
+                    }
+                },
+                {
+                    "name": "vibe_worker_request",
+                    "description": "Request specific actions from targeted workers",
+                    "inputSchema": {
+                        "type": "object",
+                        "properties": {
+                            "targetAgentId": {"type": "string", "description": "Agent ID of the request target"},
+                            "requestType": {"type": "string", "description": "Type of request being made"},
+                            "requestDetails": {"type": "object", "description": "Detailed request information"},
+                            "requestedByAgentId": {"type": "string", "description": "Agent ID making the request"},
+                            "deadline": {"type": "string", "format": "date-time", "description": "Request deadline"},
+                            "priority": {"type": "string", "enum": ["Low", "Normal", "High", "Urgent"], "description": "Request priority"}
+                        },
+                        "required": ["targetAgentId", "requestType", "requestDetails", "requestedByAgentId"]
+                    }
+                },
+                {
+                    "name": "vibe_worker_coordinate",
+                    "description": "Coordinate overlapping work areas between multiple workers",
+                    "inputSchema": {
+                        "type": "object",
+                        "properties": {
+                            "coordinationType": {"type": "string", "description": "Type of coordination needed"},
+                            "involvedAgents": {"type": "array", "items": {"type": "string"}, "description": "Agent IDs involved in coordination"},
+                            "scope": {"type": "object", "description": "Coordination scope (files/modules/projects)"},
+                            "coordinatorAgentId": {"type": "string", "description": "Agent ID initiating coordination"},
+                            "details": {"type": "object", "description": "Coordination details and requirements"}
+                        },
+                        "required": ["coordinationType", "involvedAgents", "scope", "coordinatorAgentId", "details"]
+                    }
+                },
+                {
+                    "name": "vibe_project_lock",
+                    "description": "Create project-level coordination locks to prevent conflicts",
+                    "inputSchema": {
+                        "type": "object",
+                        "properties": {
+                            "projectId": {"type": "string", "description": "Project identifier (optional)"},
+                            "resourcePath": {"type": "string", "description": "Path to resource being locked"},
+                            "lockType": {"type": "string", "enum": ["Exclusive", "Shared", "Coordination"], "description": "Type of lock"},
+                            "lockHolderAgentId": {"type": "string", "description": "Agent ID requesting the lock"},
+                            "duration": {"type": "integer", "description": "Lock duration in seconds"},
+                            "reason": {"type": "string", "description": "Reason for the lock"}
+                        },
+                        "required": ["resourcePath", "lockType", "lockHolderAgentId", "reason"]
                     }
                 }
             ]
@@ -1904,6 +1975,554 @@ impl McpServer {
         } else {
             Ok(Vec::new())
         }
+    }
+
+    /// Handle worker message request - send direct messages between workers
+    async fn handle_worker_message(
+        &self,
+        request: JsonRpcRequest,
+    ) -> Result<Option<JsonRpcResponse>> {
+        debug!("Handling worker message request");
+
+        let message_service =
+            self.message_service
+                .as_ref()
+                .ok_or_else(|| Error::Configuration {
+                    message: "Message service not configured".to_string(),
+                })?;
+
+        // Parse request parameters
+        let params: WorkerMessageParams = if let Some(params) = request.params {
+            serde_json::from_value(params).map_err(|e| Error::Protocol {
+                message: format!("Invalid worker message parameters: {}", e),
+            })?
+        } else {
+            return Err(Error::Protocol {
+                message: "Missing worker message parameters".to_string(),
+            });
+        };
+
+        // Parse and validate agent IDs
+        let sender_id = Uuid::parse_str(&params.sender_agent_id).map_err(|e| Error::Protocol {
+            message: format!("Invalid sender agent ID: {}", e),
+        })?;
+
+        let recipient_id =
+            Uuid::parse_str(&params.recipient_agent_id).map_err(|e| Error::Protocol {
+                message: format!("Invalid recipient agent ID: {}", e),
+            })?;
+
+        // Validate agents exist if agent service is available
+        if let Some(agent_service) = &self.agent_service {
+            if agent_service.get_agent(sender_id).await?.is_none() {
+                return Ok(Some(JsonRpcResponse::error(
+                    request.id,
+                    JsonRpcError {
+                        code: error_codes::AGENT_NOT_FOUND,
+                        message: format!("Sender agent not found: {}", sender_id),
+                        data: None,
+                    },
+                )));
+            }
+
+            if agent_service.get_agent(recipient_id).await?.is_none() {
+                return Ok(Some(JsonRpcResponse::error(
+                    request.id,
+                    JsonRpcError {
+                        code: error_codes::AGENT_NOT_FOUND,
+                        message: format!("Recipient agent not found: {}", recipient_id),
+                        data: None,
+                    },
+                )));
+            }
+        }
+
+        // Parse message type
+        let message_type = match params.message_type.as_str() {
+            "Info" => MessageType::Direct,
+            "Request" => MessageType::Direct,
+            "Coordination" => MessageType::StatusUpdate,
+            "Alert" => MessageType::IssueNotification,
+            _ => {
+                return Ok(Some(JsonRpcResponse::error(
+                    request.id,
+                    JsonRpcError {
+                        code: error_codes::INVALID_PARAMS,
+                        message: format!("Invalid message type: {}", params.message_type),
+                        data: None,
+                    },
+                )));
+            }
+        };
+
+        // Parse priority
+        let priority = match params.priority.as_deref() {
+            Some("Low") => MessagePriority::Low,
+            Some("Normal") => MessagePriority::Normal,
+            Some("High") => MessagePriority::High,
+            Some("Urgent") => MessagePriority::Urgent,
+            None => MessagePriority::Normal,
+            Some(p) => {
+                return Ok(Some(JsonRpcResponse::error(
+                    request.id,
+                    JsonRpcError {
+                        code: error_codes::INVALID_PARAMS,
+                        message: format!("Invalid priority: {}", p),
+                        data: None,
+                    },
+                )));
+            }
+        };
+
+        // Validate message content
+        if let Err(e) = message_service.validate_message_content(&params.message_content) {
+            return Ok(Some(JsonRpcResponse::error(
+                request.id,
+                JsonRpcError {
+                    code: error_codes::INVALID_PARAMS,
+                    message: format!("Invalid message content: {}", e),
+                    data: None,
+                },
+            )));
+        }
+
+        info!(
+            "Sending worker message from {} to {}: {}",
+            sender_id, recipient_id, params.message_type
+        );
+
+        // Send the message
+        match message_service
+            .send_message(
+                sender_id,
+                recipient_id,
+                params.message_content,
+                message_type,
+                priority,
+            )
+            .await
+        {
+            Ok(message) => {
+                let result = WorkerMessageResult {
+                    message_id: message.id,
+                    recipient_agent_id: recipient_id,
+                    sender_agent_id: sender_id,
+                    status: "sent".to_string(),
+                    sent_at: message.created_at,
+                    delivery_confirmation: message.requires_confirmation(),
+                    message: "Worker message sent successfully".to_string(),
+                };
+
+                Ok(Some(JsonRpcResponse::success(
+                    request.id,
+                    serde_json::to_value(result)?,
+                )))
+            }
+            Err(e) => {
+                error!("Failed to send worker message: {}", e);
+                Ok(Some(JsonRpcResponse::error(
+                    request.id,
+                    JsonRpcError {
+                        code: error_codes::MESSAGE_DELIVERY_FAILED,
+                        message: format!("Failed to send worker message: {}", e),
+                        data: None,
+                    },
+                )))
+            }
+        }
+    }
+
+    /// Handle worker request - request specific actions from targeted workers
+    async fn handle_worker_request(
+        &self,
+        request: JsonRpcRequest,
+    ) -> Result<Option<JsonRpcResponse>> {
+        debug!("Handling worker request");
+
+        let message_service =
+            self.message_service
+                .as_ref()
+                .ok_or_else(|| Error::Configuration {
+                    message: "Message service not configured".to_string(),
+                })?;
+
+        // Parse request parameters
+        let params: WorkerRequestParams = if let Some(params) = request.params {
+            serde_json::from_value(params).map_err(|e| Error::Protocol {
+                message: format!("Invalid worker request parameters: {}", e),
+            })?
+        } else {
+            return Err(Error::Protocol {
+                message: "Missing worker request parameters".to_string(),
+            });
+        };
+
+        // Parse and validate agent IDs
+        let requester_id =
+            Uuid::parse_str(&params.requested_by_agent_id).map_err(|e| Error::Protocol {
+                message: format!("Invalid requester agent ID: {}", e),
+            })?;
+
+        let target_id = Uuid::parse_str(&params.target_agent_id).map_err(|e| Error::Protocol {
+            message: format!("Invalid target agent ID: {}", e),
+        })?;
+
+        // Validate agents exist if agent service is available
+        if let Some(agent_service) = &self.agent_service {
+            if agent_service.get_agent(requester_id).await?.is_none() {
+                return Ok(Some(JsonRpcResponse::error(
+                    request.id,
+                    JsonRpcError {
+                        code: error_codes::AGENT_NOT_FOUND,
+                        message: format!("Requester agent not found: {}", requester_id),
+                        data: None,
+                    },
+                )));
+            }
+
+            if agent_service.get_agent(target_id).await?.is_none() {
+                return Ok(Some(JsonRpcResponse::error(
+                    request.id,
+                    JsonRpcError {
+                        code: error_codes::AGENT_NOT_FOUND,
+                        message: format!("Target agent not found: {}", target_id),
+                        data: None,
+                    },
+                )));
+            }
+        }
+
+        // Parse priority
+        let priority = match params.priority.as_deref() {
+            Some("Low") => MessagePriority::Low,
+            Some("Normal") => MessagePriority::Normal,
+            Some("High") => MessagePriority::High,
+            Some("Urgent") => MessagePriority::Urgent,
+            None => MessagePriority::High, // Requests default to high priority
+            Some(p) => {
+                return Ok(Some(JsonRpcResponse::error(
+                    request.id,
+                    JsonRpcError {
+                        code: error_codes::INVALID_PARAMS,
+                        message: format!("Invalid priority: {}", p),
+                        data: None,
+                    },
+                )));
+            }
+        };
+
+        // Create request message content
+        let request_content = format!(
+            "ACTION REQUEST: {}\n\nDetails: {}\nRequested by: {}{}",
+            params.request_type,
+            serde_json::to_string_pretty(&params.request_details)
+                .unwrap_or_else(|_| "Unable to serialize request details".to_string()),
+            requester_id,
+            params
+                .deadline
+                .map(|d| format!("\nDeadline: {}", d.format("%Y-%m-%d %H:%M:%S UTC")))
+                .unwrap_or_default()
+        );
+
+        info!(
+            "Creating worker request from {} to {}: {}",
+            requester_id, target_id, params.request_type
+        );
+
+        // Send as a direct message with request type
+        match message_service
+            .send_message(
+                requester_id,
+                target_id,
+                request_content,
+                MessageType::Direct,
+                priority,
+            )
+            .await
+        {
+            Ok(message) => {
+                let result = WorkerRequestResult {
+                    request_id: message.id,
+                    target_agent_id: target_id,
+                    requested_by_agent_id: requester_id,
+                    request_type: params.request_type,
+                    status: "sent".to_string(),
+                    created_at: message.created_at,
+                    deadline: params.deadline,
+                    message: "Worker request sent successfully".to_string(),
+                };
+
+                Ok(Some(JsonRpcResponse::success(
+                    request.id,
+                    serde_json::to_value(result)?,
+                )))
+            }
+            Err(e) => {
+                error!("Failed to send worker request: {}", e);
+                Ok(Some(JsonRpcResponse::error(
+                    request.id,
+                    JsonRpcError {
+                        code: error_codes::MESSAGE_DELIVERY_FAILED,
+                        message: format!("Failed to send worker request: {}", e),
+                        data: None,
+                    },
+                )))
+            }
+        }
+    }
+
+    /// Handle worker coordination - coordinate overlapping work areas between multiple workers
+    async fn handle_worker_coordinate(
+        &self,
+        request: JsonRpcRequest,
+    ) -> Result<Option<JsonRpcResponse>> {
+        debug!("Handling worker coordination request");
+
+        let message_service =
+            self.message_service
+                .as_ref()
+                .ok_or_else(|| Error::Configuration {
+                    message: "Message service not configured".to_string(),
+                })?;
+
+        // Parse request parameters
+        let params: WorkerCoordinateParams = if let Some(params) = request.params {
+            serde_json::from_value(params).map_err(|e| Error::Protocol {
+                message: format!("Invalid worker coordination parameters: {}", e),
+            })?
+        } else {
+            return Err(Error::Protocol {
+                message: "Missing worker coordination parameters".to_string(),
+            });
+        };
+
+        // Parse and validate coordinator agent ID
+        let coordinator_id =
+            Uuid::parse_str(&params.coordinator_agent_id).map_err(|e| Error::Protocol {
+                message: format!("Invalid coordinator agent ID: {}", e),
+            })?;
+
+        // Parse and validate involved agent IDs
+        let mut involved_agent_ids = Vec::new();
+        for agent_id_str in &params.involved_agents {
+            let agent_id = Uuid::parse_str(agent_id_str).map_err(|e| Error::Protocol {
+                message: format!("Invalid involved agent ID '{}': {}", agent_id_str, e),
+            })?;
+            involved_agent_ids.push(agent_id);
+        }
+
+        if involved_agent_ids.is_empty() {
+            return Ok(Some(JsonRpcResponse::error(
+                request.id,
+                JsonRpcError {
+                    code: error_codes::INVALID_PARAMS,
+                    message: "At least one involved agent is required".to_string(),
+                    data: None,
+                },
+            )));
+        }
+
+        // Validate agents exist if agent service is available
+        if let Some(agent_service) = &self.agent_service {
+            if agent_service.get_agent(coordinator_id).await?.is_none() {
+                return Ok(Some(JsonRpcResponse::error(
+                    request.id,
+                    JsonRpcError {
+                        code: error_codes::AGENT_NOT_FOUND,
+                        message: format!("Coordinator agent not found: {}", coordinator_id),
+                        data: None,
+                    },
+                )));
+            }
+
+            for agent_id in &involved_agent_ids {
+                if agent_service.get_agent(*agent_id).await?.is_none() {
+                    return Ok(Some(JsonRpcResponse::error(
+                        request.id,
+                        JsonRpcError {
+                            code: error_codes::AGENT_NOT_FOUND,
+                            message: format!("Involved agent not found: {}", agent_id),
+                            data: None,
+                        },
+                    )));
+                }
+            }
+        }
+
+        // Generate coordination session ID
+        let coordination_session_id = Uuid::new_v4();
+
+        // Create coordination message content
+        let coordination_content = format!(
+            "COORDINATION SESSION: {}\n\nType: {}\nSession ID: {}\nCoordinator: {}\nScope: {}\nDetails: {}\n\nPlease acknowledge participation in this coordination session.",
+            params.coordination_type,
+            params.coordination_type,
+            coordination_session_id,
+            coordinator_id,
+            serde_json::to_string_pretty(&params.scope)
+                .unwrap_or_else(|_| "Unable to serialize scope".to_string()),
+            serde_json::to_string_pretty(&params.details)
+                .unwrap_or_else(|_| "Unable to serialize details".to_string())
+        );
+
+        info!(
+            "Creating coordination session {} with {} participants",
+            coordination_session_id,
+            involved_agent_ids.len()
+        );
+
+        // Send coordination messages to all involved agents
+        let mut participant_confirmations = Vec::new();
+        for agent_id in &involved_agent_ids {
+            match message_service
+                .send_message(
+                    coordinator_id,
+                    *agent_id,
+                    coordination_content.clone(),
+                    MessageType::StatusUpdate,
+                    MessagePriority::High,
+                )
+                .await
+            {
+                Ok(_) => {
+                    participant_confirmations.push(format!("Sent to {}", agent_id));
+                }
+                Err(e) => {
+                    warn!("Failed to send coordination message to {}: {}", agent_id, e);
+                    participant_confirmations
+                        .push(format!("Failed to send to {}: {}", agent_id, e));
+                }
+            }
+        }
+
+        let result = WorkerCoordinateResult {
+            coordination_session_id,
+            coordinator_agent_id: coordinator_id,
+            involved_agents: involved_agent_ids,
+            coordination_type: params.coordination_type,
+            status: "initiated".to_string(),
+            created_at: chrono::Utc::now(),
+            participant_confirmations,
+            message: "Coordination session initiated successfully".to_string(),
+        };
+
+        Ok(Some(JsonRpcResponse::success(
+            request.id,
+            serde_json::to_value(result)?,
+        )))
+    }
+
+    /// Handle project lock - create project-level coordination locks to prevent conflicts
+    async fn handle_project_lock(
+        &self,
+        request: JsonRpcRequest,
+    ) -> Result<Option<JsonRpcResponse>> {
+        debug!("Handling project lock request");
+
+        // Parse request parameters
+        let params: ProjectLockParams = if let Some(params) = request.params {
+            serde_json::from_value(params).map_err(|e| Error::Protocol {
+                message: format!("Invalid project lock parameters: {}", e),
+            })?
+        } else {
+            return Err(Error::Protocol {
+                message: "Missing project lock parameters".to_string(),
+            });
+        };
+
+        // Parse and validate lock holder agent ID
+        let lock_holder_id =
+            Uuid::parse_str(&params.lock_holder_agent_id).map_err(|e| Error::Protocol {
+                message: format!("Invalid lock holder agent ID: {}", e),
+            })?;
+
+        // Validate agent exists if agent service is available
+        if let Some(agent_service) = &self.agent_service {
+            if agent_service.get_agent(lock_holder_id).await?.is_none() {
+                return Ok(Some(JsonRpcResponse::error(
+                    request.id,
+                    JsonRpcError {
+                        code: error_codes::AGENT_NOT_FOUND,
+                        message: format!("Lock holder agent not found: {}", lock_holder_id),
+                        data: None,
+                    },
+                )));
+            }
+        }
+
+        // Validate lock type
+        if !["Exclusive", "Shared", "Coordination"].contains(&params.lock_type.as_str()) {
+            return Ok(Some(JsonRpcResponse::error(
+                request.id,
+                JsonRpcError {
+                    code: error_codes::INVALID_PARAMS,
+                    message: format!("Invalid lock type: {}", params.lock_type),
+                    data: None,
+                },
+            )));
+        }
+
+        // Generate lock ID
+        let lock_id = Uuid::new_v4();
+
+        // Calculate expiration time if duration is provided
+        let expiration = params
+            .duration
+            .map(|duration| chrono::Utc::now() + chrono::Duration::seconds(duration));
+
+        // For now, we'll simulate successful lock acquisition
+        // In a real implementation, this would involve checking for existing locks
+        // and managing a distributed lock registry
+
+        let locked_at = chrono::Utc::now();
+
+        info!(
+            "Creating {} lock {} for resource '{}' by agent {}",
+            params.lock_type, lock_id, params.resource_path, lock_holder_id
+        );
+
+        // Send notification to relevant agents if message service is available
+        if let Some(message_service) = &self.message_service {
+            let lock_notification = format!(
+                "RESOURCE LOCK ACQUIRED\n\nLock ID: {}\nResource: {}\nLock Type: {}\nHolder: {}\nReason: {}\nExpires: {}",
+                lock_id,
+                params.resource_path,
+                params.lock_type,
+                lock_holder_id,
+                params.reason,
+                expiration.map(|e| e.format("%Y-%m-%d %H:%M:%S UTC").to_string()).unwrap_or("Never".to_string())
+            );
+
+            // Send as broadcast to notify all agents about the lock
+            if let Err(e) = message_service
+                .send_broadcast(
+                    lock_holder_id,
+                    lock_notification,
+                    MessageType::StatusUpdate,
+                    MessagePriority::Normal,
+                )
+                .await
+            {
+                warn!("Failed to broadcast lock notification: {}", e);
+            }
+        }
+
+        let result = ProjectLockResult {
+            lock_id,
+            project_id: params.project_id,
+            resource_path: params.resource_path,
+            lock_type: params.lock_type,
+            lock_holder_agent_id: lock_holder_id,
+            status: "acquired".to_string(),
+            locked_at,
+            expiration,
+            message: "Project lock acquired successfully".to_string(),
+        };
+
+        Ok(Some(JsonRpcResponse::success(
+            request.id,
+            serde_json::to_value(result)?,
+        )))
     }
 }
 

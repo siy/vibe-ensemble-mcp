@@ -85,6 +85,12 @@ pub mod methods {
     pub const MESSAGE_BROADCAST: &str = "vibe/message/broadcast";
     pub const KNOWLEDGE_QUERY: &str = "vibe/knowledge/query";
     pub const KNOWLEDGE_SUBMIT: &str = "vibe/knowledge/submit";
+
+    // Worker communication methods
+    pub const WORKER_MESSAGE: &str = "vibe/worker/message";
+    pub const WORKER_REQUEST: &str = "vibe/worker/request";
+    pub const WORKER_COORDINATE: &str = "vibe/worker/coordinate";
+    pub const PROJECT_LOCK: &str = "vibe/project/lock";
 }
 
 /// MCP initialization parameters
@@ -513,4 +519,144 @@ pub mod error_codes {
     pub const KNOWLEDGE_ACCESS_DENIED: i32 = -32003;
     /// Transport error
     pub const TRANSPORT_ERROR: i32 = -32004;
+    /// Message delivery failed
+    pub const MESSAGE_DELIVERY_FAILED: i32 = -32005;
+    /// Resource lock conflict
+    pub const RESOURCE_LOCK_CONFLICT: i32 = -32006;
+    /// Coordination session failed
+    pub const COORDINATION_FAILED: i32 = -32007;
+}
+
+// Worker Communication MCP tool parameters and results
+
+/// Worker message parameters
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct WorkerMessageParams {
+    #[serde(rename = "recipientAgentId")]
+    pub recipient_agent_id: String,
+    #[serde(rename = "messageContent")]
+    pub message_content: String,
+    #[serde(rename = "messageType")]
+    pub message_type: String,
+    #[serde(rename = "senderAgentId")]
+    pub sender_agent_id: String,
+    pub priority: Option<String>,
+    pub metadata: Option<serde_json::Value>,
+}
+
+/// Worker message result
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct WorkerMessageResult {
+    #[serde(rename = "messageId")]
+    pub message_id: Uuid,
+    #[serde(rename = "recipientAgentId")]
+    pub recipient_agent_id: Uuid,
+    #[serde(rename = "senderAgentId")]
+    pub sender_agent_id: Uuid,
+    pub status: String,
+    #[serde(rename = "sentAt")]
+    pub sent_at: chrono::DateTime<chrono::Utc>,
+    #[serde(rename = "deliveryConfirmation")]
+    pub delivery_confirmation: bool,
+    pub message: String,
+}
+
+/// Worker request parameters
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct WorkerRequestParams {
+    #[serde(rename = "targetAgentId")]
+    pub target_agent_id: String,
+    #[serde(rename = "requestType")]
+    pub request_type: String,
+    #[serde(rename = "requestDetails")]
+    pub request_details: serde_json::Value,
+    #[serde(rename = "requestedByAgentId")]
+    pub requested_by_agent_id: String,
+    pub deadline: Option<chrono::DateTime<chrono::Utc>>,
+    pub priority: Option<String>,
+}
+
+/// Worker request result
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct WorkerRequestResult {
+    #[serde(rename = "requestId")]
+    pub request_id: Uuid,
+    #[serde(rename = "targetAgentId")]
+    pub target_agent_id: Uuid,
+    #[serde(rename = "requestedByAgentId")]
+    pub requested_by_agent_id: Uuid,
+    #[serde(rename = "requestType")]
+    pub request_type: String,
+    pub status: String,
+    #[serde(rename = "createdAt")]
+    pub created_at: chrono::DateTime<chrono::Utc>,
+    pub deadline: Option<chrono::DateTime<chrono::Utc>>,
+    pub message: String,
+}
+
+/// Worker coordination parameters
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct WorkerCoordinateParams {
+    #[serde(rename = "coordinationType")]
+    pub coordination_type: String,
+    #[serde(rename = "involvedAgents")]
+    pub involved_agents: Vec<String>,
+    pub scope: serde_json::Value, // files/modules/projects
+    #[serde(rename = "coordinatorAgentId")]
+    pub coordinator_agent_id: String,
+    pub details: serde_json::Value,
+}
+
+/// Worker coordination result
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct WorkerCoordinateResult {
+    #[serde(rename = "coordinationSessionId")]
+    pub coordination_session_id: Uuid,
+    #[serde(rename = "coordinatorAgentId")]
+    pub coordinator_agent_id: Uuid,
+    #[serde(rename = "involvedAgents")]
+    pub involved_agents: Vec<Uuid>,
+    #[serde(rename = "coordinationType")]
+    pub coordination_type: String,
+    pub status: String,
+    #[serde(rename = "createdAt")]
+    pub created_at: chrono::DateTime<chrono::Utc>,
+    #[serde(rename = "participantConfirmations")]
+    pub participant_confirmations: Vec<String>,
+    pub message: String,
+}
+
+/// Project lock parameters
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ProjectLockParams {
+    #[serde(rename = "projectId")]
+    pub project_id: Option<String>,
+    #[serde(rename = "resourcePath")]
+    pub resource_path: String,
+    #[serde(rename = "lockType")]
+    pub lock_type: String, // Exclusive, Shared, Coordination
+    #[serde(rename = "lockHolderAgentId")]
+    pub lock_holder_agent_id: String,
+    pub duration: Option<i64>, // Duration in seconds
+    pub reason: String,
+}
+
+/// Project lock result
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ProjectLockResult {
+    #[serde(rename = "lockId")]
+    pub lock_id: Uuid,
+    #[serde(rename = "projectId")]
+    pub project_id: Option<String>,
+    #[serde(rename = "resourcePath")]
+    pub resource_path: String,
+    #[serde(rename = "lockType")]
+    pub lock_type: String,
+    #[serde(rename = "lockHolderAgentId")]
+    pub lock_holder_agent_id: Uuid,
+    pub status: String,
+    #[serde(rename = "lockedAt")]
+    pub locked_at: chrono::DateTime<chrono::Utc>,
+    pub expiration: Option<chrono::DateTime<chrono::Utc>>,
+    pub message: String,
 }
