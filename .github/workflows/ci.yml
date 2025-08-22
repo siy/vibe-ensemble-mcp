@@ -45,7 +45,7 @@ jobs:
       
       - name: Run security audit
         run: |
-          cargo install cargo-audit --locked
+          cargo install cargo-audit --locked --force
           cargo audit
       
       - name: Run tests
