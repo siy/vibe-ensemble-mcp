@@ -323,7 +323,9 @@ impl McpServer {
             methods::MERGE_COORDINATE => self.handle_merge_coordinate(request).await,
 
             // Issue #53: Knowledge-Driven Coordination methods
-            methods::KNOWLEDGE_QUERY_COORDINATION => self.handle_knowledge_query_coordination(request).await,
+            methods::KNOWLEDGE_QUERY_COORDINATION => {
+                self.handle_knowledge_query_coordination(request).await
+            }
             methods::PATTERN_SUGGEST => self.handle_pattern_suggest(request).await,
             methods::GUIDELINE_ENFORCE => self.handle_guideline_enforce(request).await,
             methods::LEARNING_CAPTURE => self.handle_learning_capture(request).await,

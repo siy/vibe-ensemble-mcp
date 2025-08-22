@@ -214,7 +214,10 @@ mod tests {
                 }
             }
             Err(e) => {
-                eprintln!("Unexpected error in test_pattern_suggest_basic_functionality: {:?}", e);
+                eprintln!(
+                    "Unexpected error in test_pattern_suggest_basic_functionality: {:?}",
+                    e
+                );
                 panic!("Request should not fail at transport level");
             }
         }
@@ -327,7 +330,10 @@ mod tests {
             Err(e) => {
                 // The test expects the request to be handled and return an error response,
                 // not fail at the transport level. This suggests a fundamental issue.
-                eprintln!("Unexpected error in test_invalid_agent_id_handling: {:?}", e);
+                eprintln!(
+                    "Unexpected error in test_invalid_agent_id_handling: {:?}",
+                    e
+                );
                 panic!("Request should not fail at transport level");
             }
         }
