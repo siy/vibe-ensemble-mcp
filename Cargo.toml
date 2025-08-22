@@ -38,10 +38,6 @@ chrono = { version = "0.4", features = ["serde"] }
 
 # Logging and observability
 tracing = "0.1"
-tracing-subscriber = { version = "0.3", features = ["env-filter", "json"] }
-
-# Configuration
-config = "0.14"
 
 # Error handling
 anyhow = "1.0"
@@ -49,17 +45,7 @@ thiserror = "1.0"
 
 # Database
 sqlx = { version = "0.8", default-features = false, features = ["runtime-tokio-rustls", "sqlite", "postgres", "chrono", "uuid", "macros", "migrate"] }
-
-# Web framework
-axum = { version = "0.7", features = ["ws", "tokio"] }
-tower = "0.4"
-tower-http = { version = "0.5", features = ["cors", "trace"] }
-
-# Templates
-askama = { version = "0.12", features = ["with-axum"] }
-
-# MCP protocol - Official Rust SDK
-rmcp = { version = "0.2.0", features = ["server"] }
+handlebars = "4.5"
 
 # WebSocket support
 tokio-tungstenite = "0.21"
@@ -68,36 +54,11 @@ futures-util = "0.3"
 # Regex and random utilities
 regex = "1.10"
 rand = "0.8"
-
-# Security and authentication
-jsonwebtoken = "9.2"
-bcrypt = "0.15"
-tower-sessions = "0.12"
-tower-sessions-sqlx-store = "0.13"
-governor = "0.6"
-nonzero_ext = "0.3"
-headers = "0.4"
-
-# Encryption
-aes-gcm = "0.10"
-chacha20poly1305 = "0.10"
 base64 = "0.22"
 
 # Async traits
 async-trait = "0.1"
 futures = "0.3"
-
-# Testing framework dependencies
-proptest = "1.4"                    # Property-based testing
-criterion = { version = "0.5", features = ["html_reports"] }  # Benchmarking
-mockall = "0.12"                    # Mocking framework
-fake = { version = "2.9", features = ["derive", "chrono"] }  # Test data generation
-testcontainers = "0.15"             # Integration test containers
-tokio-test = "0.4"                  # Async test utilities
-wiremock = "0.6"                    # HTTP mocking
-assert_matches = "1.5"              # Enhanced assertion macros
-rstest = "0.18"                     # Parameterized tests
-tarpaulin = "0.27"                  # Code coverage
 
 # Performance optimization dependencies
 moka = { version = "0.12", features = ["future"] }  # Async caching
@@ -106,5 +67,4 @@ dashmap = "5.5"                     # Concurrent HashMap
 flate2 = "1.0"                      # Compression
 parking_lot = "0.12"                # High-performance synchronization
 rayon = "1.8"                       # Data parallelism
-arc-swap = "1.6"                    # Atomic Arc swapping
 num_cpus = "1.16"                   # CPU core detection

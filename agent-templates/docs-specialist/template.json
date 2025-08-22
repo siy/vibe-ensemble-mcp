@@ -1,0 +1,153 @@
+{
+  "name": "docs-specialist",
+  "description": "Documentation specialist agent for creating and maintaining comprehensive project documentation",
+  "version": "1.0.0", 
+  "author": "Vibe Ensemble Team",
+  "variables": [
+    {
+      "name": "project_name",
+      "description": "Name of the project to document",
+      "variable_type": "String",
+      "default_value": null,
+      "required": true,
+      "constraints": {
+        "min": 1,
+        "max": 100,
+        "pattern": "^[a-zA-Z0-9][a-zA-Z0-9_-]*$",
+        "allowed_values": null
+      }
+    },
+    {
+      "name": "project_description",
+      "description": "Brief description of what the project does",
+      "variable_type": "String",
+      "default_value": null,
+      "required": true,
+      "constraints": {
+        "min": 10,
+        "max": 500,
+        "pattern": null,
+        "allowed_values": null
+      }
+    },
+    {
+      "name": "framework",
+      "description": "Primary framework or technology stack",
+      "variable_type": "String", 
+      "default_value": "rust",
+      "required": false,
+      "constraints": {
+        "min": null,
+        "max": null,
+        "pattern": null,
+        "allowed_values": ["rust", "python", "nodejs", "react", "vue", "angular", "django", "flask", "express"]
+      }
+    },
+    {
+      "name": "target_audience",
+      "description": "Primary audience for the documentation",
+      "variable_type": "String",
+      "default_value": "developers",
+      "required": false,
+      "constraints": {
+        "min": null,
+        "max": null,
+        "pattern": null,
+        "allowed_values": ["developers", "end-users", "administrators", "mixed"]
+      }
+    },
+    {
+      "name": "documentation_style",
+      "description": "Preferred documentation style and format",
+      "variable_type": "String",
+      "default_value": "comprehensive",
+      "required": false,
+      "constraints": {
+        "min": null,
+        "max": null,
+        "pattern": null,
+        "allowed_values": ["minimal", "standard", "comprehensive", "tutorial-focused"]
+      }
+    },
+    {
+      "name": "include_examples",
+      "description": "Whether to include code examples in documentation",
+      "variable_type": "Boolean",
+      "default_value": true,
+      "required": false,
+      "constraints": null
+    }
+  ],
+  "capabilities": [
+    "documentation-writing",
+    "technical-writing", 
+    "api-documentation",
+    "tutorial-creation",
+    "readme-generation",
+    "architecture-documentation",
+    "user-guides",
+    "code-commenting"
+  ],
+  "tool_permissions": {
+    "allowed_tools": [
+      "Read",
+      "Write",
+      "Edit", 
+      "Glob",
+      "Grep",
+      "Bash"
+    ],
+    "denied_tools": [],
+    "file_access": {
+      "read": true,
+      "write": true,
+      "allowed_paths": [],
+      "denied_paths": [
+        "/etc/**",
+        "/usr/**", 
+        "/var/**",
+        "/home/*/.ssh/**",
+        "/Users/*/.ssh/**",
+        "/root/.ssh/**",
+        "C:\\Users\\*\\.ssh\\**"
+      ]
+    },
+    "network_access": {
+      "enabled": true,
+      "allowed_domains": [
+        "github.com",
+        "gitlab.com",
+        "docs.rs",
+        "readthedocs.org",
+        "gitbook.com"
+      ],
+      "denied_domains": []
+    },
+    "process_access": {
+      "enabled": true,
+      "allowed_commands": [
+        "git",
+        "cargo",
+        "npm",
+        "rustdoc",
+        "sphinx-build",
+        "mkdocs"
+      ],
+      "denied_commands": [
+        "rm",
+        "chmod", 
+        "sudo",
+        "su"
+      ]
+    }
+  },
+  "tags": [
+    "documentation",
+    "technical-writing",
+    "user-experience",
+    "knowledge-management"
+  ],
+  "min_claude_version": "1.0.0",
+  "created_at": "2024-08-20T16:00:00Z",
+  "updated_at": "2024-08-21T11:00:00Z"
+}

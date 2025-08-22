@@ -43,6 +43,21 @@ pub enum Error {
 
     #[error("Dependency error: {dependency} - {message}")]
     Dependency { dependency: String, message: String },
+
+    #[error("Execution error: {message}")]
+    Execution { message: String },
+
+    #[error("Parsing error: {message}")]
+    Parsing { message: String },
+
+    #[error("IO error: {message}")]
+    Io { message: String },
+
+    #[error("Rendering error: {message}")]
+    Rendering { message: String },
+
+    #[error("Resource already exists: {resource} with id {id}")]
+    AlreadyExists { resource: String, id: String },
 }
 
 impl From<serde_json::Error> for Error {
@@ -60,6 +75,14 @@ impl From<uuid::Error> for Error {
 impl From<anyhow::Error> for Error {
     fn from(err: anyhow::Error) -> Self {
         Error::Internal(err.to_string())
+    }
+}
+
+impl From<std::io::Error> for Error {
+    fn from(err: std::io::Error) -> Self {
+        Error::Io {
+            message: err.to_string(),
+        }
     }
 }
 
@@ -139,6 +162,42 @@ impl Error {
         }
     }
 
+    /// Create an execution error
+    pub fn execution<S: Into<String>>(message: S) -> Self {
+        Self::Execution {
+            message: message.into(),
+        }
+    }
+
+    /// Create a parsing error
+    pub fn parsing<S: Into<String>>(message: S) -> Self {
+        Self::Parsing {
+            message: message.into(),
+        }
+    }
+
+    /// Create an IO error
+    pub fn io<S: Into<String>>(message: S) -> Self {
+        Self::Io {
+            message: message.into(),
+        }
+    }
+
+    /// Create a rendering error
+    pub fn rendering<S: Into<String>>(message: S) -> Self {
+        Self::Rendering {
+            message: message.into(),
+        }
+    }
+
+    /// Create an already-exists error
+    pub fn already_exists<S1: Into<String>, S2: Into<String>>(resource: S1, id: S2) -> Self {
+        Self::AlreadyExists {
+            resource: resource.into(),
+            id: id.into(),
+        }
+    }
+
     /// Check if this error is a validation error
     pub fn is_validation(&self) -> bool {
         matches!(self, Error::Validation { .. })
@@ -177,6 +236,11 @@ impl Error {
             Error::Timeout { .. } => "timeout",
             Error::PermissionDenied { .. } => "permission_denied",
             Error::Dependency { .. } => "dependency",
+            Error::Execution { .. } => "execution",
+            Error::Parsing { .. } => "parsing",
+            Error::Io { .. } => "io",
+            Error::Rendering { .. } => "rendering",
+            Error::AlreadyExists { .. } => "already_exists",
         }
     }
 }
@@ -239,5 +303,17 @@ mod tests {
         assert!(display_str.contains("Constraint violation"));
         assert!(display_str.contains("unique_name"));
         assert!(display_str.contains("Name already exists"));
+    }
+
+    #[test]
+    fn test_new_error_categories() {
+        assert_eq!(Error::execution("boom").category(), "execution");
+        assert_eq!(Error::parsing("bad token").category(), "parsing");
+        assert_eq!(Error::io("disk full").category(), "io");
+        assert_eq!(Error::rendering("template err").category(), "rendering");
+        assert_eq!(
+            Error::already_exists("Agent", "123").category(),
+            "already_exists"
+        );
     }
 }

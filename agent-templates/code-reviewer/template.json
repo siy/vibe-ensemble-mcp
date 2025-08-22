@@ -1,0 +1,185 @@
+{
+  "name": "code-reviewer",
+  "description": "Specialized agent for comprehensive code review tasks with security and performance analysis",
+  "version": "1.2.0",
+  "author": "Vibe Ensemble Team",
+  "variables": [
+    {
+      "name": "project_name",
+      "description": "Name of the project being reviewed",
+      "variable_type": "String",
+      "default_value": null,
+      "required": true,
+      "constraints": {
+        "min": 1,
+        "max": 100,
+        "pattern": "^[a-zA-Z0-9][a-zA-Z0-9_-]*$",
+        "allowed_values": null
+      }
+    },
+    {
+      "name": "primary_language",
+      "description": "Primary programming language of the project",
+      "variable_type": "String",
+      "default_value": "rust",
+      "required": false,
+      "constraints": {
+        "min": null,
+        "max": null,
+        "pattern": null,
+        "allowed_values": ["rust", "python", "javascript", "typescript", "java", "go", "cpp", "csharp", "c", "sql", "php"]
+      }
+    },
+    {
+      "name": "review_depth",
+      "description": "Depth of code review analysis",
+      "variable_type": "String",
+      "default_value": "standard",
+      "required": false,
+      "constraints": {
+        "min": null,
+        "max": null,
+        "pattern": null,
+        "allowed_values": ["basic", "standard", "comprehensive", "security-focused"]
+      }
+    },
+    {
+      "name": "target_files",
+      "description": "Specific files or patterns to review (comma-separated)",
+      "variable_type": "String",
+      "default_value": "**/*",
+      "required": false,
+      "constraints": null
+    },
+    {
+      "name": "exclude_patterns",
+      "description": "File patterns to exclude from review (comma-separated)",
+      "variable_type": "String",
+      "default_value": "target/**,node_modules/**,*.test.*,*.spec.*,bin/**,obj/**,build/**,dist/**,out/**,.gradle/**,vendor/**,*.o,*.exe,*.dll,*.so,*.dylib",
+      "required": false,
+      "constraints": null
+    },
+    {
+      "name": "max_file_size_kb",
+      "description": "Maximum file size to review in kilobytes",
+      "variable_type": "Number",
+      "default_value": 500,
+      "required": false,
+      "constraints": {
+        "min": 1,
+        "max": 10000,
+        "pattern": null,
+        "allowed_values": null
+      }
+    }
+  ],
+  "capabilities": [
+    "code-review",
+    "static-analysis",
+    "security-analysis",
+    "performance-analysis",
+    "style-checking",
+    "documentation-review",
+    "dependency-analysis"
+  ],
+  "tool_permissions": {
+    "allowed_tools": [
+      "Read",
+      "Glob",
+      "Grep",
+      "Bash"
+    ],
+    "denied_tools": [
+      "Write",
+      "Edit"
+    ],
+    "file_access": {
+      "read": true,
+      "write": false,
+      "allowed_paths": [],
+      "denied_paths": [
+        "/etc/**",
+        "/usr/**",
+        "/var/**",
+        "/home/*/.ssh/**",
+        "/Users/*/.ssh/**",
+        "/root/.ssh/**",
+        "C:\\Users\\*\\.ssh\\**"
+      ]
+    },
+    "network_access": {
+      "enabled": true,
+      "allowed_domains": [
+        "github.com",
+        "gitlab.com",
+        "crates.io",
+        "npmjs.com",
+        "pypi.org",
+        "mvnrepository.com",
+        "nuget.org",
+        "pkg.go.dev",
+        "packagist.org"
+      ],
+      "denied_domains": []
+    },
+    "process_access": {
+      "enabled": true,
+      "allowed_commands": [
+        "git",
+        "cargo",
+        "rustc",
+        "clippy",
+        "npm",
+        "yarn",
+        "node",
+        "python",
+        "pip",
+        "pylint",
+        "black",
+        "mypy",
+        "bandit",
+        "eslint",
+        "prettier",
+        "tsc",
+        "java",
+        "javac",
+        "mvn",
+        "gradle",
+        "dotnet",
+        "go",
+        "golint",
+        "gofmt",
+        "gcc",
+        "g++",
+        "clang",
+        "clang++",
+        "clang-tidy",
+        "cppcheck",
+        "make",
+        "cmake",
+        "php",
+        "composer",
+        "phpcs",
+        "phpstan",
+        "sqlite3",
+        "mysql",
+        "psql"
+      ],
+      "denied_commands": [
+        "rm",
+        "chmod",
+        "sudo",
+        "su"
+      ]
+    }
+  },
+  "tags": [
+    "code-quality",
+    "security",
+    "review",
+    "analysis"
+  ],
+  "min_claude_version": "1.0.0",
+  "created_at": "2024-01-15T10:00:00Z",
+  "updated_at": "2024-08-21T11:00:00Z"
+}
