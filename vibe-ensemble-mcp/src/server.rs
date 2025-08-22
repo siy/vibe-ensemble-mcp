@@ -30,7 +30,7 @@ use vibe_ensemble_core::agent::{AgentStatus, AgentType, ConnectionMetadata};
 use vibe_ensemble_core::issue::{IssuePriority, IssueStatus};
 use vibe_ensemble_core::message::{MessagePriority, MessageType};
 use vibe_ensemble_storage::services::{
-    AgentService, CoordinationService, IssueService, MessageService,
+    AgentService, CoordinationService, IssueService, KnowledgeService, MessageService,
 };
 
 /// MCP server state and connection manager
@@ -48,6 +48,8 @@ pub struct McpServer {
     message_service: Option<Arc<MessageService>>,
     /// Coordination service for cross-project dependencies and worker coordination
     coordination_service: Option<Arc<CoordinationService>>,
+    /// Knowledge service for managing organizational knowledge and learning
+    knowledge_service: Option<Arc<KnowledgeService>>,
 }
 
 /// Client session information
@@ -70,6 +72,7 @@ impl McpServer {
             issue_service: None,
             message_service: None,
             coordination_service: None,
+            knowledge_service: None,
         }
     }
 
@@ -82,6 +85,7 @@ impl McpServer {
             issue_service: None,
             message_service: None,
             coordination_service: None,
+            knowledge_service: None,
         }
     }
 
@@ -94,6 +98,7 @@ impl McpServer {
             issue_service: None,
             message_service: None,
             coordination_service: None,
+            knowledge_service: None,
         }
     }
 
@@ -109,6 +114,7 @@ impl McpServer {
             issue_service: None,
             message_service: None,
             coordination_service: None,
+            knowledge_service: None,
         }
     }
 
@@ -121,6 +127,7 @@ impl McpServer {
             issue_service: Some(issue_service),
             message_service: None,
             coordination_service: None,
+            knowledge_service: None,
         }
     }
 
@@ -136,6 +143,7 @@ impl McpServer {
             issue_service: Some(issue_service),
             message_service: None,
             coordination_service: None,
+            knowledge_service: None,
         }
     }
 
@@ -152,6 +160,7 @@ impl McpServer {
             issue_service: Some(issue_service),
             message_service: None,
             coordination_service: None,
+            knowledge_service: None,
         }
     }
 
@@ -164,6 +173,7 @@ impl McpServer {
             issue_service: None,
             message_service: Some(message_service),
             coordination_service: None,
+            knowledge_service: None,
         }
     }
 
@@ -180,6 +190,7 @@ impl McpServer {
             issue_service: Some(issue_service),
             message_service: Some(message_service),
             coordination_service: None,
+            knowledge_service: None,
         }
     }
 
@@ -189,6 +200,7 @@ impl McpServer {
         agent_service: Arc<AgentService>,
         issue_service: Arc<IssueService>,
         message_service: Arc<MessageService>,
+        knowledge_service: Arc<KnowledgeService>,
     ) -> Self {
         Self {
             clients: Arc::new(RwLock::new(HashMap::new())),
@@ -197,6 +209,7 @@ impl McpServer {
             issue_service: Some(issue_service),
             message_service: Some(message_service),
             coordination_service: None,
+            knowledge_service: Some(knowledge_service),
         }
     }
 
@@ -209,6 +222,7 @@ impl McpServer {
             issue_service: None,
             message_service: None,
             coordination_service: Some(coordination_service),
+            knowledge_service: None,
         }
     }
 
@@ -226,6 +240,7 @@ impl McpServer {
             issue_service: Some(issue_service),
             message_service: Some(message_service),
             coordination_service: Some(coordination_service),
+            knowledge_service: None,
         }
     }
 
@@ -1417,10 +1432,81 @@ impl McpServer {
     ) -> Result<Option<JsonRpcResponse>> {
         debug!("Handling knowledge query request");
 
-        // TODO: Integrate with knowledge management system
+        let knowledge_service =
+            self.knowledge_service
+                .as_ref()
+                .ok_or_else(|| Error::Configuration {
+                    message: "Knowledge service not configured".to_string(),
+                })?;
+
+        // Parse request parameters
+        #[derive(serde::Deserialize)]
+        struct KnowledgeQueryParams {
+            query: Option<String>,
+            knowledge_types: Option<Vec<String>>,
+            tags: Option<Vec<String>>,
+            limit: Option<u32>,
+            agent_id: String,
+        }
+
+        let params: KnowledgeQueryParams = if let Some(params) = request.params {
+            serde_json::from_value(params).map_err(|e| Error::Protocol {
+                message: format!("Invalid knowledge query parameters: {}", e),
+            })?
+        } else {
+            return Err(Error::Protocol {
+                message: "Missing knowledge query parameters".to_string(),
+            });
+        };
+
+        // Parse agent ID
+        let agent_id = Uuid::parse_str(&params.agent_id).map_err(|e| Error::Protocol {
+            message: format!("Invalid agent ID format: {}", e),
+        })?;
+
+        // Build search criteria
+        let mut criteria = vibe_ensemble_core::knowledge::KnowledgeSearchCriteria::new();
+
+        if let Some(query) = params.query {
+            criteria = criteria.with_query(query);
+        }
+
+        if let Some(types) = params.knowledge_types {
+            use vibe_ensemble_core::knowledge::KnowledgeType;
+            let parsed_types: std::result::Result<Vec<KnowledgeType>, Error> = types
+                .iter()
+                .map(|t| match t.as_str() {
+                    "Pattern" => Ok(KnowledgeType::Pattern),
+                    "Practice" => Ok(KnowledgeType::Practice),
+                    "Guideline" => Ok(KnowledgeType::Guideline),
+                    "Solution" => Ok(KnowledgeType::Solution),
+                    "Reference" => Ok(KnowledgeType::Reference),
+                    _ => Err(Error::Protocol {
+                        message: format!("Invalid knowledge type: {}", t),
+                    }),
+                })
+                .collect();
+            criteria = criteria.with_types(parsed_types?);
+        }
+
+        if let Some(tags) = params.tags {
+            criteria = criteria.with_tags(tags);
+        }
+
+        if let Some(limit) = params.limit {
+            criteria = criteria.with_limit(limit);
+        }
+
+        // Perform search
+        let results = knowledge_service
+            .search_knowledge(&criteria, agent_id)
+            .await?;
+
+        debug!("Knowledge query returned {} results", results.len());
+
         let result = serde_json::json!({
-            "results": [],
-            "total": 0
+            "results": results,
+            "total": results.len()
         });
 
         Ok(Some(JsonRpcResponse::success(request.id, result)))
@@ -4286,6 +4372,42 @@ impl McpServer {
                 params.improvement_opportunities.len()
             ),
         };
+
+        // Persist learned knowledge to knowledge repository if service is available
+        if let Some(knowledge_service) = &self.knowledge_service {
+            for contribution in &result.knowledge_contributions {
+                if let (Some(title), Some(description)) = (
+                    contribution.get("title").and_then(|v| v.as_str()),
+                    contribution.get("description").and_then(|v| v.as_str()),
+                ) {
+                    let knowledge = vibe_ensemble_core::knowledge::Knowledge::builder()
+                        .title(format!("Learning: {}", title))
+                        .content(format!(
+                            "**Type**: {}\n\n**Description**: {}\n\n**Evidence**: {}\n\n**Confidence**: {}\n\n**Context**: Coordination Learning Session {}",
+                            contribution.get("contribution_type").and_then(|v| v.as_str()).unwrap_or("unknown"),
+                            description,
+                            contribution.get("evidence").map(|v| v.to_string()).unwrap_or_else(|| "No specific evidence provided".to_string()),
+                            contribution.get("confidence").and_then(|v| v.as_f64()).unwrap_or(0.0),
+                            learning_record_id
+                        ))
+                        .knowledge_type(vibe_ensemble_core::knowledge::KnowledgeType::Practice)
+                        .created_by(capturing_id)
+                        .access_level(vibe_ensemble_core::knowledge::AccessLevel::Team)
+                        .tag("coordination")
+                        .tag("learning")
+                        .tag("experience")
+                        .build();
+
+                    if let Ok(knowledge_entry) = knowledge {
+                        if let Err(e) = knowledge_service.create_knowledge(&knowledge_entry).await {
+                            warn!("Failed to persist learning knowledge: {}", e);
+                        } else {
+                            info!("Persisted learning knowledge: {}", knowledge_entry.title);
+                        }
+                    }
+                }
+            }
+        }
 
         Ok(Some(JsonRpcResponse::success(
             request.id,
