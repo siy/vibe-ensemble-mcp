@@ -289,7 +289,10 @@ impl TemplateVariable {
             });
         }
 
-        if !name.chars().all(|c| c.is_alphanumeric() || c == '_' || c == '-') {
+        if !name
+            .chars()
+            .all(|c| c.is_alphanumeric() || c == '_' || c == '-')
+        {
             return Err(Error::Validation {
                 message: "Template variable name can only contain alphanumeric characters, underscores, and hyphens".to_string(),
             });
@@ -582,7 +585,11 @@ mod tests {
             min: None,
             max: None,
             pattern: None,
-            allowed_values: Some(vec!["dev".to_string(), "staging".to_string(), "prod".to_string()]),
+            allowed_values: Some(vec![
+                "dev".to_string(),
+                "staging".to_string(),
+                "prod".to_string(),
+            ]),
         });
 
         // Valid value

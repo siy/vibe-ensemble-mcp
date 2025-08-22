@@ -144,19 +144,25 @@ impl WorkspaceManager {
         }
 
         // Create workspace directory structure
-        fs::create_dir_all(&workspace_path).await.map_err(|e| Error::Io {
-            message: format!("Failed to create workspace directory: {}", e),
-        })?;
+        fs::create_dir_all(&workspace_path)
+            .await
+            .map_err(|e| Error::Io {
+                message: format!("Failed to create workspace directory: {}", e),
+            })?;
 
         let project_path = workspace_path.join("project");
-        fs::create_dir_all(&project_path).await.map_err(|e| Error::Io {
-            message: format!("Failed to create project directory: {}", e),
-        })?;
+        fs::create_dir_all(&project_path)
+            .await
+            .map_err(|e| Error::Io {
+                message: format!("Failed to create project directory: {}", e),
+            })?;
 
         let agent_config_dir = workspace_path.join(".claude").join("agents");
-        fs::create_dir_all(&agent_config_dir).await.map_err(|e| Error::Io {
-            message: format!("Failed to create agent config directory: {}", e),
-        })?;
+        fs::create_dir_all(&agent_config_dir)
+            .await
+            .map_err(|e| Error::Io {
+                message: format!("Failed to create agent config directory: {}", e),
+            })?;
 
         // Create workspace configuration
         let workspace_config = WorkspaceConfiguration::new(
@@ -172,9 +178,11 @@ impl WorkspaceManager {
             Error::Serialization(format!("Failed to serialize workspace config: {}", e))
         })?;
 
-        fs::write(&config_path, config_json).await.map_err(|e| Error::Io {
-            message: format!("Failed to write workspace config: {}", e),
-        })?;
+        fs::write(&config_path, config_json)
+            .await
+            .map_err(|e| Error::Io {
+                message: format!("Failed to write workspace config: {}", e),
+            })?;
 
         // Create project structure
         self.create_project_structure(&project_path, &config.project_structure)
@@ -203,9 +211,11 @@ impl WorkspaceManager {
             });
         }
 
-        let config_content = fs::read_to_string(&config_path).await.map_err(|e| Error::Io {
-            message: format!("Failed to read workspace config: {}", e),
-        })?;
+        let config_content = fs::read_to_string(&config_path)
+            .await
+            .map_err(|e| Error::Io {
+                message: format!("Failed to read workspace config: {}", e),
+            })?;
 
         let mut config: WorkspaceConfiguration =
             serde_json::from_str(&config_content).map_err(|e| Error::Parsing {
@@ -220,9 +230,11 @@ impl WorkspaceManager {
             Error::Serialization(format!("Failed to serialize updated config: {}", e))
         })?;
 
-        fs::write(&config_path, updated_json).await.map_err(|e| Error::Io {
-            message: format!("Failed to update workspace config: {}", e),
-        })?;
+        fs::write(&config_path, updated_json)
+            .await
+            .map_err(|e| Error::Io {
+                message: format!("Failed to update workspace config: {}", e),
+            })?;
 
         // Update registry
         self.update_in_registry(&config).await?;
@@ -284,9 +296,11 @@ impl WorkspaceManager {
         self.remove_from_registry(name).await?;
 
         // Delete workspace directory
-        fs::remove_dir_all(&workspace_path).await.map_err(|e| Error::Io {
-            message: format!("Failed to delete workspace directory: {}", e),
-        })?;
+        fs::remove_dir_all(&workspace_path)
+            .await
+            .map_err(|e| Error::Io {
+                message: format!("Failed to delete workspace directory: {}", e),
+            })?;
 
         Ok(())
     }
@@ -309,7 +323,8 @@ impl WorkspaceManager {
         };
 
         // Calculate workspace size and file counts
-        self.calculate_directory_stats(workspace_path, &mut stats).await?;
+        self.calculate_directory_stats(workspace_path, &mut stats)
+            .await?;
 
         Ok(stats)
     }
@@ -320,9 +335,11 @@ impl WorkspaceManager {
             return Ok(WorkspaceRegistry::default());
         }
 
-        let content = fs::read_to_string(&self.registry_path).await.map_err(|e| Error::Io {
-            message: format!("Failed to read registry: {}", e),
-        })?;
+        let content = fs::read_to_string(&self.registry_path)
+            .await
+            .map_err(|e| Error::Io {
+                message: format!("Failed to read registry: {}", e),
+            })?;
 
         serde_json::from_str(&content).map_err(|e| Error::Parsing {
             message: format!("Failed to parse registry: {}", e),
@@ -338,19 +355,22 @@ impl WorkspaceManager {
             })?;
         }
 
-        let content = serde_json::to_string_pretty(registry).map_err(|e| {
-            Error::Serialization(format!("Failed to serialize registry: {}", e))
-        })?;
+        let content = serde_json::to_string_pretty(registry)
+            .map_err(|e| Error::Serialization(format!("Failed to serialize registry: {}", e)))?;
 
-        fs::write(&self.registry_path, content).await.map_err(|e| Error::Io {
-            message: format!("Failed to write registry: {}", e),
-        })
+        fs::write(&self.registry_path, content)
+            .await
+            .map_err(|e| Error::Io {
+                message: format!("Failed to write registry: {}", e),
+            })
     }
 
     /// Add workspace to registry
     async fn add_to_registry(&self, config: &WorkspaceConfiguration) -> Result<()> {
         let mut registry = self.load_registry().await?;
-        registry.workspaces.insert(config.name.clone(), config.clone());
+        registry
+            .workspaces
+            .insert(config.name.clone(), config.clone());
         registry.updated_at = chrono::Utc::now();
         self.save_registry(&registry).await
     }
@@ -359,7 +379,9 @@ impl WorkspaceManager {
     async fn update_in_registry(&self, config: &WorkspaceConfiguration) -> Result<()> {
         let mut registry = self.load_registry().await?;
         if registry.workspaces.contains_key(&config.name) {
-            registry.workspaces.insert(config.name.clone(), config.clone());
+            registry
+                .workspaces
+                .insert(config.name.clone(), config.clone());
             registry.updated_at = chrono::Utc::now();
             self.save_registry(&registry).await?;
         }
@@ -391,7 +413,10 @@ impl WorkspaceManager {
         }
 
         // Check for invalid characters
-        if !name.chars().all(|c| c.is_alphanumeric() || c == '-' || c == '_') {
+        if !name
+            .chars()
+            .all(|c| c.is_alphanumeric() || c == '-' || c == '_')
+        {
             return Err(Error::Validation {
                 message: "Workspace name can only contain alphanumeric characters, hyphens, and underscores".to_string(),
             });
@@ -418,9 +443,15 @@ impl WorkspaceManager {
 
             match item.item_type {
                 ProjectItemType::Directory => {
-                    fs::create_dir_all(&item_path).await.map_err(|e| Error::Io {
-                        message: format!("Failed to create directory {}: {}", item_path.display(), e),
-                    })?;
+                    fs::create_dir_all(&item_path)
+                        .await
+                        .map_err(|e| Error::Io {
+                            message: format!(
+                                "Failed to create directory {}: {}",
+                                item_path.display(),
+                                e
+                            ),
+                        })?;
                 }
                 ProjectItemType::File => {
                     // Create parent directories if they don't exist
@@ -431,9 +462,11 @@ impl WorkspaceManager {
                     }
 
                     let content = item.content.as_deref().unwrap_or("");
-                    fs::write(&item_path, content).await.map_err(|e| Error::Io {
-                        message: format!("Failed to write file {}: {}", item_path.display(), e),
-                    })?;
+                    fs::write(&item_path, content)
+                        .await
+                        .map_err(|e| Error::Io {
+                            message: format!("Failed to write file {}: {}", item_path.display(), e),
+                        })?;
                 }
             }
         }
@@ -442,7 +475,11 @@ impl WorkspaceManager {
     }
 
     /// Clone git repository into project directory
-    async fn clone_git_repository(&self, project_path: &Path, git_config: &GitConfig) -> Result<()> {
+    async fn clone_git_repository(
+        &self,
+        project_path: &Path,
+        git_config: &GitConfig,
+    ) -> Result<()> {
         let mut cmd = tokio::process::Command::new("git");
         cmd.arg("clone").arg(&git_config.url).arg(project_path);
 
@@ -485,7 +522,11 @@ impl WorkspaceManager {
     }
 
     /// Calculate directory statistics recursively
-    async fn calculate_directory_stats(&self, path: &Path, stats: &mut WorkspaceStats) -> Result<()> {
+    async fn calculate_directory_stats(
+        &self,
+        path: &Path,
+        stats: &mut WorkspaceStats,
+    ) -> Result<()> {
         let mut entries = fs::read_dir(path).await.map_err(|e| Error::Io {
             message: format!("Failed to read directory {}: {}", path.display(), e),
         })?;
@@ -529,7 +570,7 @@ pub struct WorkspaceStats {
 mod tests {
     use super::*;
     use crate::orchestration::models::{
-        AgentTemplateMetadata, ToolPermissions, TemplateVariable, TemplateVariableType,
+        AgentTemplateMetadata, TemplateVariable, TemplateVariableType, ToolPermissions,
     };
     use chrono::Utc;
     use tempfile::TempDir;
@@ -729,7 +770,10 @@ mod tests {
             .await
             .unwrap();
 
-        assert!(manager.workspace_exists("existing-workspace").await.unwrap());
+        assert!(manager
+            .workspace_exists("existing-workspace")
+            .await
+            .unwrap());
     }
 
     #[tokio::test]
@@ -769,11 +813,15 @@ mod tests {
         assert!(result.is_err());
 
         // Invalid characters should fail
-        let result = manager.create_workspace("workspace with spaces", &template, &config).await;
+        let result = manager
+            .create_workspace("workspace with spaces", &template, &config)
+            .await;
         assert!(result.is_err());
 
         // Reserved name should fail
-        let result = manager.create_workspace("registry", &template, &config).await;
+        let result = manager
+            .create_workspace("registry", &template, &config)
+            .await;
         assert!(result.is_err());
 
         // Valid name should succeed

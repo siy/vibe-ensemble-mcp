@@ -6,8 +6,7 @@
 
 use crate::orchestration::executor::{ExecutionResult, HeadlessClaudeExecutor};
 use crate::orchestration::models::{
-    WorkflowExecutionContext, WorkflowStats, WorkflowStatus,
-    WorkspaceConfiguration,
+    WorkflowExecutionContext, WorkflowStats, WorkflowStatus, WorkspaceConfiguration,
 };
 use crate::orchestration::template_manager::TemplateManager;
 use crate::prompt::{AgentTemplate, WorkflowStep};
@@ -171,7 +170,7 @@ impl WorkflowExecutor {
                     completed_at,
                     error,
                 })
-            },
+            }
             Ok(Err(e)) => Ok(WorkflowResult {
                 workflow_id,
                 status: WorkflowStatus::Failed,
@@ -210,7 +209,11 @@ impl WorkflowExecutor {
         &self,
         context: &WorkflowContext,
         workflow_id: Uuid,
-    ) -> Result<(HashMap<String, StepExecutionResult>, WorkflowStatus, Option<String>)> {
+    ) -> Result<(
+        HashMap<String, StepExecutionResult>,
+        WorkflowStatus,
+        Option<String>,
+    )> {
         let mut step_results = HashMap::new();
         let mut workflow_variables = context.variables.clone();
         let mut workflow_error = None;
@@ -243,10 +246,7 @@ impl WorkflowExecutor {
                     format!("{}_output", step.id),
                     execution_result.content.clone(),
                 );
-                workflow_variables.insert(
-                    format!("{}_success", step.id),
-                    step_success.to_string(),
-                );
+                workflow_variables.insert(format!("{}_success", step.id), step_success.to_string());
             }
 
             step_results.insert(step.id.clone(), step_result);
@@ -254,7 +254,8 @@ impl WorkflowExecutor {
             // Handle step failure
             if !step_success {
                 if context.config.continue_on_failure {
-                    workflow_error = Some(format!("Step '{}' failed but continuing workflow", step.id));
+                    workflow_error =
+                        Some(format!("Step '{}' failed but continuing workflow", step.id));
                 } else {
                     workflow_error = Some(format!("Step '{}' failed, stopping workflow", step.id));
                     return Ok((step_results, WorkflowStatus::Failed, workflow_error));
@@ -392,7 +393,11 @@ impl WorkflowExecutor {
     }
 
     /// Generate a prompt for a workflow step
-    fn generate_step_prompt(&self, step: &WorkflowStep, variables: &HashMap<String, String>) -> String {
+    fn generate_step_prompt(
+        &self,
+        step: &WorkflowStep,
+        variables: &HashMap<String, String>,
+    ) -> String {
         let mut prompt = format!("Execute workflow step: {}\n\n", step.name);
         prompt.push_str(&format!("Description: {}\n\n", step.description));
 
@@ -405,7 +410,8 @@ impl WorkflowExecutor {
             prompt.push('\n');
         }
 
-        prompt.push_str("Please complete this step and provide a summary of what was accomplished.");
+        prompt
+            .push_str("Please complete this step and provide a summary of what was accomplished.");
 
         prompt
     }
@@ -419,10 +425,7 @@ impl WorkflowExecutor {
     ) -> WorkflowStats {
         let total_duration_ms = (completed_at - started_at).num_milliseconds() as u64;
         let steps_executed = step_results.len() as u32;
-        let total_retries = step_results
-            .values()
-            .map(|r| r.retry_count)
-            .sum::<u32>();
+        let total_retries = step_results.values().map(|r| r.retry_count).sum::<u32>();
 
         let total_cost = step_results
             .values()
@@ -439,13 +442,21 @@ impl WorkflowExecutor {
             steps_executed,
             total_retries,
             peak_memory_mb: None, // Would need system monitoring to calculate
-            total_cost: if total_cost > 0.0 { Some(total_cost) } else { None },
+            total_cost: if total_cost > 0.0 {
+                Some(total_cost)
+            } else {
+                None
+            },
         }
     }
 
     /// Get status of an active workflow
     pub async fn get_workflow_status(&self, workflow_id: Uuid) -> Option<WorkflowExecutionContext> {
-        self.active_workflows.read().await.get(&workflow_id).cloned()
+        self.active_workflows
+            .read()
+            .await
+            .get(&workflow_id)
+            .cloned()
     }
 
     /// Cancel an active workflow
@@ -463,7 +474,12 @@ impl WorkflowExecutor {
 
     /// List all active workflows
     pub async fn list_active_workflows(&self) -> Vec<WorkflowExecutionContext> {
-        self.active_workflows.read().await.values().cloned().collect()
+        self.active_workflows
+            .read()
+            .await
+            .values()
+            .cloned()
+            .collect()
     }
 }
 
@@ -519,7 +535,11 @@ mod tests {
         let step_results = HashMap::new();
         let variables = HashMap::new();
 
-        assert!(workflow_executor.should_execute_step(&step_no_conditions, &step_results, &variables));
+        assert!(workflow_executor.should_execute_step(
+            &step_no_conditions,
+            &step_results,
+            &variables
+        ));
 
         // Step with previous step success condition
         let step_with_condition = WorkflowStep {
@@ -536,39 +556,57 @@ mod tests {
         };
 
         // Should not execute if previous step doesn't exist
-        assert!(!workflow_executor.should_execute_step(&step_with_condition, &step_results, &variables));
+        assert!(!workflow_executor.should_execute_step(
+            &step_with_condition,
+            &step_results,
+            &variables
+        ));
 
         // Add successful previous step result
         let mut step_results_with_success = HashMap::new();
-        step_results_with_success.insert("step1".to_string(), StepExecutionResult {
-            step_id: "step1".to_string(),
-            success: true,
-            execution_result: None,
-            error: None,
-            retry_count: 0,
-            duration_ms: 1000,
-            started_at: Utc::now(),
-            completed_at: Utc::now(),
-        });
+        step_results_with_success.insert(
+            "step1".to_string(),
+            StepExecutionResult {
+                step_id: "step1".to_string(),
+                success: true,
+                execution_result: None,
+                error: None,
+                retry_count: 0,
+                duration_ms: 1000,
+                started_at: Utc::now(),
+                completed_at: Utc::now(),
+            },
+        );
 
         // Should execute if previous step succeeded
-        assert!(workflow_executor.should_execute_step(&step_with_condition, &step_results_with_success, &variables));
+        assert!(workflow_executor.should_execute_step(
+            &step_with_condition,
+            &step_results_with_success,
+            &variables
+        ));
 
         // Add failed previous step result
         let mut step_results_with_failure = HashMap::new();
-        step_results_with_failure.insert("step1".to_string(), StepExecutionResult {
-            step_id: "step1".to_string(),
-            success: false,
-            execution_result: None,
-            error: Some("Step failed".to_string()),
-            retry_count: 1,
-            duration_ms: 1000,
-            started_at: Utc::now(),
-            completed_at: Utc::now(),
-        });
+        step_results_with_failure.insert(
+            "step1".to_string(),
+            StepExecutionResult {
+                step_id: "step1".to_string(),
+                success: false,
+                execution_result: None,
+                error: Some("Step failed".to_string()),
+                retry_count: 1,
+                duration_ms: 1000,
+                started_at: Utc::now(),
+                completed_at: Utc::now(),
+            },
+        );
 
         // Should not execute if previous step failed
-        assert!(!workflow_executor.should_execute_step(&step_with_condition, &step_results_with_failure, &variables));
+        assert!(!workflow_executor.should_execute_step(
+            &step_with_condition,
+            &step_results_with_failure,
+            &variables
+        ));
     }
 
     #[tokio::test]
@@ -659,7 +697,10 @@ mod tests {
         assert_eq!(active[0].workflow_id, workflow_id);
 
         // Cancel workflow
-        workflow_executor.cancel_workflow(workflow_id).await.unwrap();
+        workflow_executor
+            .cancel_workflow(workflow_id)
+            .await
+            .unwrap();
 
         let updated_status = workflow_executor.get_workflow_status(workflow_id).await;
         assert!(updated_status.is_some());
@@ -679,30 +720,37 @@ mod tests {
         let mut step_results = HashMap::new();
 
         // Add step result with retry
-        step_results.insert("step1".to_string(), StepExecutionResult {
-            step_id: "step1".to_string(),
-            success: true,
-            execution_result: None,
-            error: None,
-            retry_count: 2,
-            duration_ms: 120000,
-            started_at,
-            completed_at: started_at + chrono::Duration::minutes(2),
-        });
+        step_results.insert(
+            "step1".to_string(),
+            StepExecutionResult {
+                step_id: "step1".to_string(),
+                success: true,
+                execution_result: None,
+                error: None,
+                retry_count: 2,
+                duration_ms: 120000,
+                started_at,
+                completed_at: started_at + chrono::Duration::minutes(2),
+            },
+        );
 
         // Add another step result
-        step_results.insert("step2".to_string(), StepExecutionResult {
-            step_id: "step2".to_string(),
-            success: true,
-            execution_result: None,
-            error: None,
-            retry_count: 0,
-            duration_ms: 180000,
-            started_at: started_at + chrono::Duration::minutes(2),
-            completed_at,
-        });
+        step_results.insert(
+            "step2".to_string(),
+            StepExecutionResult {
+                step_id: "step2".to_string(),
+                success: true,
+                execution_result: None,
+                error: None,
+                retry_count: 0,
+                duration_ms: 180000,
+                started_at: started_at + chrono::Duration::minutes(2),
+                completed_at,
+            },
+        );
 
-        let stats = workflow_executor.calculate_workflow_stats(&step_results, started_at, completed_at);
+        let stats =
+            workflow_executor.calculate_workflow_stats(&step_results, started_at, completed_at);
 
         assert_eq!(stats.steps_executed, 2);
         assert_eq!(stats.total_retries, 2);

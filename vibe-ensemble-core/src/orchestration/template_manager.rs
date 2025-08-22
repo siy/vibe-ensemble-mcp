@@ -17,9 +17,7 @@
 //!         +-- examples.md
 //! ```
 
-use crate::orchestration::models::{
-    AgentTemplateMetadata, FilesystemTemplate,
-};
+use crate::orchestration::models::{AgentTemplateMetadata, FilesystemTemplate};
 use crate::{Error, Result};
 use async_trait::async_trait;
 use handlebars::Handlebars;
@@ -63,7 +61,7 @@ impl FilesystemTemplateManager {
     /// Create a new filesystem template manager
     pub fn new<P: AsRef<Path>>(templates_directory: P) -> Self {
         let mut handlebars = Handlebars::new();
-        
+
         // Configure Handlebars with helpful settings
         handlebars.set_strict_mode(true);
         handlebars.register_helper("upper", Box::new(handlebars_helpers::upper));
@@ -92,9 +90,11 @@ impl FilesystemTemplateManager {
             });
         }
 
-        let content = fs::read_to_string(&metadata_path).await.map_err(|e| Error::Io {
-            message: format!("Failed to read template.json: {}", e),
-        })?;
+        let content = fs::read_to_string(&metadata_path)
+            .await
+            .map_err(|e| Error::Io {
+                message: format!("Failed to read template.json: {}", e),
+            })?;
 
         let metadata: AgentTemplateMetadata =
             serde_json::from_str(&content).map_err(|e| Error::Parsing {
@@ -115,9 +115,11 @@ impl FilesystemTemplateManager {
             });
         }
 
-        fs::read_to_string(&config_path).await.map_err(|e| Error::Io {
-            message: format!("Failed to read agent-config.md: {}", e),
-        })
+        fs::read_to_string(&config_path)
+            .await
+            .map_err(|e| Error::Io {
+                message: format!("Failed to read agent-config.md: {}", e),
+            })
     }
 
     /// Load prompt templates from prompts/ directory
@@ -142,9 +144,14 @@ impl FilesystemTemplateManager {
                     if extension == "md" || extension == "txt" {
                         if let Some(file_stem) = path.file_stem() {
                             let name = file_stem.to_string_lossy().to_string();
-                            let content = fs::read_to_string(&path).await.map_err(|e| Error::Io {
-                                message: format!("Failed to read prompt file {}: {}", path.display(), e),
-                            })?;
+                            let content =
+                                fs::read_to_string(&path).await.map_err(|e| Error::Io {
+                                    message: format!(
+                                        "Failed to read prompt file {}: {}",
+                                        path.display(),
+                                        e
+                                    ),
+                                })?;
                             prompt_templates.insert(name, content);
                         }
                     }
@@ -167,7 +174,10 @@ impl FilesystemTemplateManager {
                 if !variables.contains_key(&template_var.name) {
                     if template_var.default_value.is_none() {
                         return Err(Error::Validation {
-                            message: format!("Required variable '{}' not provided", template_var.name),
+                            message: format!(
+                                "Required variable '{}' not provided",
+                                template_var.name
+                            ),
                         });
                     }
                 }
@@ -176,11 +186,7 @@ impl FilesystemTemplateManager {
 
         // Validate provided variable values
         for (name, value) in variables {
-            if let Some(template_var) = template
-                .metadata
-                .variables
-                .iter()
-                .find(|v| v.name == *name)
+            if let Some(template_var) = template.metadata.variables.iter().find(|v| v.name == *name)
             {
                 template_var.validate_value(value)?;
             }
@@ -208,7 +214,10 @@ impl FilesystemTemplateManager {
 
         // Add common built-in variables
         prepared_vars.insert("template_name".to_string(), template.metadata.name.clone());
-        prepared_vars.insert("template_version".to_string(), template.metadata.version.clone());
+        prepared_vars.insert(
+            "template_version".to_string(),
+            template.metadata.version.clone(),
+        );
         prepared_vars.insert(
             "template_description".to_string(),
             template.metadata.description.clone(),
@@ -236,7 +245,10 @@ impl TemplateManager for FilesystemTemplateManager {
 
         if !template_path.is_dir() {
             return Err(Error::Validation {
-                message: format!("Template path '{}' is not a directory", template_path.display()),
+                message: format!(
+                    "Template path '{}' is not a directory",
+                    template_path.display()
+                ),
             });
         }
 
@@ -315,7 +327,10 @@ impl TemplateManager for FilesystemTemplateManager {
         // Validate configuration template syntax
         if let Err(e) = handlebars::Template::compile(&template.config_template) {
             return Err(Error::Validation {
-                message: format!("Invalid Handlebars template syntax in agent-config.md: {}", e),
+                message: format!(
+                    "Invalid Handlebars template syntax in agent-config.md: {}",
+                    e
+                ),
             });
         }
 
@@ -323,7 +338,10 @@ impl TemplateManager for FilesystemTemplateManager {
         for (name, content) in &template.prompt_templates {
             if let Err(e) = handlebars::Template::compile(content) {
                 return Err(Error::Validation {
-                    message: format!("Invalid Handlebars template syntax in prompt '{}': {}", name, e),
+                    message: format!(
+                        "Invalid Handlebars template syntax in prompt '{}': {}",
+                        name, e
+                    ),
                 });
             }
         }
@@ -375,7 +393,7 @@ mod handlebars_helpers {
         let param = h
             .param(0)
             .ok_or_else(|| RenderError::new("upper helper requires exactly one parameter"))?;
-        
+
         let value = param.value().render();
         out.write(&value.to_uppercase())?;
         Ok(())
@@ -391,7 +409,7 @@ mod handlebars_helpers {
         let param = h
             .param(0)
             .ok_or_else(|| RenderError::new("lower helper requires exactly one parameter"))?;
-        
+
         let value = param.value().render();
         out.write(&value.to_lowercase())?;
         Ok(())
@@ -407,10 +425,10 @@ mod handlebars_helpers {
         let param = h
             .param(0)
             .ok_or_else(|| RenderError::new("json helper requires exactly one parameter"))?;
-        
+
         let json_str = serde_json::to_string_pretty(param.value())
             .map_err(|e| RenderError::new(&format!("Failed to serialize to JSON: {}", e)))?;
-        
+
         out.write(&json_str)?;
         Ok(())
     }
@@ -420,7 +438,7 @@ mod handlebars_helpers {
 mod tests {
     use super::*;
     use crate::orchestration::models::{
-        AgentTemplateMetadata, FileAccessConfig, NetworkAccessConfig, ProcessAccessConfig, 
+        AgentTemplateMetadata, FileAccessConfig, NetworkAccessConfig, ProcessAccessConfig,
         TemplateVariable, TemplateVariableType, ToolPermissions,
     };
     use chrono::Utc;
@@ -521,7 +539,9 @@ Follow the test protocol for this project.
     #[tokio::test]
     async fn test_load_template() {
         let temp_dir = TempDir::new().unwrap();
-        create_test_template(&temp_dir, "test-template").await.unwrap();
+        create_test_template(&temp_dir, "test-template")
+            .await
+            .unwrap();
 
         let manager = FilesystemTemplateManager::new(temp_dir.path());
         let template = manager.load_template("test-template").await.unwrap();
@@ -562,18 +582,25 @@ Follow the test protocol for this project.
     #[tokio::test]
     async fn test_template_exists() {
         let temp_dir = TempDir::new().unwrap();
-        create_test_template(&temp_dir, "existing-template").await.unwrap();
+        create_test_template(&temp_dir, "existing-template")
+            .await
+            .unwrap();
 
         let manager = FilesystemTemplateManager::new(temp_dir.path());
 
         assert!(manager.template_exists("existing-template").await.unwrap());
-        assert!(!manager.template_exists("nonexistent-template").await.unwrap());
+        assert!(!manager
+            .template_exists("nonexistent-template")
+            .await
+            .unwrap());
     }
 
     #[tokio::test]
     async fn test_render_agent_config() {
         let temp_dir = TempDir::new().unwrap();
-        create_test_template(&temp_dir, "test-template").await.unwrap();
+        create_test_template(&temp_dir, "test-template")
+            .await
+            .unwrap();
 
         let manager = FilesystemTemplateManager::new(temp_dir.path());
         let template = manager.load_template("test-template").await.unwrap();
@@ -581,7 +608,10 @@ Follow the test protocol for this project.
         let mut variables = HashMap::new();
         variables.insert("project_name".to_string(), "MyProject".to_string());
 
-        let rendered = manager.render_agent_config(&template, &variables).await.unwrap();
+        let rendered = manager
+            .render_agent_config(&template, &variables)
+            .await
+            .unwrap();
 
         assert!(rendered.contains("MyProject"));
         assert!(rendered.contains("8080")); // Default port value
@@ -591,7 +621,9 @@ Follow the test protocol for this project.
     #[tokio::test]
     async fn test_render_agent_config_missing_required_variable() {
         let temp_dir = TempDir::new().unwrap();
-        create_test_template(&temp_dir, "test-template").await.unwrap();
+        create_test_template(&temp_dir, "test-template")
+            .await
+            .unwrap();
 
         let manager = FilesystemTemplateManager::new(temp_dir.path());
         let template = manager.load_template("test-template").await.unwrap();
@@ -607,7 +639,9 @@ Follow the test protocol for this project.
     #[tokio::test]
     async fn test_validate_template() {
         let temp_dir = TempDir::new().unwrap();
-        create_test_template(&temp_dir, "test-template").await.unwrap();
+        create_test_template(&temp_dir, "test-template")
+            .await
+            .unwrap();
 
         let manager = FilesystemTemplateManager::new(temp_dir.path());
         let template = manager.load_template("test-template").await.unwrap();
@@ -664,7 +698,7 @@ Follow the test protocol for this project.
         assert!(templates.is_empty());
     }
 
-    #[tokio::test] 
+    #[tokio::test]
     async fn test_handlebars_helpers() {
         let temp_dir = TempDir::new().unwrap();
         let template_dir = temp_dir.path().join("helpers-template");
@@ -676,14 +710,13 @@ Follow the test protocol for this project.
             description: "Template with helpers".to_string(),
             version: "1.0.0".to_string(),
             author: None,
-            variables: vec![
-                TemplateVariable::new(
-                    "name".to_string(),
-                    "Name to transform".to_string(),
-                    TemplateVariableType::String,
-                    true,
-                ).unwrap(),
-            ],
+            variables: vec![TemplateVariable::new(
+                "name".to_string(),
+                "Name to transform".to_string(),
+                TemplateVariableType::String,
+                true,
+            )
+            .unwrap()],
             capabilities: Vec::new(),
             tool_permissions: ToolPermissions::default(),
             tags: Vec::new(),
@@ -713,7 +746,10 @@ Lowercase: {{lower name}}
         let mut variables = HashMap::new();
         variables.insert("name".to_string(), "TestName".to_string());
 
-        let rendered = manager.render_agent_config(&template, &variables).await.unwrap();
+        let rendered = manager
+            .render_agent_config(&template, &variables)
+            .await
+            .unwrap();
 
         assert!(rendered.contains("TESTNAME")); // upper helper
         assert!(rendered.contains("testname")); // lower helper

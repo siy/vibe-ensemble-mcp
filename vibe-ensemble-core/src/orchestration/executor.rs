@@ -297,7 +297,10 @@ impl HeadlessClaudeExecutor {
                 // Timeout occurred
                 let _ = child.kill().await;
                 return Err(Error::Execution {
-                    message: format!("Execution timed out after {} seconds", config.timeout_seconds),
+                    message: format!(
+                        "Execution timed out after {} seconds",
+                        config.timeout_seconds
+                    ),
                 });
             }
         };
@@ -320,7 +323,11 @@ impl HeadlessClaudeExecutor {
             error: if success && status.success() {
                 None
             } else {
-                Some(error_msg.unwrap_or_else(|| format!("Process exited with code: {:?}", status.code())))
+                Some(
+                    error_msg.unwrap_or_else(|| {
+                        format!("Process exited with code: {:?}", status.code())
+                    }),
+                )
             },
             events,
             usage,
@@ -456,14 +463,26 @@ impl HeadlessClaudeExecutor {
 
         if has_usage {
             Some(UsageInfo {
-                input_tokens: if total_input_tokens > 0 { Some(total_input_tokens) } else { None },
-                output_tokens: if total_output_tokens > 0 { Some(total_output_tokens) } else { None },
-                total_tokens: if total_input_tokens + total_output_tokens > 0 { 
-                    Some(total_input_tokens + total_output_tokens) 
-                } else { 
-                    None 
+                input_tokens: if total_input_tokens > 0 {
+                    Some(total_input_tokens)
+                } else {
+                    None
                 },
-                cost_usd: if total_cost > 0.0 { Some(total_cost) } else { None },
+                output_tokens: if total_output_tokens > 0 {
+                    Some(total_output_tokens)
+                } else {
+                    None
+                },
+                total_tokens: if total_input_tokens + total_output_tokens > 0 {
+                    Some(total_input_tokens + total_output_tokens)
+                } else {
+                    None
+                },
+                cost_usd: if total_cost > 0.0 {
+                    Some(total_cost)
+                } else {
+                    None
+                },
             })
         } else {
             None
@@ -478,12 +497,10 @@ impl HeadlessClaudeExecutor {
             .stderr(Stdio::piped());
 
         match cmd.spawn() {
-            Ok(mut child) => {
-                match child.wait().await {
-                    Ok(status) => Ok(status.success()),
-                    Err(_) => Ok(false),
-                }
-            }
+            Ok(mut child) => match child.wait().await {
+                Ok(status) => Ok(status.success()),
+                Err(_) => Ok(false),
+            },
             Err(_) => Ok(false),
         }
     }
@@ -528,7 +545,8 @@ mod tests {
         let executor = HeadlessClaudeExecutor::new();
         assert_eq!(executor.claude_binary_path, "claude");
 
-        let custom_executor = HeadlessClaudeExecutor::with_binary_path("/usr/local/bin/claude".to_string());
+        let custom_executor =
+            HeadlessClaudeExecutor::with_binary_path("/usr/local/bin/claude".to_string());
         assert_eq!(custom_executor.claude_binary_path, "/usr/local/bin/claude");
     }
 
@@ -539,7 +557,7 @@ mod tests {
         // Test parsing system event
         let system_json = r#"{"type": "system", "subtype": "init", "cwd": "/tmp", "session_id": "test", "tools": [], "mcp_servers": [], "model": "claude-3", "permissionMode": "allow", "slash_commands": [], "apiKeySource": "config", "output_style": "stream", "uuid": "test-uuid"}"#;
         let event = executor.parse_stream_event(system_json).unwrap();
-        
+
         assert!(event.is_some());
         match event.unwrap() {
             ClaudeStreamEvent::System { subtype, .. } => {
