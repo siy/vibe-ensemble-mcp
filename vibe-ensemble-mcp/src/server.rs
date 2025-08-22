@@ -3312,45 +3312,23 @@ impl McpServer {
             involved_agents.len()
         );
 
-        // Create optimized coordination schedule
+        // Create intelligent coordination schedule using load balancing
         let schedule_id = Uuid::new_v4();
-        let estimated_completion = chrono::Utc::now() + chrono::Duration::hours(4);
 
-        // Analyze dependencies and create optimized sequence
-        let optimized_sequence = params
-            .work_sequences
-            .iter()
-            .enumerate()
-            .map(|(i, seq)| {
-                serde_json::json!({
-                    "sequence_id": i + 1,
-                    "work_item": seq,
-                    "estimated_duration": "2h",
-                    "dependencies": [],
-                    "assigned_agents": involved_agents.get(i % involved_agents.len()).map(|id| id.to_string()).unwrap_or_default(),
-                    "priority": "medium",
-                    "resource_locks": []
-                })
-            })
-            .collect();
+        // Generate optimized work sequence using smart scheduling
+        let (optimized_sequence, estimated_completion) = self
+            .create_smart_schedule(&params, &involved_agents)
+            .await?;
 
-        // Generate resource allocations
-        let resource_allocations = serde_json::json!({
-            "cpu_cores": params.involved_agents.len() * 2,
-            "memory_gb": params.involved_agents.len() * 4,
-            "storage_gb": 10,
-            "network_bandwidth": "1gbps",
-            "exclusive_resources": params.project_scopes.clone()
-        });
+        // Generate intelligent resource allocations
+        let resource_allocations = self
+            .optimize_resource_allocation(&params, &involved_agents)
+            .await?;
 
-        // Create dependency graph
-        let dependency_graph = serde_json::json!({
-            "nodes": params.work_sequences.len(),
-            "edges": 0,
-            "cycles": false,
-            "critical_path": optimized_sequence,
-            "bottlenecks": []
-        });
+        // Create intelligent dependency graph
+        let dependency_graph = self
+            .analyze_dependencies(&params, &optimized_sequence)
+            .await?;
 
         let result = ScheduleCoordinateResult {
             coordination_schedule_id: schedule_id,
@@ -3419,51 +3397,18 @@ impl McpServer {
 
         let analysis_id = Uuid::new_v4();
 
-        // Perform conflict prediction analysis
-        let predicted_conflicts = vec![
-            serde_json::json!({
-                "conflict_type": "resource_contention",
-                "probability": 0.75,
-                "resources": ["src/main.rs", "config/app.toml"],
-                "involved_actions": [0, 2],
-                "estimated_impact": "medium",
-                "timeline": "2-4 hours"
-            }),
-            serde_json::json!({
-                "conflict_type": "dependency_violation",
-                "probability": 0.45,
-                "resources": ["lib/database.rs"],
-                "involved_actions": [1, 3],
-                "estimated_impact": "high",
-                "timeline": "1-2 hours"
-            }),
-        ];
+        // Perform intelligent conflict prediction analysis
+        let predicted_conflicts = self.analyze_conflicts(&params).await?;
 
-        let risk_assessment = serde_json::json!({
-            "overall_risk": "medium",
-            "risk_factors": [
-                "Multiple agents working on same module",
-                "Overlapping time windows",
-                "Shared configuration files"
-            ],
-            "mitigation_urgency": "moderate",
-            "confidence_level": 0.82
-        });
+        // Generate intelligent risk assessment
+        let risk_assessment = self
+            .assess_conflict_risk(&params, &predicted_conflicts)
+            .await?;
 
-        let recommended_actions = vec![
-            serde_json::json!({
-                "action": "resource_reservation",
-                "description": "Reserve critical files before work begins",
-                "priority": "high",
-                "estimated_effort": "15 minutes"
-            }),
-            serde_json::json!({
-                "action": "sequence_adjustment",
-                "description": "Adjust timing to avoid peak conflict periods",
-                "priority": "medium",
-                "estimated_effort": "30 minutes"
-            }),
-        ];
+        // Generate smart recommended actions
+        let recommended_actions = self
+            .generate_prevention_actions(&params, &predicted_conflicts)
+            .await?;
 
         let result = ConflictPredictResult {
             analysis_id,
@@ -4346,6 +4291,659 @@ impl McpServer {
             request.id,
             serde_json::to_value(result)?,
         )))
+    }
+
+    // Issue #52: Smart Work Scheduling and Conflict Prevention - Intelligent Algorithms
+
+    /// Intelligent conflict analysis using real agent and resource data
+    async fn analyze_conflicts(
+        &self,
+        params: &ConflictPredictParams,
+    ) -> Result<Vec<serde_json::Value>> {
+        let mut conflicts = Vec::new();
+
+        // Analyze resource conflicts using resource map
+        if let Some(resource_map) = params.resource_map.as_object() {
+            conflicts.extend(
+                self.detect_resource_conflicts(resource_map, &params.planned_actions)
+                    .await?,
+            );
+        }
+
+        // Analyze temporal conflicts
+        conflicts.extend(
+            self.detect_temporal_conflicts(&params.planned_actions, &params.active_workflows)
+                .await?,
+        );
+
+        // Analyze dependency conflicts
+        conflicts.extend(
+            self.detect_dependency_conflicts(&params.planned_actions)
+                .await?,
+        );
+
+        Ok(conflicts)
+    }
+
+    /// Detect resource-based conflicts
+    async fn detect_resource_conflicts(
+        &self,
+        _resource_map: &serde_json::Map<String, serde_json::Value>,
+        planned_actions: &[serde_json::Value],
+    ) -> Result<Vec<serde_json::Value>> {
+        let mut conflicts = Vec::new();
+
+        // Track resource usage patterns
+        let mut resource_usage: std::collections::HashMap<String, Vec<usize>> =
+            std::collections::HashMap::new();
+
+        for (action_idx, action) in planned_actions.iter().enumerate() {
+            if let Some(resources) = action.get("resources").and_then(|r| r.as_array()) {
+                for resource in resources {
+                    if let Some(resource_path) = resource.as_str() {
+                        resource_usage
+                            .entry(resource_path.to_string())
+                            .or_default()
+                            .push(action_idx);
+                    }
+                }
+            }
+        }
+
+        // Find conflicts where multiple actions use the same resource
+        for (resource_path, action_indices) in resource_usage {
+            if action_indices.len() > 1 {
+                let probability = self
+                    .calculate_conflict_probability(&action_indices, planned_actions)
+                    .await;
+                let impact = self.assess_resource_impact(&resource_path).await;
+
+                conflicts.push(serde_json::json!({
+                    "conflict_type": "resource_contention",
+                    "probability": probability,
+                    "resources": [resource_path],
+                    "involved_actions": action_indices,
+                    "estimated_impact": impact,
+                    "timeline": self.estimate_conflict_timeline(&action_indices, planned_actions).await
+                }));
+            }
+        }
+
+        Ok(conflicts)
+    }
+
+    /// Detect temporal conflicts based on timing
+    async fn detect_temporal_conflicts(
+        &self,
+        planned_actions: &[serde_json::Value],
+        _active_workflows: &[serde_json::Value],
+    ) -> Result<Vec<serde_json::Value>> {
+        let mut conflicts = Vec::new();
+
+        // Check for overlapping time windows
+        for (i, action1) in planned_actions.iter().enumerate() {
+            for (j, action2) in planned_actions.iter().enumerate().skip(i + 1) {
+                if self.actions_have_temporal_overlap(action1, action2).await {
+                    conflicts.push(serde_json::json!({
+                        "conflict_type": "temporal_overlap",
+                        "probability": 0.8,
+                        "involved_actions": [i, j],
+                        "estimated_impact": "medium",
+                        "timeline": "concurrent execution"
+                    }));
+                }
+            }
+        }
+
+        Ok(conflicts)
+    }
+
+    /// Detect dependency-based conflicts
+    async fn detect_dependency_conflicts(
+        &self,
+        planned_actions: &[serde_json::Value],
+    ) -> Result<Vec<serde_json::Value>> {
+        let mut conflicts = Vec::new();
+
+        // Analyze dependencies between actions
+        for (i, action) in planned_actions.iter().enumerate() {
+            if let Some(dependencies) = action.get("dependencies").and_then(|d| d.as_array()) {
+                for dep in dependencies {
+                    if let Some(dep_idx) = dep.as_u64() {
+                        if (dep_idx as usize) < planned_actions.len() {
+                            // Check for circular dependencies
+                            if self
+                                .has_circular_dependency(i, dep_idx as usize, planned_actions)
+                                .await
+                            {
+                                conflicts.push(serde_json::json!({
+                                    "conflict_type": "dependency_violation",
+                                    "probability": 0.95,
+                                    "involved_actions": [i, dep_idx],
+                                    "estimated_impact": "high",
+                                    "timeline": "blocking"
+                                }));
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        Ok(conflicts)
+    }
+
+    /// Calculate conflict probability based on action patterns
+    async fn calculate_conflict_probability(
+        &self,
+        action_indices: &[usize],
+        planned_actions: &[serde_json::Value],
+    ) -> f64 {
+        let mut base_probability: f64 = 0.5;
+
+        // Increase probability based on action types
+        for &idx in action_indices {
+            if let Some(action) = planned_actions.get(idx) {
+                if let Some(action_type) = action.get("type").and_then(|t| t.as_str()) {
+                    match action_type {
+                        "write" | "modify" => base_probability += 0.2,
+                        "delete" => base_probability += 0.3,
+                        "read" => base_probability += 0.1,
+                        _ => base_probability += 0.1,
+                    }
+                }
+            }
+        }
+
+        base_probability.min(0.95)
+    }
+
+    /// Assess the impact of conflicts on a specific resource
+    async fn assess_resource_impact(&self, resource_path: &str) -> &'static str {
+        match resource_path {
+            path if path.contains("main.rs") || path.contains("lib.rs") => "high",
+            path if path.contains("config") || path.contains("Cargo.toml") => "high",
+            path if path.contains("test") => "low",
+            path if path.contains("doc") || path.contains("README") => "low",
+            _ => "medium",
+        }
+    }
+
+    /// Estimate timeline for conflict resolution
+    async fn estimate_conflict_timeline(
+        &self,
+        action_indices: &[usize],
+        _planned_actions: &[serde_json::Value],
+    ) -> String {
+        let duration = action_indices.len() * 30; // 30 minutes per conflicting action
+        format!("{}-{} minutes", duration.saturating_sub(15), duration + 15)
+    }
+
+    /// Check if two actions have temporal overlap
+    async fn actions_have_temporal_overlap(
+        &self,
+        action1: &serde_json::Value,
+        action2: &serde_json::Value,
+    ) -> bool {
+        // Simple heuristic: actions that modify the same type of files are likely to overlap
+        let type1 = action1.get("type").and_then(|t| t.as_str()).unwrap_or("");
+        let type2 = action2.get("type").and_then(|t| t.as_str()).unwrap_or("");
+
+        matches!(
+            (type1, type2),
+            ("write", "write") | ("modify", "modify") | ("write", "modify") | ("modify", "write")
+        )
+    }
+
+    /// Check for circular dependencies
+    async fn has_circular_dependency(
+        &self,
+        action_idx: usize,
+        dep_idx: usize,
+        planned_actions: &[serde_json::Value],
+    ) -> bool {
+        // Simple cycle detection: check if dependency action depends back on original action
+        if let Some(dep_action) = planned_actions.get(dep_idx) {
+            if let Some(dependencies) = dep_action.get("dependencies").and_then(|d| d.as_array()) {
+                for dep in dependencies {
+                    if let Some(dep_num) = dep.as_u64() {
+                        if dep_num as usize == action_idx {
+                            return true;
+                        }
+                    }
+                }
+            }
+        }
+        false
+    }
+
+    /// Generate intelligent risk assessment
+    async fn assess_conflict_risk(
+        &self,
+        params: &ConflictPredictParams,
+        predicted_conflicts: &[serde_json::Value],
+    ) -> Result<serde_json::Value> {
+        let conflict_count = predicted_conflicts.len();
+        let high_impact_conflicts = predicted_conflicts
+            .iter()
+            .filter(|c| c.get("estimated_impact").and_then(|i| i.as_str()) == Some("high"))
+            .count();
+
+        let overall_risk = match (conflict_count, high_impact_conflicts) {
+            (0, _) => "low",
+            (1..=2, 0) => "medium",
+            (1..=2, _) => "high",
+            (_, 0) => "high",
+            _ => "critical",
+        };
+
+        let mut risk_factors = Vec::new();
+        if conflict_count > 2 {
+            risk_factors.push("Multiple concurrent conflicts detected");
+        }
+        if high_impact_conflicts > 0 {
+            risk_factors.push("High-impact conflicts present");
+        }
+        if params.active_workflows.len() > params.planned_actions.len() {
+            risk_factors.push("More active workflows than planned actions");
+        }
+
+        let confidence_level = 0.7 + (conflict_count as f64 * 0.1).min(0.25);
+
+        Ok(serde_json::json!({
+            "overall_risk": overall_risk,
+            "risk_factors": risk_factors,
+            "mitigation_urgency": match overall_risk {
+                "critical" => "immediate",
+                "high" => "urgent",
+                "medium" => "moderate",
+                _ => "low"
+            },
+            "confidence_level": confidence_level,
+            "total_conflicts": conflict_count,
+            "high_impact_conflicts": high_impact_conflicts
+        }))
+    }
+
+    /// Generate smart prevention actions
+    async fn generate_prevention_actions(
+        &self,
+        _params: &ConflictPredictParams,
+        predicted_conflicts: &[serde_json::Value],
+    ) -> Result<Vec<serde_json::Value>> {
+        let mut actions = Vec::new();
+
+        // Analyze conflicts and suggest specific actions
+        for conflict in predicted_conflicts {
+            if let Some(conflict_type) = conflict.get("conflict_type").and_then(|t| t.as_str()) {
+                match conflict_type {
+                    "resource_contention" => {
+                        actions.push(serde_json::json!({
+                            "action": "resource_reservation",
+                            "description": "Reserve conflicting resources before work begins",
+                            "priority": "high",
+                            "estimated_effort": "10-15 minutes",
+                            "automation_possible": true
+                        }));
+                    }
+                    "temporal_overlap" => {
+                        actions.push(serde_json::json!({
+                            "action": "sequence_adjustment",
+                            "description": "Adjust execution timing to prevent overlap",
+                            "priority": "medium",
+                            "estimated_effort": "20-30 minutes",
+                            "automation_possible": true
+                        }));
+                    }
+                    "dependency_violation" => {
+                        actions.push(serde_json::json!({
+                            "action": "dependency_reordering",
+                            "description": "Reorder actions to resolve dependency conflicts",
+                            "priority": "high",
+                            "estimated_effort": "30-45 minutes",
+                            "automation_possible": false
+                        }));
+                    }
+                    _ => {}
+                }
+            }
+        }
+
+        // Add general coordination actions
+        if predicted_conflicts.len() > 1 {
+            actions.push(serde_json::json!({
+                "action": "coordination_meeting",
+                "description": "Schedule coordination meeting with involved agents",
+                "priority": "medium",
+                "estimated_effort": "45-60 minutes",
+                "automation_possible": false
+            }));
+        }
+
+        Ok(actions)
+    }
+
+    /// Create smart work schedule using load balancing
+    async fn create_smart_schedule(
+        &self,
+        params: &ScheduleCoordinateParams,
+        involved_agents: &[Uuid],
+    ) -> Result<(Vec<serde_json::Value>, chrono::DateTime<chrono::Utc>)> {
+        let mut optimized_sequence = Vec::new();
+        let mut total_duration = 0;
+
+        // Get agent load balancing recommendations if available
+        if let Some(agent_service) = &self.agent_service {
+            let load_recommendations = agent_service
+                .get_load_balancer_recommendations(params.work_sequences.len())
+                .await?;
+
+            // Assign work based on agent capabilities and load
+            for (i, work_sequence) in params.work_sequences.iter().enumerate() {
+                let assigned_agent = if let Some(recommendation) =
+                    load_recommendations.recommended_assignments.get(i)
+                {
+                    recommendation.agent_id.to_string()
+                } else {
+                    involved_agents
+                        .get(i % involved_agents.len())
+                        .map(|id| id.to_string())
+                        .unwrap_or_default()
+                };
+
+                let estimated_duration = self.estimate_work_duration(work_sequence).await;
+                total_duration += estimated_duration;
+
+                let priority = self.calculate_work_priority(work_sequence, i).await;
+                let dependencies = self.extract_work_dependencies(work_sequence, i).await;
+
+                optimized_sequence.push(serde_json::json!({
+                    "sequence_id": i + 1,
+                    "work_item": work_sequence,
+                    "estimated_duration": format!("{}h", estimated_duration),
+                    "dependencies": dependencies,
+                    "assigned_agent": assigned_agent,
+                    "priority": priority,
+                    "resource_locks": self.identify_required_locks(work_sequence).await,
+                    "start_time": chrono::Utc::now() + chrono::Duration::hours(i as i64),
+                    "load_balancing_score": load_recommendations.recommended_assignments.get(i).map(|r| r.load_balancing_score).unwrap_or(0.5)
+                }));
+            }
+        } else {
+            // Fallback to simple scheduling
+            for (i, work_sequence) in params.work_sequences.iter().enumerate() {
+                let estimated_duration = self.estimate_work_duration(work_sequence).await;
+                total_duration += estimated_duration;
+
+                optimized_sequence.push(serde_json::json!({
+                    "sequence_id": i + 1,
+                    "work_item": work_sequence,
+                    "estimated_duration": format!("{}h", estimated_duration),
+                    "dependencies": [],
+                    "assigned_agent": involved_agents.get(i % involved_agents.len()).map(|id| id.to_string()).unwrap_or_default(),
+                    "priority": "medium",
+                    "resource_locks": []
+                }));
+            }
+        }
+
+        let estimated_completion =
+            chrono::Utc::now() + chrono::Duration::hours(total_duration as i64);
+        Ok((optimized_sequence, estimated_completion))
+    }
+
+    /// Estimate work duration based on complexity
+    async fn estimate_work_duration(&self, work_sequence: &serde_json::Value) -> i32 {
+        let base_duration = 2; // 2 hours base
+        let mut duration = base_duration;
+
+        // Adjust based on work complexity
+        if let Some(complexity) = work_sequence.get("complexity").and_then(|c| c.as_str()) {
+            duration += match complexity {
+                "high" => 3,
+                "medium" => 1,
+                "low" => 0,
+                _ => 1,
+            };
+        }
+
+        // Adjust based on work type
+        if let Some(work_type) = work_sequence.get("type").and_then(|t| t.as_str()) {
+            duration += match work_type {
+                "implementation" => 2,
+                "testing" => 1,
+                "documentation" => 1,
+                "refactoring" => 3,
+                _ => 1,
+            };
+        }
+
+        duration
+    }
+
+    /// Calculate work priority
+    async fn calculate_work_priority(
+        &self,
+        work_sequence: &serde_json::Value,
+        index: usize,
+    ) -> &'static str {
+        // Higher priority for earlier items and critical work
+        if index == 0 {
+            return "high";
+        }
+
+        if let Some(priority) = work_sequence.get("priority").and_then(|p| p.as_str()) {
+            match priority {
+                "high" => return "high",
+                "medium" => return "medium",
+                "low" => return "low",
+                _ => {} // Continue to type-based detection
+            }
+        }
+
+        if let Some(work_type) = work_sequence.get("type").and_then(|t| t.as_str()) {
+            match work_type {
+                "critical" | "blocking" => "high",
+                "enhancement" | "feature" => "medium",
+                _ => "low",
+            }
+        } else {
+            "medium"
+        }
+    }
+
+    /// Extract work dependencies
+    async fn extract_work_dependencies(
+        &self,
+        work_sequence: &serde_json::Value,
+        current_index: usize,
+    ) -> Vec<usize> {
+        let mut dependencies = Vec::new();
+
+        // Add dependency on previous work item for sequential work
+        if current_index > 0 {
+            dependencies.push(current_index - 1);
+        }
+
+        // Extract explicit dependencies if present
+        if let Some(deps) = work_sequence.get("dependencies").and_then(|d| d.as_array()) {
+            for dep in deps {
+                if let Some(dep_idx) = dep.as_u64() {
+                    dependencies.push(dep_idx as usize);
+                }
+            }
+        }
+
+        dependencies
+    }
+
+    /// Identify required resource locks
+    async fn identify_required_locks(&self, work_sequence: &serde_json::Value) -> Vec<String> {
+        let mut locks = Vec::new();
+
+        if let Some(resources) = work_sequence.get("resources").and_then(|r| r.as_array()) {
+            for resource in resources {
+                if let Some(resource_path) = resource.as_str() {
+                    // Lock critical files
+                    if resource_path.contains("main.rs")
+                        || resource_path.contains("lib.rs")
+                        || resource_path.contains("Cargo.toml")
+                    {
+                        locks.push(resource_path.to_string());
+                    }
+                }
+            }
+        }
+
+        locks
+    }
+
+    /// Optimize resource allocation using agent load data
+    async fn optimize_resource_allocation(
+        &self,
+        params: &ScheduleCoordinateParams,
+        involved_agents: &[Uuid],
+    ) -> Result<serde_json::Value> {
+        let mut allocation = serde_json::json!({
+            "cpu_cores": involved_agents.len() * 2,
+            "memory_gb": involved_agents.len() * 4,
+            "storage_gb": 10,
+            "network_bandwidth": "1gbps"
+        });
+
+        if let Some(agent_service) = &self.agent_service {
+            // Get system capacity and load
+            let system_metrics = agent_service.get_system_health().await?;
+
+            // Adjust allocations based on current system load
+            let load_factor = 1.0 - system_metrics.load_distribution_score;
+            let cpu_cores =
+                ((involved_agents.len() as f64 * 2.0) * (1.0 + load_factor)).ceil() as i32;
+            let memory_gb =
+                ((involved_agents.len() as f64 * 4.0) * (1.0 + load_factor * 0.5)).ceil() as i32;
+
+            allocation = serde_json::json!({
+                "cpu_cores": cpu_cores,
+                "memory_gb": memory_gb,
+                "storage_gb": 10 + (params.work_sequences.len() * 2),
+                "network_bandwidth": if system_metrics.load_distribution_score > 0.8 { "10gbps" } else { "1gbps" },
+                "exclusive_resources": params.project_scopes.clone(),
+                "load_balancing_enabled": true,
+                "dynamic_scaling": true,
+                "system_load_factor": load_factor
+            });
+        }
+
+        Ok(allocation)
+    }
+
+    /// Analyze work dependencies
+    async fn analyze_dependencies(
+        &self,
+        params: &ScheduleCoordinateParams,
+        optimized_sequence: &[serde_json::Value],
+    ) -> Result<serde_json::Value> {
+        let node_count = params.work_sequences.len();
+        let mut edge_count = 0;
+        let mut bottlenecks = Vec::new();
+
+        // Count dependencies (edges)
+        for seq in optimized_sequence {
+            if let Some(deps) = seq.get("dependencies").and_then(|d| d.as_array()) {
+                edge_count += deps.len();
+            }
+        }
+
+        // Simple cycle detection using iterative approach
+        let has_cycles = self.detect_cycles_iterative(optimized_sequence).await;
+
+        // Identify bottlenecks (nodes with many dependents)
+        let mut dependent_counts: std::collections::HashMap<usize, usize> =
+            std::collections::HashMap::new();
+        for seq in optimized_sequence {
+            if let Some(deps) = seq.get("dependencies").and_then(|d| d.as_array()) {
+                for dep in deps {
+                    if let Some(dep_idx) = dep.as_u64() {
+                        *dependent_counts.entry(dep_idx as usize).or_insert(0) += 1;
+                    }
+                }
+            }
+        }
+
+        for (node_idx, dependent_count) in dependent_counts {
+            if dependent_count > 2 {
+                bottlenecks.push(serde_json::json!({
+                    "node_id": node_idx,
+                    "dependent_count": dependent_count,
+                    "severity": if dependent_count > 4 { "high" } else { "medium" }
+                }));
+            }
+        }
+
+        Ok(serde_json::json!({
+            "nodes": node_count,
+            "edges": edge_count,
+            "cycles": has_cycles,
+            "critical_path": optimized_sequence,
+            "bottlenecks": bottlenecks,
+            "complexity_score": (edge_count as f64 / node_count as f64).min(1.0),
+            "parallelization_potential": if edge_count < node_count { "high" } else { "low" }
+        }))
+    }
+
+    /// Detect cycles using iterative approach
+    async fn detect_cycles_iterative(&self, optimized_sequence: &[serde_json::Value]) -> bool {
+        let node_count = optimized_sequence.len();
+        let mut visited = vec![false; node_count];
+        let mut rec_stack = vec![false; node_count];
+
+        for i in 0..node_count {
+            if !visited[i]
+                && Self::has_cycle_util(i, optimized_sequence, &mut visited, &mut rec_stack)
+            {
+                return true;
+            }
+        }
+
+        false
+    }
+
+    /// Utility function for cycle detection (non-async to avoid recursion issues)
+    fn has_cycle_util(
+        node: usize,
+        optimized_sequence: &[serde_json::Value],
+        visited: &mut [bool],
+        rec_stack: &mut [bool],
+    ) -> bool {
+        visited[node] = true;
+        rec_stack[node] = true;
+
+        if let Some(seq) = optimized_sequence.get(node) {
+            if let Some(deps) = seq.get("dependencies").and_then(|d| d.as_array()) {
+                for dep in deps {
+                    if let Some(dep_idx) = dep.as_u64() {
+                        let dep_idx = dep_idx as usize;
+                        if dep_idx < optimized_sequence.len() {
+                            if !visited[dep_idx]
+                                && Self::has_cycle_util(
+                                    dep_idx,
+                                    optimized_sequence,
+                                    visited,
+                                    rec_stack,
+                                )
+                            {
+                                return true;
+                            } else if rec_stack[dep_idx] {
+                                return true; // Back edge found
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        rec_stack[node] = false;
+        false
     }
 }
 
