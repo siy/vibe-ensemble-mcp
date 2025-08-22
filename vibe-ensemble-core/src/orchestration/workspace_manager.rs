@@ -842,8 +842,10 @@ mod tests {
         let manager = WorkspaceManager::new(temp_dir.path());
         let template = create_test_template();
 
-        let mut config = WorkspaceConfig::default();
-        config.reuse_existing = true;
+        let mut config = WorkspaceConfig {
+            reuse_existing: true,
+            ..Default::default()
+        };
         config
             .variables
             .insert("project_name".to_string(), "TestProject".to_string());

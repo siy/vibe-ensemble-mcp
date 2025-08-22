@@ -179,10 +179,7 @@ impl FilesystemTemplateManager {
                 && template_var.default_value.is_none()
             {
                 return Err(Error::Validation {
-                    message: format!(
-                        "Required variable '{}' not provided",
-                        template_var.name
-                    ),
+                    message: format!("Required variable '{}' not provided", template_var.name),
                 });
             }
         }

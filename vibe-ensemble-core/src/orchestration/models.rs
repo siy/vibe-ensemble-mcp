@@ -232,7 +232,6 @@ pub struct WorkflowStats {
     pub total_cost: Option<f64>,
 }
 
-
 impl Default for FileAccessConfig {
     fn default() -> Self {
         Self {
