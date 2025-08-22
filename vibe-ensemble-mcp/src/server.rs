@@ -323,9 +323,7 @@ impl McpServer {
             methods::MERGE_COORDINATE => self.handle_merge_coordinate(request).await,
 
             // Issue #53: Knowledge-Driven Coordination methods
-            "vibe/knowledge/query" => {
-                self.handle_knowledge_query_coordination(request).await
-            }
+            methods::KNOWLEDGE_QUERY_COORDINATION => self.handle_knowledge_query_coordination(request).await,
             methods::PATTERN_SUGGEST => self.handle_pattern_suggest(request).await,
             methods::GUIDELINE_ENFORCE => self.handle_guideline_enforce(request).await,
             methods::LEARNING_CAPTURE => self.handle_learning_capture(request).await,
@@ -3267,10 +3265,21 @@ impl McpServer {
         };
 
         // Parse coordinator agent ID
-        let coordinator_id =
-            Uuid::parse_str(&params.coordinator_agent_id).map_err(|e| Error::Protocol {
-                message: format!("Invalid coordinator agent ID: {}", e),
-            })?;
+        let coordinator_id = match Uuid::parse_str(&params.coordinator_agent_id) {
+            Ok(id) => id,
+            Err(e) => {
+                return Ok(Some(JsonRpcResponse {
+                    jsonrpc: "2.0".to_string(),
+                    id: request.id.clone(),
+                    result: None,
+                    error: Some(JsonRpcError {
+                        code: -32602,
+                        message: format!("Invalid coordinator agent ID: {}", e),
+                        data: None,
+                    }),
+                }));
+            }
+        };
 
         // Parse involved agent IDs
         let mut involved_agents = Vec::new();
@@ -3700,8 +3709,8 @@ impl McpServer {
             })
             .collect();
 
-        let estimated_merge_time = chrono::Utc::now()
-            + chrono::Duration::hours((params.source_branches.len() as i64) + 2);
+        let estimated_merge_time =
+            chrono::Utc::now() + chrono::Duration::hours((params.source_branches.len() as i64) + 2);
 
         // Create rollback plan
         let rollback_plan = serde_json::json!({
@@ -4068,7 +4077,8 @@ impl McpServer {
                     // Check if resources are properly reserved
                     if params
                         .coordination_plan
-                        .get("resource_reservations").is_none()
+                        .get("resource_reservations")
+                        .is_none()
                     {
                         violations.push(serde_json::json!({
                             "guideline": "resource_reservation",
@@ -4083,7 +4093,8 @@ impl McpServer {
                     // Check if conflict prevention measures exist
                     if params
                         .coordination_plan
-                        .get("conflict_prevention").is_none()
+                        .get("conflict_prevention")
+                        .is_none()
                     {
                         if params.allow_exceptions {
                             approved_exceptions.push(serde_json::json!({

@@ -105,7 +105,7 @@ pub mod methods {
     pub const MERGE_COORDINATE: &str = "vibe/merge/coordinate";
 
     // Issue #53: Knowledge-Driven Coordination methods
-    pub const KNOWLEDGE_QUERY_COORDINATION: &str = "vibe/knowledge/query";
+    pub const KNOWLEDGE_QUERY_COORDINATION: &str = "vibe/knowledge/query/coordination";
     pub const PATTERN_SUGGEST: &str = "vibe/pattern/suggest";
     pub const GUIDELINE_ENFORCE: &str = "vibe/guideline/enforce";
     pub const LEARNING_CAPTURE: &str = "vibe/learning/capture";

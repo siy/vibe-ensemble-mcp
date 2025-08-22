@@ -26,6 +26,7 @@ use vibe_ensemble_core::{
 #[derive(Clone)]
 pub struct CoordinationService {
     agent_repo: Arc<AgentRepository>,
+    #[allow(dead_code)]
     issue_repo: Arc<IssueRepository>,
     message_repo: Arc<MessageRepository>,
 }
@@ -45,6 +46,7 @@ impl CoordinationService {
     }
 
     /// Declare a cross-project dependency and create coordination plan
+    #[allow(clippy::too_many_arguments)]
     pub async fn declare_dependency(
         &self,
         declaring_agent_id: Uuid,
@@ -125,6 +127,7 @@ impl CoordinationService {
     }
 
     /// Request coordinator to spawn a new worker for a project
+    #[allow(clippy::too_many_arguments)]
     pub async fn request_worker_spawn(
         &self,
         requesting_agent_id: Uuid,

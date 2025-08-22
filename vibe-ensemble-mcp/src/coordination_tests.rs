@@ -163,7 +163,7 @@ mod tests {
             "searchScope": ["patterns", "practices", "guidelines"]
         });
 
-        let request = create_test_request("vibe/knowledge/query", params);
+        let request = create_test_request("vibe/knowledge/query/coordination", params);
         let result = server.handle_request(request).await;
 
         assert!(result.is_ok());
@@ -192,25 +192,31 @@ mod tests {
                 "project_type": "web_api",
                 "team_size": 3,
                 "complexity": "medium"
-            }
+            },
+            "excludePatterns": []
         });
 
         let request = create_test_request("vibe/pattern/suggest", params);
         let result = server.handle_request(request).await;
 
-        assert!(result.is_ok());
-        let response = result.unwrap();
-        assert!(response.is_some());
+        match result {
+            Ok(response) => {
+                assert!(response.is_some());
+                let response = response.unwrap();
+                assert!(response.result.is_some());
+                assert!(response.error.is_none());
 
-        let response = response.unwrap();
-        assert!(response.result.is_some());
-        assert!(response.error.is_none());
-
-        // Verify response structure
-        if let Some(result_value) = response.result {
-            assert!(result_value.get("suggestionId").is_some());
-            assert!(result_value.get("recommendedPatterns").is_some());
-            assert!(result_value.get("successProbability").is_some());
+                // Verify response structure
+                if let Some(result_value) = response.result {
+                    assert!(result_value.get("suggestionId").is_some());
+                    assert!(result_value.get("recommendedPatterns").is_some());
+                    assert!(result_value.get("successProbability").is_some());
+                }
+            }
+            Err(e) => {
+                eprintln!("Unexpected error in test_pattern_suggest_basic_functionality: {:?}", e);
+                panic!("Request should not fail at transport level");
+            }
         }
     }
 
@@ -311,13 +317,20 @@ mod tests {
         let request = create_test_request("vibe/schedule/coordinate", params);
         let result = server.handle_request(request).await;
 
-        assert!(result.is_ok());
-        let response = result.unwrap();
-        assert!(response.is_some());
-
-        let response = response.unwrap();
-        assert!(response.error.is_some());
-        assert!(response.result.is_none());
+        match result {
+            Ok(response) => {
+                assert!(response.is_some());
+                let response = response.unwrap();
+                assert!(response.error.is_some());
+                assert!(response.result.is_none());
+            }
+            Err(e) => {
+                // The test expects the request to be handled and return an error response,
+                // not fail at the transport level. This suggests a fundamental issue.
+                eprintln!("Unexpected error in test_invalid_agent_id_handling: {:?}", e);
+                panic!("Request should not fail at transport level");
+            }
+        }
     }
 
     #[tokio::test]

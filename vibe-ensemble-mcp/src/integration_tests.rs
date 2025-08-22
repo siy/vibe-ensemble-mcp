@@ -772,7 +772,7 @@ mod tests {
 
         let result = parsed_response.result.unwrap();
         let issues = result.get("issues").unwrap().as_array().unwrap();
-        assert!(issues.len() >= 1);
+        assert!(!issues.is_empty());
         assert_eq!(
             result.get("total").unwrap().as_u64().unwrap(),
             issues.len() as u64
@@ -1141,7 +1141,7 @@ mod tests {
         let parsed_response: JsonRpcResponse = serde_json::from_str(&response).unwrap();
         let result = parsed_response.result.unwrap();
         let issues = result.get("issues").unwrap().as_array().unwrap();
-        assert!(issues.len() >= 1);
+        assert!(!issues.is_empty());
         assert_eq!(
             issues
                 .iter()
