@@ -97,6 +97,18 @@ pub mod methods {
     pub const COORDINATOR_REQUEST_WORKER: &str = "vibe/coordinator/request_worker";
     pub const WORK_COORDINATE: &str = "vibe/work/coordinate";
     pub const CONFLICT_RESOLVE: &str = "vibe/conflict/resolve";
+
+    // Issue #52: Intelligent Work Orchestration methods
+    pub const SCHEDULE_COORDINATE: &str = "vibe/schedule/coordinate";
+    pub const CONFLICT_PREDICT: &str = "vibe/conflict/predict";
+    pub const RESOURCE_RESERVE: &str = "vibe/resource/reserve";
+    pub const MERGE_COORDINATE: &str = "vibe/merge/coordinate";
+
+    // Issue #53: Knowledge-Driven Coordination methods
+    pub const KNOWLEDGE_QUERY_COORDINATION: &str = "vibe/knowledge/query";
+    pub const PATTERN_SUGGEST: &str = "vibe/pattern/suggest";
+    pub const GUIDELINE_ENFORCE: &str = "vibe/guideline/enforce";
+    pub const LEARNING_CAPTURE: &str = "vibe/learning/capture";
 }
 
 /// MCP initialization parameters
@@ -818,5 +830,298 @@ pub struct ConflictResolveResult {
     #[serde(rename = "coordinatorEscalation")]
     pub coordinator_escalation: bool,
     pub status: String,
+    pub message: String,
+}
+
+// Issue #52: Intelligent Work Orchestration MCP tool parameters and results
+
+/// Schedule coordination parameters  
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ScheduleCoordinateParams {
+    #[serde(rename = "coordinatorAgentId")]
+    pub coordinator_agent_id: String,
+    #[serde(rename = "workSequences")]
+    pub work_sequences: Vec<serde_json::Value>,
+    #[serde(rename = "involvedAgents")]
+    pub involved_agents: Vec<String>,
+    #[serde(rename = "projectScopes")]
+    pub project_scopes: Vec<String>,
+    #[serde(rename = "resourceRequirements")]
+    pub resource_requirements: serde_json::Value,
+    #[serde(rename = "timeConstraints")]
+    pub time_constraints: Option<serde_json::Value>,
+}
+
+/// Schedule coordination result
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ScheduleCoordinateResult {
+    #[serde(rename = "coordinationScheduleId")]
+    pub coordination_schedule_id: Uuid,
+    #[serde(rename = "optimizedSequence")]
+    pub optimized_sequence: Vec<serde_json::Value>,
+    #[serde(rename = "resourceAllocations")]
+    pub resource_allocations: serde_json::Value,
+    #[serde(rename = "dependencyGraph")]
+    pub dependency_graph: serde_json::Value,
+    #[serde(rename = "estimatedCompletionTime")]
+    pub estimated_completion_time: chrono::DateTime<chrono::Utc>,
+    #[serde(rename = "conflictWarnings")]
+    pub conflict_warnings: Vec<String>,
+    pub status: String,
+    pub message: String,
+}
+
+/// Conflict prediction parameters
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ConflictPredictParams {
+    #[serde(rename = "analyzerAgentId")]
+    pub analyzer_agent_id: String,
+    #[serde(rename = "plannedActions")]
+    pub planned_actions: Vec<serde_json::Value>,
+    #[serde(rename = "activeWorkflows")]
+    pub active_workflows: Vec<serde_json::Value>,
+    #[serde(rename = "resourceMap")]
+    pub resource_map: serde_json::Value,
+    #[serde(rename = "timeHorizon")]
+    pub time_horizon: Option<String>,
+}
+
+/// Conflict prediction result
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ConflictPredictResult {
+    #[serde(rename = "analysisId")]
+    pub analysis_id: Uuid,
+    #[serde(rename = "predictedConflicts")]
+    pub predicted_conflicts: Vec<serde_json::Value>,
+    #[serde(rename = "riskAssessment")]
+    pub risk_assessment: serde_json::Value,
+    #[serde(rename = "recommendedActions")]
+    pub recommended_actions: Vec<serde_json::Value>,
+    #[serde(rename = "preventionStrategies")]
+    pub prevention_strategies: Vec<String>,
+    #[serde(rename = "monitoringPoints")]
+    pub monitoring_points: Vec<String>,
+    pub confidence: f32,
+    pub message: String,
+}
+
+/// Resource reservation parameters
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ResourceReserveParams {
+    #[serde(rename = "reservingAgentId")]
+    pub reserving_agent_id: String,
+    #[serde(rename = "resourcePaths")]
+    pub resource_paths: Vec<String>,
+    #[serde(rename = "reservationType")]
+    pub reservation_type: String,
+    #[serde(rename = "reservationDuration")]
+    pub reservation_duration: String,
+    #[serde(rename = "exclusiveAccess")]
+    pub exclusive_access: bool,
+    #[serde(rename = "allowedOperations")]
+    pub allowed_operations: Vec<String>,
+    pub justification: String,
+}
+
+/// Resource reservation result
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ResourceReserveResult {
+    #[serde(rename = "reservationId")]
+    pub reservation_id: Uuid,
+    #[serde(rename = "reservedResources")]
+    pub reserved_resources: Vec<serde_json::Value>,
+    #[serde(rename = "accessToken")]
+    pub access_token: String,
+    #[serde(rename = "expirationTime")]
+    pub expiration_time: chrono::DateTime<chrono::Utc>,
+    #[serde(rename = "conflictingReservations")]
+    pub conflicting_reservations: Vec<Uuid>,
+    #[serde(rename = "coordinationRequired")]
+    pub coordination_required: bool,
+    pub status: String,
+    pub message: String,
+}
+
+/// Merge coordination parameters
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct MergeCoordinateParams {
+    #[serde(rename = "coordinatorAgentId")]
+    pub coordinator_agent_id: String,
+    #[serde(rename = "mergeScenario")]
+    pub merge_scenario: String,
+    #[serde(rename = "sourceBranches")]
+    pub source_branches: Vec<String>,
+    #[serde(rename = "targetBranch")]
+    pub target_branch: String,
+    #[serde(rename = "involvedAgents")]
+    pub involved_agents: Vec<String>,
+    #[serde(rename = "complexityAnalysis")]
+    pub complexity_analysis: serde_json::Value,
+    #[serde(rename = "conflictResolutionStrategy")]
+    pub conflict_resolution_strategy: Option<String>,
+}
+
+/// Merge coordination result
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct MergeCoordinateResult {
+    #[serde(rename = "mergeCoordinationId")]
+    pub merge_coordination_id: Uuid,
+    #[serde(rename = "mergeStrategy")]
+    pub merge_strategy: String,
+    #[serde(rename = "sequencePlan")]
+    pub sequence_plan: Vec<serde_json::Value>,
+    #[serde(rename = "conflictResolutionPlan")]
+    pub conflict_resolution_plan: serde_json::Value,
+    #[serde(rename = "reviewAssignments")]
+    pub review_assignments: Vec<serde_json::Value>,
+    #[serde(rename = "estimatedMergeTime")]
+    pub estimated_merge_time: chrono::DateTime<chrono::Utc>,
+    #[serde(rename = "rollbackPlan")]
+    pub rollback_plan: serde_json::Value,
+    pub message: String,
+}
+
+// Issue #53: Knowledge-Driven Coordination MCP tool parameters and results
+
+/// Knowledge query for coordination parameters
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct KnowledgeQueryCoordinationParams {
+    #[serde(rename = "queryingAgentId")]
+    pub querying_agent_id: String,
+    #[serde(rename = "coordinationContext")]
+    pub coordination_context: String,
+    pub query: String,
+    #[serde(rename = "searchScope")]
+    pub search_scope: Vec<String>,
+    #[serde(rename = "relevanceCriteria")]
+    pub relevance_criteria: Option<serde_json::Value>,
+    #[serde(rename = "maxResults")]
+    pub max_results: Option<i32>,
+}
+
+/// Knowledge query for coordination result
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct KnowledgeQueryCoordinationResult {
+    #[serde(rename = "queryId")]
+    pub query_id: Uuid,
+    #[serde(rename = "relevantPatterns")]
+    pub relevant_patterns: Vec<serde_json::Value>,
+    #[serde(rename = "bestPractices")]
+    pub best_practices: Vec<serde_json::Value>,
+    #[serde(rename = "historicalSolutions")]
+    pub historical_solutions: Vec<serde_json::Value>,
+    #[serde(rename = "organizationalGuidelines")]
+    pub organizational_guidelines: Vec<serde_json::Value>,
+    #[serde(rename = "confidenceScore")]
+    pub confidence_score: f32,
+    #[serde(rename = "applicabilityRating")]
+    pub applicability_rating: f32,
+    pub message: String,
+}
+
+/// Pattern suggestion parameters
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PatternSuggestParams {
+    #[serde(rename = "requestingAgentId")]
+    pub requesting_agent_id: String,
+    #[serde(rename = "coordinationScenario")]
+    pub coordination_scenario: String,
+    #[serde(rename = "currentContext")]
+    pub current_context: serde_json::Value,
+    #[serde(rename = "similarityThreshold")]
+    pub similarity_threshold: Option<f32>,
+    #[serde(rename = "excludePatterns")]
+    pub exclude_patterns: Vec<String>,
+}
+
+/// Pattern suggestion result
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PatternSuggestResult {
+    #[serde(rename = "suggestionId")]
+    pub suggestion_id: Uuid,
+    #[serde(rename = "recommendedPatterns")]
+    pub recommended_patterns: Vec<serde_json::Value>,
+    #[serde(rename = "adaptationGuidance")]
+    pub adaptation_guidance: Vec<String>,
+    #[serde(rename = "implementationSteps")]
+    pub implementation_steps: Vec<serde_json::Value>,
+    #[serde(rename = "successProbability")]
+    pub success_probability: f32,
+    #[serde(rename = "alternativeApproaches")]
+    pub alternative_approaches: Vec<serde_json::Value>,
+    #[serde(rename = "riskFactors")]
+    pub risk_factors: Vec<String>,
+    pub message: String,
+}
+
+/// Guideline enforcement parameters
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct GuidelineEnforceParams {
+    #[serde(rename = "enforcingAgentId")]
+    pub enforcing_agent_id: String,
+    #[serde(rename = "coordinationPlan")]
+    pub coordination_plan: serde_json::Value,
+    #[serde(rename = "applicableGuidelines")]
+    pub applicable_guidelines: Vec<String>,
+    #[serde(rename = "enforcementLevel")]
+    pub enforcement_level: String,
+    #[serde(rename = "allowExceptions")]
+    pub allow_exceptions: bool,
+}
+
+/// Guideline enforcement result
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct GuidelineEnforceResult {
+    #[serde(rename = "enforcementId")]
+    pub enforcement_id: Uuid,
+    #[serde(rename = "complianceStatus")]
+    pub compliance_status: String,
+    #[serde(rename = "violations")]
+    pub violations: Vec<serde_json::Value>,
+    #[serde(rename = "recommendedCorrections")]
+    pub recommended_corrections: Vec<serde_json::Value>,
+    #[serde(rename = "approvedExceptions")]
+    pub approved_exceptions: Vec<serde_json::Value>,
+    #[serde(rename = "complianceScore")]
+    pub compliance_score: f32,
+    #[serde(rename = "auditTrail")]
+    pub audit_trail: Vec<serde_json::Value>,
+    pub message: String,
+}
+
+/// Learning capture parameters
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct LearningCaptureParams {
+    #[serde(rename = "capturingAgentId")]
+    pub capturing_agent_id: String,
+    #[serde(rename = "coordinationSession")]
+    pub coordination_session: serde_json::Value,
+    #[serde(rename = "outcomeData")]
+    pub outcome_data: serde_json::Value,
+    #[serde(rename = "successMetrics")]
+    pub success_metrics: serde_json::Value,
+    #[serde(rename = "lessonsLearned")]
+    pub lessons_learned: Vec<String>,
+    #[serde(rename = "improvementOpportunities")]
+    pub improvement_opportunities: Vec<String>,
+}
+
+/// Learning capture result
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct LearningCaptureResult {
+    #[serde(rename = "learningRecordId")]
+    pub learning_record_id: Uuid,
+    #[serde(rename = "extractedPatterns")]
+    pub extracted_patterns: Vec<serde_json::Value>,
+    #[serde(rename = "knowledgeContributions")]
+    pub knowledge_contributions: Vec<serde_json::Value>,
+    #[serde(rename = "processImprovements")]
+    pub process_improvements: Vec<serde_json::Value>,
+    #[serde(rename = "organizationalLearning")]
+    pub organizational_learning: serde_json::Value,
+    #[serde(rename = "futureRecommendations")]
+    pub future_recommendations: Vec<String>,
+    #[serde(rename = "knowledgeQualityScore")]
+    pub knowledge_quality_score: f32,
     pub message: String,
 }

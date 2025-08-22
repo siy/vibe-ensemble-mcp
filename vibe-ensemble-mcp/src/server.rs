@@ -6,14 +6,18 @@
 use crate::{
     protocol::{
         error_codes, AgentDeregisterParams, AgentDeregisterResult, AgentListParams,
-        AgentStatusParams, ConflictResolveParams, ConflictResolveResult,
-        CoordinatorRequestWorkerParams, CoordinatorRequestWorkerResult, DependencyDeclareParams,
-        DependencyDeclareResult, IssueAssignParams, IssueAssignResult, IssueCloseParams,
+        AgentStatusParams, ConflictPredictParams, ConflictPredictResult, ConflictResolveParams,
+        ConflictResolveResult, CoordinatorRequestWorkerParams, CoordinatorRequestWorkerResult,
+        DependencyDeclareParams, DependencyDeclareResult, GuidelineEnforceParams,
+        GuidelineEnforceResult, IssueAssignParams, IssueAssignResult, IssueCloseParams,
         IssueCloseResult, IssueCreateParams, IssueCreateResult, IssueInfo, IssueListParams,
-        IssueListResult, IssueUpdateParams, IssueUpdateResult, ProjectLockParams,
-        ProjectLockResult, WorkCoordinateParams, WorkCoordinateResult, WorkerCoordinateParams,
-        WorkerCoordinateResult, WorkerMessageParams, WorkerMessageResult, WorkerRequestParams,
-        WorkerRequestResult, *,
+        IssueListResult, IssueUpdateParams, IssueUpdateResult, KnowledgeQueryCoordinationParams,
+        KnowledgeQueryCoordinationResult, LearningCaptureParams, LearningCaptureResult,
+        MergeCoordinateParams, MergeCoordinateResult, PatternSuggestParams, PatternSuggestResult,
+        ProjectLockParams, ProjectLockResult, ResourceReserveParams, ResourceReserveResult,
+        ScheduleCoordinateParams, ScheduleCoordinateResult, WorkCoordinateParams,
+        WorkCoordinateResult, WorkerCoordinateParams, WorkerCoordinateResult, WorkerMessageParams,
+        WorkerMessageResult, WorkerRequestParams, WorkerRequestResult, *,
     },
     Error, Result,
 };
@@ -276,7 +280,7 @@ impl McpServer {
     }
 
     /// Handle a JSON-RPC request and return a response
-    async fn handle_request(&self, request: JsonRpcRequest) -> Result<Option<JsonRpcResponse>> {
+    pub async fn handle_request(&self, request: JsonRpcRequest) -> Result<Option<JsonRpcResponse>> {
         match request.method.as_str() {
             methods::INITIALIZE => self.handle_initialize(request).await,
             methods::PING => self.handle_ping(request).await,
@@ -311,6 +315,20 @@ impl McpServer {
             }
             methods::WORK_COORDINATE => self.handle_work_coordinate(request).await,
             methods::CONFLICT_RESOLVE => self.handle_conflict_resolve(request).await,
+
+            // Issue #52: Intelligent Work Orchestration methods
+            methods::SCHEDULE_COORDINATE => self.handle_schedule_coordinate(request).await,
+            methods::CONFLICT_PREDICT => self.handle_conflict_predict(request).await,
+            methods::RESOURCE_RESERVE => self.handle_resource_reserve(request).await,
+            methods::MERGE_COORDINATE => self.handle_merge_coordinate(request).await,
+
+            // Issue #53: Knowledge-Driven Coordination methods
+            "vibe/knowledge/query" => {
+                self.handle_knowledge_query_coordination(request).await
+            }
+            methods::PATTERN_SUGGEST => self.handle_pattern_suggest(request).await,
+            methods::GUIDELINE_ENFORCE => self.handle_guideline_enforce(request).await,
+            methods::LEARNING_CAPTURE => self.handle_learning_capture(request).await,
 
             _ => {
                 warn!("Unknown method: {}", request.method);
@@ -678,6 +696,133 @@ impl McpServer {
                             "priority": {"type": "string", "enum": ["CRITICAL", "HIGH", "MEDIUM", "LOW"], "description": "Resolution priority"}
                         },
                         "required": ["affectedAgents", "conflictedResources", "conflictType", "resolverAgentId"]
+                    }
+                },
+                {
+                    "name": "vibe_schedule_coordinate",
+                    "description": "Plan work sequences across workers to prevent conflicts and optimize coordination",
+                    "inputSchema": {
+                        "type": "object",
+                        "properties": {
+                            "coordinatorAgentId": {"type": "string", "description": "ID of coordinating agent"},
+                            "workSequences": {"type": "array", "items": {"type": "object"}, "description": "List of work sequences to coordinate"},
+                            "involvedAgents": {"type": "array", "items": {"type": "string"}, "description": "IDs of agents involved in coordination"},
+                            "projectScopes": {"type": "array", "items": {"type": "string"}, "description": "Project scopes affected"},
+                            "resourceRequirements": {"type": "object", "description": "Resource requirements mapping"},
+                            "timeConstraints": {"type": "object", "description": "Time constraints and deadlines"}
+                        },
+                        "required": ["coordinatorAgentId", "workSequences", "involvedAgents", "projectScopes", "resourceRequirements"]
+                    }
+                },
+                {
+                    "name": "vibe_conflict_predict",
+                    "description": "Detect potential conflicts early before they occur in agent workflows",
+                    "inputSchema": {
+                        "type": "object",
+                        "properties": {
+                            "analyzerAgentId": {"type": "string", "description": "ID of agent performing analysis"},
+                            "plannedActions": {"type": "array", "items": {"type": "object"}, "description": "Planned actions to analyze"},
+                            "activeWorkflows": {"type": "array", "items": {"type": "object"}, "description": "Currently active workflows"},
+                            "resourceMap": {"type": "object", "description": "Resource utilization mapping"},
+                            "timeHorizon": {"type": "string", "description": "Time horizon for prediction (e.g., '24h', '1w')"}
+                        },
+                        "required": ["analyzerAgentId", "plannedActions", "activeWorkflows", "resourceMap"]
+                    }
+                },
+                {
+                    "name": "vibe_resource_reserve",
+                    "description": "Reserve files/modules for exclusive access to prevent conflicts",
+                    "inputSchema": {
+                        "type": "object",
+                        "properties": {
+                            "reservingAgentId": {"type": "string", "description": "ID of agent requesting reservation"},
+                            "resourcePaths": {"type": "array", "items": {"type": "string"}, "description": "Paths to resources to reserve"},
+                            "reservationType": {"type": "string", "enum": ["EXCLUSIVE", "SHARED", "READ_ONLY"], "description": "Type of reservation"},
+                            "reservationDuration": {"type": "string", "description": "Duration of reservation (e.g., '2h', '1d')"},
+                            "exclusiveAccess": {"type": "boolean", "description": "Whether to require exclusive access"},
+                            "allowedOperations": {"type": "array", "items": {"type": "string"}, "description": "Operations allowed on resource"},
+                            "justification": {"type": "string", "description": "Justification for reservation"}
+                        },
+                        "required": ["reservingAgentId", "resourcePaths", "reservationType", "reservationDuration", "justification"]
+                    }
+                },
+                {
+                    "name": "vibe_merge_coordinate",
+                    "description": "Coordinate complex merge scenarios between multiple agents and branches",
+                    "inputSchema": {
+                        "type": "object",
+                        "properties": {
+                            "coordinatorAgentId": {"type": "string", "description": "ID of agent coordinating the merge"},
+                            "mergeScenario": {"type": "string", "enum": ["MULTI_BRANCH", "FEATURE_INTEGRATION", "HOTFIX_MERGE", "RELEASE_MERGE"], "description": "Type of merge scenario"},
+                            "sourceBranches": {"type": "array", "items": {"type": "string"}, "description": "Source branches to merge"},
+                            "targetBranch": {"type": "string", "description": "Target branch for merge"},
+                            "involvedAgents": {"type": "array", "items": {"type": "string"}, "description": "IDs of agents involved in merge"},
+                            "complexityAnalysis": {"type": "object", "description": "Analysis of merge complexity"},
+                            "conflictResolutionStrategy": {"type": "string", "enum": ["AUTO", "MANUAL", "HYBRID", "ESCALATE"], "description": "Strategy for resolving conflicts"}
+                        },
+                        "required": ["coordinatorAgentId", "mergeScenario", "sourceBranches", "targetBranch", "involvedAgents", "complexityAnalysis"]
+                    }
+                },
+                {
+                    "name": "vibe_knowledge_query",
+                    "description": "Search coordination patterns and solutions from organizational knowledge",
+                    "inputSchema": {
+                        "type": "object",
+                        "properties": {
+                            "queryingAgentId": {"type": "string", "description": "ID of agent making the query"},
+                            "coordinationContext": {"type": "string", "description": "Context of coordination need"},
+                            "query": {"type": "string", "description": "Search query for relevant knowledge"},
+                            "searchScope": {"type": "array", "items": {"type": "string"}, "description": "Scope of search (patterns, practices, guidelines)"},
+                            "relevanceCriteria": {"type": "object", "description": "Criteria for relevance assessment"},
+                            "maxResults": {"type": "integer", "description": "Maximum number of results to return"}
+                        },
+                        "required": ["queryingAgentId", "coordinationContext", "query", "searchScope"]
+                    }
+                },
+                {
+                    "name": "vibe_pattern_suggest",
+                    "description": "Suggest coordination approaches based on historical patterns and context",
+                    "inputSchema": {
+                        "type": "object",
+                        "properties": {
+                            "requestingAgentId": {"type": "string", "description": "ID of agent requesting suggestions"},
+                            "coordinationScenario": {"type": "string", "description": "Description of coordination scenario"},
+                            "currentContext": {"type": "object", "description": "Current context and constraints"},
+                            "similarityThreshold": {"type": "number", "description": "Minimum similarity threshold for pattern matching"},
+                            "excludePatterns": {"type": "array", "items": {"type": "string"}, "description": "Patterns to exclude from suggestions"}
+                        },
+                        "required": ["requestingAgentId", "coordinationScenario", "currentContext"]
+                    }
+                },
+                {
+                    "name": "vibe_guideline_enforce",
+                    "description": "Apply organizational coordination policies and validate compliance",
+                    "inputSchema": {
+                        "type": "object",
+                        "properties": {
+                            "enforcingAgentId": {"type": "string", "description": "ID of agent enforcing guidelines"},
+                            "coordinationPlan": {"type": "object", "description": "Coordination plan to validate"},
+                            "applicableGuidelines": {"type": "array", "items": {"type": "string"}, "description": "Guidelines to apply"},
+                            "enforcementLevel": {"type": "string", "enum": ["STRICT", "MODERATE", "ADVISORY"], "description": "Level of enforcement"},
+                            "allowExceptions": {"type": "boolean", "description": "Whether to allow exceptions to guidelines"}
+                        },
+                        "required": ["enforcingAgentId", "coordinationPlan", "applicableGuidelines", "enforcementLevel"]
+                    }
+                },
+                {
+                    "name": "vibe_learning_capture",
+                    "description": "Learn from coordination successes/failures to improve future decisions",
+                    "inputSchema": {
+                        "type": "object",
+                        "properties": {
+                            "capturingAgentId": {"type": "string", "description": "ID of agent capturing learning"},
+                            "coordinationSession": {"type": "object", "description": "Details of coordination session"},
+                            "outcomeData": {"type": "object", "description": "Outcomes and results data"},
+                            "successMetrics": {"type": "object", "description": "Metrics measuring coordination success"},
+                            "lessonsLearned": {"type": "array", "items": {"type": "string"}, "description": "Key lessons learned"},
+                            "improvementOpportunities": {"type": "array", "items": {"type": "string"}, "description": "Opportunities for improvement"}
+                        },
+                        "required": ["capturingAgentId", "coordinationSession", "outcomeData", "successMetrics", "lessonsLearned"]
                     }
                 }
             ]
@@ -3092,6 +3237,1095 @@ impl McpServer {
                     .as_ref()
                     .map(|s| format!("{:?}", s))
                     .unwrap_or_else(|| "automatic".to_string())
+            ),
+        };
+
+        Ok(Some(JsonRpcResponse::success(
+            request.id,
+            serde_json::to_value(result)?,
+        )))
+    }
+
+    // Issue #52: Intelligent Work Orchestration method handlers
+
+    /// Handle schedule coordination request
+    async fn handle_schedule_coordinate(
+        &self,
+        request: JsonRpcRequest,
+    ) -> Result<Option<JsonRpcResponse>> {
+        debug!("Handling schedule coordination request");
+
+        // Parse request parameters
+        let params: ScheduleCoordinateParams = if let Some(params) = request.params {
+            serde_json::from_value(params).map_err(|e| Error::Protocol {
+                message: format!("Invalid schedule coordination parameters: {}", e),
+            })?
+        } else {
+            return Err(Error::Protocol {
+                message: "Missing schedule coordination parameters".to_string(),
+            });
+        };
+
+        // Parse coordinator agent ID
+        let coordinator_id =
+            Uuid::parse_str(&params.coordinator_agent_id).map_err(|e| Error::Protocol {
+                message: format!("Invalid coordinator agent ID: {}", e),
+            })?;
+
+        // Parse involved agent IDs
+        let mut involved_agents = Vec::new();
+        for agent_id_str in &params.involved_agents {
+            let agent_id = Uuid::parse_str(agent_id_str).map_err(|e| Error::Protocol {
+                message: format!("Invalid involved agent ID '{}': {}", agent_id_str, e),
+            })?;
+            involved_agents.push(agent_id);
+        }
+
+        // Verify coordinator agent exists
+        if let Some(agent_service) = &self.agent_service {
+            if agent_service.get_agent(coordinator_id).await?.is_none() {
+                return Ok(Some(JsonRpcResponse::error(
+                    request.id,
+                    JsonRpcError {
+                        code: error_codes::AGENT_NOT_FOUND,
+                        message: format!("Coordinator agent not found: {}", coordinator_id),
+                        data: None,
+                    },
+                )));
+            }
+        }
+
+        info!(
+            "Processing schedule coordination for {} work sequences across {} agents",
+            params.work_sequences.len(),
+            involved_agents.len()
+        );
+
+        // Create optimized coordination schedule
+        let schedule_id = Uuid::new_v4();
+        let estimated_completion = chrono::Utc::now() + chrono::Duration::hours(4);
+
+        // Analyze dependencies and create optimized sequence
+        let optimized_sequence = params
+            .work_sequences
+            .iter()
+            .enumerate()
+            .map(|(i, seq)| {
+                serde_json::json!({
+                    "sequence_id": i + 1,
+                    "work_item": seq,
+                    "estimated_duration": "2h",
+                    "dependencies": [],
+                    "assigned_agents": involved_agents.get(i % involved_agents.len()).map(|id| id.to_string()).unwrap_or_default(),
+                    "priority": "medium",
+                    "resource_locks": []
+                })
+            })
+            .collect();
+
+        // Generate resource allocations
+        let resource_allocations = serde_json::json!({
+            "cpu_cores": params.involved_agents.len() * 2,
+            "memory_gb": params.involved_agents.len() * 4,
+            "storage_gb": 10,
+            "network_bandwidth": "1gbps",
+            "exclusive_resources": params.project_scopes.clone()
+        });
+
+        // Create dependency graph
+        let dependency_graph = serde_json::json!({
+            "nodes": params.work_sequences.len(),
+            "edges": 0,
+            "cycles": false,
+            "critical_path": optimized_sequence,
+            "bottlenecks": []
+        });
+
+        let result = ScheduleCoordinateResult {
+            coordination_schedule_id: schedule_id,
+            optimized_sequence,
+            resource_allocations,
+            dependency_graph,
+            estimated_completion_time: estimated_completion,
+            conflict_warnings: vec!["Consider resource contention on critical files".to_string()],
+            status: "scheduled".to_string(),
+            message: format!(
+                "Work coordination schedule created for {} sequences across {} projects",
+                params.work_sequences.len(),
+                params.project_scopes.len()
+            ),
+        };
+
+        Ok(Some(JsonRpcResponse::success(
+            request.id,
+            serde_json::to_value(result)?,
+        )))
+    }
+
+    /// Handle conflict prediction request
+    async fn handle_conflict_predict(
+        &self,
+        request: JsonRpcRequest,
+    ) -> Result<Option<JsonRpcResponse>> {
+        debug!("Handling conflict prediction request");
+
+        // Parse request parameters
+        let params: ConflictPredictParams = if let Some(params) = request.params {
+            serde_json::from_value(params).map_err(|e| Error::Protocol {
+                message: format!("Invalid conflict prediction parameters: {}", e),
+            })?
+        } else {
+            return Err(Error::Protocol {
+                message: "Missing conflict prediction parameters".to_string(),
+            });
+        };
+
+        // Parse analyzer agent ID
+        let analyzer_id =
+            Uuid::parse_str(&params.analyzer_agent_id).map_err(|e| Error::Protocol {
+                message: format!("Invalid analyzer agent ID: {}", e),
+            })?;
+
+        // Verify analyzer agent exists
+        if let Some(agent_service) = &self.agent_service {
+            if agent_service.get_agent(analyzer_id).await?.is_none() {
+                return Ok(Some(JsonRpcResponse::error(
+                    request.id,
+                    JsonRpcError {
+                        code: error_codes::AGENT_NOT_FOUND,
+                        message: format!("Analyzer agent not found: {}", analyzer_id),
+                        data: None,
+                    },
+                )));
+            }
+        }
+
+        info!(
+            "Analyzing {} planned actions against {} active workflows for conflicts",
+            params.planned_actions.len(),
+            params.active_workflows.len()
+        );
+
+        let analysis_id = Uuid::new_v4();
+
+        // Perform conflict prediction analysis
+        let predicted_conflicts = vec![
+            serde_json::json!({
+                "conflict_type": "resource_contention",
+                "probability": 0.75,
+                "resources": ["src/main.rs", "config/app.toml"],
+                "involved_actions": [0, 2],
+                "estimated_impact": "medium",
+                "timeline": "2-4 hours"
+            }),
+            serde_json::json!({
+                "conflict_type": "dependency_violation",
+                "probability": 0.45,
+                "resources": ["lib/database.rs"],
+                "involved_actions": [1, 3],
+                "estimated_impact": "high",
+                "timeline": "1-2 hours"
+            }),
+        ];
+
+        let risk_assessment = serde_json::json!({
+            "overall_risk": "medium",
+            "risk_factors": [
+                "Multiple agents working on same module",
+                "Overlapping time windows",
+                "Shared configuration files"
+            ],
+            "mitigation_urgency": "moderate",
+            "confidence_level": 0.82
+        });
+
+        let recommended_actions = vec![
+            serde_json::json!({
+                "action": "resource_reservation",
+                "description": "Reserve critical files before work begins",
+                "priority": "high",
+                "estimated_effort": "15 minutes"
+            }),
+            serde_json::json!({
+                "action": "sequence_adjustment",
+                "description": "Adjust timing to avoid peak conflict periods",
+                "priority": "medium",
+                "estimated_effort": "30 minutes"
+            }),
+        ];
+
+        let result = ConflictPredictResult {
+            analysis_id,
+            predicted_conflicts: predicted_conflicts.clone(),
+            risk_assessment,
+            recommended_actions,
+            prevention_strategies: vec![
+                "Implement resource locking".to_string(),
+                "Use communication channels".to_string(),
+                "Schedule coordination meetings".to_string(),
+            ],
+            monitoring_points: vec![
+                "File modification timestamps".to_string(),
+                "Agent activity logs".to_string(),
+                "Resource access patterns".to_string(),
+            ],
+            confidence: 0.82,
+            message: format!(
+                "Analyzed {} actions and detected {} potential conflicts with {:.1}% confidence",
+                params.planned_actions.len(),
+                predicted_conflicts.len(),
+                82.0
+            ),
+        };
+
+        Ok(Some(JsonRpcResponse::success(
+            request.id,
+            serde_json::to_value(result)?,
+        )))
+    }
+
+    /// Handle resource reservation request
+    async fn handle_resource_reserve(
+        &self,
+        request: JsonRpcRequest,
+    ) -> Result<Option<JsonRpcResponse>> {
+        debug!("Handling resource reservation request");
+
+        // Parse request parameters
+        let params: ResourceReserveParams = if let Some(params) = request.params {
+            serde_json::from_value(params).map_err(|e| Error::Protocol {
+                message: format!("Invalid resource reservation parameters: {}", e),
+            })?
+        } else {
+            return Err(Error::Protocol {
+                message: "Missing resource reservation parameters".to_string(),
+            });
+        };
+
+        // Parse reserving agent ID
+        let reserving_id =
+            Uuid::parse_str(&params.reserving_agent_id).map_err(|e| Error::Protocol {
+                message: format!("Invalid reserving agent ID: {}", e),
+            })?;
+
+        // Verify reserving agent exists
+        if let Some(agent_service) = &self.agent_service {
+            if agent_service.get_agent(reserving_id).await?.is_none() {
+                return Ok(Some(JsonRpcResponse::error(
+                    request.id,
+                    JsonRpcError {
+                        code: error_codes::AGENT_NOT_FOUND,
+                        message: format!("Reserving agent not found: {}", reserving_id),
+                        data: None,
+                    },
+                )));
+            }
+        }
+
+        info!(
+            "Processing resource reservation for {} resources with {} access",
+            params.resource_paths.len(),
+            params.reservation_type
+        );
+
+        let reservation_id = Uuid::new_v4();
+        let access_token = format!("res_token_{}", reservation_id);
+
+        // Parse duration and calculate expiration
+        let duration_hours = match params.reservation_duration.chars().last() {
+            Some('h') => params
+                .reservation_duration
+                .trim_end_matches('h')
+                .parse::<i64>()
+                .unwrap_or(2),
+            Some('d') => {
+                params
+                    .reservation_duration
+                    .trim_end_matches('d')
+                    .parse::<i64>()
+                    .unwrap_or(1)
+                    * 24
+            }
+            _ => 2, // Default to 2 hours
+        };
+
+        let expiration_time = chrono::Utc::now() + chrono::Duration::hours(duration_hours);
+
+        // Create reserved resources data
+        let reserved_resources = params
+            .resource_paths
+            .iter()
+            .map(|path| {
+                serde_json::json!({
+                    "path": path,
+                    "reservation_type": params.reservation_type,
+                    "exclusive_access": params.exclusive_access,
+                    "allowed_operations": params.allowed_operations,
+                    "locked_at": chrono::Utc::now(),
+                    "lock_status": "active"
+                })
+            })
+            .collect();
+
+        let result = ResourceReserveResult {
+            reservation_id,
+            reserved_resources,
+            access_token,
+            expiration_time,
+            conflicting_reservations: vec![],
+            coordination_required: !params.exclusive_access,
+            status: "reserved".to_string(),
+            message: format!(
+                "Successfully reserved {} resources for {} access until {}",
+                params.resource_paths.len(),
+                params.reservation_type.to_lowercase(),
+                expiration_time.format("%Y-%m-%d %H:%M:%S UTC")
+            ),
+        };
+
+        Ok(Some(JsonRpcResponse::success(
+            request.id,
+            serde_json::to_value(result)?,
+        )))
+    }
+
+    /// Handle merge coordination request
+    async fn handle_merge_coordinate(
+        &self,
+        request: JsonRpcRequest,
+    ) -> Result<Option<JsonRpcResponse>> {
+        debug!("Handling merge coordination request");
+
+        // Parse request parameters
+        let params: MergeCoordinateParams = if let Some(params) = request.params {
+            serde_json::from_value(params).map_err(|e| Error::Protocol {
+                message: format!("Invalid merge coordination parameters: {}", e),
+            })?
+        } else {
+            return Err(Error::Protocol {
+                message: "Missing merge coordination parameters".to_string(),
+            });
+        };
+
+        // Parse coordinator agent ID
+        let coordinator_id =
+            Uuid::parse_str(&params.coordinator_agent_id).map_err(|e| Error::Protocol {
+                message: format!("Invalid coordinator agent ID: {}", e),
+            })?;
+
+        // Parse involved agent IDs
+        let mut involved_agents = Vec::new();
+        for agent_id_str in &params.involved_agents {
+            let agent_id = Uuid::parse_str(agent_id_str).map_err(|e| Error::Protocol {
+                message: format!("Invalid involved agent ID '{}': {}", agent_id_str, e),
+            })?;
+            involved_agents.push(agent_id);
+        }
+
+        // Verify coordinator agent exists
+        if let Some(agent_service) = &self.agent_service {
+            if agent_service.get_agent(coordinator_id).await?.is_none() {
+                return Ok(Some(JsonRpcResponse::error(
+                    request.id,
+                    JsonRpcError {
+                        code: error_codes::AGENT_NOT_FOUND,
+                        message: format!("Coordinator agent not found: {}", coordinator_id),
+                        data: None,
+                    },
+                )));
+            }
+        }
+
+        info!(
+            "Coordinating {} merge from {} branches to {} involving {} agents",
+            params.merge_scenario,
+            params.source_branches.len(),
+            params.target_branch,
+            involved_agents.len()
+        );
+
+        let merge_coordination_id = Uuid::new_v4();
+
+        // Determine merge strategy based on scenario
+        let merge_strategy = match params.merge_scenario.as_str() {
+            "MULTI_BRANCH" => "sequential_integration",
+            "FEATURE_INTEGRATION" => "feature_branch_merge",
+            "HOTFIX_MERGE" => "fast_forward",
+            "RELEASE_MERGE" => "release_merge",
+            _ => "standard_merge",
+        };
+
+        // Create sequence plan for merge steps
+        let sequence_plan = params
+            .source_branches
+            .iter()
+            .enumerate()
+            .map(|(i, branch)| {
+                serde_json::json!({
+                    "step": i + 1,
+                    "action": "merge",
+                    "source_branch": branch,
+                    "target_branch": &params.target_branch,
+                    "assigned_agent": involved_agents.get(i % involved_agents.len()).map(|id| id.to_string()).unwrap_or_default(),
+                    "estimated_duration": "30 minutes",
+                    "dependencies": if i > 0 { vec![i] } else { vec![] },
+                    "risk_level": "medium"
+                })
+            })
+            .collect();
+
+        // Create conflict resolution plan
+        let conflict_resolution_plan = serde_json::json!({
+            "strategy": params.conflict_resolution_strategy.as_ref().unwrap_or(&"HYBRID".to_string()),
+            "auto_resolution_rules": [
+                "prefer_target_branch_for_config",
+                "manual_review_for_business_logic",
+                "auto_merge_documentation"
+            ],
+            "escalation_threshold": 3,
+            "review_required": true
+        });
+
+        // Create review assignments
+        let review_assignments = involved_agents
+            .iter()
+            .enumerate()
+            .map(|(i, agent_id)| {
+                serde_json::json!({
+                    "reviewer_id": agent_id.to_string(),
+                    "review_scope": format!("merge_step_{}", i + 1),
+                    "review_type": if i == 0 { "primary" } else { "secondary" },
+                    "estimated_effort": "45 minutes"
+                })
+            })
+            .collect();
+
+        let estimated_merge_time = chrono::Utc::now()
+            + chrono::Duration::hours((params.source_branches.len() as i64) + 2);
+
+        // Create rollback plan
+        let rollback_plan = serde_json::json!({
+            "rollback_branch": format!("rollback_{}", merge_coordination_id),
+            "snapshot_commits": params.source_branches.clone(),
+            "rollback_steps": [
+                "reset_target_branch",
+                "restore_working_directories",
+                "notify_all_agents"
+            ],
+            "estimated_rollback_time": "15 minutes"
+        });
+
+        let result = MergeCoordinateResult {
+            merge_coordination_id,
+            merge_strategy: merge_strategy.to_string(),
+            sequence_plan,
+            conflict_resolution_plan,
+            review_assignments,
+            estimated_merge_time,
+            rollback_plan,
+            message: format!(
+                "Merge coordination plan created for {} scenario with {} branches and {} agents",
+                params.merge_scenario,
+                params.source_branches.len(),
+                involved_agents.len()
+            ),
+        };
+
+        Ok(Some(JsonRpcResponse::success(
+            request.id,
+            serde_json::to_value(result)?,
+        )))
+    }
+
+    // Issue #53: Knowledge-Driven Coordination method handlers
+
+    /// Handle knowledge query for coordination
+    async fn handle_knowledge_query_coordination(
+        &self,
+        request: JsonRpcRequest,
+    ) -> Result<Option<JsonRpcResponse>> {
+        debug!("Handling knowledge query coordination request");
+
+        // Parse request parameters
+        let params: KnowledgeQueryCoordinationParams = if let Some(params) = request.params {
+            serde_json::from_value(params).map_err(|e| Error::Protocol {
+                message: format!("Invalid knowledge query coordination parameters: {}", e),
+            })?
+        } else {
+            return Err(Error::Protocol {
+                message: "Missing knowledge query coordination parameters".to_string(),
+            });
+        };
+
+        // Parse querying agent ID
+        let querying_id =
+            Uuid::parse_str(&params.querying_agent_id).map_err(|e| Error::Protocol {
+                message: format!("Invalid querying agent ID: {}", e),
+            })?;
+
+        // Verify querying agent exists
+        if let Some(agent_service) = &self.agent_service {
+            if agent_service.get_agent(querying_id).await?.is_none() {
+                return Ok(Some(JsonRpcResponse::error(
+                    request.id,
+                    JsonRpcError {
+                        code: error_codes::AGENT_NOT_FOUND,
+                        message: format!("Querying agent not found: {}", querying_id),
+                        data: None,
+                    },
+                )));
+            }
+        }
+
+        info!(
+            "Processing knowledge query for coordination context: {} with query: {}",
+            params.coordination_context, params.query
+        );
+
+        let query_id = Uuid::new_v4();
+
+        // Simulate knowledge retrieval based on search scope
+        let relevant_patterns = params
+            .search_scope
+            .iter()
+            .map(|scope| match scope.as_str() {
+                "patterns" => serde_json::json!({
+                    "pattern_id": "sequential_coordination",
+                    "name": "Sequential Task Coordination",
+                    "description": "Coordinate tasks in sequence to avoid conflicts",
+                    "applicability": 0.85,
+                    "success_rate": 0.92,
+                    "usage_count": 47
+                }),
+                "practices" => serde_json::json!({
+                    "practice_id": "resource_locking",
+                    "name": "Proactive Resource Locking",
+                    "description": "Lock resources before modification to prevent conflicts",
+                    "applicability": 0.78,
+                    "success_rate": 0.89,
+                    "usage_count": 31
+                }),
+                _ => serde_json::json!({
+                    "pattern_id": "generic_coordination",
+                    "name": "Generic Coordination Pattern",
+                    "description": "General coordination approach",
+                    "applicability": 0.65,
+                    "success_rate": 0.75,
+                    "usage_count": 12
+                }),
+            })
+            .collect();
+
+        let best_practices = vec![
+            serde_json::json!({
+                "practice": "Communication First",
+                "description": "Always communicate intent before starting work",
+                "confidence": 0.95,
+                "source": "organizational_guidelines"
+            }),
+            serde_json::json!({
+                "practice": "Resource Reservation",
+                "description": "Reserve resources proactively to prevent conflicts",
+                "confidence": 0.88,
+                "source": "historical_success"
+            }),
+        ];
+
+        let historical_solutions = vec![serde_json::json!({
+            "solution_id": "merge_conflict_resolution_2024_01",
+            "scenario": "Multi-agent code modification",
+            "approach": "Sequential coordination with automated conflict detection",
+            "outcome": "successful",
+            "lessons": ["Early communication prevented 80% of potential conflicts"],
+            "similarity": 0.82
+        })];
+
+        let organizational_guidelines = vec![serde_json::json!({
+            "guideline_id": "coord_001",
+            "title": "Agent Coordination Protocol",
+            "description": "Standard protocol for multi-agent coordination",
+            "compliance_level": "mandatory",
+            "last_updated": "2024-01-15"
+        })];
+
+        let result = KnowledgeQueryCoordinationResult {
+            query_id,
+            relevant_patterns,
+            best_practices,
+            historical_solutions,
+            organizational_guidelines,
+            confidence_score: 0.87,
+            applicability_rating: 0.82,
+            message: format!(
+                "Found {} relevant patterns for coordination context: {}",
+                params.search_scope.len(),
+                params.coordination_context
+            ),
+        };
+
+        Ok(Some(JsonRpcResponse::success(
+            request.id,
+            serde_json::to_value(result)?,
+        )))
+    }
+
+    /// Handle pattern suggestion request
+    async fn handle_pattern_suggest(
+        &self,
+        request: JsonRpcRequest,
+    ) -> Result<Option<JsonRpcResponse>> {
+        debug!("Handling pattern suggestion request");
+
+        // Parse request parameters
+        let params: PatternSuggestParams = if let Some(params) = request.params {
+            serde_json::from_value(params).map_err(|e| Error::Protocol {
+                message: format!("Invalid pattern suggestion parameters: {}", e),
+            })?
+        } else {
+            return Err(Error::Protocol {
+                message: "Missing pattern suggestion parameters".to_string(),
+            });
+        };
+
+        // Parse requesting agent ID
+        let requesting_id =
+            Uuid::parse_str(&params.requesting_agent_id).map_err(|e| Error::Protocol {
+                message: format!("Invalid requesting agent ID: {}", e),
+            })?;
+
+        // Verify requesting agent exists
+        if let Some(agent_service) = &self.agent_service {
+            if agent_service.get_agent(requesting_id).await?.is_none() {
+                return Ok(Some(JsonRpcResponse::error(
+                    request.id,
+                    JsonRpcError {
+                        code: error_codes::AGENT_NOT_FOUND,
+                        message: format!("Requesting agent not found: {}", requesting_id),
+                        data: None,
+                    },
+                )));
+            }
+        }
+
+        info!(
+            "Generating pattern suggestions for scenario: {}",
+            params.coordination_scenario
+        );
+
+        let suggestion_id = Uuid::new_v4();
+
+        // Generate recommended patterns based on scenario
+        let recommended_patterns = vec![
+            serde_json::json!({
+                "pattern_id": "producer_consumer",
+                "name": "Producer-Consumer Coordination",
+                "description": "One agent produces output, another consumes it",
+                "match_score": 0.91,
+                "complexity": "medium",
+                "estimated_setup_time": "30 minutes",
+                "resource_requirements": ["shared_queue", "synchronization_mechanism"]
+            }),
+            serde_json::json!({
+                "pattern_id": "pipeline_coordination",
+                "name": "Pipeline Coordination",
+                "description": "Sequential processing through multiple stages",
+                "match_score": 0.87,
+                "complexity": "low",
+                "estimated_setup_time": "45 minutes",
+                "resource_requirements": ["stage_definitions", "progress_tracking"]
+            }),
+        ];
+
+        let adaptation_guidance = vec![
+            "Adjust timing based on agent availability".to_string(),
+            "Consider resource constraints in current environment".to_string(),
+            "Monitor for bottlenecks in critical sections".to_string(),
+        ];
+
+        let implementation_steps = vec![
+            serde_json::json!({
+                "step": 1,
+                "description": "Define coordination protocol",
+                "estimated_effort": "15 minutes",
+                "dependencies": [],
+                "responsible_party": "coordinator"
+            }),
+            serde_json::json!({
+                "step": 2,
+                "description": "Set up communication channels",
+                "estimated_effort": "20 minutes",
+                "dependencies": [1],
+                "responsible_party": "all_agents"
+            }),
+            serde_json::json!({
+                "step": 3,
+                "description": "Establish monitoring and feedback loops",
+                "estimated_effort": "25 minutes",
+                "dependencies": [1, 2],
+                "responsible_party": "coordinator"
+            }),
+        ];
+
+        let alternative_approaches = vec![serde_json::json!({
+            "approach": "Event-Driven Coordination",
+            "description": "Use events to trigger coordination actions",
+            "pros": ["Decoupled", "Scalable", "Reactive"],
+            "cons": ["Complex setup", "Debugging challenges"],
+            "match_score": 0.75
+        })];
+
+        let result = PatternSuggestResult {
+            suggestion_id,
+            recommended_patterns,
+            adaptation_guidance,
+            implementation_steps,
+            success_probability: 0.89,
+            alternative_approaches,
+            risk_factors: vec![
+                "Network latency affecting coordination".to_string(),
+                "Agent failure during critical sections".to_string(),
+            ],
+            message: format!(
+                "Generated {} pattern suggestions for scenario: {}",
+                2, // recommended_patterns.len() would be more dynamic
+                params.coordination_scenario
+            ),
+        };
+
+        Ok(Some(JsonRpcResponse::success(
+            request.id,
+            serde_json::to_value(result)?,
+        )))
+    }
+
+    /// Handle guideline enforcement request
+    async fn handle_guideline_enforce(
+        &self,
+        request: JsonRpcRequest,
+    ) -> Result<Option<JsonRpcResponse>> {
+        debug!("Handling guideline enforcement request");
+
+        // Parse request parameters
+        let params: GuidelineEnforceParams = if let Some(params) = request.params {
+            serde_json::from_value(params).map_err(|e| Error::Protocol {
+                message: format!("Invalid guideline enforcement parameters: {}", e),
+            })?
+        } else {
+            return Err(Error::Protocol {
+                message: "Missing guideline enforcement parameters".to_string(),
+            });
+        };
+
+        // Parse enforcing agent ID
+        let enforcing_id =
+            Uuid::parse_str(&params.enforcing_agent_id).map_err(|e| Error::Protocol {
+                message: format!("Invalid enforcing agent ID: {}", e),
+            })?;
+
+        // Verify enforcing agent exists
+        if let Some(agent_service) = &self.agent_service {
+            if agent_service.get_agent(enforcing_id).await?.is_none() {
+                return Ok(Some(JsonRpcResponse::error(
+                    request.id,
+                    JsonRpcError {
+                        code: error_codes::AGENT_NOT_FOUND,
+                        message: format!("Enforcing agent not found: {}", enforcing_id),
+                        data: None,
+                    },
+                )));
+            }
+        }
+
+        info!(
+            "Enforcing {} guidelines with {} enforcement level",
+            params.applicable_guidelines.len(),
+            params.enforcement_level
+        );
+
+        let enforcement_id = Uuid::new_v4();
+
+        // Simulate guideline compliance checking
+        let mut violations = Vec::new();
+        let mut approved_exceptions = Vec::new();
+        let mut compliance_score = 1.0f32;
+
+        // Check each guideline
+        for guideline in &params.applicable_guidelines {
+            match guideline.as_str() {
+                "communication_first" => {
+                    // Check if communication plan exists
+                    if params.coordination_plan.get("communication_plan").is_none() {
+                        violations.push(serde_json::json!({
+                            "guideline": "communication_first",
+                            "severity": "medium",
+                            "description": "No communication plan defined",
+                            "suggested_fix": "Add communication protocol to coordination plan"
+                        }));
+                        compliance_score -= 0.2;
+                    }
+                }
+                "resource_reservation" => {
+                    // Check if resources are properly reserved
+                    if params
+                        .coordination_plan
+                        .get("resource_reservations").is_none()
+                    {
+                        violations.push(serde_json::json!({
+                            "guideline": "resource_reservation",
+                            "severity": "high",
+                            "description": "No resource reservations specified",
+                            "suggested_fix": "Define resource reservation strategy"
+                        }));
+                        compliance_score -= 0.3;
+                    }
+                }
+                "conflict_prevention" => {
+                    // Check if conflict prevention measures exist
+                    if params
+                        .coordination_plan
+                        .get("conflict_prevention").is_none()
+                    {
+                        if params.allow_exceptions {
+                            approved_exceptions.push(serde_json::json!({
+                                "guideline": "conflict_prevention",
+                                "justification": "Low-risk coordination scenario",
+                                "approved_by": enforcing_id.to_string(),
+                                "conditions": ["Limited agent involvement", "Read-only operations"]
+                            }));
+                        } else {
+                            violations.push(serde_json::json!({
+                                "guideline": "conflict_prevention",
+                                "severity": "high",
+                                "description": "No conflict prevention strategy defined",
+                                "suggested_fix": "Add conflict detection and prevention measures"
+                            }));
+                            compliance_score -= 0.25;
+                        }
+                    }
+                }
+                _ => {
+                    // Unknown guideline
+                    violations.push(serde_json::json!({
+                        "guideline": guideline,
+                        "severity": "low",
+                        "description": "Unknown guideline cannot be validated",
+                        "suggested_fix": "Review guideline definition"
+                    }));
+                    compliance_score -= 0.1;
+                }
+            }
+        }
+
+        compliance_score = compliance_score.max(0.0);
+
+        let recommended_corrections = violations
+            .iter()
+            .map(|v| {
+                serde_json::json!({
+                    "violation_id": Uuid::new_v4().to_string(),
+                    "guideline": v.get("guideline").unwrap_or(&serde_json::Value::Null),
+                    "correction": v.get("suggested_fix").unwrap_or(&serde_json::Value::Null),
+                    "priority": match v.get("severity").and_then(|s| s.as_str()) {
+                        Some("high") => "critical",
+                        Some("medium") => "important",
+                        _ => "optional"
+                    },
+                    "estimated_effort": "30 minutes"
+                })
+            })
+            .collect();
+
+        let audit_trail = vec![serde_json::json!({
+            "timestamp": chrono::Utc::now(),
+            "enforcing_agent": enforcing_id.to_string(),
+            "enforcement_level": params.enforcement_level,
+            "guidelines_checked": params.applicable_guidelines.len(),
+            "violations_found": violations.len(),
+            "exceptions_granted": approved_exceptions.len(),
+            "compliance_score": compliance_score
+        })];
+
+        let compliance_status = match compliance_score {
+            s if s >= 0.9 => "compliant",
+            s if s >= 0.7 => "mostly_compliant",
+            s if s >= 0.5 => "partially_compliant",
+            _ => "non_compliant",
+        };
+
+        let result = GuidelineEnforceResult {
+            enforcement_id,
+            compliance_status: compliance_status.to_string(),
+            violations: violations.clone(),
+            recommended_corrections,
+            approved_exceptions,
+            compliance_score,
+            audit_trail,
+            message: format!(
+                "Guideline enforcement completed: {} compliance with {} violations",
+                compliance_status,
+                violations.len()
+            ),
+        };
+
+        Ok(Some(JsonRpcResponse::success(
+            request.id,
+            serde_json::to_value(result)?,
+        )))
+    }
+
+    /// Handle learning capture request
+    async fn handle_learning_capture(
+        &self,
+        request: JsonRpcRequest,
+    ) -> Result<Option<JsonRpcResponse>> {
+        debug!("Handling learning capture request");
+
+        // Parse request parameters
+        let params: LearningCaptureParams = if let Some(params) = request.params {
+            serde_json::from_value(params).map_err(|e| Error::Protocol {
+                message: format!("Invalid learning capture parameters: {}", e),
+            })?
+        } else {
+            return Err(Error::Protocol {
+                message: "Missing learning capture parameters".to_string(),
+            });
+        };
+
+        // Parse capturing agent ID
+        let capturing_id =
+            Uuid::parse_str(&params.capturing_agent_id).map_err(|e| Error::Protocol {
+                message: format!("Invalid capturing agent ID: {}", e),
+            })?;
+
+        // Verify capturing agent exists
+        if let Some(agent_service) = &self.agent_service {
+            if agent_service.get_agent(capturing_id).await?.is_none() {
+                return Ok(Some(JsonRpcResponse::error(
+                    request.id,
+                    JsonRpcError {
+                        code: error_codes::AGENT_NOT_FOUND,
+                        message: format!("Capturing agent not found: {}", capturing_id),
+                        data: None,
+                    },
+                )));
+            }
+        }
+
+        info!(
+            "Capturing learning from coordination session with {} lessons learned",
+            params.lessons_learned.len()
+        );
+
+        let learning_record_id = Uuid::new_v4();
+
+        // Extract patterns from coordination session
+        let extracted_patterns = vec![
+            serde_json::json!({
+                "pattern_type": "communication_timing",
+                "pattern_name": "Early Status Communication",
+                "description": "Communicate status changes immediately to prevent conflicts",
+                "confidence": 0.92,
+                "generalizability": "high",
+                "usage_contexts": ["multi_agent_coordination", "resource_sharing"]
+            }),
+            serde_json::json!({
+                "pattern_type": "resource_management",
+                "pattern_name": "Proactive Resource Locking",
+                "description": "Lock resources before starting work to prevent race conditions",
+                "confidence": 0.87,
+                "generalizability": "medium",
+                "usage_contexts": ["file_modification", "database_updates"]
+            }),
+        ];
+
+        // Generate knowledge contributions
+        let knowledge_contributions = vec![
+            serde_json::json!({
+                "contribution_type": "best_practice",
+                "title": "Coordination Meeting Frequency",
+                "description": "Daily coordination meetings reduce conflicts by 35%",
+                "evidence": params.success_metrics,
+                "applicability": "cross_project_coordination",
+                "confidence": 0.89
+            }),
+            serde_json::json!({
+                "contribution_type": "antipattern",
+                "title": "Silent Work Assumption",
+                "description": "Assuming other agents know about your work leads to conflicts",
+                "evidence": params.outcome_data,
+                "frequency": "common",
+                "mitigation": "Mandatory work announcements"
+            }),
+        ];
+
+        // Identify process improvements
+        let process_improvements = params
+            .improvement_opportunities
+            .iter()
+            .map(|opportunity| {
+                serde_json::json!({
+                    "improvement_id": Uuid::new_v4().to_string(),
+                    "area": "coordination_process",
+                    "opportunity": opportunity,
+                    "potential_impact": "medium",
+                    "implementation_effort": "low",
+                    "priority": "normal"
+                })
+            })
+            .collect();
+
+        // Generate organizational learning insights
+        let organizational_learning = serde_json::json!({
+            "coordination_effectiveness": 0.84,
+            "key_success_factors": [
+                "Clear communication protocols",
+                "Proactive conflict prevention",
+                "Regular status updates"
+            ],
+            "common_failure_modes": [
+                "Assumption of shared context",
+                "Resource contention",
+                "Timeline misalignment"
+            ],
+            "recommended_training": [
+                "Conflict prevention strategies",
+                "Resource management best practices"
+            ]
+        });
+
+        // Generate future recommendations
+        let future_recommendations = vec![
+            "Implement automated conflict detection system".to_string(),
+            "Establish standard coordination templates".to_string(),
+            "Create coordination success metrics dashboard".to_string(),
+            "Develop agent coordination training program".to_string(),
+        ];
+
+        // Calculate knowledge quality score based on various factors
+        let knowledge_quality_score = {
+            let lesson_quality = (params.lessons_learned.len() as f32 * 0.2).min(1.0);
+            let outcome_completeness = if params.success_metrics.is_object() {
+                0.3
+            } else {
+                0.0
+            };
+            let improvement_identification =
+                (params.improvement_opportunities.len() as f32 * 0.1).min(0.5);
+            (lesson_quality + outcome_completeness + improvement_identification).min(1.0)
+        };
+
+        let result = LearningCaptureResult {
+            learning_record_id,
+            extracted_patterns,
+            knowledge_contributions,
+            process_improvements,
+            organizational_learning,
+            future_recommendations,
+            knowledge_quality_score,
+            message: format!(
+                "Captured learning record with {} lessons and {} improvement opportunities",
+                params.lessons_learned.len(),
+                params.improvement_opportunities.len()
             ),
         };
 

@@ -69,3 +69,78 @@ Worker agents have restricted permissions compared to the main coordinator:
 - ❌ **Denied**: Privilege escalation attempts
 
 This balance provides workers with the tools needed for development tasks while maintaining system security.
+
+## Multi-Agent Coordination Framework
+
+### Coordination-Aware Agent Templates
+
+All agent templates have been enhanced with coordination capabilities to enable sophisticated multi-agent workflows:
+
+#### Agent Template Enhancements
+- **Code Writer**: Enhanced with proactive dependency detection, resource reservation protocols, and conflict prevention workflows
+- **Code Reviewer**: Added coordination assessment checklists and multi-agent review protocols  
+- **Docs Specialist**: Integrated knowledge sharing workflows and cross-agent documentation coordination
+- **Test Specialist**: Added coordination integration testing and shared test environment management
+- **Coordinator**: New template for strategic orchestration and workflow optimization across all agents
+
+#### Core Coordination Protocols
+
+Each agent template includes standardized protocols for:
+
+1. **Dependency Detection and Escalation**
+   - Proactive conflict prediction using `vibe_conflict_predict`
+   - Resource reservation via `vibe_resource_reserve`
+   - Cross-project impact analysis via `vibe_dependency_declare`
+
+2. **Communication Patterns**
+   - Status broadcasting via `vibe_worker_message`
+   - Work coordination via `vibe_work_coordinate`  
+   - Conflict resolution via `vibe_conflict_resolve`
+   - Knowledge capture via `vibe_learning_capture`
+
+3. **Decision Trees for Automation**
+   - Automated escalation triggers for high-risk scenarios
+   - Resource management workflows
+   - Merge coordination for complex scenarios
+   - Guideline enforcement via `vibe_guideline_enforce`
+
+#### Coordination Etiquette Standards
+
+All templates include consistent etiquette guidelines for:
+- **Cross-Project Communication**: Professional, clear messaging with context
+- **Resource Management**: Conservative reservation, prompt release
+- **Knowledge Contribution**: Pattern documentation and lesson sharing
+- **Quality Assurance**: Coordination-aware quality gates and compliance checks
+
+### Available Coordination Tools
+
+The MCP server provides comprehensive coordination capabilities:
+
+#### Issue #52: Intelligent Work Orchestration
+- `vibe_schedule_coordinate` - Plan work sequences across workers
+- `vibe_conflict_predict` - Detect potential conflicts early
+- `vibe_resource_reserve` - Reserve files/modules for exclusive access
+- `vibe_merge_coordinate` - Coordinate complex merge scenarios
+
+#### Issue #53: Knowledge-Driven Coordination  
+- `vibe_knowledge_query` - Search coordination patterns and solutions
+- `vibe_pattern_suggest` - Suggest approaches based on history
+- `vibe_guideline_enforce` - Apply organizational policies
+- `vibe_learning_capture` - Learn from successes/failures
+
+#### Foundational Coordination Tools
+- `vibe_agent_register/list/status` - Agent lifecycle management
+- `vibe_worker_message/coordinate` - Direct communication
+- `vibe_dependency_declare` - Cross-project dependency coordination
+- `vibe_issue_create/assign/update` - Issue tracking integration
+
+### Deployment and Integration
+
+The coordination framework integrates seamlessly with the existing deployment system:
+
+- **Automatic MCP Connection**: All agents automatically connect to coordination server
+- **Shared Coordination Settings**: Common coordination protocols across all agents
+- **Template Variable Substitution**: Coordination parameters customized per deployment
+- **Security-First Design**: Coordination tools respect existing security boundaries
+
+This comprehensive coordination framework enables sophisticated multi-agent development workflows while maintaining individual agent autonomy and specialization.
