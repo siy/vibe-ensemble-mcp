@@ -78,6 +78,12 @@ impl From<anyhow::Error> for Error {
     }
 }
 
+impl From<std::io::Error> for Error {
+    fn from(err: std::io::Error) -> Self {
+        Error::Io { message: err.to_string() }
+    }
+}
+
 impl Error {
     /// Create a validation error with a formatted message
     pub fn validation<S: Into<String>>(message: S) -> Self {
@@ -152,6 +158,31 @@ impl Error {
             dependency: dependency.into(),
             message: message.into(),
         }
+    }
+
+    /// Create an execution error
+    pub fn execution<S: Into<String>>(message: S) -> Self {
+        Self::Execution { message: message.into() }
+    }
+
+    /// Create a parsing error
+    pub fn parsing<S: Into<String>>(message: S) -> Self {
+        Self::Parsing { message: message.into() }
+    }
+
+    /// Create an IO error
+    pub fn io<S: Into<String>>(message: S) -> Self {
+        Self::Io { message: message.into() }
+    }
+
+    /// Create a rendering error
+    pub fn rendering<S: Into<String>>(message: S) -> Self {
+        Self::Rendering { message: message.into() }
+    }
+
+    /// Create an already-exists error
+    pub fn already_exists<S1: Into<String>, S2: Into<String>>(resource: S1, id: S2) -> Self {
+        Self::AlreadyExists { resource: resource.into(), id: id.into() }
     }
 
     /// Check if this error is a validation error
@@ -259,5 +290,14 @@ mod tests {
         assert!(display_str.contains("Constraint violation"));
         assert!(display_str.contains("unique_name"));
         assert!(display_str.contains("Name already exists"));
+    }
+
+    #[test]
+    fn test_new_error_categories() {
+        assert_eq!(Error::execution("boom").category(), "execution");
+        assert_eq!(Error::parsing("bad token").category(), "parsing");
+        assert_eq!(Error::io("disk full").category(), "io");
+        assert_eq!(Error::rendering("template err").category(), "rendering");
+        assert_eq!(Error::already_exists("Agent", "123").category(), "already_exists");
     }
 }

@@ -396,9 +396,13 @@ impl HeadlessClaudeExecutor {
                 stderr_line = stderr_lines.next_line() => {
                     match stderr_line {
                         Ok(Some(line)) => {
-                            // Log stderr but don't fail on it
                             eprintln!("Claude Code stderr: {}", line);
-                            if error_message.is_none() && !line.trim().is_empty() {
+                            // Only treat stderr as error if it contains error indicators
+                            let lower_line = line.to_lowercase();
+                            if error_message.is_none() && 
+                               (lower_line.contains("error") || 
+                                lower_line.contains("fatal") || 
+                                lower_line.contains("failed")) {
                                 error_message = Some(line);
                                 success = false;
                             }

@@ -28,6 +28,6 @@ Before considering any implementation complete:
 - [ ] Documentation is updated as needed
 - [ ] Security considerations are addressed
 - [ ] Performance impact is acceptable
-- [ ] Commit messages follow single-line convenient convention
+- [ ] Commit messages follow the Conventional Commits single-line format
 - [ ] No attribution added anywhere in code or commits
 - [ ] Version impact aligns with semantic versioning
