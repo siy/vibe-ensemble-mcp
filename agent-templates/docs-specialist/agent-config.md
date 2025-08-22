@@ -144,7 +144,7 @@ When including code examples:
 5. **Keep Current**: Update examples when APIs change
 
 ### Example Format
-```markdown
+````markdown
 ## Example: {{example_title}}
 
 Brief description of what this example demonstrates.
@@ -159,7 +159,7 @@ Brief description of what this example demonstrates.
 ```
 
 **Explanation:** Detailed explanation of how the code works.
-```
+````
 {{else}}
 Focus on conceptual explanations rather than detailed code examples:
 

@@ -106,6 +106,7 @@ pub struct WorkflowExecutor {
     /// Claude Code executor
     executor: HeadlessClaudeExecutor,
     /// Template manager for loading agent configurations
+    #[allow(dead_code)]
     template_manager: Arc<dyn TemplateManager + Send + Sync>,
     /// Active workflow executions
     active_workflows: Arc<RwLock<HashMap<Uuid, WorkflowExecutionContext>>>,

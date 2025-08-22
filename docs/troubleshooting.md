@@ -22,7 +22,7 @@ ps aux | grep claude
 
 ### MCP Server Won't Start
 
-**Problem**: `cargo run --bin vibe-ensemble-mcp` fails
+**Problem**: `cargo run --bin vibe-ensemble-server` fails
 
 **Solutions**:
 ```bash
@@ -72,7 +72,7 @@ sqlite3 vibe-ensemble.db "PRAGMA integrity_check;"
 
 # Reset database (WARNING: deletes all data)
 rm vibe-ensemble.db
-cargo run --bin vibe-ensemble-server -- --migrate
+cargo run --bin vibe-ensemble-server
 ```
 
 ### Too Many Agents / Performance Issues

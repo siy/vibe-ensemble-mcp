@@ -34,7 +34,7 @@
       "name": "test_coverage_target",
       "description": "Target code coverage percentage",
       "variable_type": "Number",
-      "default_value": "80",
+      "default_value": 80,
       "required": false,
       "constraints": {
         "min": 50,
@@ -68,7 +68,7 @@
       "name": "enable_property_testing",
       "description": "Whether to include property-based testing",
       "variable_type": "Boolean",
-      "default_value": "false",
+      "default_value": false,
       "required": false,
       "constraints": null
     },
@@ -76,7 +76,7 @@
       "name": "performance_testing",
       "description": "Whether to include performance/load testing",
       "variable_type": "Boolean",
-      "default_value": "false", 
+      "default_value": false, 
       "required": false,
       "constraints": null
     }

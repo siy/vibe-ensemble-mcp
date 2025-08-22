@@ -267,7 +267,7 @@ test_pipeline:
 ## Git and Testing Workflow
 
 ### Commit Convention for Tests
-Follow **single-line convenient commit** convention:
+Follow **Conventional Commits** convention:
 - ✅ **Good**: `test: add integration tests for user authentication`
 - ✅ **Good**: `fix: resolve flaky test in payment processing`
 - ✅ **Good**: `refactor: extract test helpers for API testing`

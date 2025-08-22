@@ -73,7 +73,7 @@
       "name": "include_examples",
       "description": "Whether to include code examples in documentation",
       "variable_type": "Boolean",
-      "default_value": "true",
+      "default_value": true,
       "required": false,
       "constraints": null
     }
@@ -106,7 +106,10 @@
         "/etc/**",
         "/usr/**", 
         "/var/**",
-        "~/.ssh/**"
+        "/home/*/.ssh/**",
+        "/Users/*/.ssh/**",
+        "/root/.ssh/**",
+        "C:\\Users\\*\\.ssh\\**"
       ]
     },
     "network_access": {

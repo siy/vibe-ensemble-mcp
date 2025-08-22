@@ -78,7 +78,7 @@ pub struct VariableConstraints {
 }
 
 /// Tool permissions configuration for Claude Code execution
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Default)]
 pub struct ToolPermissions {
     /// Allowed tools (empty means all allowed)
     pub allowed_tools: Vec<String>,
@@ -232,17 +232,6 @@ pub struct WorkflowStats {
     pub total_cost: Option<f64>,
 }
 
-impl Default for ToolPermissions {
-    fn default() -> Self {
-        Self {
-            allowed_tools: Vec::new(), // Empty means all allowed
-            denied_tools: Vec::new(),
-            file_access: FileAccessConfig::default(),
-            network_access: NetworkAccessConfig::default(),
-            process_access: ProcessAccessConfig::default(),
-        }
-    }
-}
 
 impl Default for FileAccessConfig {
     fn default() -> Self {

@@ -16,7 +16,7 @@ Implement a comprehensive MCP (Model Context Protocol) server in Rust for coordi
 - **Current Status**: 3 core crates implemented with 204 passing tests
 - **Dependencies Implemented**:
   - ✅ `tokio`: Async runtime
-  - ✅ `rmcp`: Official Rust MCP SDK
+  - ✅ `handlebars`: Template engine for agent configurations
   - ✅ `serde`: Serialization/deserialization  
   - ✅ `sqlx`: Database integration (upgraded to v0.8 for security)
   - ✅ `uuid`: Unique identifiers
@@ -24,8 +24,9 @@ Implement a comprehensive MCP (Model Context Protocol) server in Rust for coordi
   - ✅ `tracing`: Logging and observability
   - ✅ `config`: Configuration management
   - ✅ `anyhow/thiserror`: Error handling
+  - 🚧 `rmcp`: Official Rust MCP SDK (for next phase)
   - 🚧 `axum`: Web framework (for next phase)
-  - 🚧 `askama`: Template engine (for next phase)
+  - 🚧 `askama`: Template engine (replaced with handlebars for Phase 1)
 
 ### 1.2 Core Data Models ✅
 - ✅ **Agent Model**: Complete with capabilities, status, connection metadata

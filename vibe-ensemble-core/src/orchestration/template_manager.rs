@@ -67,6 +67,10 @@ impl FilesystemTemplateManager {
         handlebars.register_helper("upper", Box::new(handlebars_helpers::upper));
         handlebars.register_helper("lower", Box::new(handlebars_helpers::lower));
         handlebars.register_helper("json", Box::new(handlebars_helpers::json));
+        handlebars.register_helper("eq", Box::new(handlebars_helpers::eq));
+        handlebars.register_helper("split", Box::new(handlebars_helpers::split));
+        handlebars.register_helper("trim", Box::new(handlebars_helpers::trim));
+        handlebars.register_helper("title", Box::new(handlebars_helpers::title));
 
         Self {
             templates_directory: templates_directory.as_ref().to_path_buf(),
@@ -170,17 +174,16 @@ impl FilesystemTemplateManager {
     ) -> Result<()> {
         // Check required variables
         for template_var in &template.metadata.variables {
-            if template_var.required {
-                if !variables.contains_key(&template_var.name) {
-                    if template_var.default_value.is_none() {
-                        return Err(Error::Validation {
-                            message: format!(
-                                "Required variable '{}' not provided",
-                                template_var.name
-                            ),
-                        });
-                    }
-                }
+            if template_var.required
+                && !variables.contains_key(&template_var.name)
+                && template_var.default_value.is_none()
+            {
+                return Err(Error::Validation {
+                    message: format!(
+                        "Required variable '{}' not provided",
+                        template_var.name
+                    ),
+                });
             }
         }
 
@@ -427,9 +430,101 @@ mod handlebars_helpers {
             .ok_or_else(|| RenderError::new("json helper requires exactly one parameter"))?;
 
         let json_str = serde_json::to_string_pretty(param.value())
-            .map_err(|e| RenderError::new(&format!("Failed to serialize to JSON: {}", e)))?;
+            .map_err(|e| RenderError::new(format!("Failed to serialize to JSON: {}", e)))?;
 
         out.write(&json_str)?;
+        Ok(())
+    }
+
+    pub fn eq(
+        h: &Helper,
+        _: &Handlebars,
+        _: &Context,
+        _: &mut RenderContext,
+        out: &mut dyn Output,
+    ) -> Result<(), RenderError> {
+        let param1 = h
+            .param(0)
+            .ok_or_else(|| RenderError::new("eq helper requires two parameters"))?;
+        let param2 = h
+            .param(1)
+            .ok_or_else(|| RenderError::new("eq helper requires two parameters"))?;
+
+        let equal = param1.value() == param2.value();
+        // This is a block helper that returns true/false for #if conditions
+        // The actual rendering is handled by the #if directive
+        out.write(&equal.to_string())?;
+        Ok(())
+    }
+
+    pub fn split(
+        h: &Helper,
+        _: &Handlebars,
+        _: &Context,
+        _: &mut RenderContext,
+        out: &mut dyn Output,
+    ) -> Result<(), RenderError> {
+        let param = h
+            .param(0)
+            .ok_or_else(|| RenderError::new("split helper requires two parameters"))?;
+        let delimiter = h
+            .param(1)
+            .ok_or_else(|| RenderError::new("split helper requires two parameters"))?;
+
+        let text = param.value().render();
+        let delim = delimiter.value().render();
+
+        let parts: Vec<&str> = text.split(&delim).collect();
+        let json_array = serde_json::to_string(&parts)
+            .map_err(|e| RenderError::new(format!("Failed to serialize split result: {}", e)))?;
+
+        out.write(&json_array)?;
+        Ok(())
+    }
+
+    pub fn trim(
+        h: &Helper,
+        _: &Handlebars,
+        _: &Context,
+        _: &mut RenderContext,
+        out: &mut dyn Output,
+    ) -> Result<(), RenderError> {
+        let param = h
+            .param(0)
+            .ok_or_else(|| RenderError::new("trim helper requires exactly one parameter"))?;
+
+        let value = param.value().render();
+        out.write(value.trim())?;
+        Ok(())
+    }
+
+    pub fn title(
+        h: &Helper,
+        _: &Handlebars,
+        _: &Context,
+        _: &mut RenderContext,
+        out: &mut dyn Output,
+    ) -> Result<(), RenderError> {
+        let param = h
+            .param(0)
+            .ok_or_else(|| RenderError::new("title helper requires exactly one parameter"))?;
+
+        let value = param.value().render();
+        let title_case = value
+            .split_whitespace()
+            .map(|word| {
+                let mut chars = word.chars();
+                match chars.next() {
+                    None => String::new(),
+                    Some(first) => {
+                        first.to_uppercase().collect::<String>() + &chars.as_str().to_lowercase()
+                    }
+                }
+            })
+            .collect::<Vec<_>>()
+            .join(" ");
+
+        out.write(&title_case)?;
         Ok(())
     }
 }

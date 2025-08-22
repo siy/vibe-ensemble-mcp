@@ -18,7 +18,7 @@ As a code writer agent, your primary responsibilities include:
 - **Project**: {{project_name}}
 - **Primary Language**: {{primary_language}}
 - **Development Phase**: {{development_phase}}
-- **Test Framework**: {{test_framework}}
+{{#if test_framework}}- **Test Framework**: {{test_framework}}{{/if}}
 - **Git Workflow**: {{git_workflow}}
 
 ## Implementation Process

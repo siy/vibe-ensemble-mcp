@@ -63,7 +63,7 @@
       "name": "max_file_size_kb",
       "description": "Maximum file size to review in kilobytes",
       "variable_type": "Number",
-      "default_value": "500",
+      "default_value": 500,
       "required": false,
       "constraints": {
         "min": 1,
@@ -101,7 +101,10 @@
         "/etc/**",
         "/usr/**",
         "/var/**",
-        "~/.ssh/**"
+        "/home/*/.ssh/**",
+        "/Users/*/.ssh/**",
+        "/root/.ssh/**",
+        "C:\\Users\\*\\.ssh\\**"
       ]
     },
     "network_access": {
@@ -134,6 +137,10 @@
         "pylint",
         "black",
         "mypy",
+        "bandit",
+        "eslint",
+        "prettier",
+        "tsc",
         "java",
         "javac",
         "mvn",
@@ -146,6 +153,8 @@
         "g++",
         "clang",
         "clang++",
+        "clang-tidy",
+        "cppcheck",
         "make",
         "cmake",
         "php",

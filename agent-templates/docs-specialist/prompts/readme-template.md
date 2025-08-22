@@ -4,7 +4,7 @@ This template provides a structure for creating comprehensive README documentati
 
 ## Basic README Structure
 
-```markdown
+````markdown
 # {{project_name}}
 
 {{project_description}}
@@ -99,7 +99,7 @@ This project is licensed under the [LICENSE NAME](LICENSE) - see the LICENSE fil
 
 - Issues: [GitHub Issues](https://github.com/your-org/{{project_name}}/issues)
 - Discussions: [GitHub Discussions](https://github.com/your-org/{{project_name}}/discussions)
-```
+````
 
 ## Content Guidelines
 
