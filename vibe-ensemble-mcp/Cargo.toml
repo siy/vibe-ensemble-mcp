@@ -24,3 +24,8 @@ tokio-tungstenite = { workspace = true }
 futures-util = { workspace = true }
 async-trait = "0.1"
 chrono = { workspace = true }
+tracing-subscriber = "0.3"
+
+[[bin]]
+name = "vibe-ensemble-mcp"
+path = "src/main.rs"
