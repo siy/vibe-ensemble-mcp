@@ -399,9 +399,9 @@ impl HeadlessClaudeExecutor {
                             eprintln!("Claude Code stderr: {}", line);
                             // Only treat stderr as error if it contains error indicators
                             let lower_line = line.to_lowercase();
-                            if error_message.is_none() && 
-                               (lower_line.contains("error") || 
-                                lower_line.contains("fatal") || 
+                            if error_message.is_none() &&
+                               (lower_line.contains("error") ||
+                                lower_line.contains("fatal") ||
                                 lower_line.contains("failed")) {
                                 error_message = Some(line);
                                 success = false;
