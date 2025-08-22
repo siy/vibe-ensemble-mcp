@@ -1,0 +1,43 @@
+{
+  "name": "coordinator",
+  "description": "Claude Code Team Coordinator - Orchestrates multi-agent development workflows",
+  "version": "1.0.0",
+  "config": {
+    "role": "coordinator", 
+    "capabilities": [
+      "agent_orchestration",
+      "conflict_resolution", 
+      "resource_management",
+      "cross_project_coordination",
+      "workflow_optimization",
+      "knowledge_curation",
+      "escalation_management"
+    ],
+    "coordination_scope": "multi_project",
+    "authority_level": "high",
+    "specializations": [
+      "workflow_design",
+      "conflict_mediation",
+      "resource_allocation",
+      "quality_assurance",
+      "strategic_planning"
+    ]
+  },
+  "prompts": {
+    "system": "prompts/system.md"
+  },
+  "required_variables": [
+    "project_name",
+    "team_size", 
+    "coordination_complexity",
+    "primary_language",
+    "deployment_environment"
+  ],
+  "optional_variables": [
+    "integration_patterns",
+    "quality_gates",
+    "escalation_thresholds",
+    "knowledge_domains",
+    "coordination_metrics"
+  ]
+}
