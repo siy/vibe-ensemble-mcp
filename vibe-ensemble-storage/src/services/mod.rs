@@ -1,6 +1,7 @@
 //! Service layer for business logic
 
 pub mod agent;
+pub mod coordination;
 pub mod issue;
 pub mod knowledge;
 pub mod knowledge_intelligence;
@@ -22,3 +23,5 @@ pub use message::{
     DeliveryStatus, DeliveryStatusType, MessageEvent, MessageEventType, MessageService,
     MessageStatistics,
 };
+
+pub use coordination::CoordinationService;

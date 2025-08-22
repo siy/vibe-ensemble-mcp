@@ -86,6 +86,7 @@
 
 pub mod agent;
 pub mod config;
+pub mod coordination;
 pub mod error;
 pub mod issue;
 pub mod knowledge;

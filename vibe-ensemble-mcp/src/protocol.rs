@@ -91,6 +91,12 @@ pub mod methods {
     pub const WORKER_REQUEST: &str = "vibe/worker/request";
     pub const WORKER_COORDINATE: &str = "vibe/worker/coordinate";
     pub const PROJECT_LOCK: &str = "vibe/project/lock";
+
+    // Cross-project dependency coordination methods
+    pub const DEPENDENCY_DECLARE: &str = "vibe/dependency/declare";
+    pub const COORDINATOR_REQUEST_WORKER: &str = "vibe/coordinator/request_worker";
+    pub const WORK_COORDINATE: &str = "vibe/work/coordinate";
+    pub const CONFLICT_RESOLVE: &str = "vibe/conflict/resolve";
 }
 
 /// MCP initialization parameters
@@ -658,5 +664,159 @@ pub struct ProjectLockResult {
     #[serde(rename = "lockedAt")]
     pub locked_at: chrono::DateTime<chrono::Utc>,
     pub expiration: Option<chrono::DateTime<chrono::Utc>>,
+    pub message: String,
+}
+
+// Cross-Project Dependency Coordination MCP tool parameters and results
+
+/// Dependency declaration parameters
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct DependencyDeclareParams {
+    #[serde(rename = "declaringAgentId")]
+    pub declaring_agent_id: String,
+    #[serde(rename = "sourceProject")]
+    pub source_project: String,
+    #[serde(rename = "targetProject")]
+    pub target_project: String,
+    #[serde(rename = "dependencyType")]
+    pub dependency_type: String,
+    pub description: String,
+    pub impact: String,
+    pub urgency: String,
+    #[serde(rename = "affectedFiles")]
+    pub affected_files: Vec<String>,
+    pub metadata: Option<serde_json::Value>,
+}
+
+/// Dependency declaration result
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct DependencyDeclareResult {
+    #[serde(rename = "dependencyId")]
+    pub dependency_id: Uuid,
+    #[serde(rename = "coordinationPlan")]
+    pub coordination_plan: serde_json::Value,
+    #[serde(rename = "requiredActions")]
+    pub required_actions: Vec<serde_json::Value>,
+    #[serde(rename = "targetProjectActiveWorkers")]
+    pub target_project_active_workers: Vec<Uuid>,
+    #[serde(rename = "issueCreated")]
+    pub issue_created: Option<Uuid>,
+    pub status: String,
+    #[serde(rename = "estimatedResolutionTime")]
+    pub estimated_resolution_time: Option<chrono::DateTime<chrono::Utc>>,
+    pub message: String,
+}
+
+/// Coordinator worker request parameters
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CoordinatorRequestWorkerParams {
+    #[serde(rename = "requestingAgentId")]
+    pub requesting_agent_id: String,
+    #[serde(rename = "targetProject")]
+    pub target_project: String,
+    #[serde(rename = "requiredCapabilities")]
+    pub required_capabilities: Vec<String>,
+    pub priority: String,
+    #[serde(rename = "taskDescription")]
+    pub task_description: String,
+    #[serde(rename = "estimatedDuration")]
+    pub estimated_duration: Option<String>,
+    #[serde(rename = "contextData")]
+    pub context_data: Option<serde_json::Value>,
+}
+
+/// Coordinator worker request result
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CoordinatorRequestWorkerResult {
+    #[serde(rename = "requestId")]
+    pub request_id: Uuid,
+    #[serde(rename = "workerAssignmentStatus")]
+    pub worker_assignment_status: String,
+    #[serde(rename = "estimatedSpawnTime")]
+    pub estimated_spawn_time: Option<chrono::DateTime<chrono::Utc>>,
+    #[serde(rename = "assignedWorkerId")]
+    pub assigned_worker_id: Option<Uuid>,
+    #[serde(rename = "capabilityMatch")]
+    pub capability_match: f32,
+    #[serde(rename = "spawnPlan")]
+    pub spawn_plan: Option<serde_json::Value>,
+    pub status: String,
+    pub message: String,
+}
+
+/// Work coordination parameters
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct WorkCoordinateParams {
+    #[serde(rename = "initiatingAgentId")]
+    pub initiating_agent_id: String,
+    #[serde(rename = "targetAgentId")]
+    pub target_agent_id: String,
+    #[serde(rename = "coordinationType")]
+    pub coordination_type: String,
+    #[serde(rename = "workItems")]
+    pub work_items: Vec<serde_json::Value>,
+    pub dependencies: Vec<serde_json::Value>,
+    #[serde(rename = "proposedTimeline")]
+    pub proposed_timeline: Option<serde_json::Value>,
+    #[serde(rename = "resourceRequirements")]
+    pub resource_requirements: Option<serde_json::Value>,
+}
+
+/// Work coordination result
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct WorkCoordinateResult {
+    #[serde(rename = "coordinationAgreementId")]
+    pub coordination_agreement_id: Uuid,
+    #[serde(rename = "negotiatedTimeline")]
+    pub negotiated_timeline: serde_json::Value,
+    #[serde(rename = "workAssignments")]
+    pub work_assignments: Vec<serde_json::Value>,
+    #[serde(rename = "coordinationStatus")]
+    pub coordination_status: String,
+    #[serde(rename = "participantConfirmations")]
+    pub participant_confirmations: Vec<Uuid>,
+    #[serde(rename = "communicationProtocol")]
+    pub communication_protocol: serde_json::Value,
+    #[serde(rename = "escalationRules")]
+    pub escalation_rules: Vec<serde_json::Value>,
+    pub message: String,
+}
+
+/// Conflict resolution parameters
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ConflictResolveParams {
+    #[serde(rename = "affectedAgents")]
+    pub affected_agents: Vec<String>,
+    #[serde(rename = "conflictedResources")]
+    pub conflicted_resources: Vec<String>,
+    #[serde(rename = "conflictType")]
+    pub conflict_type: String,
+    #[serde(rename = "resolutionStrategy")]
+    pub resolution_strategy: Option<String>,
+    #[serde(rename = "resolverAgentId")]
+    pub resolver_agent_id: String,
+    #[serde(rename = "conflictEvidence")]
+    pub conflict_evidence: Vec<serde_json::Value>,
+    pub priority: Option<String>,
+}
+
+/// Conflict resolution result
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ConflictResolveResult {
+    #[serde(rename = "resolutionId")]
+    pub resolution_id: Uuid,
+    #[serde(rename = "resolutionPlan")]
+    pub resolution_plan: serde_json::Value,
+    #[serde(rename = "requiredActionsPerAgent")]
+    pub required_actions_per_agent: serde_json::Value,
+    #[serde(rename = "resolutionStrategy")]
+    pub resolution_strategy: String,
+    #[serde(rename = "estimatedResolutionTime")]
+    pub estimated_resolution_time: Option<chrono::DateTime<chrono::Utc>>,
+    #[serde(rename = "rollbackPlan")]
+    pub rollback_plan: Option<serde_json::Value>,
+    #[serde(rename = "coordinatorEscalation")]
+    pub coordinator_escalation: bool,
+    pub status: String,
     pub message: String,
 }

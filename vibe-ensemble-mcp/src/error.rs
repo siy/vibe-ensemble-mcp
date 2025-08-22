@@ -40,6 +40,25 @@ pub enum Error {
 
     #[error("Configuration error: {message}")]
     Configuration { message: String },
+
+    #[error("Service unavailable: {message}")]
+    ServiceUnavailable { message: String },
+}
+
+impl Error {
+    /// Create a service unavailable error
+    pub fn service_unavailable(message: &str) -> Self {
+        Error::ServiceUnavailable {
+            message: message.to_string(),
+        }
+    }
+
+    /// Create a validation error
+    pub fn validation(message: &str) -> Self {
+        Error::InvalidParams {
+            message: message.to_string(),
+        }
+    }
 }
 
 /// Convenience result type for MCP operations

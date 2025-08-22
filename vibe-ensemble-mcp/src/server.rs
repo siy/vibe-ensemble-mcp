@@ -6,11 +6,14 @@
 use crate::{
     protocol::{
         error_codes, AgentDeregisterParams, AgentDeregisterResult, AgentListParams,
-        AgentStatusParams, IssueAssignParams, IssueAssignResult, IssueCloseParams,
+        AgentStatusParams, ConflictResolveParams, ConflictResolveResult,
+        CoordinatorRequestWorkerParams, CoordinatorRequestWorkerResult, DependencyDeclareParams,
+        DependencyDeclareResult, IssueAssignParams, IssueAssignResult, IssueCloseParams,
         IssueCloseResult, IssueCreateParams, IssueCreateResult, IssueInfo, IssueListParams,
         IssueListResult, IssueUpdateParams, IssueUpdateResult, ProjectLockParams,
-        ProjectLockResult, WorkerCoordinateParams, WorkerCoordinateResult, WorkerMessageParams,
-        WorkerMessageResult, WorkerRequestParams, WorkerRequestResult, *,
+        ProjectLockResult, WorkCoordinateParams, WorkCoordinateResult, WorkerCoordinateParams,
+        WorkerCoordinateResult, WorkerMessageParams, WorkerMessageResult, WorkerRequestParams,
+        WorkerRequestResult, *,
     },
     Error, Result,
 };
@@ -22,7 +25,9 @@ use uuid::Uuid;
 use vibe_ensemble_core::agent::{AgentStatus, AgentType, ConnectionMetadata};
 use vibe_ensemble_core::issue::{IssuePriority, IssueStatus};
 use vibe_ensemble_core::message::{MessagePriority, MessageType};
-use vibe_ensemble_storage::services::{AgentService, IssueService, MessageService};
+use vibe_ensemble_storage::services::{
+    AgentService, CoordinationService, IssueService, MessageService,
+};
 
 /// MCP server state and connection manager
 #[derive(Clone)]
@@ -37,6 +42,8 @@ pub struct McpServer {
     issue_service: Option<Arc<IssueService>>,
     /// Message service for real-time messaging
     message_service: Option<Arc<MessageService>>,
+    /// Coordination service for cross-project dependencies and worker coordination
+    coordination_service: Option<Arc<CoordinationService>>,
 }
 
 /// Client session information
@@ -58,6 +65,7 @@ impl McpServer {
             agent_service: None,
             issue_service: None,
             message_service: None,
+            coordination_service: None,
         }
     }
 
@@ -69,6 +77,7 @@ impl McpServer {
             agent_service: None,
             issue_service: None,
             message_service: None,
+            coordination_service: None,
         }
     }
 
@@ -80,6 +89,7 @@ impl McpServer {
             agent_service: Some(agent_service),
             issue_service: None,
             message_service: None,
+            coordination_service: None,
         }
     }
 
@@ -94,6 +104,7 @@ impl McpServer {
             agent_service: Some(agent_service),
             issue_service: None,
             message_service: None,
+            coordination_service: None,
         }
     }
 
@@ -105,6 +116,7 @@ impl McpServer {
             agent_service: None,
             issue_service: Some(issue_service),
             message_service: None,
+            coordination_service: None,
         }
     }
 
@@ -119,6 +131,7 @@ impl McpServer {
             agent_service: Some(agent_service),
             issue_service: Some(issue_service),
             message_service: None,
+            coordination_service: None,
         }
     }
 
@@ -134,6 +147,7 @@ impl McpServer {
             agent_service: Some(agent_service),
             issue_service: Some(issue_service),
             message_service: None,
+            coordination_service: None,
         }
     }
 
@@ -145,6 +159,7 @@ impl McpServer {
             agent_service: None,
             issue_service: None,
             message_service: Some(message_service),
+            coordination_service: None,
         }
     }
 
@@ -160,6 +175,7 @@ impl McpServer {
             agent_service: Some(agent_service),
             issue_service: Some(issue_service),
             message_service: Some(message_service),
+            coordination_service: None,
         }
     }
 
@@ -176,6 +192,36 @@ impl McpServer {
             agent_service: Some(agent_service),
             issue_service: Some(issue_service),
             message_service: Some(message_service),
+            coordination_service: None,
+        }
+    }
+
+    /// Create a new MCP server with coordination service
+    pub fn new_with_coordination_service(coordination_service: Arc<CoordinationService>) -> Self {
+        Self {
+            clients: Arc::new(RwLock::new(HashMap::new())),
+            capabilities: ServerCapabilities::default(),
+            agent_service: None,
+            issue_service: None,
+            message_service: None,
+            coordination_service: Some(coordination_service),
+        }
+    }
+
+    /// Create a new MCP server with all services including coordination
+    pub fn new_with_full_services(
+        agent_service: Arc<AgentService>,
+        issue_service: Arc<IssueService>,
+        message_service: Arc<MessageService>,
+        coordination_service: Arc<CoordinationService>,
+    ) -> Self {
+        Self {
+            clients: Arc::new(RwLock::new(HashMap::new())),
+            capabilities: ServerCapabilities::default(),
+            agent_service: Some(agent_service),
+            issue_service: Some(issue_service),
+            message_service: Some(message_service),
+            coordination_service: Some(coordination_service),
         }
     }
 
@@ -257,6 +303,14 @@ impl McpServer {
             methods::WORKER_REQUEST => self.handle_worker_request(request).await,
             methods::WORKER_COORDINATE => self.handle_worker_coordinate(request).await,
             methods::PROJECT_LOCK => self.handle_project_lock(request).await,
+
+            // Cross-project dependency coordination methods
+            methods::DEPENDENCY_DECLARE => self.handle_dependency_declare(request).await,
+            methods::COORDINATOR_REQUEST_WORKER => {
+                self.handle_coordinator_request_worker(request).await
+            }
+            methods::WORK_COORDINATE => self.handle_work_coordinate(request).await,
+            methods::CONFLICT_RESOLVE => self.handle_conflict_resolve(request).await,
 
             _ => {
                 warn!("Unknown method: {}", request.method);
@@ -554,6 +608,76 @@ impl McpServer {
                             "reason": {"type": "string", "description": "Reason for the lock"}
                         },
                         "required": ["resourcePath", "lockType", "lockHolderAgentId", "reason"]
+                    }
+                },
+                {
+                    "name": "vibe_dependency_declare",
+                    "description": "Declare a cross-project dependency and create coordination plan",
+                    "inputSchema": {
+                        "type": "object",
+                        "properties": {
+                            "declaringAgentId": {"type": "string", "description": "ID of agent declaring dependency"},
+                            "sourceProject": {"type": "string", "description": "Source project name"},
+                            "targetProject": {"type": "string", "description": "Target project name"},
+                            "dependencyType": {"type": "string", "enum": ["API_CHANGE", "SHARED_RESOURCE", "BUILD_DEPENDENCY", "CONFIGURATION", "DATA_SCHEMA"], "description": "Type of dependency"},
+                            "description": {"type": "string", "description": "Description of dependency"},
+                            "impact": {"type": "string", "enum": ["BLOCKER", "MAJOR", "MINOR", "INFO"], "description": "Impact level"},
+                            "urgency": {"type": "string", "enum": ["CRITICAL", "HIGH", "MEDIUM", "LOW"], "description": "Urgency level"},
+                            "affectedFiles": {"type": "array", "items": {"type": "string"}, "description": "List of affected files"},
+                            "metadata": {"type": "object", "description": "Additional metadata"}
+                        },
+                        "required": ["declaringAgentId", "sourceProject", "targetProject", "dependencyType", "description", "impact", "urgency"]
+                    }
+                },
+                {
+                    "name": "vibe_coordinator_request_worker",
+                    "description": "Request coordinator to spawn a new worker for a project",
+                    "inputSchema": {
+                        "type": "object",
+                        "properties": {
+                            "requestingAgentId": {"type": "string", "description": "ID of requesting agent"},
+                            "targetProject": {"type": "string", "description": "Target project name"},
+                            "requiredCapabilities": {"type": "array", "items": {"type": "string"}, "description": "Required worker capabilities"},
+                            "priority": {"type": "string", "enum": ["CRITICAL", "HIGH", "MEDIUM", "LOW"], "description": "Spawn priority"},
+                            "taskDescription": {"type": "string", "description": "Task description for new worker"},
+                            "estimatedDuration": {"type": "string", "description": "Estimated duration (e.g., '2h', '30m')"},
+                            "contextData": {"type": "object", "description": "Context data for worker"}
+                        },
+                        "required": ["requestingAgentId", "targetProject", "requiredCapabilities", "priority", "taskDescription"]
+                    }
+                },
+                {
+                    "name": "vibe_work_coordinate",
+                    "description": "Negotiate work ordering and coordination between agents",
+                    "inputSchema": {
+                        "type": "object",
+                        "properties": {
+                            "initiatingAgentId": {"type": "string", "description": "ID of initiating agent"},
+                            "targetAgentId": {"type": "string", "description": "ID of target agent"},
+                            "coordinationType": {"type": "string", "enum": ["SEQUENTIAL", "PARALLEL", "BLOCKING", "COLLABORATIVE", "CONFLICT_RESOLUTION"], "description": "Type of coordination"},
+                            "workItems": {"type": "array", "items": {"type": "object"}, "description": "List of work items to coordinate"},
+                            "dependencies": {"type": "array", "items": {"type": "object"}, "description": "Work dependencies"},
+                            "proposedTimeline": {"type": "object", "description": "Proposed coordination timeline"},
+                            "resourceRequirements": {"type": "object", "description": "Resource requirements"}
+                        },
+                        "required": ["initiatingAgentId", "targetAgentId", "coordinationType", "workItems"]
+                    }
+                },
+                {
+                    "name": "vibe_conflict_resolve",
+                    "description": "Resolve conflicts between agents working on overlapping resources",
+                    "inputSchema": {
+                        "type": "object",
+                        "properties": {
+                            "affectedAgents": {"type": "array", "items": {"type": "string"}, "description": "IDs of affected agents"},
+                            "conflictedResources": {"type": "array", "items": {"type": "string"}, "description": "List of conflicted resources"},
+                            "conflictType": {"type": "string", "enum": ["FILE_MODIFICATION", "RESOURCE_LOCK", "ARCHITECTURE", "BUSINESS_LOGIC", "TESTING", "DEPLOYMENT"], "description": "Type of conflict"},
+                            "resolutionStrategy": {"type": "string", "enum": ["LAST_WRITER_WINS", "FIRST_WRITER_WINS", "AUTO_MERGE", "MANUAL_MERGE", "RESOURCE_SPLIT", "SEQUENTIAL", "ESCALATE"], "description": "Preferred resolution strategy"},
+                            "resolverAgentId": {"type": "string", "description": "ID of agent handling resolution"},
+                            "conflictEvidence": {"type": "array", "items": {"type": "object"}, "description": "Evidence of the conflict"},
+                            "priority": {"type": "string", "enum": ["CRITICAL", "HIGH", "MEDIUM", "LOW"], "description": "Resolution priority"}
+                        },
+                        "required": ["affectedAgents", "conflictedResources", "conflictType", "resolverAgentId"]
                     }
                 }
             ]
@@ -2517,6 +2641,458 @@ impl McpServer {
             locked_at,
             expiration,
             message: "Project lock acquired successfully".to_string(),
+        };
+
+        Ok(Some(JsonRpcResponse::success(
+            request.id,
+            serde_json::to_value(result)?,
+        )))
+    }
+
+    // Cross-project dependency coordination handlers
+
+    /// Handle dependency declaration - declare cross-project dependency and create coordination plan
+    async fn handle_dependency_declare(
+        &self,
+        request: JsonRpcRequest,
+    ) -> Result<Option<JsonRpcResponse>> {
+        debug!("Handling dependency declare request");
+
+        let coordination_service = self
+            .coordination_service
+            .as_ref()
+            .ok_or_else(|| Error::service_unavailable("Coordination service not available"))?;
+
+        let params: DependencyDeclareParams =
+            serde_json::from_value(request.params.unwrap_or(serde_json::Value::Null))?;
+
+        // Parse UUID from string
+        let declaring_agent_id = Uuid::parse_str(&params.declaring_agent_id)
+            .map_err(|_| Error::validation("Invalid declaring_agent_id UUID"))?;
+
+        // Parse dependency type
+        let dependency_type = match params.dependency_type.as_str() {
+            "API_CHANGE" => vibe_ensemble_core::coordination::DependencyType::ApiChange,
+            "SHARED_RESOURCE" => vibe_ensemble_core::coordination::DependencyType::SharedResource,
+            "BUILD_DEPENDENCY" => vibe_ensemble_core::coordination::DependencyType::BuildDependency,
+            "CONFIGURATION" => vibe_ensemble_core::coordination::DependencyType::Configuration,
+            "DATA_SCHEMA" => vibe_ensemble_core::coordination::DependencyType::DataSchema,
+            custom => vibe_ensemble_core::coordination::DependencyType::Custom(custom.to_string()),
+        };
+
+        // Parse impact level
+        let impact = match params.impact.as_str() {
+            "BLOCKER" => vibe_ensemble_core::coordination::DependencyImpact::Blocker,
+            "MAJOR" => vibe_ensemble_core::coordination::DependencyImpact::Major,
+            "MINOR" => vibe_ensemble_core::coordination::DependencyImpact::Minor,
+            "INFO" => vibe_ensemble_core::coordination::DependencyImpact::Info,
+            _ => vibe_ensemble_core::coordination::DependencyImpact::Major,
+        };
+
+        // Parse urgency level
+        let urgency = match params.urgency.as_str() {
+            "CRITICAL" => vibe_ensemble_core::coordination::DependencyUrgency::Critical,
+            "HIGH" => vibe_ensemble_core::coordination::DependencyUrgency::High,
+            "MEDIUM" => vibe_ensemble_core::coordination::DependencyUrgency::Medium,
+            "LOW" => vibe_ensemble_core::coordination::DependencyUrgency::Low,
+            _ => vibe_ensemble_core::coordination::DependencyUrgency::Medium,
+        };
+
+        // Parse metadata
+        let metadata = if let Some(metadata_value) = params.metadata {
+            serde_json::from_value::<std::collections::HashMap<String, String>>(metadata_value)
+                .unwrap_or_default()
+        } else {
+            std::collections::HashMap::new()
+        };
+
+        // Declare dependency
+        let (dependency, coordination_plan, issue) = coordination_service
+            .declare_dependency(
+                declaring_agent_id,
+                params.source_project,
+                params.target_project,
+                dependency_type,
+                params.description,
+                impact,
+                urgency,
+                params.affected_files,
+                metadata,
+            )
+            .await?;
+
+        info!(
+            "Dependency declared: {} -> {} (ID: {})",
+            dependency.source_project, dependency.target_project, dependency.id
+        );
+
+        // Build response
+        let result = DependencyDeclareResult {
+            dependency_id: dependency.id,
+            coordination_plan: serde_json::to_value(&coordination_plan)?,
+            required_actions: coordination_plan
+                .required_actions
+                .iter()
+                .map(|action| serde_json::to_value(action).unwrap_or(serde_json::Value::Null))
+                .collect(),
+            target_project_active_workers: coordination_plan.assigned_agents,
+            issue_created: issue.map(|i| i.id),
+            status: format!("{:?}", dependency.status),
+            estimated_resolution_time: coordination_plan
+                .estimated_duration
+                .map(|d| chrono::Utc::now() + d),
+            message: format!(
+                "Dependency declared successfully with {} coordination plan",
+                match coordination_plan.plan_type {
+                    vibe_ensemble_core::coordination::CoordinationPlanType::DirectCoordination =>
+                        "direct",
+                    vibe_ensemble_core::coordination::CoordinationPlanType::WorkerSpawn =>
+                        "worker spawn",
+                    _ => "custom",
+                }
+            ),
+        };
+
+        Ok(Some(JsonRpcResponse::success(
+            request.id,
+            serde_json::to_value(result)?,
+        )))
+    }
+
+    /// Handle coordinator worker request - request coordinator spawn new worker
+    async fn handle_coordinator_request_worker(
+        &self,
+        request: JsonRpcRequest,
+    ) -> Result<Option<JsonRpcResponse>> {
+        debug!("Handling coordinator request worker");
+
+        let coordination_service = self
+            .coordination_service
+            .as_ref()
+            .ok_or_else(|| Error::service_unavailable("Coordination service not available"))?;
+
+        let params: CoordinatorRequestWorkerParams =
+            serde_json::from_value(request.params.unwrap_or(serde_json::Value::Null))?;
+
+        // Parse UUID from string
+        let requesting_agent_id = Uuid::parse_str(&params.requesting_agent_id)
+            .map_err(|_| Error::validation("Invalid requesting_agent_id UUID"))?;
+
+        // Parse priority
+        let priority = match params.priority.as_str() {
+            "CRITICAL" => vibe_ensemble_core::coordination::SpawnPriority::Critical,
+            "HIGH" => vibe_ensemble_core::coordination::SpawnPriority::High,
+            "MEDIUM" => vibe_ensemble_core::coordination::SpawnPriority::Medium,
+            "LOW" => vibe_ensemble_core::coordination::SpawnPriority::Low,
+            _ => vibe_ensemble_core::coordination::SpawnPriority::Medium,
+        };
+
+        // Parse estimated duration
+        let estimated_duration = params.estimated_duration.and_then(|duration_str| {
+            // Try to parse duration string like "2h", "30m", "1h30m"
+            if let Ok(minutes) = duration_str.trim_end_matches("m").parse::<i64>() {
+                Some(chrono::Duration::minutes(minutes))
+            } else if let Ok(hours) = duration_str.trim_end_matches("h").parse::<i64>() {
+                Some(chrono::Duration::hours(hours))
+            } else {
+                None
+            }
+        });
+
+        // Parse context data
+        let context_data = if let Some(context_value) = params.context_data {
+            serde_json::from_value::<std::collections::HashMap<String, String>>(context_value)
+                .unwrap_or_default()
+        } else {
+            std::collections::HashMap::new()
+        };
+
+        // Request worker spawn
+        let spawn_request = coordination_service
+            .request_worker_spawn(
+                requesting_agent_id,
+                params.target_project,
+                params.required_capabilities.clone(),
+                priority,
+                params.task_description,
+                estimated_duration,
+                context_data,
+            )
+            .await?;
+
+        info!(
+            "Worker spawn requested for project {} (ID: {})",
+            spawn_request.target_project, spawn_request.id
+        );
+
+        // Build response
+        let result = CoordinatorRequestWorkerResult {
+            request_id: spawn_request.id,
+            worker_assignment_status: format!("{:?}", spawn_request.status),
+            estimated_spawn_time: spawn_request
+                .estimated_duration
+                .map(|d| chrono::Utc::now() + d),
+            assigned_worker_id: spawn_request.assigned_worker_id,
+            capability_match: 1.0, // TODO: Calculate actual capability match score
+            spawn_plan: spawn_request
+                .spawn_result
+                .as_ref()
+                .map(|r| serde_json::to_value(r).unwrap_or(serde_json::Value::Null)),
+            status: format!("{:?}", spawn_request.status),
+            message: match spawn_request.status {
+                vibe_ensemble_core::coordination::SpawnRequestStatus::Approved => {
+                    "Worker spawn request approved and processing"
+                }
+                vibe_ensemble_core::coordination::SpawnRequestStatus::Evaluating => {
+                    "Worker spawn request under evaluation"
+                }
+                vibe_ensemble_core::coordination::SpawnRequestStatus::Pending => {
+                    "Worker spawn request queued for processing"
+                }
+                _ => "Worker spawn request submitted",
+            }
+            .to_string(),
+        };
+
+        Ok(Some(JsonRpcResponse::success(
+            request.id,
+            serde_json::to_value(result)?,
+        )))
+    }
+
+    /// Handle work coordination - negotiate work ordering between workers
+    async fn handle_work_coordinate(
+        &self,
+        request: JsonRpcRequest,
+    ) -> Result<Option<JsonRpcResponse>> {
+        debug!("Handling work coordination request");
+
+        let coordination_service = self
+            .coordination_service
+            .as_ref()
+            .ok_or_else(|| Error::service_unavailable("Coordination service not available"))?;
+
+        let params: WorkCoordinateParams =
+            serde_json::from_value(request.params.unwrap_or(serde_json::Value::Null))?;
+
+        // Parse UUIDs from strings
+        let initiating_agent_id = Uuid::parse_str(&params.initiating_agent_id)
+            .map_err(|_| Error::validation("Invalid initiating_agent_id UUID"))?;
+
+        let target_agent_id = Uuid::parse_str(&params.target_agent_id)
+            .map_err(|_| Error::validation("Invalid target_agent_id UUID"))?;
+
+        // Parse coordination type
+        let coordination_type = match params.coordination_type.as_str() {
+            "SEQUENTIAL" => vibe_ensemble_core::coordination::WorkCoordinationType::Sequential,
+            "PARALLEL" => vibe_ensemble_core::coordination::WorkCoordinationType::Parallel,
+            "BLOCKING" => vibe_ensemble_core::coordination::WorkCoordinationType::Blocking,
+            "COLLABORATIVE" => {
+                vibe_ensemble_core::coordination::WorkCoordinationType::Collaborative
+            }
+            "CONFLICT_RESOLUTION" => {
+                vibe_ensemble_core::coordination::WorkCoordinationType::ConflictResolution
+            }
+            _ => vibe_ensemble_core::coordination::WorkCoordinationType::Sequential,
+        };
+
+        // Parse work items and dependencies from JSON values
+        let work_items: Vec<vibe_ensemble_core::coordination::WorkItem> = params
+            .work_items
+            .into_iter()
+            .filter_map(|item| serde_json::from_value(item).ok())
+            .collect();
+
+        let dependencies: Vec<vibe_ensemble_core::coordination::WorkDependency> = params
+            .dependencies
+            .into_iter()
+            .filter_map(|dep| serde_json::from_value(dep).ok())
+            .collect();
+
+        let proposed_timeline: Option<vibe_ensemble_core::coordination::CoordinationTimeline> =
+            params
+                .proposed_timeline
+                .and_then(|timeline| serde_json::from_value(timeline).ok());
+
+        // Coordinate work
+        let agreement = coordination_service
+            .coordinate_work(
+                initiating_agent_id,
+                target_agent_id,
+                coordination_type,
+                work_items,
+                dependencies,
+                proposed_timeline,
+            )
+            .await?;
+
+        info!(
+            "Work coordination agreement created between agents {} and {} (ID: {})",
+            agreement.initiating_agent_id, agreement.target_agent_id, agreement.id
+        );
+
+        // Build response
+        let result = WorkCoordinateResult {
+            coordination_agreement_id: agreement.id,
+            negotiated_timeline: serde_json::to_value(&agreement.negotiated_timeline)?,
+            work_assignments: agreement
+                .work_items
+                .iter()
+                .map(|item| serde_json::to_value(item).unwrap_or(serde_json::Value::Null))
+                .collect(),
+            coordination_status: format!("{:?}", agreement.status),
+            participant_confirmations: vec![
+                agreement.initiating_agent_id,
+                agreement.target_agent_id,
+            ],
+            communication_protocol: serde_json::to_value(&agreement.terms.communication_protocol)?,
+            escalation_rules: agreement
+                .terms
+                .escalation_rules
+                .iter()
+                .map(|rule| serde_json::to_value(rule).unwrap_or(serde_json::Value::Null))
+                .collect(),
+            message: format!(
+                "{:?} coordination agreement established with {} work items",
+                agreement.coordination_type,
+                agreement.work_items.len()
+            ),
+        };
+
+        Ok(Some(JsonRpcResponse::success(
+            request.id,
+            serde_json::to_value(result)?,
+        )))
+    }
+
+    /// Handle conflict resolution - resolve overlapping modifications
+    async fn handle_conflict_resolve(
+        &self,
+        request: JsonRpcRequest,
+    ) -> Result<Option<JsonRpcResponse>> {
+        debug!("Handling conflict resolution request");
+
+        let coordination_service = self
+            .coordination_service
+            .as_ref()
+            .ok_or_else(|| Error::service_unavailable("Coordination service not available"))?;
+
+        let params: ConflictResolveParams =
+            serde_json::from_value(request.params.unwrap_or(serde_json::Value::Null))?;
+
+        // Parse UUIDs from strings
+        let mut affected_agents = Vec::new();
+        for id in &params.affected_agents {
+            let uuid = Uuid::parse_str(id)
+                .map_err(|_| Error::validation("Invalid affected_agents UUID format"))?;
+            affected_agents.push(uuid);
+        }
+
+        let resolver_agent_id = Uuid::parse_str(&params.resolver_agent_id)
+            .map_err(|_| Error::validation("Invalid resolver_agent_id UUID"))?;
+
+        // Parse conflict type
+        let conflict_type = match params.conflict_type.as_str() {
+            "FILE_MODIFICATION" => vibe_ensemble_core::coordination::ConflictType::FileModification,
+            "RESOURCE_LOCK" => vibe_ensemble_core::coordination::ConflictType::ResourceLock,
+            "ARCHITECTURE" => vibe_ensemble_core::coordination::ConflictType::Architecture,
+            "BUSINESS_LOGIC" => vibe_ensemble_core::coordination::ConflictType::BusinessLogic,
+            "TESTING" => vibe_ensemble_core::coordination::ConflictType::Testing,
+            "DEPLOYMENT" => vibe_ensemble_core::coordination::ConflictType::Deployment,
+            _ => vibe_ensemble_core::coordination::ConflictType::FileModification,
+        };
+
+        // Parse resolution strategy
+        let resolution_strategy =
+            params
+                .resolution_strategy
+                .and_then(|strategy| match strategy.as_str() {
+                    "LAST_WRITER_WINS" => {
+                        Some(vibe_ensemble_core::coordination::ResolutionStrategy::LastWriterWins)
+                    }
+                    "FIRST_WRITER_WINS" => {
+                        Some(vibe_ensemble_core::coordination::ResolutionStrategy::FirstWriterWins)
+                    }
+                    "AUTO_MERGE" => {
+                        Some(vibe_ensemble_core::coordination::ResolutionStrategy::AutoMerge)
+                    }
+                    "MANUAL_MERGE" => {
+                        Some(vibe_ensemble_core::coordination::ResolutionStrategy::ManualMerge)
+                    }
+                    "RESOURCE_SPLIT" => {
+                        Some(vibe_ensemble_core::coordination::ResolutionStrategy::ResourceSplit)
+                    }
+                    "SEQUENTIAL" => {
+                        Some(vibe_ensemble_core::coordination::ResolutionStrategy::Sequential)
+                    }
+                    "ESCALATE" => {
+                        Some(vibe_ensemble_core::coordination::ResolutionStrategy::Escalate)
+                    }
+                    _ => None,
+                });
+
+        // Resolve conflict
+        let conflict_case = coordination_service
+            .resolve_conflict(
+                affected_agents,
+                params.conflicted_resources,
+                conflict_type,
+                resolution_strategy,
+                resolver_agent_id,
+            )
+            .await?;
+
+        info!(
+            "Conflict resolution case created for {} agents (ID: {})",
+            conflict_case.affected_agents.len(),
+            conflict_case.id
+        );
+
+        // Build response
+        let result = ConflictResolveResult {
+            resolution_id: conflict_case.id,
+            resolution_plan: conflict_case
+                .resolution_plan
+                .as_ref()
+                .map(|plan| serde_json::to_value(plan).unwrap_or(serde_json::Value::Null))
+                .unwrap_or(serde_json::Value::Null),
+            required_actions_per_agent: conflict_case
+                .resolution_plan
+                .as_ref()
+                .map(|plan| {
+                    serde_json::to_value(&plan.required_actions_per_agent)
+                        .unwrap_or(serde_json::Value::Object(serde_json::Map::new()))
+                })
+                .unwrap_or(serde_json::Value::Object(serde_json::Map::new())),
+            resolution_strategy: conflict_case
+                .resolution_strategy
+                .as_ref()
+                .map(|s| format!("{:?}", s))
+                .unwrap_or_else(|| "None".to_string()),
+            estimated_resolution_time: conflict_case
+                .resolution_plan
+                .as_ref()
+                .and_then(|plan| plan.estimated_resolution_time)
+                .map(|d| chrono::Utc::now() + d),
+            rollback_plan: conflict_case
+                .resolution_plan
+                .as_ref()
+                .and_then(|plan| plan.rollback_plan.as_ref())
+                .map(|rollback| serde_json::to_value(rollback).unwrap_or(serde_json::Value::Null)),
+            coordinator_escalation: matches!(
+                conflict_case.resolution_strategy,
+                Some(vibe_ensemble_core::coordination::ResolutionStrategy::Escalate)
+            ),
+            status: format!("{:?}", conflict_case.status),
+            message: format!(
+                "{:?} conflict resolution case created with {} strategy",
+                conflict_case.conflict_type,
+                conflict_case
+                    .resolution_strategy
+                    .as_ref()
+                    .map(|s| format!("{:?}", s))
+                    .unwrap_or_else(|| "automatic".to_string())
+            ),
         };
 
         Ok(Some(JsonRpcResponse::success(
