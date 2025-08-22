@@ -18,6 +18,66 @@ export SERVER_PORT="8080"         # default port
 export RUST_LOG="info"             # or "debug" for troubleshooting
 ```
 
+## Worker Settings Deployment
+
+The system automatically deploys shared Claude Code settings to worker directories to ensure controlled permissions and MCP server connectivity.
+
+### Shared Settings Template
+
+Located at `agent-templates/shared/.claude/settings.json`, this template provides:
+
+- **Restricted Permissions**: Workers have limited tool access compared to Claude Code defaults
+- **MCP Server Integration**: Automatic connection to the Vibe Ensemble MCP server
+- **Environment Variable Substitution**: Dynamic configuration based on workspace context
+
+### Permission Differences: Worker vs Claude Code Default
+
+| Category | Claude Code Default | Worker Settings |
+|----------|-------------------|-----------------|
+| File Operations | All files, any location | Restricted to workspace |
+| Shell Access | Full system access | Curated commands only |
+| Network Access | Unrestricted | Limited domains only |
+| System Commands | All commands | Development tools only |
+
+### Allowed Worker Permissions
+
+**Core Tools**: Read, Write, Edit, MultiEdit, Glob, Grep, LS, TodoWrite
+
+**Web Access**: Limited to documentation sites (docs.anthropic.com, github.com, docs.rs, crates.io, rust-lang.org)
+
+**Shell Commands**: 
+- Git operations (all git commands)
+- Rust/Cargo development (build, test, check, fmt, clippy)  
+- Common file operations (mkdir, rm, mv, cp, chmod)
+- Development utilities (find, grep, rg, echo, cat, ls)
+
+**Denied Operations**: 
+- System admin commands (sudo, su)  
+- Dangerous operations (rm -rf /, format, fdisk)
+- Direct disk operations
+
+### Environment Variable Substitution
+
+The settings template supports these variables:
+
+- `${VIBE_ENSEMBLE_MCP_SERVER:-ws://localhost:8080}` - MCP server URL
+- `${VIBE_ENSEMBLE_MCP_BINARY:-vibe-ensemble-mcp}` - MCP binary path
+- `${WORKSPACE_ID}` - Unique workspace identifier
+- `${WORKSPACE_NAME}` - Human-readable workspace name  
+- `${TEMPLATE_NAME}` - Agent template being used
+- `${AGENT_ID:-${WORKSPACE_ID}}` - Agent identifier (defaults to workspace ID)
+- `${VIBE_ENSEMBLE_LOG_LEVEL:-info}` - Logging level for MCP connection
+- `${DATABASE_URL:-sqlite:./vibe-ensemble.db}` - Database connection string
+
+### Automatic Deployment
+
+Settings are deployed automatically when executing worker commands through the HeadlessClaudeExecutor:
+
+1. **Pre-execution**: Template is processed and copied to `{workspace}/.claude/settings.json`
+2. **Variable Substitution**: Environment variables are replaced with actual values
+3. **Validation**: Generated JSON is validated for correctness
+4. **Post-execution**: Settings file is cleaned up to prevent stale configurations
+
 ## Agent Template Configuration
 
 Templates are in `agent-templates/` directory:
