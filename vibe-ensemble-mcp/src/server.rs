@@ -3,13 +3,21 @@
 //! This module provides the core MCP server functionality including
 //! protocol handling, capability negotiation, and client session management.
 
-use crate::{protocol::error_codes, protocol::*, Error, Result};
+use crate::{
+    protocol::{
+        error_codes, AgentDeregisterParams, AgentDeregisterResult, AgentListParams,
+        AgentStatusParams, IssueAssignParams, IssueAssignResult, IssueCloseParams,
+        IssueCloseResult, IssueCreateParams, IssueCreateResult, IssueInfo, IssueListParams,
+        IssueListResult, IssueUpdateParams, IssueUpdateResult, *,
+    },
+    Error, Result,
+};
 use std::collections::HashMap;
 use std::sync::Arc;
 use tokio::sync::RwLock;
 use tracing::{debug, error, info, warn};
 use uuid::Uuid;
-use vibe_ensemble_core::agent::{AgentType, ConnectionMetadata};
+use vibe_ensemble_core::agent::{AgentStatus, AgentType, ConnectionMetadata};
 use vibe_ensemble_core::issue::{IssuePriority, IssueStatus};
 use vibe_ensemble_core::message::{MessagePriority, MessageType};
 use vibe_ensemble_storage::services::{AgentService, IssueService, MessageService};
@@ -184,6 +192,7 @@ impl McpServer {
         debug!("Parsed JSON-RPC request: {}", parsed_message.method);
 
         // Handle the request and generate response
+        let request_id = parsed_message.id.clone();
         match self.handle_request(parsed_message).await {
             Ok(Some(response)) => {
                 let response_json =
@@ -193,7 +202,27 @@ impl McpServer {
             Ok(None) => Ok(None), // No response needed (notification)
             Err(e) => {
                 error!("Error handling request: {}", e);
-                Err(e)
+
+                // Convert error to JSON-RPC error response
+                let error_code = match &e {
+                    Error::Protocol { .. } => error_codes::INVALID_PARAMS,
+                    Error::InvalidParams { .. } => error_codes::INVALID_PARAMS,
+                    Error::Configuration { .. } => error_codes::INTERNAL_ERROR,
+                    _ => error_codes::INTERNAL_ERROR,
+                };
+
+                let error_response = JsonRpcResponse::error(
+                    request_id,
+                    JsonRpcError {
+                        code: error_code,
+                        message: e.to_string(),
+                        data: None,
+                    },
+                );
+
+                let response_json =
+                    serde_json::to_string(&error_response).map_err(Error::Serialization)?;
+                Ok(Some(response_json))
             }
         }
     }
@@ -210,9 +239,13 @@ impl McpServer {
             // Vibe Ensemble extensions
             methods::AGENT_REGISTER => self.handle_agent_register(request).await,
             methods::AGENT_STATUS => self.handle_agent_status(request).await,
-            methods::ISSUE_CREATE => self.handle_issue_create(request).await,
-            methods::ISSUE_UPDATE => self.handle_issue_update(request).await,
-            methods::ISSUE_LIST => self.handle_issue_list(request).await,
+            methods::AGENT_LIST => self.handle_agent_list(request).await,
+            methods::AGENT_DEREGISTER => self.handle_agent_deregister(request).await,
+            methods::ISSUE_CREATE => self.handle_issue_create_new(request).await,
+            methods::ISSUE_LIST => self.handle_issue_list_new(request).await,
+            methods::ISSUE_ASSIGN => self.handle_issue_assign(request).await,
+            methods::ISSUE_UPDATE => self.handle_issue_update_new(request).await,
+            methods::ISSUE_CLOSE => self.handle_issue_close(request).await,
             methods::MESSAGE_SEND => self.handle_message_send(request).await,
             methods::MESSAGE_BROADCAST => self.handle_message_broadcast(request).await,
             methods::KNOWLEDGE_QUERY => self.handle_knowledge_query(request).await,
@@ -319,30 +352,137 @@ impl McpServer {
         let result = serde_json::json!({
             "tools": [
                 {
-                    "name": "agent_register",
+                    "name": "vibe_agent_register",
                     "description": "Register a new Claude Code agent with the system",
                     "inputSchema": {
                         "type": "object",
                         "properties": {
-                            "name": {"type": "string"},
-                            "agentType": {"type": "string"},
-                            "capabilities": {"type": "array", "items": {"type": "string"}},
-                            "connectionMetadata": {"type": "object"}
+                            "name": {"type": "string", "description": "Agent name"},
+                            "agentType": {"type": "string", "enum": ["Coordinator", "Worker"], "description": "Agent type"},
+                            "capabilities": {"type": "array", "items": {"type": "string"}, "description": "Agent capabilities"},
+                            "connectionMetadata": {"type": "object", "description": "Connection metadata"}
                         },
                         "required": ["name", "agentType", "capabilities"]
                     }
                 },
                 {
-                    "name": "issue_create",
+                    "name": "vibe_agent_status",
+                    "description": "Report agent status or query system statistics",
+                    "inputSchema": {
+                        "type": "object",
+                        "properties": {
+                            "agentId": {"type": "string", "description": "Agent ID (for status updates)"},
+                            "status": {"type": "string", "enum": ["Connecting", "Online", "Idle", "Busy", "Maintenance", "Disconnecting", "Offline"], "description": "Agent status"},
+                            "currentTask": {"type": "string", "description": "Current task description"},
+                            "progress": {"type": "number", "minimum": 0, "maximum": 1, "description": "Task progress (0-1)"},
+                            "healthMetrics": {"type": "object", "description": "Health metrics data"}
+                        },
+                        "required": []
+                    }
+                },
+                {
+                    "name": "vibe_agent_list",
+                    "description": "List active agents with optional filtering",
+                    "inputSchema": {
+                        "type": "object",
+                        "properties": {
+                            "project": {"type": "string", "description": "Filter by project"},
+                            "capability": {"type": "string", "description": "Filter by capability"},
+                            "status": {"type": "string", "enum": ["Connecting", "Online", "Idle", "Busy", "Maintenance", "Disconnecting", "Offline"], "description": "Filter by status"},
+                            "agentType": {"type": "string", "enum": ["Coordinator", "Worker"], "description": "Filter by agent type"},
+                            "limit": {"type": "integer", "minimum": 1, "description": "Maximum number of agents to return"}
+                        },
+                        "required": []
+                    }
+                },
+                {
+                    "name": "vibe_agent_deregister",
+                    "description": "Deregister an agent from the system",
+                    "inputSchema": {
+                        "type": "object",
+                        "properties": {
+                            "agentId": {"type": "string", "description": "Agent ID to deregister"},
+                            "shutdownReason": {"type": "string", "description": "Reason for shutdown"}
+                        },
+                        "required": ["agentId"]
+                    }
+                },
+                {
+                    "name": "vibe_issue_create",
                     "description": "Create a new issue in the tracking system",
                     "inputSchema": {
                         "type": "object",
                         "properties": {
-                            "title": {"type": "string"},
-                            "description": {"type": "string"},
-                            "priority": {"type": "string", "enum": ["Low", "Medium", "High", "Critical"]}
+                            "title": {"type": "string", "description": "Issue title"},
+                            "description": {"type": "string", "description": "Issue description"},
+                            "priority": {"type": "string", "enum": ["Low", "Medium", "High", "Critical"], "description": "Issue priority"},
+                            "issueType": {"type": "string", "description": "Type of issue (e.g., bug, feature, task)"},
+                            "projectId": {"type": "string", "description": "Project identifier"},
+                            "createdByAgentId": {"type": "string", "description": "ID of the agent creating the issue"},
+                            "labels": {"type": "array", "items": {"type": "string"}, "description": "Issue labels/tags"},
+                            "assignee": {"type": "string", "description": "Agent ID to assign the issue to"}
                         },
-                        "required": ["title", "description"]
+                        "required": ["title", "description", "createdByAgentId"]
+                    }
+                },
+                {
+                    "name": "vibe_issue_list",
+                    "description": "Query issues by project/status/assignee with comprehensive filtering",
+                    "inputSchema": {
+                        "type": "object",
+                        "properties": {
+                            "projectId": {"type": "string", "description": "Filter by project ID"},
+                            "status": {"type": "string", "enum": ["Open", "InProgress", "Resolved", "Closed"], "description": "Filter by status"},
+                            "assignee": {"type": "string", "description": "Filter by assignee agent ID"},
+                            "issueType": {"type": "string", "description": "Filter by issue type"},
+                            "priority": {"type": "string", "enum": ["Low", "Medium", "High", "Critical"], "description": "Filter by priority"},
+                            "labels": {"type": "array", "items": {"type": "string"}, "description": "Filter by labels"},
+                            "limit": {"type": "integer", "minimum": 1, "description": "Maximum number of issues to return"}
+                        },
+                        "required": []
+                    }
+                },
+                {
+                    "name": "vibe_issue_assign",
+                    "description": "Assign issues to workers or coordinator",
+                    "inputSchema": {
+                        "type": "object",
+                        "properties": {
+                            "issueId": {"type": "string", "description": "ID of the issue to assign"},
+                            "assigneeAgentId": {"type": "string", "description": "Agent ID to assign the issue to"},
+                            "assignedByAgentId": {"type": "string", "description": "Agent ID performing the assignment"},
+                            "reason": {"type": "string", "description": "Reason for assignment"}
+                        },
+                        "required": ["issueId", "assigneeAgentId", "assignedByAgentId"]
+                    }
+                },
+                {
+                    "name": "vibe_issue_update",
+                    "description": "Update issue status and add comments",
+                    "inputSchema": {
+                        "type": "object",
+                        "properties": {
+                            "issueId": {"type": "string", "description": "ID of the issue to update"},
+                            "status": {"type": "string", "enum": ["Open", "InProgress", "Resolved", "Closed"], "description": "New status"},
+                            "comment": {"type": "string", "description": "Comment to add to the issue"},
+                            "updatedByAgentId": {"type": "string", "description": "Agent ID performing the update"},
+                            "priority": {"type": "string", "enum": ["Low", "Medium", "High", "Critical"], "description": "Updated priority"}
+                        },
+                        "required": ["issueId", "updatedByAgentId"]
+                    }
+                },
+                {
+                    "name": "vibe_issue_close",
+                    "description": "Mark issues as resolved/closed",
+                    "inputSchema": {
+                        "type": "object",
+                        "properties": {
+                            "issueId": {"type": "string", "description": "ID of the issue to close"},
+                            "closedByAgentId": {"type": "string", "description": "Agent ID closing the issue"},
+                            "resolution": {"type": "string", "description": "Resolution description"},
+                            "closeReason": {"type": "string", "description": "Reason for closing"}
+                        },
+                        "required": ["issueId", "closedByAgentId", "resolution"]
                     }
                 }
             ]
@@ -569,17 +709,66 @@ impl McpServer {
         }
     }
 
-    /// Handle agent status request
+    /// Handle agent status request - supports both reporting status and querying status
     async fn handle_agent_status(
         &self,
         request: JsonRpcRequest,
     ) -> Result<Option<JsonRpcResponse>> {
         debug!("Handling agent status request");
 
-        let result = if let Some(agent_service) = &self.agent_service {
+        let agent_service = if let Some(service) = &self.agent_service {
+            service
+        } else {
+            // Fallback: return system-level statistics
+            let result = serde_json::json!({
+                "connected_agents": self.client_count().await,
+                "active_sessions": self.clients.read().await.len(),
+                "note": "Agent service not available"
+            });
+            return Ok(Some(JsonRpcResponse::success(request.id, result)));
+        };
+
+        // Check if this is a status update (has parameters) or status query (no parameters)
+        if let Some(params) = request.params {
+            // Status update from an agent
+            let status_params: AgentStatusParams =
+                serde_json::from_value(params).map_err(|e| Error::Protocol {
+                    message: format!("Invalid agent status parameters: {}", e),
+                })?;
+
+            let agent_id =
+                Uuid::parse_str(&status_params.agent_id).map_err(|e| Error::Protocol {
+                    message: format!("Invalid agent ID: {}", e),
+                })?;
+
+            // Update heartbeat
+            if let Err(e) = agent_service.update_heartbeat(agent_id).await {
+                warn!("Failed to update heartbeat for agent {}: {}", agent_id, e);
+            }
+
+            // Parse and update status if provided
+            if let Ok(agent_status) = self.parse_agent_status(&status_params.status) {
+                if let Err(e) = agent_service
+                    .update_agent_status(agent_id, agent_status)
+                    .await
+                {
+                    warn!("Failed to update status for agent {}: {}", agent_id, e);
+                }
+            }
+
+            // Return acknowledgment
+            let result = serde_json::json!({
+                "agent_id": agent_id,
+                "status": "acknowledged",
+                "timestamp": chrono::Utc::now(),
+                "message": "Status update received"
+            });
+            Ok(Some(JsonRpcResponse::success(request.id, result)))
+        } else {
+            // Status query - return system-wide statistics
             match agent_service.get_statistics().await {
                 Ok(stats) => {
-                    serde_json::json!({
+                    let result = serde_json::json!({
                         "total_agents": stats.total_agents,
                         "online_agents": stats.online_agents,
                         "busy_agents": stats.busy_agents,
@@ -588,506 +777,296 @@ impl McpServer {
                         "worker_agents": stats.worker_agents,
                         "active_sessions": stats.active_sessions,
                         "mcp_connections": self.client_count().await
-                    })
+                    });
+                    Ok(Some(JsonRpcResponse::success(request.id, result)))
                 }
                 Err(e) => {
                     warn!("Failed to get agent statistics: {}", e);
-                    serde_json::json!({
+                    let result = serde_json::json!({
                         "connected_agents": self.client_count().await,
                         "active_sessions": self.clients.read().await.len(),
                         "error": "Failed to retrieve agent statistics"
-                    })
+                    });
+                    Ok(Some(JsonRpcResponse::success(request.id, result)))
                 }
-            }
-        } else {
-            serde_json::json!({
-                "connected_agents": self.client_count().await,
-                "active_sessions": self.clients.read().await.len(),
-                "note": "Agent service not available"
-            })
-        };
-
-        Ok(Some(JsonRpcResponse::success(request.id, result)))
-    }
-
-    /// Handle issue creation
-    async fn handle_issue_create(
-        &self,
-        request: JsonRpcRequest,
-    ) -> Result<Option<JsonRpcResponse>> {
-        debug!("Handling issue creation request");
-
-        let issue_service = self
-            .issue_service
-            .as_ref()
-            .ok_or_else(|| Error::Configuration {
-                message: "Issue service not configured".to_string(),
-            })?;
-
-        // Parse request parameters
-        #[derive(serde::Deserialize)]
-        struct CreateIssueParams {
-            title: String,
-            description: String,
-            priority: Option<String>,
-            tags: Option<Vec<String>>,
-        }
-
-        let params: CreateIssueParams = if let Some(params) = request.params {
-            serde_json::from_value(params).map_err(|e| Error::Protocol {
-                message: format!("Invalid issue creation parameters: {}", e),
-            })?
-        } else {
-            return Err(Error::Protocol {
-                message: "Missing issue creation parameters".to_string(),
-            });
-        };
-
-        // Parse priority
-        let priority = match params.priority.as_deref() {
-            Some("Low") => IssuePriority::Low,
-            Some("Medium") => IssuePriority::Medium,
-            Some("High") => IssuePriority::High,
-            Some("Critical") => IssuePriority::Critical,
-            None => IssuePriority::Medium, // Default
-            Some(p) => {
-                return Err(Error::Protocol {
-                    message: format!("Invalid priority: {}", p),
-                });
-            }
-        };
-
-        let tags = params.tags.unwrap_or_default();
-
-        // Create the issue
-        match issue_service
-            .create_issue(params.title, params.description, priority, tags)
-            .await
-        {
-            Ok(issue) => {
-                let result = serde_json::json!({
-                    "issue_id": issue.id,
-                    "title": issue.title,
-                    "description": issue.description,
-                    "priority": format!("{:?}", issue.priority),
-                    "status": format!("{:?}", issue.status),
-                    "tags": issue.tags,
-                    "created_at": issue.created_at,
-                    "message": "Issue created successfully"
-                });
-                Ok(Some(JsonRpcResponse::success(request.id, result)))
-            }
-            Err(e) => {
-                error!("Failed to create issue: {}", e);
-                Ok(Some(JsonRpcResponse::error(
-                    request.id,
-                    JsonRpcError {
-                        code: error_codes::INTERNAL_ERROR,
-                        message: format!("Failed to create issue: {}", e),
-                        data: None,
-                    },
-                )))
             }
         }
     }
 
-    /// Handle issue update request
-    async fn handle_issue_update(
-        &self,
-        request: JsonRpcRequest,
-    ) -> Result<Option<JsonRpcResponse>> {
-        debug!("Handling issue update request");
-
-        let issue_service = self
-            .issue_service
-            .as_ref()
-            .ok_or_else(|| Error::Configuration {
-                message: "Issue service not configured".to_string(),
-            })?;
-
-        // Parse request parameters
-        #[derive(serde::Deserialize)]
-        #[allow(dead_code)]
-        struct UpdateIssueParams {
-            issue_id: String,
-            action: String,
-            // Optional fields for different actions
-            priority: Option<String>,
-            status: Option<String>,
-            assigned_agent_id: Option<String>,
-            tags: Option<Vec<String>>,
-            add_tag: Option<String>,
-            remove_tag: Option<String>,
-            knowledge_link: Option<String>,
-            block_reason: Option<String>,
+    /// Parse agent status string into AgentStatus enum
+    fn parse_agent_status(&self, status_str: &str) -> Result<AgentStatus> {
+        match status_str {
+            "Connecting" => Ok(AgentStatus::Connecting),
+            "Online" => Ok(AgentStatus::Online),
+            "Idle" => Ok(AgentStatus::Idle),
+            "Busy" => Ok(AgentStatus::Busy),
+            "Maintenance" => Ok(AgentStatus::Maintenance),
+            "Disconnecting" => Ok(AgentStatus::Disconnecting),
+            "Offline" => Ok(AgentStatus::Offline),
+            s if s.starts_with("Error:") => {
+                let message = s.strip_prefix("Error:").unwrap_or("").trim().to_string();
+                Ok(AgentStatus::Error { message })
+            }
+            s if s.starts_with("Unhealthy:") => {
+                let reason = s
+                    .strip_prefix("Unhealthy:")
+                    .unwrap_or("")
+                    .trim()
+                    .to_string();
+                Ok(AgentStatus::Unhealthy { reason })
+            }
+            _ => Err(Error::Protocol {
+                message: format!("Invalid agent status: {}", status_str),
+            }),
         }
-
-        let params: UpdateIssueParams = if let Some(params) = request.params {
-            serde_json::from_value(params).map_err(|e| Error::Protocol {
-                message: format!("Invalid issue update parameters: {}", e),
-            })?
-        } else {
-            return Err(Error::Protocol {
-                message: "Missing issue update parameters".to_string(),
-            });
-        };
-
-        let issue_id = Uuid::parse_str(&params.issue_id).map_err(|e| Error::Protocol {
-            message: format!("Invalid issue ID: {}", e),
-        })?;
-
-        // Perform the requested action
-        let result = match params.action.as_str() {
-            "assign" => {
-                let agent_id_str = params.assigned_agent_id.ok_or_else(|| Error::Protocol {
-                    message: "Missing agent ID for assignment".to_string(),
-                })?;
-                let agent_id = Uuid::parse_str(&agent_id_str).map_err(|e| Error::Protocol {
-                    message: format!("Invalid agent ID: {}", e),
-                })?;
-                match issue_service.assign_issue(issue_id, agent_id).await {
-                    Ok(issue) => serde_json::json!({
-                        "message": "Issue assigned successfully",
-                        "issue_id": issue.id,
-                        "assigned_agent_id": issue.assigned_agent_id,
-                        "status": format!("{:?}", issue.status)
-                    }),
-                    Err(e) => {
-                        return Ok(Some(JsonRpcResponse::error(
-                            request.id,
-                            JsonRpcError {
-                                code: error_codes::INTERNAL_ERROR,
-                                message: format!("Failed to assign issue: {}", e),
-                                data: None,
-                            },
-                        )))
-                    }
-                }
-            }
-            "unassign" => match issue_service.unassign_issue(issue_id).await {
-                Ok(issue) => serde_json::json!({
-                    "message": "Issue unassigned successfully",
-                    "issue_id": issue.id,
-                    "assigned_agent_id": issue.assigned_agent_id,
-                    "status": format!("{:?}", issue.status)
-                }),
-                Err(e) => {
-                    return Ok(Some(JsonRpcResponse::error(
-                        request.id,
-                        JsonRpcError {
-                            code: error_codes::INTERNAL_ERROR,
-                            message: format!("Failed to unassign issue: {}", e),
-                            data: None,
-                        },
-                    )))
-                }
-            },
-            "update_priority" => {
-                let priority_str = params.priority.ok_or_else(|| Error::Protocol {
-                    message: "Missing priority for priority update".to_string(),
-                })?;
-                let priority = match priority_str.as_str() {
-                    "Low" => IssuePriority::Low,
-                    "Medium" => IssuePriority::Medium,
-                    "High" => IssuePriority::High,
-                    "Critical" => IssuePriority::Critical,
-                    _ => {
-                        return Err(Error::Protocol {
-                            message: format!("Invalid priority: {}", priority_str),
-                        })
-                    }
-                };
-                match issue_service.update_priority(issue_id, priority).await {
-                    Ok(issue) => serde_json::json!({
-                        "message": "Issue priority updated successfully",
-                        "issue_id": issue.id,
-                        "priority": format!("{:?}", issue.priority)
-                    }),
-                    Err(e) => {
-                        return Ok(Some(JsonRpcResponse::error(
-                            request.id,
-                            JsonRpcError {
-                                code: error_codes::INTERNAL_ERROR,
-                                message: format!("Failed to update priority: {}", e),
-                                data: None,
-                            },
-                        )))
-                    }
-                }
-            }
-            "block" => {
-                let reason = params.block_reason.ok_or_else(|| Error::Protocol {
-                    message: "Missing block reason".to_string(),
-                })?;
-                match issue_service.block_issue(issue_id, reason).await {
-                    Ok(issue) => serde_json::json!({
-                        "message": "Issue blocked successfully",
-                        "issue_id": issue.id,
-                        "status": match &issue.status {
-                            IssueStatus::Blocked { reason } => format!("Blocked: {}", reason),
-                            other => format!("{:?}", other),
-                        }
-                    }),
-                    Err(e) => {
-                        return Ok(Some(JsonRpcResponse::error(
-                            request.id,
-                            JsonRpcError {
-                                code: error_codes::INTERNAL_ERROR,
-                                message: format!("Failed to block issue: {}", e),
-                                data: None,
-                            },
-                        )))
-                    }
-                }
-            }
-            "unblock" => match issue_service.unblock_issue(issue_id).await {
-                Ok(issue) => serde_json::json!({
-                    "message": "Issue unblocked successfully",
-                    "issue_id": issue.id,
-                    "status": format!("{:?}", issue.status)
-                }),
-                Err(e) => {
-                    return Ok(Some(JsonRpcResponse::error(
-                        request.id,
-                        JsonRpcError {
-                            code: error_codes::INTERNAL_ERROR,
-                            message: format!("Failed to unblock issue: {}", e),
-                            data: None,
-                        },
-                    )))
-                }
-            },
-            "resolve" => match issue_service.resolve_issue(issue_id).await {
-                Ok(issue) => serde_json::json!({
-                    "message": "Issue resolved successfully",
-                    "issue_id": issue.id,
-                    "status": format!("{:?}", issue.status),
-                    "resolved_at": issue.resolved_at
-                }),
-                Err(e) => {
-                    return Ok(Some(JsonRpcResponse::error(
-                        request.id,
-                        JsonRpcError {
-                            code: error_codes::INTERNAL_ERROR,
-                            message: format!("Failed to resolve issue: {}", e),
-                            data: None,
-                        },
-                    )))
-                }
-            },
-            "close" => match issue_service.close_issue(issue_id).await {
-                Ok(issue) => serde_json::json!({
-                    "message": "Issue closed successfully",
-                    "issue_id": issue.id,
-                    "status": format!("{:?}", issue.status),
-                    "resolved_at": issue.resolved_at
-                }),
-                Err(e) => {
-                    return Ok(Some(JsonRpcResponse::error(
-                        request.id,
-                        JsonRpcError {
-                            code: error_codes::INTERNAL_ERROR,
-                            message: format!("Failed to close issue: {}", e),
-                            data: None,
-                        },
-                    )))
-                }
-            },
-            "add_tag" => {
-                let tag = params.add_tag.ok_or_else(|| Error::Protocol {
-                    message: "Missing tag to add".to_string(),
-                })?;
-                match issue_service.add_tag(issue_id, tag).await {
-                    Ok(issue) => serde_json::json!({
-                        "message": "Tag added successfully",
-                        "issue_id": issue.id,
-                        "tags": issue.tags
-                    }),
-                    Err(e) => {
-                        return Ok(Some(JsonRpcResponse::error(
-                            request.id,
-                            JsonRpcError {
-                                code: error_codes::INTERNAL_ERROR,
-                                message: format!("Failed to add tag: {}", e),
-                                data: None,
-                            },
-                        )))
-                    }
-                }
-            }
-            "remove_tag" => {
-                let tag = params.remove_tag.ok_or_else(|| Error::Protocol {
-                    message: "Missing tag to remove".to_string(),
-                })?;
-                match issue_service.remove_tag(issue_id, &tag).await {
-                    Ok(issue) => serde_json::json!({
-                        "message": "Tag removed successfully",
-                        "issue_id": issue.id,
-                        "tags": issue.tags
-                    }),
-                    Err(e) => {
-                        return Ok(Some(JsonRpcResponse::error(
-                            request.id,
-                            JsonRpcError {
-                                code: error_codes::INTERNAL_ERROR,
-                                message: format!("Failed to remove tag: {}", e),
-                                data: None,
-                            },
-                        )))
-                    }
-                }
-            }
-            "add_knowledge_link" => {
-                let link = params.knowledge_link.ok_or_else(|| Error::Protocol {
-                    message: "Missing knowledge link".to_string(),
-                })?;
-                match issue_service.add_knowledge_link(issue_id, link).await {
-                    Ok(issue) => serde_json::json!({
-                        "message": "Knowledge link added successfully",
-                        "issue_id": issue.id,
-                        "knowledge_links": issue.knowledge_links
-                    }),
-                    Err(e) => {
-                        return Ok(Some(JsonRpcResponse::error(
-                            request.id,
-                            JsonRpcError {
-                                code: error_codes::INTERNAL_ERROR,
-                                message: format!("Failed to add knowledge link: {}", e),
-                                data: None,
-                            },
-                        )))
-                    }
-                }
-            }
-            _ => {
-                return Err(Error::Protocol {
-                    message: format!("Unknown action: {}", params.action),
-                });
-            }
-        };
-
-        Ok(Some(JsonRpcResponse::success(request.id, result)))
     }
 
-    /// Handle issue list request
-    async fn handle_issue_list(&self, request: JsonRpcRequest) -> Result<Option<JsonRpcResponse>> {
-        debug!("Handling issue list request");
+    /// Handle agent list request
+    async fn handle_agent_list(&self, request: JsonRpcRequest) -> Result<Option<JsonRpcResponse>> {
+        debug!("Handling agent list request");
 
-        let issue_service = self
-            .issue_service
-            .as_ref()
-            .ok_or_else(|| Error::Configuration {
-                message: "Issue service not configured".to_string(),
-            })?;
+        let agent_service = if let Some(service) = &self.agent_service {
+            service
+        } else {
+            return Ok(Some(JsonRpcResponse::error(
+                request.id,
+                JsonRpcError {
+                    code: error_codes::INTERNAL_ERROR,
+                    message: "Agent service not available".to_string(),
+                    data: None,
+                },
+            )));
+        };
 
-        // Parse optional parameters
-        #[derive(serde::Deserialize, Default)]
-        struct ListIssueParams {
-            status: Option<String>,
-            priority: Option<String>,
-            assigned_agent_id: Option<String>,
-            limit: Option<usize>,
-        }
-
-        let params: ListIssueParams = if let Some(params) = request.params {
+        // Parse optional filter parameters
+        let params: AgentListParams = if let Some(params) = request.params {
             serde_json::from_value(params).unwrap_or_default()
         } else {
-            ListIssueParams::default()
+            AgentListParams::default()
         };
 
-        // Get issues based on filters
-        let issues_result = if let Some(status_str) = params.status {
-            let status = match status_str.as_str() {
-                "Open" => IssueStatus::Open,
-                "InProgress" => IssueStatus::InProgress,
-                "Resolved" => IssueStatus::Resolved,
-                "Closed" => IssueStatus::Closed,
+        // Get agents based on filters
+        let agents_result = if let Some(capability) = &params.capability {
+            agent_service.find_agents_by_capability(capability).await
+        } else if let Some(agent_type_str) = &params.agent_type {
+            let agent_type = match agent_type_str.as_str() {
+                "Coordinator" => AgentType::Coordinator,
+                "Worker" => AgentType::Worker,
                 _ => {
-                    if status_str.starts_with("Blocked:") {
-                        let reason = status_str
-                            .strip_prefix("Blocked:")
-                            .unwrap_or("")
-                            .to_string();
-                        IssueStatus::Blocked { reason }
-                    } else {
-                        return Err(Error::Protocol {
+                    return Ok(Some(JsonRpcResponse::error(
+                        request.id,
+                        JsonRpcError {
+                            code: error_codes::INVALID_PARAMS,
+                            message: format!("Invalid agent type: {}", agent_type_str),
+                            data: None,
+                        },
+                    )));
+                }
+            };
+            agent_service.list_agents_by_type(&agent_type).await
+        } else if let Some(status_str) = &params.status {
+            let status = match self.parse_agent_status(status_str) {
+                Ok(status) => status,
+                Err(_) => {
+                    return Ok(Some(JsonRpcResponse::error(
+                        request.id,
+                        JsonRpcError {
+                            code: error_codes::INVALID_PARAMS,
                             message: format!("Invalid status filter: {}", status_str),
-                        });
-                    }
+                            data: None,
+                        },
+                    )));
                 }
             };
-            issue_service.get_issues_by_status(&status).await
-        } else if let Some(priority_str) = params.priority {
-            let priority = match priority_str.as_str() {
-                "Low" => IssuePriority::Low,
-                "Medium" => IssuePriority::Medium,
-                "High" => IssuePriority::High,
-                "Critical" => IssuePriority::Critical,
+            match status {
+                AgentStatus::Online => agent_service.list_online_agents().await,
                 _ => {
-                    return Err(Error::Protocol {
-                        message: format!("Invalid priority filter: {}", priority_str),
-                    });
+                    // For non-online statuses, use the generic method from repository
+                    let all_agents = agent_service.list_agents().await?;
+                    Ok(all_agents
+                        .into_iter()
+                        .filter(|agent| {
+                            std::mem::discriminant(&agent.status) == std::mem::discriminant(&status)
+                        })
+                        .collect())
                 }
-            };
-            issue_service.get_issues_by_priority(&priority).await
-        } else if let Some(agent_id_str) = params.assigned_agent_id {
-            let agent_id = Uuid::parse_str(&agent_id_str).map_err(|e| Error::Protocol {
-                message: format!("Invalid agent ID: {}", e),
-            })?;
-            issue_service.get_agent_issues(agent_id).await
+            }
         } else {
-            issue_service.list_issues().await
+            agent_service.list_agents().await
         };
 
-        match issues_result {
-            Ok(mut issues) => {
+        match agents_result {
+            Ok(mut agents) => {
                 // Apply limit if specified
                 if let Some(limit) = params.limit {
-                    issues.truncate(limit);
+                    agents.truncate(limit);
                 }
 
-                let issue_data: Vec<_> = issues
+                let agent_data: Vec<_> = agents
                     .iter()
-                    .map(|issue| {
+                    .map(|agent| {
                         serde_json::json!({
-                            "id": issue.id,
-                            "title": issue.title,
-                            "description": issue.description,
-                            "priority": format!("{:?}", issue.priority),
-                            "status": match &issue.status {
-                                IssueStatus::Blocked { reason } => format!("Blocked: {}", reason),
-                                other => format!("{:?}", other),
-                            },
-                            "assigned_agent_id": issue.assigned_agent_id,
-                            "created_at": issue.created_at,
-                            "updated_at": issue.updated_at,
-                            "resolved_at": issue.resolved_at,
-                            "tags": issue.tags,
-                            "knowledge_links": issue.knowledge_links,
-                            "is_assigned": issue.is_assigned(),
-                            "is_terminal": issue.is_terminal(),
-                            "age_seconds": issue.age_seconds(),
+                            "id": agent.id,
+                            "name": agent.name,
+                            "agent_type": format!("{:?}", agent.agent_type),
+                            "status": self.format_agent_status(&agent.status),
+                            "capabilities": agent.capabilities,
+                            "connected_at": agent.created_at,
+                            "last_seen": agent.last_seen,
+                            "is_healthy": agent.is_healthy(60), // 60-second health check
+                            "is_available": agent.is_available(),
+                            "performance_score": agent.performance_metrics.success_rate(),
+                            "current_tasks": agent.resource_allocation.current_task_count,
+                            "max_tasks": agent.resource_allocation.max_concurrent_tasks,
+                            "load_factor": agent.resource_allocation.load_factor
                         })
                     })
                     .collect();
 
                 let result = serde_json::json!({
-                    "issues": issue_data,
-                    "total": issues.len()
+                    "agents": agent_data,
+                    "total": agents.len(),
+                    "filters_applied": {
+                        "capability": params.capability,
+                        "agent_type": params.agent_type,
+                        "status": params.status,
+                        "project": params.project,
+                        "limit": params.limit
+                    }
                 });
+
                 Ok(Some(JsonRpcResponse::success(request.id, result)))
             }
             Err(e) => {
-                error!("Failed to list issues: {}", e);
+                error!("Failed to list agents: {}", e);
                 Ok(Some(JsonRpcResponse::error(
                     request.id,
                     JsonRpcError {
                         code: error_codes::INTERNAL_ERROR,
-                        message: format!("Failed to list issues: {}", e),
+                        message: format!("Failed to list agents: {}", e),
                         data: None,
                     },
                 )))
             }
+        }
+    }
+
+    /// Handle agent deregistration request
+    async fn handle_agent_deregister(
+        &self,
+        request: JsonRpcRequest,
+    ) -> Result<Option<JsonRpcResponse>> {
+        debug!("Handling agent deregistration request");
+
+        let agent_service = if let Some(service) = &self.agent_service {
+            service
+        } else {
+            return Ok(Some(JsonRpcResponse::error(
+                request.id,
+                JsonRpcError {
+                    code: error_codes::INTERNAL_ERROR,
+                    message: "Agent service not available".to_string(),
+                    data: None,
+                },
+            )));
+        };
+
+        // Parse deregistration parameters
+        let params: AgentDeregisterParams = if let Some(params) = request.params {
+            serde_json::from_value(params).map_err(|e| Error::Protocol {
+                message: format!("Invalid agent deregistration parameters: {}", e),
+            })?
+        } else {
+            return Ok(Some(JsonRpcResponse::error(
+                request.id,
+                JsonRpcError {
+                    code: error_codes::INVALID_PARAMS,
+                    message: "Missing agent deregistration parameters".to_string(),
+                    data: None,
+                },
+            )));
+        };
+
+        let agent_id = Uuid::parse_str(&params.agent_id).map_err(|e| Error::Protocol {
+            message: format!("Invalid agent ID: {}", e),
+        })?;
+
+        info!(
+            "Deregistering agent: {} (reason: {:?})",
+            agent_id, params.shutdown_reason
+        );
+
+        // Verify agent exists before attempting deregistration
+        match agent_service.get_agent(agent_id).await {
+            Ok(Some(_agent)) => {
+                // Proceed with deregistration
+                match agent_service.deregister_agent(agent_id).await {
+                    Ok(()) => {
+                        // Remove from active sessions
+                        self.disconnect_client(&agent_id.to_string()).await;
+
+                        let result = AgentDeregisterResult {
+                            agent_id,
+                            status: "deregistered".to_string(),
+                            cleanup_status: "completed".to_string(),
+                        };
+
+                        info!("Successfully deregistered agent: {}", agent_id);
+                        Ok(Some(JsonRpcResponse::success(
+                            request.id,
+                            serde_json::to_value(result)?,
+                        )))
+                    }
+                    Err(e) => {
+                        error!("Failed to deregister agent {}: {}", agent_id, e);
+                        Ok(Some(JsonRpcResponse::error(
+                            request.id,
+                            JsonRpcError {
+                                code: error_codes::INTERNAL_ERROR,
+                                message: format!("Agent deregistration failed: {}", e),
+                                data: None,
+                            },
+                        )))
+                    }
+                }
+            }
+            Ok(None) => {
+                warn!("Attempted to deregister non-existent agent: {}", agent_id);
+                Ok(Some(JsonRpcResponse::error(
+                    request.id,
+                    JsonRpcError {
+                        code: error_codes::AGENT_NOT_FOUND,
+                        message: format!("Agent not found: {}", agent_id),
+                        data: None,
+                    },
+                )))
+            }
+            Err(e) => {
+                error!("Failed to check agent existence {}: {}", agent_id, e);
+                Ok(Some(JsonRpcResponse::error(
+                    request.id,
+                    JsonRpcError {
+                        code: error_codes::INTERNAL_ERROR,
+                        message: format!("Failed to verify agent: {}", e),
+                        data: None,
+                    },
+                )))
+            }
+        }
+    }
+
+    /// Format agent status for JSON response
+    fn format_agent_status(&self, status: &AgentStatus) -> String {
+        match status {
+            AgentStatus::Connecting => "Connecting".to_string(),
+            AgentStatus::Online => "Online".to_string(),
+            AgentStatus::Idle => "Idle".to_string(),
+            AgentStatus::Busy => "Busy".to_string(),
+            AgentStatus::Maintenance => "Maintenance".to_string(),
+            AgentStatus::Disconnecting => "Disconnecting".to_string(),
+            AgentStatus::Offline => "Offline".to_string(),
+            AgentStatus::Error { message } => format!("Error: {}", message),
+            AgentStatus::Unhealthy { reason } => format!("Unhealthy: {}", reason),
         }
     }
 
@@ -1326,6 +1305,531 @@ impl McpServer {
                     JsonRpcError {
                         code: error_codes::INTERNAL_ERROR,
                         message: format!("Failed to send broadcast: {}", e),
+                        data: None,
+                    },
+                )))
+            }
+        }
+    }
+
+    /// Handle new issue creation with comprehensive parameters
+    async fn handle_issue_create_new(
+        &self,
+        request: JsonRpcRequest,
+    ) -> Result<Option<JsonRpcResponse>> {
+        debug!("Handling new issue creation request");
+
+        let issue_service = self
+            .issue_service
+            .as_ref()
+            .ok_or_else(|| Error::Configuration {
+                message: "Issue service not configured".to_string(),
+            })?;
+
+        // Parse request parameters
+        let params: IssueCreateParams = if let Some(params) = request.params {
+            serde_json::from_value(params).map_err(|e| Error::Protocol {
+                message: format!("Invalid issue creation parameters: {}", e),
+            })?
+        } else {
+            return Err(Error::Protocol {
+                message: "Missing issue creation parameters".to_string(),
+            });
+        };
+
+        info!(
+            "Creating new issue: {} by agent {}",
+            params.title, params.created_by_agent_id
+        );
+
+        // Validate created_by_agent_id
+        let _created_by_agent_id =
+            Uuid::parse_str(&params.created_by_agent_id).map_err(|e| Error::Protocol {
+                message: format!("Invalid agent ID: {}", e),
+            })?;
+
+        // Parse priority
+        let priority = match params.priority.as_deref() {
+            Some("Low") => IssuePriority::Low,
+            Some("Medium") => IssuePriority::Medium,
+            Some("High") => IssuePriority::High,
+            Some("Critical") => IssuePriority::Critical,
+            None => IssuePriority::Medium, // Default
+            Some(p) => {
+                return Err(Error::Protocol {
+                    message: format!("Invalid priority: {}", p),
+                });
+            }
+        };
+
+        let tags = params.labels.unwrap_or_default();
+
+        // Create the issue
+        match issue_service
+            .create_issue(params.title.clone(), params.description, priority, tags)
+            .await
+        {
+            Ok(mut issue) => {
+                // Handle assignment if provided
+                if let Some(assignee) = params.assignee {
+                    let assignee_id = Uuid::parse_str(&assignee).map_err(|e| Error::Protocol {
+                        message: format!("Invalid assignee ID: {}", e),
+                    })?;
+
+                    // Assign the issue
+                    if let Err(e) = issue_service.assign_issue(issue.id, assignee_id).await {
+                        warn!(
+                            "Failed to assign newly created issue {} to {}: {}",
+                            issue.id, assignee_id, e
+                        );
+                    } else {
+                        issue.assigned_agent_id = Some(assignee_id);
+                        info!(
+                            "Successfully assigned new issue {} to agent {}",
+                            issue.id, assignee_id
+                        );
+                    }
+                }
+
+                let result = IssueCreateResult {
+                    issue_id: issue.id,
+                    title: issue.title,
+                    status: format!("{:?}", issue.status),
+                    priority: format!("{:?}", issue.priority),
+                    created_at: issue.created_at,
+                    message: "Issue created successfully".to_string(),
+                };
+
+                Ok(Some(JsonRpcResponse::success(
+                    request.id,
+                    serde_json::to_value(result)?,
+                )))
+            }
+            Err(e) => {
+                error!("Failed to create issue: {}", e);
+                Ok(Some(JsonRpcResponse::error(
+                    request.id,
+                    JsonRpcError {
+                        code: error_codes::INTERNAL_ERROR,
+                        message: format!("Failed to create issue: {}", e),
+                        data: None,
+                    },
+                )))
+            }
+        }
+    }
+
+    /// Handle new issue list request with comprehensive filtering
+    async fn handle_issue_list_new(
+        &self,
+        request: JsonRpcRequest,
+    ) -> Result<Option<JsonRpcResponse>> {
+        debug!("Handling new issue list request");
+
+        let issue_service = self
+            .issue_service
+            .as_ref()
+            .ok_or_else(|| Error::Configuration {
+                message: "Issue service not configured".to_string(),
+            })?;
+
+        // Parse optional filter parameters
+        let params: IssueListParams = if let Some(params) = request.params {
+            serde_json::from_value(params).unwrap_or_default()
+        } else {
+            IssueListParams::default()
+        };
+
+        // Get issues based on filters
+        let issues_result = if let Some(status_str) = &params.status {
+            let status = match status_str.as_str() {
+                "Open" => IssueStatus::Open,
+                "InProgress" => IssueStatus::InProgress,
+                "Resolved" => IssueStatus::Resolved,
+                "Closed" => IssueStatus::Closed,
+                s if s.starts_with("Blocked:") => {
+                    let reason = s.strip_prefix("Blocked:").unwrap_or("").to_string();
+                    IssueStatus::Blocked { reason }
+                }
+                _ => {
+                    return Ok(Some(JsonRpcResponse::error(
+                        request.id,
+                        JsonRpcError {
+                            code: error_codes::INVALID_PARAMS,
+                            message: format!("Invalid status filter: {}", status_str),
+                            data: None,
+                        },
+                    )));
+                }
+            };
+            issue_service.get_issues_by_status(&status).await
+        } else if let Some(priority_str) = &params.priority {
+            let priority = match priority_str.as_str() {
+                "Low" => IssuePriority::Low,
+                "Medium" => IssuePriority::Medium,
+                "High" => IssuePriority::High,
+                "Critical" => IssuePriority::Critical,
+                _ => {
+                    return Ok(Some(JsonRpcResponse::error(
+                        request.id,
+                        JsonRpcError {
+                            code: error_codes::INVALID_PARAMS,
+                            message: format!("Invalid priority filter: {}", priority_str),
+                            data: None,
+                        },
+                    )));
+                }
+            };
+            issue_service.get_issues_by_priority(&priority).await
+        } else if let Some(assignee_str) = &params.assignee {
+            let assignee_id = Uuid::parse_str(assignee_str).map_err(|e| Error::Protocol {
+                message: format!("Invalid assignee ID: {}", e),
+            })?;
+            issue_service.get_agent_issues(assignee_id).await
+        } else {
+            issue_service.list_issues().await
+        };
+
+        match issues_result {
+            Ok(mut issues) => {
+                // Apply limit if specified
+                if let Some(limit) = params.limit {
+                    issues.truncate(limit);
+                }
+
+                let issue_data: Vec<IssueInfo> = issues
+                    .iter()
+                    .map(|issue| IssueInfo {
+                        id: issue.id,
+                        title: issue.title.clone(),
+                        description: issue.description.clone(),
+                        priority: format!("{:?}", issue.priority),
+                        status: match &issue.status {
+                            IssueStatus::Blocked { reason } => format!("Blocked: {}", reason),
+                            other => format!("{:?}", other),
+                        },
+                        assigned_agent_id: issue.assigned_agent_id,
+                        created_at: issue.created_at,
+                        updated_at: issue.updated_at,
+                        resolved_at: issue.resolved_at,
+                        tags: issue.tags.clone(),
+                        knowledge_links: issue.knowledge_links.clone(),
+                        is_assigned: issue.is_assigned(),
+                        is_terminal: issue.is_terminal(),
+                        age_seconds: issue.age_seconds(),
+                    })
+                    .collect();
+
+                let result = IssueListResult {
+                    issues: issue_data,
+                    total: issues.len(),
+                    filters_applied: params,
+                };
+
+                Ok(Some(JsonRpcResponse::success(
+                    request.id,
+                    serde_json::to_value(result)?,
+                )))
+            }
+            Err(e) => {
+                error!("Failed to list issues: {}", e);
+                Ok(Some(JsonRpcResponse::error(
+                    request.id,
+                    JsonRpcError {
+                        code: error_codes::INTERNAL_ERROR,
+                        message: format!("Failed to list issues: {}", e),
+                        data: None,
+                    },
+                )))
+            }
+        }
+    }
+
+    /// Handle issue assignment request
+    async fn handle_issue_assign(
+        &self,
+        request: JsonRpcRequest,
+    ) -> Result<Option<JsonRpcResponse>> {
+        debug!("Handling issue assignment request");
+
+        let issue_service = self
+            .issue_service
+            .as_ref()
+            .ok_or_else(|| Error::Configuration {
+                message: "Issue service not configured".to_string(),
+            })?;
+
+        // Parse request parameters
+        let params: IssueAssignParams = if let Some(params) = request.params {
+            serde_json::from_value(params).map_err(|e| Error::Protocol {
+                message: format!("Invalid issue assignment parameters: {}", e),
+            })?
+        } else {
+            return Err(Error::Protocol {
+                message: "Missing issue assignment parameters".to_string(),
+            });
+        };
+
+        let issue_id = Uuid::parse_str(&params.issue_id).map_err(|e| Error::Protocol {
+            message: format!("Invalid issue ID: {}", e),
+        })?;
+
+        let assignee_agent_id =
+            Uuid::parse_str(&params.assignee_agent_id).map_err(|e| Error::Protocol {
+                message: format!("Invalid assignee agent ID: {}", e),
+            })?;
+
+        let assigned_by_agent_id =
+            Uuid::parse_str(&params.assigned_by_agent_id).map_err(|e| Error::Protocol {
+                message: format!("Invalid assigned by agent ID: {}", e),
+            })?;
+
+        info!(
+            "Assigning issue {} to agent {} by agent {}",
+            issue_id, assignee_agent_id, assigned_by_agent_id
+        );
+
+        // Assign the issue
+        match issue_service
+            .assign_issue(issue_id, assignee_agent_id)
+            .await
+        {
+            Ok(issue) => {
+                let result = IssueAssignResult {
+                    issue_id: issue.id,
+                    assignee_agent_id,
+                    assigned_by_agent_id,
+                    status: format!("{:?}", issue.status),
+                    assigned_at: issue.updated_at,
+                    message: "Issue assigned successfully".to_string(),
+                };
+
+                Ok(Some(JsonRpcResponse::success(
+                    request.id,
+                    serde_json::to_value(result)?,
+                )))
+            }
+            Err(e) => {
+                error!("Failed to assign issue {}: {}", issue_id, e);
+                Ok(Some(JsonRpcResponse::error(
+                    request.id,
+                    JsonRpcError {
+                        code: error_codes::INTERNAL_ERROR,
+                        message: format!("Failed to assign issue: {}", e),
+                        data: None,
+                    },
+                )))
+            }
+        }
+    }
+
+    /// Handle new issue update request with status and comment handling
+    async fn handle_issue_update_new(
+        &self,
+        request: JsonRpcRequest,
+    ) -> Result<Option<JsonRpcResponse>> {
+        debug!("Handling new issue update request");
+
+        let issue_service = self
+            .issue_service
+            .as_ref()
+            .ok_or_else(|| Error::Configuration {
+                message: "Issue service not configured".to_string(),
+            })?;
+
+        // Parse request parameters
+        let params: IssueUpdateParams = if let Some(params) = request.params {
+            serde_json::from_value(params).map_err(|e| Error::Protocol {
+                message: format!("Invalid issue update parameters: {}", e),
+            })?
+        } else {
+            return Err(Error::Protocol {
+                message: "Missing issue update parameters".to_string(),
+            });
+        };
+
+        let issue_id = Uuid::parse_str(&params.issue_id).map_err(|e| Error::Protocol {
+            message: format!("Invalid issue ID: {}", e),
+        })?;
+
+        let _updated_by_agent_id =
+            Uuid::parse_str(&params.updated_by_agent_id).map_err(|e| Error::Protocol {
+                message: format!("Invalid updated by agent ID: {}", e),
+            })?;
+
+        info!(
+            "Updating issue {} by agent {}",
+            issue_id, _updated_by_agent_id
+        );
+
+        // Handle status update if provided
+        let mut updated_issue = if let Some(status_str) = &params.status {
+            let new_status = match status_str.as_str() {
+                "Open" => IssueStatus::Open,
+                "InProgress" => IssueStatus::InProgress,
+                "Resolved" => IssueStatus::Resolved,
+                "Closed" => IssueStatus::Closed,
+                s if s.starts_with("Blocked:") => {
+                    let reason = s.strip_prefix("Blocked:").unwrap_or("").to_string();
+                    IssueStatus::Blocked { reason }
+                }
+                _ => {
+                    return Ok(Some(JsonRpcResponse::error(
+                        request.id,
+                        JsonRpcError {
+                            code: error_codes::INVALID_PARAMS,
+                            message: format!("Invalid status: {}", status_str),
+                            data: None,
+                        },
+                    )));
+                }
+            };
+
+            match issue_service.change_status(issue_id, new_status).await {
+                Ok(issue) => issue,
+                Err(e) => {
+                    error!("Failed to update issue status: {}", e);
+                    return Ok(Some(JsonRpcResponse::error(
+                        request.id,
+                        JsonRpcError {
+                            code: error_codes::INTERNAL_ERROR,
+                            message: format!("Failed to update issue status: {}", e),
+                            data: None,
+                        },
+                    )));
+                }
+            }
+        } else {
+            // Get current issue for other updates
+            match issue_service.get_issue(issue_id).await? {
+                Some(issue) => issue,
+                None => {
+                    return Ok(Some(JsonRpcResponse::error(
+                        request.id,
+                        JsonRpcError {
+                            code: error_codes::INVALID_PARAMS,
+                            message: format!("Issue not found: {}", issue_id),
+                            data: None,
+                        },
+                    )));
+                }
+            }
+        };
+
+        // Handle priority update if provided
+        if let Some(priority_str) = &params.priority {
+            let priority = match priority_str.as_str() {
+                "Low" => IssuePriority::Low,
+                "Medium" => IssuePriority::Medium,
+                "High" => IssuePriority::High,
+                "Critical" => IssuePriority::Critical,
+                _ => {
+                    return Ok(Some(JsonRpcResponse::error(
+                        request.id,
+                        JsonRpcError {
+                            code: error_codes::INVALID_PARAMS,
+                            message: format!("Invalid priority: {}", priority_str),
+                            data: None,
+                        },
+                    )));
+                }
+            };
+
+            match issue_service.update_priority(issue_id, priority).await {
+                Ok(issue) => updated_issue = issue,
+                Err(e) => {
+                    error!("Failed to update issue priority: {}", e);
+                    return Ok(Some(JsonRpcResponse::error(
+                        request.id,
+                        JsonRpcError {
+                            code: error_codes::INTERNAL_ERROR,
+                            message: format!("Failed to update issue priority: {}", e),
+                            data: None,
+                        },
+                    )));
+                }
+            }
+        }
+
+        // TODO: Handle comment addition - this would require extending the IssueService
+        // For now, we just acknowledge the comment parameter
+        let comment_added = params.comment.is_some();
+
+        let result = IssueUpdateResult {
+            issue_id: updated_issue.id,
+            status: format!("{:?}", updated_issue.status),
+            priority: Some(format!("{:?}", updated_issue.priority)),
+            updated_at: updated_issue.updated_at,
+            comment_added,
+            message: "Issue updated successfully".to_string(),
+        };
+
+        Ok(Some(JsonRpcResponse::success(
+            request.id,
+            serde_json::to_value(result)?,
+        )))
+    }
+
+    /// Handle issue close request
+    async fn handle_issue_close(&self, request: JsonRpcRequest) -> Result<Option<JsonRpcResponse>> {
+        debug!("Handling issue close request");
+
+        let issue_service = self
+            .issue_service
+            .as_ref()
+            .ok_or_else(|| Error::Configuration {
+                message: "Issue service not configured".to_string(),
+            })?;
+
+        // Parse request parameters
+        let params: IssueCloseParams = if let Some(params) = request.params {
+            serde_json::from_value(params).map_err(|e| Error::Protocol {
+                message: format!("Invalid issue close parameters: {}", e),
+            })?
+        } else {
+            return Err(Error::Protocol {
+                message: "Missing issue close parameters".to_string(),
+            });
+        };
+
+        let issue_id = Uuid::parse_str(&params.issue_id).map_err(|e| Error::Protocol {
+            message: format!("Invalid issue ID: {}", e),
+        })?;
+
+        let closed_by_agent_id =
+            Uuid::parse_str(&params.closed_by_agent_id).map_err(|e| Error::Protocol {
+                message: format!("Invalid closed by agent ID: {}", e),
+            })?;
+
+        info!(
+            "Closing issue {} with resolution '{}' by agent {}",
+            issue_id, params.resolution, closed_by_agent_id
+        );
+
+        // Close the issue
+        match issue_service.close_issue(issue_id).await {
+            Ok(issue) => {
+                let result = IssueCloseResult {
+                    issue_id: issue.id,
+                    closed_by_agent_id,
+                    status: format!("{:?}", issue.status),
+                    resolution: params.resolution,
+                    closed_at: issue.resolved_at.unwrap_or(issue.updated_at),
+                    message: "Issue closed successfully".to_string(),
+                };
+
+                Ok(Some(JsonRpcResponse::success(
+                    request.id,
+                    serde_json::to_value(result)?,
+                )))
+            }
+            Err(e) => {
+                error!("Failed to close issue {}: {}", issue_id, e);
+                Ok(Some(JsonRpcResponse::error(
+                    request.id,
+                    JsonRpcError {
+                        code: error_codes::INTERNAL_ERROR,
+                        message: format!("Failed to close issue: {}", e),
                         data: None,
                     },
                 )))

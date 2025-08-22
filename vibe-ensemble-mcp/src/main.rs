@@ -18,11 +18,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     info!("Starting Vibe Ensemble MCP Server v0.1.0");
 
     // Get database URL from environment variable
-    let database_url = env::var("DATABASE_URL")
-        .unwrap_or_else(|_| {
-            warn!("DATABASE_URL not set, using default SQLite database");
-            "sqlite:./vibe-ensemble.db".to_string()
-        });
+    let database_url = env::var("DATABASE_URL").unwrap_or_else(|_| {
+        warn!("DATABASE_URL not set, using default SQLite database");
+        "sqlite:./vibe-ensemble.db".to_string()
+    });
 
     info!("Connecting to database: {}", database_url);
 
@@ -74,7 +73,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             vibe_knowledge_management: Some(true),
         },
         agent_service,
-        issue_service, 
+        issue_service,
         message_service,
     );
 
@@ -85,6 +84,6 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // In a full implementation, this would start an actual transport layer (WebSocket, etc.)
     tokio::signal::ctrl_c().await?;
     info!("Shutting down MCP server");
-    
+
     Ok(())
 }

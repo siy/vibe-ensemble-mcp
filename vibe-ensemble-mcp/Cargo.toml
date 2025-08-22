@@ -26,6 +26,9 @@ async-trait = "0.1"
 chrono = { workspace = true }
 tracing-subscriber = "0.3"
 
+[dev-dependencies]
+sqlx = { workspace = true }
+
 [[bin]]
 name = "vibe-ensemble-mcp"
 path = "src/main.rs"

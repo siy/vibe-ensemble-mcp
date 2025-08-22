@@ -73,10 +73,14 @@ pub mod methods {
     // Vibe Ensemble extensions
     pub const AGENT_REGISTER: &str = "vibe/agent/register";
     pub const AGENT_STATUS: &str = "vibe/agent/status";
+    pub const AGENT_LIST: &str = "vibe/agent/list";
+    pub const AGENT_DEREGISTER: &str = "vibe/agent/deregister";
     pub const AGENT_CAPABILITIES: &str = "vibe/agent/capabilities";
     pub const ISSUE_CREATE: &str = "vibe/issue/create";
-    pub const ISSUE_UPDATE: &str = "vibe/issue/update";
     pub const ISSUE_LIST: &str = "vibe/issue/list";
+    pub const ISSUE_ASSIGN: &str = "vibe/issue/assign";
+    pub const ISSUE_UPDATE: &str = "vibe/issue/update";
+    pub const ISSUE_CLOSE: &str = "vibe/issue/close";
     pub const MESSAGE_SEND: &str = "vibe/message/send";
     pub const MESSAGE_BROADCAST: &str = "vibe/message/broadcast";
     pub const KNOWLEDGE_QUERY: &str = "vibe/knowledge/query";
@@ -198,6 +202,209 @@ pub struct AgentRegisterResult {
     pub status: String,
     #[serde(rename = "assignedResources")]
     pub assigned_resources: Vec<String>,
+}
+
+/// Agent status reporting parameters
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AgentStatusParams {
+    #[serde(rename = "agentId")]
+    pub agent_id: String,
+    pub status: String,
+    #[serde(rename = "currentTask")]
+    pub current_task: Option<String>,
+    pub progress: Option<f32>,
+    #[serde(rename = "healthMetrics")]
+    pub health_metrics: Option<serde_json::Value>,
+}
+
+/// Agent list query parameters  
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct AgentListParams {
+    pub project: Option<String>,
+    pub capability: Option<String>,
+    pub status: Option<String>,
+    #[serde(rename = "agentType")]
+    pub agent_type: Option<String>,
+    pub limit: Option<usize>,
+}
+
+/// Agent deregistration parameters
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AgentDeregisterParams {
+    #[serde(rename = "agentId")]
+    pub agent_id: String,
+    #[serde(rename = "shutdownReason")]
+    pub shutdown_reason: Option<String>,
+}
+
+/// Agent deregistration result
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AgentDeregisterResult {
+    #[serde(rename = "agentId")]
+    pub agent_id: Uuid,
+    pub status: String,
+    #[serde(rename = "cleanupStatus")]
+    pub cleanup_status: String,
+}
+
+// Issue tracking MCP tool parameters and results
+
+/// Issue creation parameters
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct IssueCreateParams {
+    pub title: String,
+    pub description: String,
+    pub priority: Option<String>,
+    #[serde(rename = "issueType")]
+    pub issue_type: Option<String>,
+    #[serde(rename = "projectId")]
+    pub project_id: Option<String>,
+    #[serde(rename = "createdByAgentId")]
+    pub created_by_agent_id: String,
+    pub labels: Option<Vec<String>>,
+    pub assignee: Option<String>,
+}
+
+/// Issue creation result
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct IssueCreateResult {
+    #[serde(rename = "issueId")]
+    pub issue_id: Uuid,
+    pub title: String,
+    pub status: String,
+    pub priority: String,
+    #[serde(rename = "createdAt")]
+    pub created_at: chrono::DateTime<chrono::Utc>,
+    pub message: String,
+}
+
+/// Issue list query parameters
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct IssueListParams {
+    #[serde(rename = "projectId")]
+    pub project_id: Option<String>,
+    pub status: Option<String>,
+    pub assignee: Option<String>,
+    #[serde(rename = "issueType")]
+    pub issue_type: Option<String>,
+    pub priority: Option<String>,
+    pub labels: Option<Vec<String>>,
+    pub limit: Option<usize>,
+}
+
+/// Issue list result
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct IssueListResult {
+    pub issues: Vec<IssueInfo>,
+    pub total: usize,
+    #[serde(rename = "filtersApplied")]
+    pub filters_applied: IssueListParams,
+}
+
+/// Issue information for list results
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct IssueInfo {
+    pub id: Uuid,
+    pub title: String,
+    pub description: String,
+    pub priority: String,
+    pub status: String,
+    #[serde(rename = "assignedAgentId")]
+    pub assigned_agent_id: Option<Uuid>,
+    #[serde(rename = "createdAt")]
+    pub created_at: chrono::DateTime<chrono::Utc>,
+    #[serde(rename = "updatedAt")]
+    pub updated_at: chrono::DateTime<chrono::Utc>,
+    #[serde(rename = "resolvedAt")]
+    pub resolved_at: Option<chrono::DateTime<chrono::Utc>>,
+    pub tags: Vec<String>,
+    #[serde(rename = "knowledgeLinks")]
+    pub knowledge_links: Vec<String>,
+    #[serde(rename = "isAssigned")]
+    pub is_assigned: bool,
+    #[serde(rename = "isTerminal")]
+    pub is_terminal: bool,
+    #[serde(rename = "ageSeconds")]
+    pub age_seconds: i64,
+}
+
+/// Issue assignment parameters
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct IssueAssignParams {
+    #[serde(rename = "issueId")]
+    pub issue_id: String,
+    #[serde(rename = "assigneeAgentId")]
+    pub assignee_agent_id: String,
+    #[serde(rename = "assignedByAgentId")]
+    pub assigned_by_agent_id: String,
+    pub reason: Option<String>,
+}
+
+/// Issue assignment result
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct IssueAssignResult {
+    #[serde(rename = "issueId")]
+    pub issue_id: Uuid,
+    #[serde(rename = "assigneeAgentId")]
+    pub assignee_agent_id: Uuid,
+    #[serde(rename = "assignedByAgentId")]
+    pub assigned_by_agent_id: Uuid,
+    pub status: String,
+    #[serde(rename = "assignedAt")]
+    pub assigned_at: chrono::DateTime<chrono::Utc>,
+    pub message: String,
+}
+
+/// Issue update parameters
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct IssueUpdateParams {
+    #[serde(rename = "issueId")]
+    pub issue_id: String,
+    pub status: Option<String>,
+    pub comment: Option<String>,
+    #[serde(rename = "updatedByAgentId")]
+    pub updated_by_agent_id: String,
+    pub priority: Option<String>,
+}
+
+/// Issue update result
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct IssueUpdateResult {
+    #[serde(rename = "issueId")]
+    pub issue_id: Uuid,
+    pub status: String,
+    pub priority: Option<String>,
+    #[serde(rename = "updatedAt")]
+    pub updated_at: chrono::DateTime<chrono::Utc>,
+    #[serde(rename = "commentAdded")]
+    pub comment_added: bool,
+    pub message: String,
+}
+
+/// Issue close parameters
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct IssueCloseParams {
+    #[serde(rename = "issueId")]
+    pub issue_id: String,
+    #[serde(rename = "closedByAgentId")]
+    pub closed_by_agent_id: String,
+    pub resolution: String,
+    #[serde(rename = "closeReason")]
+    pub close_reason: Option<String>,
+}
+
+/// Issue close result
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct IssueCloseResult {
+    #[serde(rename = "issueId")]
+    pub issue_id: Uuid,
+    #[serde(rename = "closedByAgentId")]
+    pub closed_by_agent_id: Uuid,
+    pub status: String,
+    pub resolution: String,
+    #[serde(rename = "closedAt")]
+    pub closed_at: chrono::DateTime<chrono::Utc>,
+    pub message: String,
 }
 
 impl JsonRpcRequest {
