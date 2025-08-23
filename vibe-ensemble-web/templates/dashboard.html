@@ -26,7 +26,7 @@
     <div class="card">
         <h3>Recent Activity</h3>
         {% if self.has_recent_activity() %}
-            <ul style="margin: 0; padding-left: 20px;">
+            <ul style="margin: 0; padding-left: 20px;" aria-live="polite" role="status" aria-atomic="false">
                 {% for activity in recent_activity %}
                 <li><strong>{{ activity.timestamp }}</strong>: {{ activity.message }}</li>
                 {% endfor %}
@@ -56,7 +56,7 @@
         <div>
             <h4 style="margin-bottom: 10px; color: var(--gray-700);">Agent Coordination</h4>
             <ul style="margin: 0; padding-left: 20px; color: var(--gray-600);">
-                <li>25 MCP coordination tools</li>
+                <li>Rich set of MCP coordination tools</li>
                 <li>Cross-project dependency tracking</li>
                 <li>Real-time worker communication</li>
                 <li>Intelligent conflict prevention</li>
