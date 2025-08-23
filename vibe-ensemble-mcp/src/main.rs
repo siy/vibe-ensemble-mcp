@@ -49,6 +49,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let agent_service = storage_manager.agent_service();
     let issue_service = storage_manager.issue_service();
     let message_service = storage_manager.message_service();
+    let knowledge_service = storage_manager.knowledge_service();
 
     info!("Services initialized");
 
@@ -75,6 +76,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         agent_service,
         issue_service,
         message_service,
+        knowledge_service,
     );
 
     info!("MCP server initialized successfully");
