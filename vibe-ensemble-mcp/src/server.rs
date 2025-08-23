@@ -1442,8 +1442,7 @@ impl McpServer {
         // Parse request parameters
         #[derive(serde::Deserialize)]
         struct KnowledgeQueryParams {
-            #[serde(default)]
-            query: Option<String>,
+            query: String,
             // Accept "searchScope" from the advertised tool schema
             #[serde(default, alias = "searchScope")]
             knowledge_types: Option<Vec<String>>,
@@ -1494,9 +1493,7 @@ impl McpServer {
         // Build search criteria
         let mut criteria = vibe_ensemble_core::knowledge::KnowledgeSearchCriteria::new();
 
-        if let Some(query) = params.query {
-            criteria = criteria.with_query(query);
-        }
+        criteria = criteria.with_query(params.query);
 
         if let Some(types) = params.knowledge_types {
             use vibe_ensemble_core::knowledge::KnowledgeType;
