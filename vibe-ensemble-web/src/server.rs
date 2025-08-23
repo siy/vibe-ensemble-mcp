@@ -2,7 +2,7 @@
 
 use crate::{handlers, Result};
 use axum::{
-    routing::{get, post},
+    routing::{delete, get, post, put},
     Router,
 };
 use std::sync::Arc;
@@ -48,9 +48,16 @@ impl WebServer {
             .route("/dashboard", get(handlers::dashboard))
             // API routes
             .route("/api/health", get(handlers::health))
+            // Agent endpoints
             .route("/api/agents", get(handlers::agents_list))
+            .route("/api/agents/:id", get(handlers::agent_get))
+            // Issue endpoints
             .route("/api/issues", get(handlers::issues_list))
             .route("/api/issues", post(handlers::issues_create))
+            .route("/api/issues/:id", get(handlers::issue_get))
+            .route("/api/issues/:id", put(handlers::issue_update))
+            .route("/api/issues/:id", delete(handlers::issue_delete))
+            // System endpoints
             .route("/api/stats", get(handlers::system_stats))
             // Add shared state
             .with_state(self.storage.clone())
