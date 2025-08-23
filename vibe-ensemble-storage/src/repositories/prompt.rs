@@ -216,6 +216,9 @@ impl PromptRepository {
             PromptType::Worker => "worker".to_string(),
             PromptType::Specialist { domain } => format!("specialist:{}", domain),
             PromptType::Universal => "universal".to_string(),
+            PromptType::CrossProjectCoordinator => "cross_project_coordinator".to_string(),
+            PromptType::ConflictResolver => "conflict_resolver".to_string(),
+            PromptType::EscalationManager => "escalation_manager".to_string(),
         }
     }
 
@@ -226,6 +229,12 @@ impl PromptRepository {
             Ok(PromptType::Worker)
         } else if s == "universal" {
             Ok(PromptType::Universal)
+        } else if s == "cross_project_coordinator" {
+            Ok(PromptType::CrossProjectCoordinator)
+        } else if s == "conflict_resolver" {
+            Ok(PromptType::ConflictResolver)
+        } else if s == "escalation_manager" {
+            Ok(PromptType::EscalationManager)
         } else if s.starts_with("specialist:") {
             let domain = s.strip_prefix("specialist:").unwrap_or("").to_string();
             Ok(PromptType::Specialist { domain })

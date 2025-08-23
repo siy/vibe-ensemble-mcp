@@ -84,8 +84,16 @@ pub struct SystemPrompt {
 pub enum PromptType {
     Coordinator,
     Worker,
-    Specialist { domain: String },
+    Specialist {
+        domain: String,
+    },
     Universal,
+    /// Cross-project coordination specialist
+    CrossProjectCoordinator,
+    /// Conflict resolution specialist
+    ConflictResolver,
+    /// Escalation management specialist
+    EscalationManager,
 }
 
 /// Variable that can be substituted in a prompt template
@@ -399,6 +407,18 @@ impl SystemPrompt {
                     crate::agent::AgentType::Coordinator
                 )
                 | (PromptType::Worker, crate::agent::AgentType::Worker)
+                | (
+                    PromptType::CrossProjectCoordinator,
+                    crate::agent::AgentType::Coordinator
+                )
+                | (
+                    PromptType::ConflictResolver,
+                    crate::agent::AgentType::Coordinator
+                )
+                | (
+                    PromptType::EscalationManager,
+                    crate::agent::AgentType::Coordinator
+                )
         )
     }
 
