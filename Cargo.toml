@@ -4,10 +4,10 @@ members = [
     "vibe-ensemble-storage",
     "vibe-ensemble-prompts",
     "vibe-ensemble-mcp",
+    "vibe-ensemble-web",
 ]
 exclude = [
     "vibe-ensemble-server", 
-    "vibe-ensemble-web",
     "vibe-ensemble-security",
     "vibe-ensemble-monitoring",
 ]
@@ -61,9 +61,22 @@ base64 = "0.22"
 async-trait = "0.1"
 futures = "0.3"
 
-# Web framework for MCP protocol
+# Web framework for MCP protocol and dashboard
 axum = "0.7"
 tower = "0.4"
+tower-http = { version = "0.5", features = ["cors", "trace"] }
+
+# Template engine for web dashboard
+askama = "0.12"
+askama_axum = "0.4"
+
+# HTTP client and utilities
+reqwest = "0.11"
+hyper = "1.0"
+
+# Security and authentication
+bcrypt = "0.15"
+jsonwebtoken = "9.2"
 
 # Performance optimization dependencies
 moka = { version = "0.12", features = ["future"] }  # Async caching

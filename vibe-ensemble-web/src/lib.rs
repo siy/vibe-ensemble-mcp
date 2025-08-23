@@ -1,14 +1,13 @@
-//! Web interface for Vibe Ensemble MCP server
+//! Web Dashboard for Vibe Ensemble Coordination Management
 //!
-//! This crate provides a web-based interface for managing issues, agents,
-//! and other aspects of the Vibe Ensemble system.
+//! This crate provides a web-based dashboard for visualizing and managing
+//! the Vibe Ensemble coordination system, including agents, issues, and
+//! coordination activities.
 
-pub mod auth;
 pub mod error;
 pub mod handlers;
 pub mod server;
 pub mod templates;
-pub mod websocket;
 
 pub use error::{Error, Result};
 pub use server::WebServer;

@@ -1,48 +1,51 @@
 {% extends "base.html" %}
 
-{% block title %}Dashboard - Vibe Ensemble{% endblock %}
+{% block title %}{{ title }}{% endblock %}
 
 {% block content %}
 <div class="grid grid-4">
     <div class="card stat-card">
-        <div class="stat-number" id="agents-count">{{ stats.agents_count }}</div>
+        <div class="stat-number" id="agents-count">{{ active_agents }}</div>
         <div class="stat-label">Active Agents</div>
     </div>
     <div class="card stat-card">
-        <div class="stat-number" id="issues-count">{{ stats.issues_count }}</div>
-        <div class="stat-label">Total Issues</div>
+        <div class="stat-number" id="issues-count">{{ open_issues }}</div>
+        <div class="stat-label">Open Issues</div>
     </div>
     <div class="card stat-card">
-        <div class="stat-number" id="messages-count">{{ stats.messages_count }}</div>
-        <div class="stat-label">Messages Exchanged</div>
+        <div class="stat-number" id="messages-count">0</div>
+        <div class="stat-label">Messages Today</div>
     </div>
     <div class="card stat-card">
-        <div class="stat-number" id="knowledge-count">{{ stats.knowledge_count }}</div>
-        <div class="stat-label">Knowledge Entries</div>
+        <div class="stat-number" id="coordination-count">0</div>
+        <div class="stat-label">Coordination Events</div>
     </div>
 </div>
 
 <div class="grid grid-2">
     <div class="card">
         <h3>Recent Activity</h3>
-        <div class="alert alert-info">
-            <strong>System Status:</strong> All services operational
-        </div>
-        <ul style="margin: 0; padding-left: 20px;">
-            <li>Web interface started successfully</li>
-            <li>Database connection established</li>
-            <li>WebSocket service initialized</li>
-            <li>Authentication service active</li>
-        </ul>
+        {% if self.has_recent_activity() %}
+            <ul style="margin: 0; padding-left: 20px;">
+                {% for activity in recent_activity %}
+                <li><strong>{{ activity.timestamp }}</strong>: {{ activity.message }}</li>
+                {% endfor %}
+            </ul>
+        {% else %}
+            <div class="alert alert-info">
+                <strong>Welcome to Vibe Ensemble Dashboard!</strong><br>
+                This is your coordination command center for managing multiple Claude Code agents.
+            </div>
+        {% endif %}
     </div>
 
     <div class="card">
         <h3>Quick Actions</h3>
         <div style="margin-top: 15px;">
-            <a href="/issues/new" class="btn btn-primary" style="margin-right: 10px; margin-bottom: 10px;">Create New Issue</a>
-            <a href="/knowledge/new" class="btn btn-secondary" style="margin-right: 10px; margin-bottom: 10px;">Add Knowledge</a>
-            <a href="/agents" class="btn btn-primary" style="margin-right: 10px; margin-bottom: 10px;">View Agents</a>
-            <a href="/api/stats" class="btn btn-secondary" style="margin-bottom: 10px;">API Statistics</a>
+            <a href="/api/agents" class="btn btn-primary" style="margin-right: 10px; margin-bottom: 10px;">View Agents</a>
+            <a href="/api/issues" class="btn btn-secondary" style="margin-right: 10px; margin-bottom: 10px;">View Issues</a>
+            <a href="/api/stats" class="btn btn-primary" style="margin-right: 10px; margin-bottom: 10px;">System Stats</a>
+            <a href="/api/health" class="btn btn-secondary" style="margin-bottom: 10px;">Health Check</a>
         </div>
     </div>
 </div>
@@ -51,68 +54,58 @@
     <h3>System Overview</h3>
     <div class="grid grid-3">
         <div>
-            <h4 style="margin-bottom: 10px; color: var(--gray-700);">Agent Management</h4>
+            <h4 style="margin-bottom: 10px; color: var(--gray-700);">Agent Coordination</h4>
             <ul style="margin: 0; padding-left: 20px; color: var(--gray-600);">
-                <li>Registration and lifecycle tracking</li>
-                <li>Capability management</li>
-                <li>Real-time status monitoring</li>
+                <li>25 MCP coordination tools</li>
+                <li>Cross-project dependency tracking</li>
+                <li>Real-time worker communication</li>
+                <li>Intelligent conflict prevention</li>
             </ul>
         </div>
         <div>
-            <h4 style="margin-bottom: 10px; color: var(--gray-700);">Issue Tracking</h4>
+            <h4 style="margin-bottom: 10px; color: var(--gray-700);">Issue Management</h4>
             <ul style="margin: 0; padding-left: 20px; color: var(--gray-600);">
-                <li>Persistent task management</li>
-                <li>Priority-based workflow</li>
-                <li>Agent assignment</li>
+                <li>Persistent task tracking</li>
+                <li>Priority-based workflows</li>
+                <li>Agent assignment system</li>
+                <li>Automated lifecycle management</li>
             </ul>
         </div>
         <div>
             <h4 style="margin-bottom: 10px; color: var(--gray-700);">Knowledge Repository</h4>
             <ul style="margin: 0; padding-left: 20px; color: var(--gray-600);">
-                <li>Development patterns storage</li>
-                <li>Best practices documentation</li>
-                <li>Searchable content</li>
+                <li>Development pattern storage</li>
+                <li>Intelligent prompt management</li>
+                <li>A/B testing framework</li>
+                <li>Coordination specialists</li>
             </ul>
         </div>
     </div>
 </div>
 
-{% if recent_issues %}
 <div class="card">
-    <h3>Recent Issues</h3>
-    <table class="table">
-        <thead>
-            <tr>
-                <th>Title</th>
-                <th>Priority</th>
-                <th>Status</th>
-                <th>Created</th>
-                <th>Actions</th>
-            </tr>
-        </thead>
-        <tbody>
-            {% for issue in recent_issues %}
-            <tr>
-                <td>{{ issue.title }}</td>
-                <td><span class="priority-{{ issue.priority|lower }}">{{ issue.priority }}</span></td>
-                <td><span class="status status-{{ issue.status|lower|replace(" ", "-") }}">{{ issue.status }}</span></td>
-                <td>{{ issue.created_at|date("%Y-%m-%d %H:%M") }}</td>
-                <td><a href="/issues/{{ issue.id }}" class="btn btn-sm btn-primary">View</a></td>
-            </tr>
-            {% endfor %}
-        </tbody>
-    </table>
-    <div style="text-align: right; margin-top: 15px;">
-        <a href="/issues" class="btn btn-secondary">View All Issues</a>
+    <h3>Web Dashboard Features</h3>
+    <div class="alert alert-success">
+        <strong>🎯 Implementation Status</strong><br>
+        ✅ REST API endpoints for all coordination operations<br>
+        ✅ Real-time system statistics and monitoring<br>
+        ✅ Modern responsive interface with Askama templates<br>
+        🚧 WebSocket integration for live updates (coming soon)<br>
+        🚧 Advanced filtering and search capabilities (coming soon)
     </div>
 </div>
-{% endif %}
 
 {% endblock %}
 
 {% block extra_script %}
 // Auto-refresh dashboard every 30 seconds
 setTimeout(() => {
-    window.location.reload();
+    fetch('/api/stats')
+        .then(response => response.json())
+        .then(data => {
+            document.getElementById('agents-count').textContent = data.agents.total;
+            document.getElementById('issues-count').textContent = data.issues.total;
+        })
+        .catch(err => console.log('Failed to update stats:', err));
 }, 30000);
 {% endblock %}

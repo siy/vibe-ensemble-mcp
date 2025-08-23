@@ -12,10 +12,10 @@ use thiserror::Error;
 #[derive(Error, Debug)]
 pub enum Error {
     #[error("Storage error: {0}")]
-    Storage(#[from] vibe_ensemble_storage::Error),
+    Storage(#[from] vibe_ensemble_storage::error::Error),
 
     #[error("Core domain error: {0}")]
-    Core(#[from] vibe_ensemble_core::Error),
+    Core(#[from] vibe_ensemble_core::error::Error),
 
     #[error("Template error: {0}")]
     Template(#[from] askama::Error),
