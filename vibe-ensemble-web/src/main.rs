@@ -19,8 +19,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     tracing::info!("Starting Vibe Ensemble Web Dashboard");
 
     // Initialize storage manager
-    let database_url = std::env::var("DATABASE_URL")
-        .unwrap_or_else(|_| "sqlite:./vibe-ensemble.db".to_string());
+    let database_url =
+        std::env::var("DATABASE_URL").unwrap_or_else(|_| "sqlite:./vibe-ensemble.db".to_string());
 
     let db_config = DatabaseConfig {
         url: database_url,
