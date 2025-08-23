@@ -970,6 +970,7 @@ mod tests {
     }
 
     #[test]
+    #[serial_test::serial]
     fn test_environment_variable_substitution() {
         use crate::orchestration::models::*;
         use chrono::Utc;
@@ -1061,6 +1062,7 @@ mod tests {
     }
 
     #[test]
+    #[serial_test::serial]
     fn test_environment_variable_substitution_with_env_var() {
         use crate::orchestration::models::*;
         use chrono::Utc;
