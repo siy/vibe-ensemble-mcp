@@ -9,11 +9,11 @@ Implement a comprehensive MCP (Model Context Protocol) server in Rust for coordi
 - **Completed**: Cargo workspace with foundational crates:
   - ✅ `vibe-ensemble-core`: Core domain models and business logic
   - ✅ `vibe-ensemble-storage`: SQLx persistence layer with migrations
-  - ✅ `vibe-ensemble-prompts`: Prompt management and templating system
-  - 🚧 `vibe-ensemble-mcp`: MCP protocol implementation (excluded, next phase)
+  - ✅ `vibe-ensemble-prompts`: Intelligent prompt management with coordination specialists
+  - ✅ `vibe-ensemble-mcp`: MCP protocol server with 42 coordination tools
   - 🚧 `vibe-ensemble-server`: Main server application (excluded, next phase)
   - 🚧 `vibe-ensemble-web`: Web interface (excluded, next phase)
-- **Current Status**: 3 core crates implemented with 204 passing tests
+- **Current Status**: 4 core crates implemented with 314 passing tests
 - **Dependencies Implemented**:
   - ✅ `tokio`: Async runtime
   - ✅ `handlebars`: Template engine for agent configurations

@@ -677,6 +677,13 @@ impl HeadlessClaudeExecutor {
         result = result.replace("${DATABASE_URL:-sqlite:./vibe-ensemble.db}", &database_url);
         result = result.replace("${AGENT_ID:-${WORKSPACE_ID}}", &agent_id);
 
+        // Substitute simple environment variables without defaults
+        result = result.replace("${VIBE_ENSEMBLE_MCP_SERVER}", &vibe_ensemble_mcp_server);
+        result = result.replace("${VIBE_ENSEMBLE_MCP_BINARY}", &vibe_ensemble_mcp_binary);
+        result = result.replace("${VIBE_ENSEMBLE_LOG_LEVEL}", &vibe_ensemble_log_level);
+        result = result.replace("${DATABASE_URL}", &database_url);
+        result = result.replace("${AGENT_ID}", &agent_id);
+
         // Substitute workspace-specific variables
         result = result.replace("${WORKSPACE_ID}", &workspace.id.to_string());
         result = result.replace("${WORKSPACE_NAME}", &workspace.name);
@@ -1179,5 +1186,149 @@ mod tests {
             }
         }"#;
         assert!(executor.validate_settings_json(complex_json).is_ok());
+    }
+
+    #[tokio::test]
+    async fn test_shared_settings_json_deployment() {
+        use tempfile::TempDir;
+
+        // Create a temporary workspace
+        let temp_workspace = TempDir::new().unwrap();
+        let workspace = WorkspaceConfiguration {
+            id: Uuid::new_v4(),
+            name: "test-workspace".to_string(),
+            template_name: "test-template".to_string(),
+            template_version: "1.0.0".to_string(),
+            workspace_path: temp_workspace.path().to_path_buf(),
+            project_path: temp_workspace.path().join("project"),
+            agent_config_path: temp_workspace.path().join(".claude").join("agents"),
+            variable_values: std::collections::HashMap::new(),
+            capabilities: vec!["test".to_string()],
+            tool_permissions: crate::orchestration::models::ToolPermissions::default(),
+            created_at: chrono::Utc::now(),
+            last_used_at: chrono::Utc::now(),
+            is_active: true,
+        };
+
+        // Create a temporary agent templates directory
+        let temp_templates = TempDir::new().unwrap();
+        let templates_path = temp_templates.path().to_path_buf();
+
+        // Create the shared settings template directory structure
+        let shared_claude_dir = templates_path
+            .join("agent-templates")
+            .join("shared")
+            .join(".claude");
+        fs::create_dir_all(&shared_claude_dir).await.unwrap();
+
+        // Create a test settings.json template with environment variables
+        let template_content = r#"{
+  "mcp": {
+    "servers": {
+      "vibe-ensemble": {
+        "command": "vibe-ensemble-mcp",
+        "transport": {
+          "type": "websocket",
+          "url": "${VIBE_ENSEMBLE_MCP_SERVER}"
+        },
+        "env": {
+          "WORKSPACE_ID": "${WORKSPACE_ID}",
+          "WORKSPACE_NAME": "${WORKSPACE_NAME}",
+          "TEMPLATE_NAME": "${TEMPLATE_NAME}",
+          "AGENT_ID": "${AGENT_ID}",
+          "VIBE_ENSEMBLE_LOG_LEVEL": "${VIBE_ENSEMBLE_LOG_LEVEL}"
+        }
+      }
+    }
+  },
+  "rules": [
+    {
+      "type": "allow_all_commands"
+    },
+    {
+      "type": "deny_command",
+      "pattern": "sudo"
+    }
+  ],
+  "logging": {
+    "level": "${VIBE_ENSEMBLE_LOG_LEVEL}",
+    "coordination_events": true
+  }
+}"#;
+
+        let template_path = shared_claude_dir.join("settings.json");
+        fs::write(&template_path, template_content).await.unwrap();
+
+        // Create executor with the temporary templates path
+        let executor = HeadlessClaudeExecutor::with_agent_templates_path(templates_path);
+
+        // Test deployment
+        let config = ExecutionConfig {
+            deploy_shared_settings: true,
+            ..Default::default()
+        };
+
+        let result = executor.deploy_shared_settings(&workspace, &config).await;
+        assert!(
+            result.is_ok(),
+            "Failed to deploy shared settings: {:?}",
+            result
+        );
+
+        // Verify the settings file was created in the workspace
+        let deployed_path = workspace
+            .workspace_path
+            .join(".claude")
+            .join("settings.json");
+        assert!(
+            deployed_path.exists(),
+            "Deployed settings.json should exist"
+        );
+
+        // Read and verify the deployed content
+        let deployed_content = fs::read_to_string(&deployed_path).await.unwrap();
+
+        // Verify environment variables were substituted
+        assert!(deployed_content.contains(&workspace.id.to_string()));
+        assert!(deployed_content.contains("test-workspace"));
+        assert!(deployed_content.contains("test-template"));
+
+        // More flexible checks for environment variable substitution
+        // The VIBE_ENSEMBLE_MCP_SERVER should either be substituted with the default or not contain the variable placeholder
+        let mcp_server_substituted = deployed_content.contains("ws://localhost:8080")
+            || (deployed_content.contains("ws://")
+                && !deployed_content.contains("${VIBE_ENSEMBLE_MCP_SERVER}"));
+        assert!(
+            mcp_server_substituted,
+            "MCP server URL was not properly substituted. Content: {}",
+            deployed_content
+        );
+
+        // Log level should either be substituted with default "info" or not contain the variable placeholder
+        let log_level_substituted = deployed_content.contains("info")
+            || !deployed_content.contains("${VIBE_ENSEMBLE_LOG_LEVEL}");
+        assert!(
+            log_level_substituted,
+            "Log level was not properly substituted. Content: {}",
+            deployed_content
+        );
+
+        // Verify it's valid JSON
+        let _: serde_json::Value = serde_json::from_str(&deployed_content)
+            .expect("Deployed settings should be valid JSON");
+
+        // Test cleanup functionality
+        let cleanup_result = executor.cleanup_deployed_settings(&workspace).await;
+        assert!(
+            cleanup_result.is_ok(),
+            "Failed to cleanup deployed settings: {:?}",
+            cleanup_result
+        );
+
+        // Verify the settings file was removed
+        assert!(
+            !deployed_path.exists(),
+            "Deployed settings.json should be cleaned up"
+        );
     }
 }
