@@ -803,7 +803,7 @@ impl PromptManager {
 mod tests {
     use super::*;
     use std::collections::HashMap;
-    use tokio::time::Duration;
+    use vibe_ensemble_core::agent::AgentType;
     use vibe_ensemble_core::prompt::{PromptType, PromptVariable, VariableType};
     use vibe_ensemble_storage::{manager::DatabaseConfig, StorageManager};
 
@@ -1119,8 +1119,8 @@ mod tests {
                 PromptType::CrossProjectCoordinator
                 | PromptType::ConflictResolver
                 | PromptType::EscalationManager => {
-                    assert!(prompt.is_suitable_for(&crate::core::agent::AgentType::Coordinator));
-                    assert!(!prompt.is_suitable_for(&crate::core::agent::AgentType::Worker));
+                    assert!(prompt.is_suitable_for(&AgentType::Coordinator));
+                    assert!(!prompt.is_suitable_for(&AgentType::Worker));
                 }
                 _ => {}
             }
