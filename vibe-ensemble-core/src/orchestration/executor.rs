@@ -1366,7 +1366,7 @@ mod tests {
     async fn test_bare_placeholder_uses_env_var() {
         let executor = HeadlessClaudeExecutor::new();
 
-        // Create test workspace and configuration  
+        // Create test workspace and configuration
         let temp_workspace = std::env::temp_dir().join("test_bare_placeholder");
         let workspace = WorkspaceConfiguration {
             id: uuid::Uuid::new_v4(),
@@ -1409,11 +1409,17 @@ mod tests {
 
         // Test with special characters that need JSON escaping via config.environment
         let mut config_with_special = ExecutionConfig::default();
-        config_with_special.environment.insert("TEST_VAR".to_string(), "value with \"quotes\" and \\backslashes".to_string());
-        
+        config_with_special.environment.insert(
+            "TEST_VAR".to_string(),
+            "value with \"quotes\" and \\backslashes".to_string(),
+        );
+
         let template_special = r#"{"test":"${TEST_VAR}"}"#;
-        let result_special =
-            executor.substitute_environment_variables(template_special, &workspace, &config_with_special);
+        let result_special = executor.substitute_environment_variables(
+            template_special,
+            &workspace,
+            &config_with_special,
+        );
 
         // Should be valid JSON despite special characters
         let parsed: serde_json::Value = serde_json::from_str(&result_special)
