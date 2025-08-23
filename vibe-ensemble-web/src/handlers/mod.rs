@@ -80,6 +80,10 @@ pub async fn agents_list(
     State(storage): State<Arc<StorageManager>>,
     Query(query): Query<AgentQuery>,
 ) -> Result<impl IntoResponse> {
+    // Enforce maximum limit to prevent excessive memory usage
+    let limit = query.limit.unwrap_or(100).min(1000);
+    let offset = query.offset.unwrap_or(0);
+
     let agents = storage
         .agents()
         .list()
@@ -103,8 +107,8 @@ pub async fn agents_list(
                 true
             }
         })
-        .skip(query.offset.unwrap_or(0) as usize)
-        .take(query.limit.unwrap_or(100) as usize)
+        .skip(offset as usize)
+        .take(limit as usize)
         .collect();
 
     Ok(Json(json!({
@@ -129,6 +133,10 @@ pub async fn issues_list(
     State(storage): State<Arc<StorageManager>>,
     Query(query): Query<IssueQuery>,
 ) -> Result<impl IntoResponse> {
+    // Enforce maximum limit to prevent excessive memory usage
+    let limit = query.limit.unwrap_or(100).min(1000);
+    let offset = query.offset.unwrap_or(0);
+
     let issues = storage
         .issues()
         .list()
@@ -159,8 +167,8 @@ pub async fn issues_list(
                 true
             }
         })
-        .skip(query.offset.unwrap_or(0) as usize)
-        .take(query.limit.unwrap_or(100) as usize)
+        .skip(offset as usize)
+        .take(limit as usize)
         .collect();
 
     Ok(Json(json!({
@@ -186,11 +194,11 @@ pub async fn issues_create(
 ) -> Result<impl IntoResponse> {
     use vibe_ensemble_core::issue::{Issue, IssuePriority};
 
-    let priority = match request.priority.as_str() {
-        "Low" => IssuePriority::Low,
-        "Medium" => IssuePriority::Medium,
-        "High" => IssuePriority::High,
-        "Critical" => IssuePriority::Critical,
+    let priority = match request.priority.to_lowercase().as_str() {
+        "low" => IssuePriority::Low,
+        "medium" => IssuePriority::Medium,
+        "high" => IssuePriority::High,
+        "critical" => IssuePriority::Critical,
         _ => return Err(crate::Error::BadRequest("Invalid priority".to_string())),
     };
 
@@ -287,11 +295,11 @@ pub async fn issue_update(
     // Update issue fields
     issue.title = request.title;
     issue.description = request.description;
-    issue.priority = match request.priority.as_str() {
-        "Low" => IssuePriority::Low,
-        "Medium" => IssuePriority::Medium,
-        "High" => IssuePriority::High,
-        "Critical" => IssuePriority::Critical,
+    issue.priority = match request.priority.to_lowercase().as_str() {
+        "low" => IssuePriority::Low,
+        "medium" => IssuePriority::Medium,
+        "high" => IssuePriority::High,
+        "critical" => IssuePriority::Critical,
         _ => return Err(crate::Error::BadRequest("Invalid priority".to_string())),
     };
     issue.assigned_agent_id = request.assigned_agent_id;

@@ -45,6 +45,10 @@ pub async fn knowledge_list(
     State(storage): State<Arc<StorageManager>>,
     Query(query): Query<KnowledgeQuery>,
 ) -> Result<Json<Value>> {
+    // Enforce maximum limit to prevent excessive memory usage
+    let limit = query.limit.unwrap_or(100).min(1000);
+    let offset = query.offset.unwrap_or(0);
+    
     let entries = storage.knowledge().list().await?;
 
     // Apply basic filtering
@@ -75,8 +79,8 @@ pub async fn knowledge_list(
                 true
             }
         })
-        .skip(query.offset.unwrap_or(0) as usize)
-        .take(query.limit.unwrap_or(100) as usize)
+        .skip(offset as usize)
+        .take(limit as usize)
         .collect();
 
     Ok(Json(json!({
@@ -122,6 +126,10 @@ pub async fn messages_list(
     State(storage): State<Arc<StorageManager>>,
     Query(query): Query<MessageQuery>,
 ) -> Result<Json<Value>> {
+    // Enforce maximum limit to prevent excessive memory usage
+    let limit = query.limit.unwrap_or(100).min(1000);
+    let offset = query.offset.unwrap_or(0);
+    
     let messages = storage.messages().list().await?;
 
     // Apply basic filtering
@@ -152,8 +160,8 @@ pub async fn messages_list(
                 true
             }
         })
-        .skip(query.offset.unwrap_or(0) as usize)
-        .take(query.limit.unwrap_or(100) as usize)
+        .skip(offset as usize)
+        .take(limit as usize)
         .collect();
 
     Ok(Json(json!({
