@@ -46,17 +46,14 @@ impl WebServer {
             // Dashboard routes
             .route("/", get(handlers::dashboard))
             .route("/dashboard", get(handlers::dashboard))
-            
-            // API routes  
+            // API routes
             .route("/api/health", get(handlers::health))
             .route("/api/agents", get(handlers::agents_list))
             .route("/api/issues", get(handlers::issues_list))
             .route("/api/issues", post(handlers::issues_create))
             .route("/api/stats", get(handlers::system_stats))
-            
             // Add shared state
             .with_state(self.storage.clone())
-            
             // Add middleware
             .layer(
                 ServiceBuilder::new()

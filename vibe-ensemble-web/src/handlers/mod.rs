@@ -1,10 +1,6 @@
 //! Web handlers for the Vibe Ensemble dashboard
 
-use axum::{
-    extract::State,
-    response::IntoResponse,
-    Json,
-};
+use axum::{extract::State, response::IntoResponse, Json};
 use serde_json::json;
 use std::sync::Arc;
 use vibe_ensemble_storage::StorageManager;
