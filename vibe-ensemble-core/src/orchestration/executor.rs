@@ -975,13 +975,15 @@ mod tests {
         use crate::orchestration::models::*;
         use chrono::Utc;
 
-        // Save original environment state
-        let original_env = std::env::var("VIBE_ENSEMBLE_MCP_SERVER");
+        // Save original environment state for all variables we'll modify
+        let original_mcp_server = std::env::var("VIBE_ENSEMBLE_MCP_SERVER");
+        let original_mcp_binary = std::env::var("VIBE_ENSEMBLE_MCP_BINARY");
+        let original_log_level = std::env::var("VIBE_ENSEMBLE_LOG_LEVEL");
+        let original_database_url = std::env::var("DATABASE_URL");
+        let original_agent_id = std::env::var("AGENT_ID");
 
-        // Ensure env var is not set for this test
+        // Ensure env vars are not set for this test
         std::env::remove_var("VIBE_ENSEMBLE_MCP_SERVER");
-
-        // Also ensure other related env vars are not set
         std::env::remove_var("VIBE_ENSEMBLE_MCP_BINARY");
         std::env::remove_var("VIBE_ENSEMBLE_LOG_LEVEL");
         std::env::remove_var("DATABASE_URL");
@@ -1055,9 +1057,26 @@ mod tests {
         assert!(result.contains("info"));
         assert!(result.contains("sqlite:./vibe-ensemble.db"));
 
-        // Restore original environment state
-        if let Ok(val) = original_env {
-            std::env::set_var("VIBE_ENSEMBLE_MCP_SERVER", val);
+        // Restore original environment state for all variables
+        match original_mcp_server {
+            Ok(val) => std::env::set_var("VIBE_ENSEMBLE_MCP_SERVER", val),
+            Err(_) => std::env::remove_var("VIBE_ENSEMBLE_MCP_SERVER"),
+        }
+        match original_mcp_binary {
+            Ok(val) => std::env::set_var("VIBE_ENSEMBLE_MCP_BINARY", val),
+            Err(_) => std::env::remove_var("VIBE_ENSEMBLE_MCP_BINARY"),
+        }
+        match original_log_level {
+            Ok(val) => std::env::set_var("VIBE_ENSEMBLE_LOG_LEVEL", val),
+            Err(_) => std::env::remove_var("VIBE_ENSEMBLE_LOG_LEVEL"),
+        }
+        match original_database_url {
+            Ok(val) => std::env::set_var("DATABASE_URL", val),
+            Err(_) => std::env::remove_var("DATABASE_URL"),
+        }
+        match original_agent_id {
+            Ok(val) => std::env::set_var("AGENT_ID", val),
+            Err(_) => std::env::remove_var("AGENT_ID"),
         }
     }
 

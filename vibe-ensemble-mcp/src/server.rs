@@ -1490,6 +1490,20 @@ impl McpServer {
             }
         }
 
+        // Validate that at least one filter is provided to prevent unbounded searches
+        if params.query.trim().is_empty()
+            && params.tags.as_ref().map_or(true, |t| t.is_empty())
+            && params
+                .knowledge_types
+                .as_ref()
+                .map_or(true, |t| t.is_empty())
+        {
+            return Err(Error::Protocol {
+                message: "At least one filter must be provided (query, tags, or knowledge_types)"
+                    .to_string(),
+            });
+        }
+
         // Build search criteria
         let mut criteria = vibe_ensemble_core::knowledge::KnowledgeSearchCriteria::new();
 
@@ -1520,7 +1534,8 @@ impl McpServer {
             criteria = criteria.with_tags(tags);
         }
 
-        let limit = params.limit.unwrap_or(50).min(100);
+        // Clamp limit to valid range [1, 100] to prevent 0 or excessive limits
+        let limit = params.limit.unwrap_or(50).clamp(1, 100);
         criteria = criteria.with_limit(limit);
 
         // Perform search
