@@ -44,7 +44,7 @@ All agents use MCP coordination tools: `vibe/dependency/analyze`, `vibe/conflict
 - **MCP Protocol Server**: Full implementation with 42 coordination tools for cross-project collaboration
 
 ### Implementation Status
-- **Intelligent Coordination Phase**: ✅ **Complete** (314 tests passing)
+- **Intelligent Coordination Phase**: ✅ **Complete** (324 tests passing)
 - **Active Crates**: 4 core libraries with advanced AI coordination
 - **Coordination Tools**: 42 MCP tools for seamless multi-agent collaboration
 - **Test Coverage**: Comprehensive unit, integration, and coordination testing
@@ -52,7 +52,7 @@ All agents use MCP coordination tools: `vibe/dependency/analyze`, `vibe/conflict
 
 ### Next Development Phase (🚧 Planned)
 - **Web Dashboard**: Issue tracking and coordination management interface  
-- **Security Layer**: Authentication, authorization, and rate limiting
+- **Security Layer**: Authentication, authorization, and rate-limiting
 - **Monitoring**: Observability, metrics, and coordination analytics
 - **Production Server**: Main application with HTTP endpoints
 - **Advanced AI Features**: Learning from coordination patterns and autonomous optimization
@@ -86,7 +86,7 @@ All agents use MCP coordination tools: `vibe/dependency/analyze`, `vibe/conflict
 
 4. **Verify setup and start MCP server**:
    ```bash
-   # Run all 314 tests
+   # Run the full test suite
    cargo test --workspace
    
    # Check code quality
@@ -147,7 +147,7 @@ vibe-ensemble-mcp/
     └── vibe-ensemble-monitoring/ #   Observability and metrics
 ```
 
-**Current Status**: Intelligent coordination phase complete with 314 passing tests across 4 core crates including MCP server.
+**Current Status**: Intelligent coordination phase complete with 324 passing tests across 4 core crates including MCP server.
 
 ### Common Development Tasks
 
@@ -229,7 +229,7 @@ See our [Implementation Plan](docs/implementation-plan.md) for detailed developm
 - **Phase 1**: Foundation & Core Infrastructure ✅ **COMPLETE**
   - Core domain models and business logic
   - SQLx persistence layer with migrations
-  - Basic prompt management and templating system
+  - Intelligent prompt management with coordination specialists
   
 - **Phase 2**: MCP Protocol Integration ✅ **COMPLETE**
   - Full MCP protocol server implementation
@@ -240,7 +240,7 @@ See our [Implementation Plan](docs/implementation-plan.md) for detailed developm
   - Advanced prompt management with coordination specialists
   - Cross-project coordination, conflict resolution, escalation management
   - Knowledge-driven coordination with pattern recognition
-  - Comprehensive testing (314 tests passing)
+  - Comprehensive testing (324 tests passing)
   - Robust CI/CD pipeline with coordination validation
   
 - **Phase 4**: Web Interface & Dashboard 🚧 **NEXT**
@@ -253,7 +253,7 @@ See our [Implementation Plan](docs/implementation-plan.md) for detailed developm
 - **Async Runtime**: Tokio
 - **Database**: SQLite (dev) / PostgreSQL (prod)
 - **Web Framework**: Axum
-- **Template Engine**: Askama
+- **Template Engine**: Handlebars (for configs); Askama (planned for Web UI)
 - **Protocol**: Model Context Protocol (MCP)
 - **Transport**: WebSocket, HTTP
 - **Testing**: Built-in Rust testing + Custom integration framework

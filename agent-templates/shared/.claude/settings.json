@@ -2,7 +2,7 @@
   "mcp": {
     "servers": {
       "vibe-ensemble": {
-        "command": "vibe-ensemble-mcp",
+        "command": "${VIBE_ENSEMBLE_MCP_BINARY:-vibe-ensemble-mcp}",
         "transport": {
           "type": "websocket",
           "url": "${VIBE_ENSEMBLE_MCP_SERVER}"
@@ -19,9 +19,6 @@
     }
   },
   "rules": [
-    {
-      "type": "allow_all_commands"
-    },
     {
       "type": "deny_command",
       "pattern": "sudo"
@@ -84,7 +81,7 @@
     }
   ],
   "bash": {
-    "allow_unrestricted_bash": true,
+    "allow_unrestricted_bash": false,
     "restricted_commands": [
       "sudo",
       "su",
@@ -211,7 +208,7 @@
     "allow_outbound": true,
     "allowed_protocols": ["http", "https", "ws", "wss"],
     "allowed_ports": [80, 443, 8080, 8443, 3000, 5000, 8000, 9000],
-    "deny_local_network": false
+    "deny_local_network": true
   },
   "logging": {
     "level": "${VIBE_ENSEMBLE_LOG_LEVEL}",

@@ -30,6 +30,7 @@ Thumbs.db
 
 .claude/
 !agent-templates/**/.claude/
+!agent-templates/**/.claude/**
 CLAUDE.md
 code-review-*.md
 
