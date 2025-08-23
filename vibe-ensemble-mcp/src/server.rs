@@ -791,7 +791,7 @@ impl McpServer {
                             "relevanceCriteria": {"type": "object", "description": "Criteria for relevance assessment"},
                             "maxResults": {"type": "integer", "description": "Maximum number of results to return"}
                         },
-                        "required": ["queryingAgentId", "coordinationContext", "query", "searchScope"]
+                        "required": ["queryingAgentId", "query"]
                     }
                 },
                 {
@@ -1442,11 +1442,24 @@ impl McpServer {
         // Parse request parameters
         #[derive(serde::Deserialize)]
         struct KnowledgeQueryParams {
+            #[serde(default)]
             query: Option<String>,
+            // Accept "searchScope" from the advertised tool schema
+            #[serde(default, alias = "searchScope")]
             knowledge_types: Option<Vec<String>>,
+            #[serde(default)]
             tags: Option<Vec<String>>,
+            // Accept "maxResults" from the advertised tool schema
+            #[serde(default, alias = "maxResults")]
             limit: Option<u32>,
+            // Accept "queryingAgentId" from the advertised tool schema
+            #[serde(alias = "queryingAgentId")]
             agent_id: String,
+            // Tolerate (but ignore) coordination-specific fields from the tool schema
+            #[serde(default, alias = "coordinationContext")]
+            _coordination_context: Option<String>,
+            #[serde(default, alias = "relevanceCriteria")]
+            _relevance_criteria: Option<serde_json::Value>,
         }
 
         let params: KnowledgeQueryParams = if let Some(params) = request.params {
@@ -1464,6 +1477,20 @@ impl McpServer {
             message: format!("Invalid agent ID format: {}", e),
         })?;
 
+        // Verify agent exists if agent service is configured (consistent with other handlers)
+        if let Some(agent_service) = &self.agent_service {
+            if agent_service.get_agent(agent_id).await?.is_none() {
+                return Ok(Some(JsonRpcResponse::error(
+                    request.id,
+                    JsonRpcError {
+                        code: error_codes::AGENT_NOT_FOUND,
+                        message: format!("Agent not found: {}", agent_id),
+                        data: None,
+                    },
+                )));
+            }
+        }
+
         // Build search criteria
         let mut criteria = vibe_ensemble_core::knowledge::KnowledgeSearchCriteria::new();
 
@@ -1475,15 +1502,18 @@ impl McpServer {
             use vibe_ensemble_core::knowledge::KnowledgeType;
             let parsed_types: std::result::Result<Vec<KnowledgeType>, Error> = types
                 .iter()
-                .map(|t| match t.as_str() {
-                    "Pattern" => Ok(KnowledgeType::Pattern),
-                    "Practice" => Ok(KnowledgeType::Practice),
-                    "Guideline" => Ok(KnowledgeType::Guideline),
-                    "Solution" => Ok(KnowledgeType::Solution),
-                    "Reference" => Ok(KnowledgeType::Reference),
-                    _ => Err(Error::Protocol {
-                        message: format!("Invalid knowledge type: {}", t),
-                    }),
+                .map(|t| {
+                    let low = t.to_ascii_lowercase();
+                    match low.as_str() {
+                        "pattern" | "patterns" => Ok(KnowledgeType::Pattern),
+                        "practice" | "practices" => Ok(KnowledgeType::Practice),
+                        "guideline" | "guidelines" => Ok(KnowledgeType::Guideline),
+                        "solution" | "solutions" => Ok(KnowledgeType::Solution),
+                        "reference" | "references" => Ok(KnowledgeType::Reference),
+                        _ => Err(Error::Protocol {
+                            message: format!("Invalid knowledge type: {}", t),
+                        }),
+                    }
                 })
                 .collect();
             criteria = criteria.with_types(parsed_types?);
@@ -1493,9 +1523,8 @@ impl McpServer {
             criteria = criteria.with_tags(tags);
         }
 
-        if let Some(limit) = params.limit {
-            criteria = criteria.with_limit(limit);
-        }
+        let limit = params.limit.unwrap_or(50).min(100);
+        criteria = criteria.with_limit(limit);
 
         // Perform search
         let results = knowledge_service
@@ -4380,6 +4409,29 @@ impl McpServer {
                     contribution.get("title").and_then(|v| v.as_str()),
                     contribution.get("description").and_then(|v| v.as_str()),
                 ) {
+                    // Derive a knowledge type from contribution_type when possible
+                    let derived_type = match contribution
+                        .get("contribution_type")
+                        .and_then(|v| v.as_str())
+                        .map(|s| s.to_ascii_lowercase())
+                        .as_deref()
+                    {
+                        Some("best_practice") | Some("practice") => {
+                            vibe_ensemble_core::knowledge::KnowledgeType::Practice
+                        }
+                        Some("guideline") => {
+                            vibe_ensemble_core::knowledge::KnowledgeType::Guideline
+                        }
+                        Some("antipattern") | Some("anti_pattern") => {
+                            vibe_ensemble_core::knowledge::KnowledgeType::Pattern
+                        }
+                        Some("solution") => vibe_ensemble_core::knowledge::KnowledgeType::Solution,
+                        Some("reference") => {
+                            vibe_ensemble_core::knowledge::KnowledgeType::Reference
+                        }
+                        _ => vibe_ensemble_core::knowledge::KnowledgeType::Practice,
+                    };
+
                     let knowledge = vibe_ensemble_core::knowledge::Knowledge::builder()
                         .title(format!("Learning: {}", title))
                         .content(format!(
@@ -4390,12 +4442,10 @@ impl McpServer {
                             contribution.get("confidence").and_then(|v| v.as_f64()).unwrap_or(0.0),
                             learning_record_id
                         ))
-                        .knowledge_type(vibe_ensemble_core::knowledge::KnowledgeType::Practice)
+                        .knowledge_type(derived_type)
                         .created_by(capturing_id)
                         .access_level(vibe_ensemble_core::knowledge::AccessLevel::Team)
-                        .tag("coordination")
-                        .tag("learning")
-                        .tag("experience")
+                        .tags(["coordination", "learning", "experience"])
                         .build();
 
                     if let Ok(knowledge_entry) = knowledge {
