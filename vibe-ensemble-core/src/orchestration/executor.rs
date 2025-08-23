@@ -651,6 +651,13 @@ impl HeadlessClaudeExecutor {
     ) -> String {
         let mut result = template.to_string();
 
+        // Helper to JSON-escape a value for inclusion inside JSON string literals
+        fn json_escape(s: &str) -> String {
+            // serde_json::to_string returns a quoted JSON string; strip enclosing quotes
+            let quoted = serde_json::to_string(s).unwrap_or_else(|_| "\"\"".to_string());
+            quoted.trim_matches('"').to_string()
+        }
+
         // MCP Server configuration with defaults
         let vibe_ensemble_mcp_server = std::env::var("VIBE_ENSEMBLE_MCP_SERVER")
             .unwrap_or_else(|_| "ws://localhost:8080".to_string());
@@ -664,28 +671,45 @@ impl HeadlessClaudeExecutor {
         // Generate AGENT_ID (defaults to WORKSPACE_ID if not set)
         let agent_id = std::env::var("AGENT_ID").unwrap_or_else(|_| workspace.id.to_string());
 
+        // Pre-escaped variants for safe JSON embedding
+        let mcp_server_esc = json_escape(&vibe_ensemble_mcp_server);
+        let mcp_binary_esc = json_escape(&vibe_ensemble_mcp_binary);
+        let log_level_esc = json_escape(&vibe_ensemble_log_level);
+        let database_url_esc = json_escape(&database_url);
+        let agent_id_esc = json_escape(&agent_id);
+
         // Substitute variables with default fallbacks
         result = result.replace(
             "${VIBE_ENSEMBLE_MCP_SERVER:-ws://localhost:8080}",
-            &vibe_ensemble_mcp_server,
+            &mcp_server_esc,
         );
         result = result.replace(
             "${VIBE_ENSEMBLE_MCP_BINARY:-vibe-ensemble-mcp}",
-            &vibe_ensemble_mcp_binary,
+            &mcp_binary_esc,
         );
-        result = result.replace("${VIBE_ENSEMBLE_LOG_LEVEL:-info}", &vibe_ensemble_log_level);
-        result = result.replace("${DATABASE_URL:-sqlite:./vibe-ensemble.db}", &database_url);
-        result = result.replace("${AGENT_ID:-${WORKSPACE_ID}}", &agent_id);
+        result = result.replace("${VIBE_ENSEMBLE_LOG_LEVEL:-info}", &log_level_esc);
+        result = result.replace(
+            "${DATABASE_URL:-sqlite:./vibe-ensemble.db}",
+            &database_url_esc,
+        );
+        result = result.replace("${AGENT_ID:-${WORKSPACE_ID}}", &agent_id_esc);
+
+        // Substitute simple environment variables without defaults
+        result = result.replace("${VIBE_ENSEMBLE_MCP_SERVER}", &mcp_server_esc);
+        result = result.replace("${VIBE_ENSEMBLE_MCP_BINARY}", &mcp_binary_esc);
+        result = result.replace("${VIBE_ENSEMBLE_LOG_LEVEL}", &log_level_esc);
+        result = result.replace("${DATABASE_URL}", &database_url_esc);
+        result = result.replace("${AGENT_ID}", &agent_id_esc);
 
         // Substitute workspace-specific variables
-        result = result.replace("${WORKSPACE_ID}", &workspace.id.to_string());
-        result = result.replace("${WORKSPACE_NAME}", &workspace.name);
-        result = result.replace("${TEMPLATE_NAME}", &workspace.template_name);
+        result = result.replace("${WORKSPACE_ID}", &json_escape(&workspace.id.to_string()));
+        result = result.replace("${WORKSPACE_NAME}", &json_escape(&workspace.name));
+        result = result.replace("${TEMPLATE_NAME}", &json_escape(&workspace.template_name));
 
         // Substitute custom environment variables from config
         for (key, value) in &config.environment {
             let placeholder = format!("${{{}}}", key);
-            result = result.replace(&placeholder, value);
+            result = result.replace(&placeholder, &json_escape(value));
         }
 
         result
@@ -733,11 +757,17 @@ impl HeadlessClaudeExecutor {
         let claude_dir = workspace.workspace_path.join(".claude");
         if claude_dir.exists() {
             if let Ok(mut dir_entries) = fs::read_dir(&claude_dir).await {
-                if dir_entries.next_entry().await.is_ok() {
-                    // Directory has entries, don't remove it
-                } else {
-                    // Directory is empty, safe to remove
-                    let _ = fs::remove_dir(&claude_dir).await;
+                match dir_entries.next_entry().await {
+                    Ok(None) => {
+                        // Directory is empty, safe to remove
+                        let _ = fs::remove_dir(&claude_dir).await;
+                    }
+                    Ok(Some(_)) => {
+                        // Directory has entries, keep it
+                    }
+                    Err(_) => {
+                        // Ignore read errors on cleanup
+                    }
                 }
             }
         }
@@ -1179,5 +1209,223 @@ mod tests {
             }
         }"#;
         assert!(executor.validate_settings_json(complex_json).is_ok());
+    }
+
+    #[tokio::test]
+    async fn test_shared_settings_json_deployment() {
+        use tempfile::TempDir;
+
+        // Create a temporary workspace
+        let temp_workspace = TempDir::new().unwrap();
+        let workspace = WorkspaceConfiguration {
+            id: Uuid::new_v4(),
+            name: "test-workspace".to_string(),
+            template_name: "test-template".to_string(),
+            template_version: "1.0.0".to_string(),
+            workspace_path: temp_workspace.path().to_path_buf(),
+            project_path: temp_workspace.path().join("project"),
+            agent_config_path: temp_workspace.path().join(".claude").join("agents"),
+            variable_values: std::collections::HashMap::new(),
+            capabilities: vec!["test".to_string()],
+            tool_permissions: crate::orchestration::models::ToolPermissions::default(),
+            created_at: chrono::Utc::now(),
+            last_used_at: chrono::Utc::now(),
+            is_active: true,
+        };
+
+        // Create a temporary agent templates directory
+        let temp_templates = TempDir::new().unwrap();
+        let templates_path = temp_templates.path().to_path_buf();
+
+        // Create the shared settings template directory structure
+        let shared_claude_dir = templates_path
+            .join("agent-templates")
+            .join("shared")
+            .join(".claude");
+        fs::create_dir_all(&shared_claude_dir).await.unwrap();
+
+        // Create a test settings.json template with environment variables
+        let template_content = r#"{
+  "mcp": {
+    "servers": {
+      "vibe-ensemble": {
+        "command": "vibe-ensemble-mcp",
+        "transport": {
+          "type": "websocket",
+          "url": "${VIBE_ENSEMBLE_MCP_SERVER}"
+        },
+        "env": {
+          "WORKSPACE_ID": "${WORKSPACE_ID}",
+          "WORKSPACE_NAME": "${WORKSPACE_NAME}",
+          "TEMPLATE_NAME": "${TEMPLATE_NAME}",
+          "AGENT_ID": "${AGENT_ID}",
+          "VIBE_ENSEMBLE_LOG_LEVEL": "${VIBE_ENSEMBLE_LOG_LEVEL}"
+        }
+      }
+    }
+  },
+  "rules": [
+    {
+      "type": "allow_all_commands"
+    },
+    {
+      "type": "deny_command",
+      "pattern": "sudo"
+    }
+  ],
+  "logging": {
+    "level": "${VIBE_ENSEMBLE_LOG_LEVEL}",
+    "coordination_events": true
+  }
+}"#;
+
+        let template_path = shared_claude_dir.join("settings.json");
+        fs::write(&template_path, template_content).await.unwrap();
+
+        // Create executor with the temporary templates path
+        let executor = HeadlessClaudeExecutor::with_agent_templates_path(templates_path);
+
+        // Test deployment
+        let config = ExecutionConfig {
+            deploy_shared_settings: true,
+            ..Default::default()
+        };
+
+        let result = executor.deploy_shared_settings(&workspace, &config).await;
+        assert!(
+            result.is_ok(),
+            "Failed to deploy shared settings: {:?}",
+            result
+        );
+
+        // Verify the settings file was created in the workspace
+        let deployed_path = workspace
+            .workspace_path
+            .join(".claude")
+            .join("settings.json");
+        assert!(
+            deployed_path.exists(),
+            "Deployed settings.json should exist"
+        );
+
+        // Read and verify the deployed content
+        let deployed_content = fs::read_to_string(&deployed_path).await.unwrap();
+
+        // Verify environment variables were substituted
+        assert!(deployed_content.contains(&workspace.id.to_string()));
+        assert!(deployed_content.contains("test-workspace"));
+        assert!(deployed_content.contains("test-template"));
+
+        // More flexible checks for environment variable substitution
+        // The VIBE_ENSEMBLE_MCP_SERVER should either be substituted with the default or not contain the variable placeholder
+        let mcp_server_substituted = deployed_content.contains("ws://localhost:8080")
+            || (deployed_content.contains("ws://")
+                && !deployed_content.contains("${VIBE_ENSEMBLE_MCP_SERVER}"));
+        assert!(
+            mcp_server_substituted,
+            "MCP server URL was not properly substituted. Content: {}",
+            deployed_content
+        );
+
+        // Log level should either be substituted with default "info" or not contain the variable placeholder
+        let log_level_substituted = deployed_content.contains("info")
+            || !deployed_content.contains("${VIBE_ENSEMBLE_LOG_LEVEL}");
+        assert!(
+            log_level_substituted,
+            "Log level was not properly substituted. Content: {}",
+            deployed_content
+        );
+
+        // Verify it's valid JSON
+        let _: serde_json::Value = serde_json::from_str(&deployed_content)
+            .expect("Deployed settings should be valid JSON");
+
+        // Test cleanup functionality
+        let cleanup_result = executor.cleanup_deployed_settings(&workspace).await;
+        assert!(
+            cleanup_result.is_ok(),
+            "Failed to cleanup deployed settings: {:?}",
+            cleanup_result
+        );
+
+        // Verify the settings file was removed
+        assert!(
+            !deployed_path.exists(),
+            "Deployed settings.json should be cleaned up"
+        );
+
+        // Verify AGENT_ID defaults to WORKSPACE_ID when unset
+        assert!(
+            deployed_content.contains(&workspace.id.to_string()),
+            "AGENT_ID should default to WORKSPACE_ID in deployed content"
+        );
+    }
+
+    #[tokio::test]
+    #[serial_test::serial]
+    async fn test_bare_placeholder_uses_env_var() {
+        let executor = HeadlessClaudeExecutor::new();
+
+        // Create test workspace and configuration
+        let temp_workspace = std::env::temp_dir().join("test_bare_placeholder");
+        let workspace = WorkspaceConfiguration {
+            id: uuid::Uuid::new_v4(),
+            name: "test-workspace".to_string(),
+            template_name: "shared".to_string(),
+            template_version: "1.0.0".to_string(),
+            workspace_path: temp_workspace.clone(),
+            project_path: temp_workspace.join("project"),
+            agent_config_path: temp_workspace.join(".claude").join("agents"),
+            variable_values: std::collections::HashMap::new(),
+            capabilities: vec!["test".to_string()],
+            tool_permissions: crate::orchestration::models::ToolPermissions::default(),
+            created_at: chrono::Utc::now(),
+            last_used_at: chrono::Utc::now(),
+            is_active: true,
+        };
+
+        let config = ExecutionConfig::default();
+
+        // Set environment variable for testing bare placeholder
+        std::env::set_var("VIBE_ENSEMBLE_MCP_SERVER", "ws://override:1234");
+
+        // Test template with bare placeholder
+        let template = r#"{"url":"${VIBE_ENSEMBLE_MCP_SERVER}"}"#;
+        let result = executor.substitute_environment_variables(template, &workspace, &config);
+
+        // Should use the environment variable value
+        assert!(
+            result.contains("ws://override:1234"),
+            "Bare placeholder should use environment variable value: {}",
+            result
+        );
+
+        // Verify it's valid JSON with proper escaping
+        let _: serde_json::Value =
+            serde_json::from_str(&result).expect("Result should be valid JSON");
+
+        // Clean up environment variable
+        std::env::remove_var("VIBE_ENSEMBLE_MCP_SERVER");
+
+        // Test with special characters that need JSON escaping via config.environment
+        let mut config_with_special = ExecutionConfig::default();
+        config_with_special.environment.insert(
+            "TEST_VAR".to_string(),
+            "value with \"quotes\" and \\backslashes".to_string(),
+        );
+
+        let template_special = r#"{"test":"${TEST_VAR}"}"#;
+        let result_special = executor.substitute_environment_variables(
+            template_special,
+            &workspace,
+            &config_with_special,
+        );
+
+        // Should be valid JSON despite special characters
+        let parsed: serde_json::Value = serde_json::from_str(&result_special)
+            .expect("Result with special characters should be valid JSON");
+
+        // Verify the content was properly escaped
+        assert_eq!(parsed["test"], "value with \"quotes\" and \\backslashes");
     }
 }
