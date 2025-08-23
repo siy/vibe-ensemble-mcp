@@ -507,38 +507,28 @@ impl PromptManager {
                 id: prompt_name.clone(),
             })?;
 
-        // Create new version
-        let mut new_prompt = SystemPrompt::new(
-            current_prompt.name.clone(),
-            current_prompt.description.clone(),
-            new_template,
-            current_prompt.prompt_type.clone(),
-            created_by,
-        )?;
+        // Update existing prompt with new content
+        let mut updated_prompt = current_prompt;
+        updated_prompt.template = new_template;
+        updated_prompt.version += 1;
+        updated_prompt.updated_at = chrono::Utc::now();
 
-        // Set version number
-        new_prompt.version = current_prompt.version + 1;
-
-        // Add variables
+        // Clear existing variables and add new ones
+        updated_prompt.variables.clear();
         for variable in new_variables {
-            new_prompt.add_variable(variable)?;
+            updated_prompt.add_variable(variable)?;
         }
 
         // Validate quality
-        let issues = self.validate_prompt_quality(&new_prompt).await?;
+        let issues = self.validate_prompt_quality(&updated_prompt).await?;
         if !issues.is_empty() {
             return Err(Error::Validation {
                 message: format!("Quality validation failed: {}", issues.join(", ")),
             });
         }
 
-        // Deactivate old version
-        let mut old_prompt = current_prompt;
-        old_prompt.deactivate();
-        self.storage.prompts().update(&old_prompt).await?;
-
-        // Create and activate new version
-        self.storage.prompts().create(&new_prompt).await?;
+        self.storage.prompts().update(&updated_prompt).await?;
+        let new_prompt = updated_prompt;
 
         // Clear cache for this prompt
         self.clear_prompt_cache(&new_prompt.id).await;
@@ -618,7 +608,33 @@ impl PromptManager {
 
     /// Create default system prompts
     async fn create_default_prompts(&self) -> Result<()> {
-        let system_id = Uuid::new_v4(); // Placeholder for system user
+        // Find or create a system agent to use as created_by
+        let agents = self.storage.agents().list().await?;
+        let system_id = if let Some(system_agent) = agents.iter().find(|a| a.name == "system") {
+            system_agent.id
+        } else {
+            // Create a minimal system agent if it doesn't exist
+            use chrono::Utc;
+            use vibe_ensemble_core::agent::{Agent, AgentType, ConnectionMetadata};
+
+            let system_agent = Agent::builder()
+                .name("system")
+                .agent_type(AgentType::Worker)
+                .capability("system")
+                .connection_metadata(ConnectionMetadata {
+                    endpoint: "system://localhost".to_string(),
+                    protocol_version: "1.0".to_string(),
+                    session_id: Some("system".to_string()),
+                })
+                .build()
+                .map_err(|e| Error::Validation {
+                    message: format!("Failed to create system agent: {}", e),
+                })?;
+
+            let agent_id = system_agent.id;
+            self.storage.agents().create(&system_agent).await?;
+            agent_id
+        };
 
         // Coordinator prompt
         let coordinator_prompt = SystemPrompt::new(
@@ -792,6 +808,9 @@ mod tests {
     use vibe_ensemble_storage::{manager::DatabaseConfig, StorageManager};
 
     async fn create_test_manager() -> PromptManager {
+        use chrono::Utc;
+        use vibe_ensemble_core::agent::{Agent, AgentStatus, AgentType, ConnectionMetadata};
+
         let config = DatabaseConfig {
             url: ":memory:".to_string(),
             max_connections: Some(1),
@@ -799,6 +818,23 @@ mod tests {
             performance_config: None,
         };
         let storage = Arc::new(StorageManager::new(&config).await.unwrap());
+
+        // Create a system agent that can be referenced as created_by
+        let system_agent = Agent::builder()
+            .name("system")
+            .agent_type(AgentType::Worker)
+            .capability("system")
+            .connection_metadata(ConnectionMetadata {
+                endpoint: "system://localhost".to_string(),
+                protocol_version: "1.0".to_string(),
+                session_id: Some("system".to_string()),
+            })
+            .build()
+            .unwrap();
+
+        // Store the system agent
+        storage.agents().create(&system_agent).await.unwrap();
+
         PromptManager::new(storage)
     }
 
@@ -1155,7 +1191,10 @@ mod tests {
     async fn test_hot_swap_coordination_prompts() {
         let manager = create_test_manager().await;
         manager.initialize().await.unwrap();
-        let system_id = Uuid::new_v4();
+
+        // Get the system agent's ID
+        let agents = manager.storage.agents().list().await.unwrap();
+        let system_id = agents.iter().find(|a| a.name == "system").unwrap().id;
 
         let new_template = r#"
         You are {{agent_name}}, an Enhanced Cross-Project Coordinator.
