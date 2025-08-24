@@ -34,12 +34,12 @@ jobs:
 
       - name: Create Release
         id: create_release
-        uses: softprops/action-gh-release@v1
+        uses: actions/create-release@v1
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
           tag_name: ${{ steps.get_version.outputs.version }}
-          name: Vibe Ensemble MCP ${{ steps.get_version.outputs.version }}
+          release_name: Vibe Ensemble MCP ${{ steps.get_version.outputs.version }}
           draft: false
           prerelease: false
           body: |
@@ -101,12 +101,14 @@ jobs:
             vibe-ensemble-server vibe-ensemble-mcp
 
       - name: Upload Release Asset
-        uses: softprops/action-gh-release@v1
+        uses: actions/upload-release-asset@v1
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
-          tag_name: ${{ needs.create-release.outputs.version }}
-          files: ./dist/vibe-ensemble-mcp-linux-${{ matrix.target }}.tar.gz
+          upload_url: ${{ needs.create-release.outputs.upload_url }}
+          asset_path: ./dist/vibe-ensemble-mcp-linux-${{ matrix.target }}.tar.gz
+          asset_name: vibe-ensemble-mcp-linux-${{ matrix.target }}.tar.gz
+          asset_content_type: application/gzip
 
   build-macos:
     needs: create-release
@@ -133,12 +135,14 @@ jobs:
             vibe-ensemble-server vibe-ensemble-mcp
 
       - name: Upload Release Asset
-        uses: softprops/action-gh-release@v1
+        uses: actions/upload-release-asset@v1
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
-          tag_name: ${{ needs.create-release.outputs.version }}
-          files: ./dist/vibe-ensemble-mcp-macos-${{ matrix.target }}.tar.gz
+          upload_url: ${{ needs.create-release.outputs.upload_url }}
+          asset_path: ./dist/vibe-ensemble-mcp-macos-${{ matrix.target }}.tar.gz
+          asset_name: vibe-ensemble-mcp-macos-${{ matrix.target }}.tar.gz
+          asset_content_type: application/gzip
 
   build-windows:
     needs: create-release
@@ -163,12 +167,14 @@ jobs:
           Compress-Archive -Path target/${{ matrix.target }}/release/vibe-ensemble-server.exe, target/${{ matrix.target }}/release/vibe-ensemble-mcp.exe -DestinationPath dist/vibe-ensemble-mcp-windows-${{ matrix.target }}.zip
 
       - name: Upload Release Asset
-        uses: softprops/action-gh-release@v1
+        uses: actions/upload-release-asset@v1
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
-          tag_name: ${{ needs.create-release.outputs.version }}
-          files: ./dist/vibe-ensemble-mcp-windows-${{ matrix.target }}.zip
+          upload_url: ${{ needs.create-release.outputs.upload_url }}
+          asset_path: ./dist/vibe-ensemble-mcp-windows-${{ matrix.target }}.zip
+          asset_name: vibe-ensemble-mcp-windows-${{ matrix.target }}.zip
+          asset_content_type: application/zip
 
   build-docker:
     needs: create-release
@@ -315,17 +321,21 @@ jobs:
           cp ~/rpmbuild/RPMS/x86_64/vibe-ensemble-mcp-*.rpm dist/
 
       - name: Upload DEB package
-        uses: softprops/action-gh-release@v1
+        uses: actions/upload-release-asset@v1
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
-          tag_name: ${{ needs.create-release.outputs.version }}
-          files: ./dist/vibe-ensemble-mcp_${{ needs.create-release.outputs.version }}_amd64.deb
+          upload_url: ${{ needs.create-release.outputs.upload_url }}
+          asset_path: ./dist/vibe-ensemble-mcp_${{ needs.create-release.outputs.version }}_amd64.deb
+          asset_name: vibe-ensemble-mcp_${{ needs.create-release.outputs.version }}_amd64.deb
+          asset_content_type: application/vnd.debian.binary-package
 
       - name: Upload RPM package
-        uses: softprops/action-gh-release@v1
+        uses: actions/upload-release-asset@v1
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
-          tag_name: ${{ needs.create-release.outputs.version }}
-          files: ./dist/vibe-ensemble-mcp-${{ needs.create-release.outputs.version }}-1.x86_64.rpm
+          upload_url: ${{ needs.create-release.outputs.upload_url }}
+          asset_path: ./dist/vibe-ensemble-mcp-${{ needs.create-release.outputs.version }}-1.x86_64.rpm
+          asset_name: vibe-ensemble-mcp-${{ needs.create-release.outputs.version }}-1.x86_64.rpm
+          asset_content_type: application/x-rpm
