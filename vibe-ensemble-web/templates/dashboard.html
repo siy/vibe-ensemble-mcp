@@ -12,6 +12,17 @@
         <div class="stat-number" id="issues-count">{{ open_issues }}</div>
         <div class="stat-label">Open Issues</div>
     </div>
+    {% match system_metrics %}
+    {% when Some with (metrics) %}
+    <div class="card stat-card">
+        <div class="stat-number" id="cpu-usage">{{ metrics.cpu_usage_percent_int() }}%</div>
+        <div class="stat-label">CPU Usage</div>
+    </div>
+    <div class="card stat-card">
+        <div class="stat-number" id="memory-usage">{{ metrics.memory_usage_percent_int() }}%</div>
+        <div class="stat-label">Memory Usage</div>
+    </div>
+    {% when None %}
     <div class="card stat-card">
         <div class="stat-number" id="messages-count">0</div>
         <div class="stat-label">Messages Today</div>
@@ -20,6 +31,7 @@
         <div class="stat-number" id="coordination-count">0</div>
         <div class="stat-label">Coordination Events</div>
     </div>
+    {% endmatch %}
 </div>
 
 <div class="grid grid-2">
@@ -49,6 +61,61 @@
         </div>
     </div>
 </div>
+
+{% match system_metrics %}
+{% when Some with (metrics) %}
+<div class="card">
+    <h3>System Performance</h3>
+    <div class="grid grid-2">
+        <div>
+            <h4 style="margin-bottom: 10px; color: var(--gray-700);">Resource Usage</h4>
+            <div style="margin-bottom: 15px;">
+                <div style="display: flex; justify-content: space-between; margin-bottom: 5px;">
+                    <span>CPU Usage</span>
+                    <span>{{ metrics.cpu_usage_percent_int() }}%</span>
+                </div>
+                <div class="progress-bar">
+                    <div class="progress-fill" style="width: {{ metrics.cpu_usage_percent }}%; background-color: #28a745;"></div>
+                </div>
+            </div>
+            <div style="margin-bottom: 15px;">
+                <div style="display: flex; justify-content: space-between; margin-bottom: 5px;">
+                    <span>Memory Usage</span>
+                    <span>{{ metrics.memory_usage_mb }}MB / {{ metrics.memory_total_mb }}MB ({{ metrics.memory_usage_percent_int() }}%)</span>
+                </div>
+                <div class="progress-bar">
+                    <div class="progress-fill" style="width: {{ metrics.memory_usage_percent() }}%; background-color: #28a745;"></div>
+                </div>
+            </div>
+            <div>
+                <div style="display: flex; justify-content: space-between; margin-bottom: 5px;">
+                    <span>Disk Usage</span>
+                    <span>{{ metrics.disk_usage_mb }}MB / {{ metrics.disk_total_mb }}MB ({{ metrics.disk_usage_percent_int() }}%)</span>
+                </div>
+                <div class="progress-bar">
+                    <div class="progress-fill" style="width: {{ metrics.disk_usage_percent() }}%; background-color: #28a745;"></div>
+                </div>
+            </div>
+        </div>
+        <div>
+            <h4 style="margin-bottom: 10px; color: var(--gray-700);">System Info</h4>
+            <div style="color: var(--gray-600);">
+                <p><strong>Uptime:</strong> {{ metrics.uptime_hours() }}h {{ metrics.uptime_minutes() }}m</p>
+                {% match storage_metrics %}
+                {% when Some with (storage) %}
+                <p><strong>Database Size:</strong> {{ storage.database_size_mb }}MB</p>
+                <p><strong>DB Connections:</strong> {{ storage.active_connections }} / {{ storage.max_connections }}</p>
+                {% if storage.avg_query_time_ms > 0 %}
+                <p><strong>Avg Query Time:</strong> {{ storage.avg_query_time_ms }}ms</p>
+                {% endif %}
+                {% when None %}
+                {% endmatch %}
+            </div>
+        </div>
+    </div>
+</div>
+{% when None %}
+{% endmatch %}
 
 <div class="card">
     <h3>System Overview</h3>

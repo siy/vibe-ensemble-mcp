@@ -88,15 +88,10 @@ impl Server {
 
     /// Run the server
     pub async fn run(mut self) -> Result<()> {
-        info!("Starting Vibe Ensemble MCP Server");
-        info!("Main API listening on {}", self.config.server_addr());
+        // Print configuration summary with security warnings
+        self.config.print_startup_summary();
 
-        if let Some(_web_server) = &self.web_server {
-            info!(
-                "Web interface available at http://{}",
-                self.config.web_addr()
-            );
-        }
+        info!("Starting Vibe Ensemble MCP Server");
 
         // Create API router
         let app = self.create_api_router();
@@ -169,9 +164,25 @@ async fn health_check(
         Ok(_) => Ok(Json(json!({
             "status": "healthy",
             "timestamp": chrono::Utc::now(),
-            "version": env!("CARGO_PKG_VERSION")
+            "version": env!("CARGO_PKG_VERSION"),
+            "message": "All systems operational"
         }))),
-        Err(_) => Err(StatusCode::SERVICE_UNAVAILABLE),
+        Err(e) => {
+            warn!("Health check failed: {}", e);
+            Ok(Json(json!({
+                "status": "unhealthy",
+                "timestamp": chrono::Utc::now(),
+                "version": env!("CARGO_PKG_VERSION"),
+                "error": "Database connectivity issue",
+                "message": "Service temporarily unavailable. Please check database connection and try again.",
+                "suggestions": [
+                    "Verify database file exists and has proper permissions",
+                    "Check DATABASE_URL environment variable",
+                    "Ensure sufficient disk space",
+                    "Contact administrator if problem persists"
+                ]
+            })))
+        }
     }
 }
 
@@ -182,15 +193,57 @@ async fn server_status(
     let storage_healthy = state.storage.health_check().await.is_ok();
     // MCP server is available if we can access it
     let mcp_available = state.mcp_server.capabilities().tools.is_some();
+    
+    let overall_status = if storage_healthy && mcp_available {
+        "operational"
+    } else if storage_healthy || mcp_available {
+        "degraded"
+    } else {
+        "unhealthy"
+    };
 
-    Ok(Json(json!({
-        "status": if storage_healthy { "operational" } else { "degraded" },
+    let mut status_response = json!({
+        "status": overall_status,
         "timestamp": chrono::Utc::now(),
         "version": env!("CARGO_PKG_VERSION"),
         "components": {
             "storage": if storage_healthy { "healthy" } else { "unhealthy" },
             "mcp_server": if mcp_available { "available" } else { "unavailable" }
         },
-        "message": "Vibe Ensemble server is running"
-    })))
+        "endpoints": {
+            "health": "/health",
+            "status": "/status",
+            "web_dashboard": "http://127.0.0.1:8081/dashboard" // TODO: Make this configurable
+        }
+    });
+
+    // Add appropriate message and suggestions based on status
+    match overall_status {
+        "operational" => {
+            status_response["message"] = json!("All systems operational - Vibe Ensemble server is ready");
+        },
+        "degraded" => {
+            status_response["message"] = json!("Service is partially operational with some components unavailable");
+            let mut suggestions = Vec::new();
+            if !storage_healthy {
+                suggestions.push("Check database connection and permissions");
+            }
+            if !mcp_available {
+                suggestions.push("MCP server initialization may be incomplete");
+            }
+            status_response["suggestions"] = json!(suggestions);
+        },
+        "unhealthy" => {
+            status_response["message"] = json!("Service is experiencing issues - multiple components unavailable");
+            status_response["suggestions"] = json!([
+                "Check database configuration and connectivity",
+                "Verify MCP server initialization",
+                "Review server logs for detailed error information",
+                "Consider restarting the service if issues persist"
+            ]);
+        },
+        _ => {}
+    }
+
+    Ok(Json(status_response))
 }
