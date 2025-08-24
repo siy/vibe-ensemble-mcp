@@ -371,15 +371,21 @@ impl Config {
 
     /// Get the server socket address
     pub fn server_addr(&self) -> SocketAddr {
-        format!("{}:{}", self.server.host, self.server.port)
-            .parse()
-            .expect("Invalid server address")
+        parse_host_port(&self.server.host, self.server.port)
     }
 
     /// Get the web interface socket address
     pub fn web_addr(&self) -> SocketAddr {
-        format!("{}:{}", self.web.host, self.web.port)
-            .parse()
-            .expect("Invalid web address")
+        parse_host_port(&self.web.host, self.web.port)
     }
+}
+
+/// Helper function to parse host and port into SocketAddr, handling IPv6 addresses correctly
+fn parse_host_port(host: &str, port: u16) -> SocketAddr {
+    let addr = if host.contains(':') && !host.starts_with('[') {
+        format!("[{}]:{}", host, port)
+    } else {
+        format!("{}:{}", host, port)
+    };
+    addr.parse().expect("Invalid socket address")
 }

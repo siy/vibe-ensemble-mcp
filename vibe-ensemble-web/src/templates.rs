@@ -27,7 +27,8 @@ pub struct SystemMetrics {
 impl SystemMetrics {
     pub fn memory_usage_percent(&self) -> f64 {
         if self.memory_total_mb > 0 {
-            (self.memory_usage_mb as f64 / self.memory_total_mb as f64) * 100.0
+            let pct = (self.memory_usage_mb as f64 / self.memory_total_mb as f64) * 100.0;
+            pct.clamp(0.0, 100.0)
         } else {
             0.0
         }
@@ -39,7 +40,8 @@ impl SystemMetrics {
 
     pub fn disk_usage_percent(&self) -> f64 {
         if self.disk_total_mb > 0 {
-            (self.disk_usage_mb as f64 / self.disk_total_mb as f64) * 100.0
+            let pct = (self.disk_usage_mb as f64 / self.disk_total_mb as f64) * 100.0;
+            pct.clamp(0.0, 100.0)
         } else {
             0.0
         }
@@ -50,7 +52,7 @@ impl SystemMetrics {
     }
 
     pub fn cpu_usage_percent_int(&self) -> u64 {
-        self.cpu_usage_percent as u64
+        self.cpu_usage_percent.round() as u64
     }
 
     pub fn uptime_hours(&self) -> u64 {

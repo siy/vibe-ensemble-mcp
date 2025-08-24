@@ -8,6 +8,9 @@ use axum::{
 use std::time::Instant;
 use tracing::{info_span, Instrument};
 
+/// Threshold for slow request warnings in milliseconds
+const SLOW_REQUEST_THRESHOLD_MS: u128 = 1000;
+
 /// Middleware for logging requests with timing information
 pub async fn logging_middleware(req: Request, next: Next) -> Response {
     let start = Instant::now();
@@ -40,7 +43,7 @@ pub async fn logging_middleware(req: Request, next: Next) -> Response {
         );
 
         // Log slow requests as warnings
-        if elapsed.as_millis() > 1000 {
+        if elapsed.as_millis() > SLOW_REQUEST_THRESHOLD_MS {
             tracing::warn!(
                 status = %status,
                 elapsed_ms = elapsed.as_millis(),

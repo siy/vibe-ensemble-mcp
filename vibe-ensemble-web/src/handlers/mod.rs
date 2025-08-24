@@ -14,6 +14,8 @@ use std::sync::Arc;
 use uuid::Uuid;
 use vibe_ensemble_storage::StorageManager;
 
+use crate::handlers::dashboard::index;
+
 use crate::Result;
 
 /// Health check endpoint
@@ -33,8 +35,6 @@ pub async fn health(State(storage): State<Arc<StorageManager>>) -> Result<impl I
 
 /// Dashboard page handler
 pub async fn dashboard(State(storage): State<Arc<StorageManager>>) -> Result<impl IntoResponse> {
-    use crate::handlers::dashboard::index;
-
     // Delegate to the proper dashboard handler
     index(State(storage)).await
 }

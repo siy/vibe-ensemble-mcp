@@ -24,7 +24,7 @@ impl Default for WebConfig {
         Self {
             enabled: true,
             host: "127.0.0.1".to_string(),
-            port: 3000,
+            port: 8081,
         }
     }
 }
