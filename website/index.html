@@ -1,0 +1,255 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Vibe Ensemble - Multi-Agent Coordination for Claude Code</title>
+    <meta name="description" content="Coordinate multiple Claude Code instances with distributed task execution, unified management, and intelligent collaboration.">
+    <link rel="stylesheet" href="static/styles.css">
+    <link rel="icon" href="static/favicon.ico" type="image/x-icon">
+    <!-- Open Graph -->
+    <meta property="og:title" content="Vibe Ensemble - Multi-Agent Coordination">
+    <meta property="og:description" content="Coordinate multiple Claude Code instances with distributed task execution and intelligent collaboration.">
+    <meta property="og:type" content="website">
+    <meta property="og:url" content="https://vibeensemble.dev">
+</head>
+<body>
+    <nav class="navbar">
+        <div class="nav-container">
+            <div class="nav-brand">
+                <span class="brand-icon">🎭</span>
+                <span class="brand-text">Vibe Ensemble</span>
+            </div>
+            <div class="nav-links">
+                <a href="#features">Features</a>
+                <a href="#installation">Install</a>
+                <a href="#setup">Setup</a>
+                <a href="https://github.com/siy/vibe-ensemble-mcp" target="_blank">GitHub</a>
+            </div>
+        </div>
+    </nav>
+
+    <header class="hero">
+        <div class="hero-container">
+            <div class="hero-content">
+                <h1 class="hero-title">Multi-Agent Coordination for <span class="highlight">Claude Code</span></h1>
+                <p class="hero-subtitle">
+                    Coordinate multiple Claude Code instances with intelligent task distribution, 
+                    real-time communication, and unified management.
+                </p>
+                <div class="hero-buttons">
+                    <a href="#installation" class="btn btn-primary">Get Started</a>
+                    <a href="https://github.com/siy/vibe-ensemble-mcp" class="btn btn-secondary" target="_blank">
+                        View on GitHub
+                    </a>
+                </div>
+                <div class="hero-stats">
+                    <div class="stat">
+                        <span class="stat-number">316+</span>
+                        <span class="stat-label">Tests Passing</span>
+                    </div>
+                    <div class="stat">
+                        <span class="stat-number">42+</span>
+                        <span class="stat-label">MCP Tools</span>
+                    </div>
+                    <div class="stat">
+                        <span class="stat-number">Production</span>
+                        <span class="stat-label">Ready</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </header>
+
+    <section id="features" class="features">
+        <div class="container">
+            <h2 class="section-title">Powerful Features</h2>
+            <div class="features-grid">
+                <div class="feature-card">
+                    <div class="feature-icon">🤖</div>
+                    <h3>Intelligent Agent Coordination</h3>
+                    <p>AI-powered dependency detection, conflict resolution, and automated escalation management across multiple agents.</p>
+                </div>
+                <div class="feature-card">
+                    <div class="feature-icon">⚡</div>
+                    <h3>Distributed Task Execution</h3>
+                    <p>Seamless work coordination across multiple Claude Code instances with proactive monitoring and load balancing.</p>
+                </div>
+                <div class="feature-card">
+                    <div class="feature-icon">🔗</div>
+                    <h3>Cross-Project Integration</h3>
+                    <p>Advanced tools for managing dependencies and coordination across project boundaries with pattern recognition.</p>
+                </div>
+                <div class="feature-card">
+                    <div class="feature-icon">💬</div>
+                    <h3>Real-time Communication</h3>
+                    <p>Sophisticated messaging system with structured protocols and coordination awareness between agents.</p>
+                </div>
+                <div class="feature-card">
+                    <div class="feature-icon">📋</div>
+                    <h3>Issue Tracking</h3>
+                    <p>Persistent task and problem management with intelligent workflow automation and progress tracking.</p>
+                </div>
+                <div class="feature-card">
+                    <div class="feature-icon">🧠</div>
+                    <h3>Knowledge Management</h3>
+                    <p>Pattern recognition and organizational learning for continuous improvement and shared insights.</p>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <section id="installation" class="installation">
+        <div class="container">
+            <h2 class="section-title">Quick Installation</h2>
+            <div class="install-methods">
+                <div class="install-card">
+                    <h3>macOS / Linux</h3>
+                    <div class="code-block">
+                        <code>curl -fsSL https://get.vibeensemble.dev/install.sh | bash</code>
+                        <button class="copy-btn" onclick="copyToClipboard('curl -fsSL https://get.vibeensemble.dev/install.sh | bash')">Copy</button>
+                    </div>
+                </div>
+                <div class="install-card">
+                    <h3>Windows PowerShell</h3>
+                    <div class="code-block">
+                        <code>iex ((New-Object System.Net.WebClient).DownloadString('https://get.vibeensemble.dev/install.ps1'))</code>
+                        <button class="copy-btn" onclick="copyToClipboard('iex ((New-Object System.Net.WebClient).DownloadString(\\\'https://get.vibeensemble.dev/install.ps1\\\'))')">Copy</button>
+                    </div>
+                </div>
+                <div class="install-card">
+                    <h3>Docker</h3>
+                    <div class="code-block">
+                        <code>docker run -d --name vibe-ensemble -p 8080:8080 -p 8081:8081 siy/vibe-ensemble-mcp:latest</code>
+                        <button class="copy-btn" onclick="copyToClipboard('docker run -d --name vibe-ensemble -p 8080:8080 -p 8081:8081 siy/vibe-ensemble-mcp:latest')">Copy</button>
+                    </div>
+                </div>
+            </div>
+            <div class="download-alternatives">
+                <h4>Alternative Downloads</h4>
+                <div class="download-links">
+                    <a href="https://github.com/siy/vibe-ensemble-mcp/releases/latest/download/vibe-ensemble-mcp_v0.1.0_amd64.deb" class="download-link">
+                        <span class="download-icon">📦</span>
+                        <span>Ubuntu/Debian (.deb)</span>
+                    </a>
+                    <a href="https://github.com/siy/vibe-ensemble-mcp/releases/latest/download/vibe-ensemble-mcp-v0.1.0-1.x86_64.rpm" class="download-link">
+                        <span class="download-icon">📦</span>
+                        <span>CentOS/RHEL/Fedora (.rpm)</span>
+                    </a>
+                    <a href="https://github.com/siy/vibe-ensemble-mcp/releases/latest" class="download-link">
+                        <span class="download-icon">⬇️</span>
+                        <span>All Releases</span>
+                    </a>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <section id="setup" class="setup">
+        <div class="container">
+            <h2 class="section-title">Claude Code Setup</h2>
+            <div class="setup-steps">
+                <div class="step">
+                    <div class="step-number">1</div>
+                    <div class="step-content">
+                        <h3>Start the Server</h3>
+                        <p>After installation, start the Vibe Ensemble server:</p>
+                        <div class="code-block">
+                            <code>vibe-ensemble-server</code>
+                            <button class="copy-btn" onclick="copyToClipboard('vibe-ensemble-server')">Copy</button>
+                        </div>
+                    </div>
+                </div>
+                <div class="step">
+                    <div class="step-number">2</div>
+                    <div class="step-content">
+                        <h3>Configure Claude Code</h3>
+                        <p>Add Vibe Ensemble to your Claude Code MCP settings:</p>
+                        <div class="code-block">
+                            <code>{
+  "mcpServers": {
+    "vibe-ensemble": {
+      "command": "vibe-ensemble-mcp",
+      "args": ["--transport=stdio"]
+    }
+  }
+}</code>
+                            <button class="copy-btn" onclick="copyToClipboard('{\\n  \"mcpServers\": {\\n    \"vibe-ensemble\": {\\n      \"command\": \"vibe-ensemble-mcp\",\\n      \"args\": [\"--transport=stdio\"]\\n    }\\n  }\\n}')">Copy</button>
+                        </div>
+                    </div>
+                </div>
+                <div class="step">
+                    <div class="step-number">3</div>
+                    <div class="step-content">
+                        <h3>Access Interfaces</h3>
+                        <div class="interface-links">
+                            <a href="http://127.0.0.1:8081" class="interface-link" target="_blank">
+                                <span class="interface-icon">📊</span>
+                                <span>Web Dashboard (Port 8081)</span>
+                            </a>
+                            <a href="http://127.0.0.1:8080/health" class="interface-link" target="_blank">
+                                <span class="interface-icon">💚</span>
+                                <span>Health Check (Port 8080)</span>
+                            </a>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <section class="coordination-tools">
+        <div class="container">
+            <h2 class="section-title">Available MCP Tools</h2>
+            <p class="section-subtitle">42+ coordination tools for seamless multi-agent collaboration</p>
+            <div class="tools-grid">
+                <div class="tool-category">
+                    <h4>Agent Management</h4>
+                    <ul>
+                        <li><code>vibe/agent/register</code></li>
+                        <li><code>vibe/agent/list</code></li>
+                        <li><code>vibe/agent/message</code></li>
+                    </ul>
+                </div>
+                <div class="tool-category">
+                    <h4>Task Coordination</h4>
+                    <ul>
+                        <li><code>vibe/task/create</code></li>
+                        <li><code>vibe/dependency/analyze</code></li>
+                        <li><code>vibe/conflict/detect</code></li>
+                    </ul>
+                </div>
+                <div class="tool-category">
+                    <h4>Knowledge Management</h4>
+                    <ul>
+                        <li><code>vibe/knowledge/store</code></li>
+                        <li><code>vibe/knowledge/search</code></li>
+                        <li><code>vibe/guideline/enforce</code></li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <footer class="footer">
+        <div class="container">
+            <div class="footer-content">
+                <div class="footer-brand">
+                    <span class="brand-icon">🎭</span>
+                    <span class="brand-text">Vibe Ensemble</span>
+                </div>
+                <div class="footer-links">
+                    <a href="https://github.com/siy/vibe-ensemble-mcp" target="_blank">GitHub</a>
+                    <a href="https://github.com/siy/vibe-ensemble-mcp/issues" target="_blank">Issues</a>
+                    <a href="https://github.com/siy/vibe-ensemble-mcp/blob/main/docs/" target="_blank">Docs</a>
+                </div>
+            </div>
+            <div class="footer-bottom">
+                <p>&copy; 2025 Vibe Ensemble. Open source under Apache License 2.0</p>
+            </div>
+        </div>
+    </footer>
+
+    <script src="static/script.js"></script>
+</body>
+</html>

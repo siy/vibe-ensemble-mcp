@@ -1,0 +1,38 @@
+[build]
+  # Build directory
+  publish = "."
+  
+  # Since this is a static site, no build command needed
+  command = "echo 'Static site - no build required'"
+
+[[redirects]]
+  from = "/get/install.sh"
+  to = "/get/install.sh"
+  status = 200
+  force = true
+
+[[redirects]]
+  from = "/get/install.ps1"
+  to = "/get/install.ps1"
+  status = 200
+  force = true
+
+[[headers]]
+  for = "/get/*"
+  [headers.values]
+    Content-Type = "text/plain; charset=utf-8"
+    Cache-Control = "public, max-age=3600"
+
+[[headers]]
+  for = "/*.html"
+  [headers.values]
+    Cache-Control = "public, max-age=3600"
+    X-Content-Type-Options = "nosniff"
+    X-Frame-Options = "DENY"
+    X-XSS-Protection = "1; mode=block"
+    Referrer-Policy = "strict-origin-when-cross-origin"
+
+[[headers]]
+  for = "/static/*"
+  [headers.values]
+    Cache-Control = "public, max-age=31536000, immutable"
