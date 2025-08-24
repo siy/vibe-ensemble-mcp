@@ -15,7 +15,9 @@ use vibe_ensemble_web::WebServer;
 /// Shared application state for API handlers
 #[derive(Clone)]
 pub struct AppState {
+    #[allow(dead_code)] // Will be used by future API endpoints
     storage: Arc<StorageManager>,
+    #[allow(dead_code)] // Will be used by future API endpoints
     mcp_server: Arc<McpServer>,
 }
 
