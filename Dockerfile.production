@@ -35,8 +35,10 @@ COPY vibe-ensemble-prompts/Cargo.toml ./vibe-ensemble-prompts/
 COPY vibe-ensemble-security/Cargo.toml ./vibe-ensemble-security/
 COPY vibe-ensemble-monitoring/Cargo.toml ./vibe-ensemble-monitoring/
 
-# Create dummy lib.rs files
+# Create dummy source files for dependency caching
 RUN echo "fn main() {}" > vibe-ensemble-server/src/main.rs && \
+    echo "fn main() {}" > vibe-ensemble-mcp/src/main.rs && \
+    echo "fn main() {}" > vibe-ensemble-web/src/main.rs && \
     echo "" > vibe-ensemble-core/src/lib.rs && \
     echo "" > vibe-ensemble-mcp/src/lib.rs && \
     echo "" > vibe-ensemble-storage/src/lib.rs && \
