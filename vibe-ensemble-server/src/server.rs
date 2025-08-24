@@ -140,9 +140,9 @@ impl Server {
                 _ = terminate => { info!("Shutdown signal received"); },
             }
         };
-        
+
         let graceful = axum::serve(listener, app).with_graceful_shutdown(shutdown);
-        
+
         if let Err(e) = graceful.await {
             warn!("API server error: {}", e);
         }
