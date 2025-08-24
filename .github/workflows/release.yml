@@ -11,6 +11,12 @@ on:
         required: true
         default: 'v0.1.0'
 
+permissions:
+  contents: write
+  packages: write
+  pull-requests: read
+  actions: read
+
 env:
   CARGO_TERM_COLOR: always
 
