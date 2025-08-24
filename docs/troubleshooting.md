@@ -1,60 +1,144 @@
-# Troubleshooting
+# Troubleshooting Guide
 
-Common issues when running Vibe Ensemble with 5-10 Claude Code agents.
+Common issues when running Vibe Ensemble MCP server in production environments for small user groups.
 
 ## Quick Health Check
 
 ```bash
-# Check MCP server is running
-curl http://localhost:8080/api/health
+# Check production server status
+curl http://localhost:8080/health
 
-# Check database is accessible  
-ls -la vibe-ensemble.db
+# Check web dashboard availability
+curl http://localhost:8081/dashboard
 
-# List running agents
-curl http://localhost:8080/api/agents
+# View system metrics
+curl http://localhost:8080/status
 
-# Check agent processes
-ps aux | grep claude
+# Check database connectivity  
+ls -la vibe_ensemble.db
+
+# View server configuration
+curl http://localhost:8080/status | jq '.components'
+```
+
+## Production Deployment Issues
+
+### Security Warnings During Startup
+
+**Problem**: Server shows security warnings about 0.0.0.0 binding
+
+**Explanation**: This is expected behavior when using production configuration
+```bash
+⚠️  SECURITY WARNING: server is bound to 0.0.0.0:8080 (all interfaces).
+This exposes the service to external networks.
+For production use, bind to specific interfaces (e.g., 127.0.0.1 for local only).
+```
+
+**Solutions**:
+```bash
+# For local/development use, edit config/local.toml
+[server]
+host = "127.0.0.1"
+port = 8080
+
+# For production with firewall protection, keep 0.0.0.0 and ensure:
+# - Proper firewall rules
+# - Network security groups
+# - Load balancer configuration
+```
+
+### Configuration File Issues
+
+**Problem**: Server can't find or parse configuration files
+
+**Solutions**:
+```bash
+# Check configuration files exist
+ls -la config/
+# Should have: default.toml, local.example.toml, production.toml
+
+# Create local configuration
+cp config/local.example.toml config/local.toml
+
+# Test configuration parsing
+VIBE_ENSEMBLE_SERVER_HOST=127.0.0.1 cargo run --bin vibe-ensemble-server
+
+# Override specific settings with environment variables
+export VIBE_ENSEMBLE_DATABASE_URL="sqlite:./custom.db"
+export VIBE_ENSEMBLE_WEB_PORT=9090
 ```
 
 ## Common Issues
 
-### MCP Server Won't Start
+### Server Won't Start
 
 **Problem**: `cargo run --bin vibe-ensemble-server` fails
 
-**Solutions**:
+**Diagnostic Steps**:
 ```bash
-# Check database path
-export DATABASE_URL="sqlite:./vibe-ensemble.db"
-touch ./vibe-ensemble.db
+# Check Rust version (requires 1.80+)
+rustc --version
+
+# Verify workspace compilation
+cargo check --workspace
 
 # Check port availability
-lsof -i :8080
-# Kill process if needed: kill $(lsof -ti :8080)
+lsof -i :8080 :8081
 
-# Use different port
-export SERVER_PORT=8081
+# Check disk space for database
+df -h .
+
+# Verify database permissions
+touch vibe_ensemble.db && ls -la vibe_ensemble.db
 ```
-
-### Claude Code Agent Won't Connect
-
-**Problem**: Agent fails to connect to MCP server
 
 **Solutions**:
 ```bash
-# Verify MCP server is running
-curl http://localhost:8080/api/health
+# Kill processes using required ports
+sudo kill $(lsof -ti :8080 :8081)
 
-# Check Claude Code version
-claude --version
+# Use alternative ports
+export VIBE_ENSEMBLE_SERVER_PORT=8082
+export VIBE_ENSEMBLE_WEB_PORT=8083
 
-# Try explicit connection
-claude -p "test agent" --mcp-server http://localhost:8080 --verbose
+# Check for configuration conflicts
+rm config/local.toml  # Will use defaults
+```
 
-# Check firewall (macOS)
-sudo pfctl -sr | grep 8080
+### Web Dashboard Not Loading
+
+**Problem**: Can't access web dashboard at http://localhost:8081
+
+**Solutions**:
+```bash
+# Check if web server is enabled in configuration
+curl http://localhost:8080/status | jq '.components'
+
+# Verify web server is listening
+lsof -i :8081
+
+# Test direct dashboard access
+curl -I http://localhost:8081/dashboard
+
+# Check for browser cache issues (try incognito/private mode)
+```
+
+### System Metrics Not Displaying
+
+**Problem**: Dashboard shows empty or inaccurate system metrics
+
+**Solutions**:
+```bash
+# Check system commands availability (Unix/Linux)
+which free df
+
+# Verify metrics collection (increase log level)
+RUST_LOG=debug cargo run --bin vibe-ensemble-server
+
+# Test metrics API directly
+curl http://localhost:8081/dashboard 2>/dev/null | grep -i "cpu\|memory\|disk"
+
+# For Windows, ensure proper system info access
 ```
 
 ### Database Issues
@@ -63,35 +147,52 @@ sudo pfctl -sr | grep 8080
 
 **Solutions**:
 ```bash
-# Check database permissions
-ls -la vibe-ensemble.db
-chmod 644 vibe-ensemble.db
+# Check database permissions and size
+ls -lah vibe_ensemble.db*
 
 # Verify database integrity
-sqlite3 vibe-ensemble.db "PRAGMA integrity_check;"
+sqlite3 vibe_ensemble.db "PRAGMA integrity_check;"
+
+# Check disk space and inodes
+df -h . && df -i .
+
+# For PostgreSQL in production
+export VIBE_ENSEMBLE_DATABASE_URL="postgres://user:pass@localhost/vibe_ensemble"
 
 # Reset database (WARNING: deletes all data)
-rm vibe-ensemble.db
+rm vibe_ensemble.db*
 cargo run --bin vibe-ensemble-server
 ```
 
-### Too Many Agents / Performance Issues
+### Performance Issues
 
-**Problem**: System slow with 10+ agents running
+**Problem**: System becomes slow or unresponsive
+
+**Diagnostic Steps**:
+```bash
+# Check system metrics via dashboard
+curl http://localhost:8080/status | jq '.components'
+
+# Monitor resource usage
+top -p $(pgrep vibe-ensemble-server)
+
+# Check database performance
+sqlite3 vibe_ensemble.db ".timer on" "SELECT COUNT(*) FROM agents;"
+
+# View request timing logs
+tail -f server.log | grep "elapsed_ms"
+```
 
 **Solutions**:
 ```bash
-# Monitor resource usage
-top -p $(pgrep claude | tr '\n' ',')
+# Increase database connections for high load
+export VIBE_ENSEMBLE_DATABASE_MAX_CONNECTIONS=20
 
-# Limit agents per project
-# Project A: 3 agents max
-# Project B: 2 agents max  
-# Project C: 2 agents max
+# Use PostgreSQL for better concurrent performance
+export VIBE_ENSEMBLE_DATABASE_URL="postgres://user:pass@host:5432/db"
 
-# Restart agents periodically
-killall claude
-# Then restart needed agents
+# Monitor slow requests (>1000ms logged as warnings)
+RUST_LOG=warn cargo run --bin vibe-ensemble-server
 ```
 
 ### Workspace Conflicts
@@ -161,28 +262,71 @@ python -m json.tool agent-templates/code-writer/template.json
 Enable detailed logging:
 ```bash
 export RUST_LOG="debug,vibe_ensemble=trace"
-cargo run --bin vibe-ensemble-mcp
+cargo run --bin vibe-ensemble-server
 ```
 
 This will show:
-- Agent connection attempts
-- Template loading details
-- Workspace creation
-- Inter-agent coordination
-- Database operations
+- Configuration validation and security warnings
+- HTTP request timing and performance
+- Database operations and health checks
+- System metrics collection
+- WebSocket connections (when implemented)
+
+## Security Considerations
+
+**Review the [Security Best Practices](security-best-practices.md) document for:**
+- Network security and firewall configuration
+- Database security (SQLite vs PostgreSQL)
+- Process security and user permissions
+- SSL/TLS setup with reverse proxy
+- Monitoring and logging security
+
+## Performance Optimization
+
+### System Resource Monitoring
+```bash
+# Real-time system metrics via dashboard
+open http://localhost:8081/dashboard
+
+# API-based monitoring
+watch -n 5 'curl -s http://localhost:8080/status | jq'
+
+# Database performance
+sqlite3 vibe_ensemble.db ".timer on" ".schema"
+```
+
+### Production Deployment
+```bash
+# Use production configuration
+cp config/production.toml config/local.toml
+
+# Optimize for concurrent connections
+export VIBE_ENSEMBLE_DATABASE_MAX_CONNECTIONS=20
+
+# Use PostgreSQL for better performance
+export VIBE_ENSEMBLE_DATABASE_URL="postgres://user:pass@host:5432/db"
+```
 
 ## Getting Help
 
-1. **Check logs first**: Look for error messages in console output
-2. **Verify versions**: Ensure Claude Code and Rust are up to date
-3. **Minimal reproduction**: Try with just 1-2 agents first
-4. **Reset state**: Stop all agents, restart MCP server, try again
+1. **Check system health**: Visit http://localhost:8081/dashboard for real-time metrics
+2. **Review logs**: Look for security warnings and performance issues
+3. **Verify configuration**: Ensure all .toml files are properly formatted
+4. **Test connectivity**: Use curl to verify API endpoints
+5. **Check documentation**: Review security-best-practices.md for deployment guidance
 
-## Performance Tips
+## Quick Recovery
 
-- **Limit concurrent agents**: Start with 3-5 agents, add more gradually
-- **Use git worktrees**: Avoid file system conflicts
-- **Restart periodically**: Claude Code agents can accumulate memory over time
-- **Monitor resources**: Keep an eye on CPU and memory usage
+```bash
+# Complete reset (WARNING: deletes all data)
+pkill vibe-ensemble-server
+rm vibe_ensemble.db*
+rm config/local.toml
+cargo run --bin vibe-ensemble-server
 
-Most issues are resolved by restarting the MCP server and agents in the correct order.
+# Verify recovery
+curl http://localhost:8080/health
+curl http://localhost:8081/dashboard
+```
+
+For persistent issues, check the [Security Best Practices](security-best-practices.md) and ensure your deployment follows recommended security guidelines.

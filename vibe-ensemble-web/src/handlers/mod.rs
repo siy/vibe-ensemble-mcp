@@ -1,5 +1,7 @@
 //! Web handlers for the Vibe Ensemble dashboard
 
+pub mod dashboard;
+
 use axum::{
     extract::{Path, Query, State},
     http::StatusCode,
@@ -12,7 +14,9 @@ use std::sync::Arc;
 use uuid::Uuid;
 use vibe_ensemble_storage::StorageManager;
 
-use crate::{templates::DashboardTemplate, Result};
+use crate::handlers::dashboard::index;
+
+use crate::Result;
 
 /// Health check endpoint
 pub async fn health(State(storage): State<Arc<StorageManager>>) -> Result<impl IntoResponse> {
@@ -31,39 +35,8 @@ pub async fn health(State(storage): State<Arc<StorageManager>>) -> Result<impl I
 
 /// Dashboard page handler
 pub async fn dashboard(State(storage): State<Arc<StorageManager>>) -> Result<impl IntoResponse> {
-    use crate::templates::ActivityEntry;
-
-    // Fetch real data for the dashboard
-    let agent_count = storage
-        .agents()
-        .list()
-        .await
-        .map_err(crate::Error::Storage)?
-        .len();
-
-    let issue_count = storage
-        .issues()
-        .list()
-        .await
-        .map_err(crate::Error::Storage)?
-        .len();
-
-    // Create some sample activity (in a real implementation, this would come from an activity log)
-    let recent_activity = vec![ActivityEntry {
-        timestamp: chrono::Utc::now().format("%H:%M").to_string(),
-        message: "Dashboard initialized".to_string(),
-        activity_type: "info".to_string(),
-    }];
-
-    let template = DashboardTemplate {
-        title: "Vibe Ensemble Dashboard".to_string(),
-        active_agents: agent_count,
-        open_issues: issue_count,
-        recent_activity,
-        current_page: "dashboard".to_string(),
-    };
-
-    Ok(template)
+    // Delegate to the proper dashboard handler
+    index(State(storage)).await
 }
 
 /// Query parameters for agent listing
@@ -237,6 +210,7 @@ pub async fn system_stats(State(storage): State<Arc<StorageManager>>) -> Result<
         "messages": stats.messages_count,
         "knowledge": stats.knowledge_count,
         "prompts": stats.prompts_count,
+        "templates": stats.templates_count,
         "timestamp": chrono::Utc::now().to_rfc3339()
     })))
 }

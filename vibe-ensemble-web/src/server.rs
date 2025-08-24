@@ -1,7 +1,8 @@
 //! Web server for the Vibe Ensemble dashboard
 
-use crate::{handlers, Result};
+use crate::{handlers, middleware, Result};
 use axum::{
+    middleware as axum_middleware,
     routing::{delete, get, post, put},
     Router,
 };
@@ -23,7 +24,7 @@ impl Default for WebConfig {
         Self {
             enabled: true,
             host: "127.0.0.1".to_string(),
-            port: 3000,
+            port: 8081,
         }
     }
 }
@@ -60,9 +61,13 @@ impl WebServer {
             .route("/api/issues/:id", delete(handlers::issue_delete))
             // Add shared state
             .with_state(self.storage.clone())
-            // Add middleware
+            // Add middleware layers
             .layer(
                 ServiceBuilder::new()
+                    .layer(axum_middleware::from_fn(middleware::logging_middleware))
+                    .layer(axum_middleware::from_fn(
+                        middleware::security_headers_middleware,
+                    ))
                     .layer(TraceLayer::new_for_http())
                     .layer(CorsLayer::permissive()),
             )
