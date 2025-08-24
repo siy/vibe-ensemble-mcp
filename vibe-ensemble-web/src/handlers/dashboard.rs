@@ -29,7 +29,7 @@ pub async fn index(State(storage): State<Arc<StorageManager>>) -> Result<Html<St
     let template = DashboardTemplate::new(active_agents, open_issues, recent_issues)
         .with_system_metrics(system_metrics)
         .with_storage_metrics(storage_metrics);
-    
+
     let rendered = template
         .render()
         .map_err(|e| crate::Error::Internal(anyhow::anyhow!("{}", e)))?;

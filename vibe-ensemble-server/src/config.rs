@@ -2,7 +2,7 @@
 
 use serde::{Deserialize, Serialize};
 use std::net::SocketAddr;
-use tracing::{error, warn};
+use tracing::warn;
 
 /// Server configuration
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -138,11 +138,11 @@ impl Config {
             .set_default("monitoring.alerting_enabled", true)?
             .build()?;
 
-        let mut config: Config = settings.try_deserialize()?;
-        
+        let config: Config = settings.try_deserialize()?;
+
         // Perform security validation and warnings
         config.validate_security_settings()?;
-        
+
         Ok(config)
     }
 
@@ -151,19 +151,27 @@ impl Config {
         // Check for 0.0.0.0 binding in production
         self.check_external_binding(&self.server.host, "server", self.server.port);
         self.check_external_binding(&self.web.host, "web interface", self.web.port);
-        self.check_external_binding(&self.monitoring.metrics_host, "metrics endpoint", self.monitoring.metrics_port);
-        self.check_external_binding(&self.monitoring.health_host, "health endpoint", self.monitoring.health_port);
-        
+        self.check_external_binding(
+            &self.monitoring.metrics_host,
+            "metrics endpoint",
+            self.monitoring.metrics_port,
+        );
+        self.check_external_binding(
+            &self.monitoring.health_host,
+            "health endpoint",
+            self.monitoring.health_port,
+        );
+
         // Validate database configuration
         self.validate_database_config()?;
-        
+
         // Check for insecure settings
         self.validate_message_size_limits();
         self.validate_logging_configuration();
-        
+
         Ok(())
     }
-    
+
     /// Check if a host binding is potentially insecure
     fn check_external_binding(&self, host: &str, service_name: &str, port: u16) {
         match host {
@@ -174,24 +182,24 @@ impl Config {
                      For production use, bind to specific interfaces (e.g., 127.0.0.1 for local only).",
                     service_name, port
                 );
-            },
+            }
             host if !host.starts_with("127.0.0.1") && !host.starts_with("localhost") => {
                 warn!(
                     "⚠️  SECURITY NOTICE: {} is bound to {}:{} (external interface). \
                      Ensure proper firewall rules and authentication are in place.",
                     service_name, host, port
                 );
-            },
+            }
             _ => {
                 // Localhost binding is secure by default
             }
         }
     }
-    
+
     /// Validate database configuration for security
     fn validate_database_config(&self) -> Result<(), config::ConfigError> {
         let url = &self.database.url;
-        
+
         // Check for production database without SSL
         if url.starts_with("postgres://") && !url.contains("sslmode") {
             warn!(
@@ -199,7 +207,7 @@ impl Config {
                  Consider adding '?sslmode=require' to the connection string for production use."
             );
         }
-        
+
         // Check for file-based databases in production
         if url.starts_with("sqlite:") {
             warn!(
@@ -207,7 +215,7 @@ impl Config {
                  For production deployments with multiple instances, consider PostgreSQL for better concurrency."
             );
         }
-        
+
         // Warn about auto-migration in production
         if self.database.migrate_on_startup {
             warn!(
@@ -215,15 +223,15 @@ impl Config {
                  For production, consider running migrations separately and setting migrate_on_startup=false."
             );
         }
-        
+
         Ok(())
     }
-    
+
     /// Validate message size limits
     fn validate_message_size_limits(&self) {
         const MAX_RECOMMENDED_SIZE: usize = 10 * 1024 * 1024; // 10MB
         const MIN_RECOMMENDED_SIZE: usize = 64 * 1024; // 64KB
-        
+
         if self.mcp.max_message_size > MAX_RECOMMENDED_SIZE {
             warn!(
                 "⚠️  PERFORMANCE WARNING: MCP max message size ({} bytes) exceeds recommended limit of {} bytes. \
@@ -231,7 +239,7 @@ impl Config {
                 self.mcp.max_message_size, MAX_RECOMMENDED_SIZE
             );
         }
-        
+
         if self.mcp.max_message_size < MIN_RECOMMENDED_SIZE {
             warn!(
                 "⚠️  CONFIGURATION WARNING: MCP max message size ({} bytes) is below recommended minimum of {} bytes. \
@@ -240,7 +248,7 @@ impl Config {
             );
         }
     }
-    
+
     /// Validate logging configuration
     fn validate_logging_configuration(&self) {
         match self.logging.level.as_str() {
@@ -250,63 +258,91 @@ impl Config {
                      Consider 'info' or 'warn' for production.",
                     self.logging.level
                 );
-            },
+            }
             "error" => {
                 warn!(
                     "💡 MONITORING TIP: Logging level 'error' may hide important information. \
                      Consider 'warn' or 'info' for better observability."
                 );
-            },
+            }
             _ => {} // info, warn are good defaults
         }
     }
-    
+
     /// Check if the configuration appears to be for production use
     pub fn is_production_config(&self) -> bool {
         // Heuristics to detect production configuration
-        self.server.host != "127.0.0.1" ||
-        self.database.url.starts_with("postgres://") ||
-        !self.database.migrate_on_startup ||
-        self.logging.format == "json"
+        self.server.host != "127.0.0.1"
+            || self.database.url.starts_with("postgres://")
+            || !self.database.migrate_on_startup
+            || self.logging.format == "json"
     }
-    
+
     /// Print configuration summary for startup
     pub fn print_startup_summary(&self) {
         println!("🚀 Vibe Ensemble MCP Server Starting");
         println!("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
-        
+
         println!("📡 API Server:");
-        println!("   • Listening on {}:{}", self.server.host, self.server.port);
-        println!("   • Health check: http://{}:{}/health", self.server.host, self.server.port);
-        println!("   • Status endpoint: http://{}:{}/status", self.server.host, self.server.port);
-        
+        println!(
+            "   • Listening on {}:{}",
+            self.server.host, self.server.port
+        );
+        println!(
+            "   • Health check: http://{}:{}/health",
+            self.server.host, self.server.port
+        );
+        println!(
+            "   • Status endpoint: http://{}:{}/status",
+            self.server.host, self.server.port
+        );
+
         if self.web.enabled {
             println!();
             println!("🌐 Web Dashboard:");
-            println!("   • Dashboard: http://{}:{}/dashboard", self.web.host, self.web.port);
+            println!(
+                "   • Dashboard: http://{}:{}/dashboard",
+                self.web.host, self.web.port
+            );
             println!("   • Real-time system monitoring available");
         }
-        
+
         if self.monitoring.enabled {
             println!();
             println!("📊 Monitoring:");
-            println!("   • Health: http://{}:{}", self.monitoring.health_host, self.monitoring.health_port);
-            println!("   • Metrics: http://{}:{}", self.monitoring.metrics_host, self.monitoring.metrics_port);
+            println!(
+                "   • Health: http://{}:{}",
+                self.monitoring.health_host, self.monitoring.health_port
+            );
+            println!(
+                "   • Metrics: http://{}:{}",
+                self.monitoring.metrics_host, self.monitoring.metrics_port
+            );
         }
-        
+
         println!();
         println!("🗄️  Database:");
-        let db_type = if self.database.url.starts_with("postgres://") { 
-            "PostgreSQL (production ready)" 
-        } else if self.database.url.starts_with("mysql://") { 
-            "MySQL (production ready)" 
-        } else { 
-            "SQLite (development/single-user)" 
+        let db_type = if self.database.url.starts_with("postgres://") {
+            "PostgreSQL (production ready)"
+        } else if self.database.url.starts_with("mysql://") {
+            "MySQL (production ready)"
+        } else {
+            "SQLite (development/single-user)"
         };
         println!("   • Type: {}", db_type);
-        println!("   • Max connections: {}", self.database.max_connections.unwrap_or(10));
-        println!("   • Auto-migration: {}", if self.database.migrate_on_startup { "enabled" } else { "disabled" });
-        
+        println!(
+            "   • Max connections: {}",
+            self.database.max_connections.unwrap_or(10)
+        );
+        println!(
+            "   • Auto-migration: {}",
+            if self.database.migrate_on_startup {
+                "enabled"
+            } else {
+                "disabled"
+            }
+        );
+
         println!();
         if self.is_production_config() {
             println!("🔒 Production Mode (external interfaces detected)");
@@ -316,12 +352,18 @@ impl Config {
             println!("🏠 Development Mode (localhost only)");
             println!("   💡 For production, see config/production.toml");
         }
-        
+
         println!();
         println!("✨ Quick Start:");
-        println!("   • Health check: curl http://{}:{}/health", self.server.host, self.server.port);
+        println!(
+            "   • Health check: curl http://{}:{}/health",
+            self.server.host, self.server.port
+        );
         if self.web.enabled {
-            println!("   • Open dashboard: http://{}:{}/dashboard", self.web.host, self.web.port);
+            println!(
+                "   • Open dashboard: http://{}:{}/dashboard",
+                self.web.host, self.web.port
+            );
         }
         println!("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
         println!();

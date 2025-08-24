@@ -65,7 +65,9 @@ impl WebServer {
             .layer(
                 ServiceBuilder::new()
                     .layer(axum_middleware::from_fn(middleware::logging_middleware))
-                    .layer(axum_middleware::from_fn(middleware::security_headers_middleware))
+                    .layer(axum_middleware::from_fn(
+                        middleware::security_headers_middleware,
+                    ))
                     .layer(TraceLayer::new_for_http())
                     .layer(CorsLayer::permissive()),
             )

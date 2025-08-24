@@ -193,7 +193,7 @@ async fn server_status(
     let storage_healthy = state.storage.health_check().await.is_ok();
     // MCP server is available if we can access it
     let mcp_available = state.mcp_server.capabilities().tools.is_some();
-    
+
     let overall_status = if storage_healthy && mcp_available {
         "operational"
     } else if storage_healthy || mcp_available {
@@ -220,10 +220,12 @@ async fn server_status(
     // Add appropriate message and suggestions based on status
     match overall_status {
         "operational" => {
-            status_response["message"] = json!("All systems operational - Vibe Ensemble server is ready");
-        },
+            status_response["message"] =
+                json!("All systems operational - Vibe Ensemble server is ready");
+        }
         "degraded" => {
-            status_response["message"] = json!("Service is partially operational with some components unavailable");
+            status_response["message"] =
+                json!("Service is partially operational with some components unavailable");
             let mut suggestions = Vec::new();
             if !storage_healthy {
                 suggestions.push("Check database connection and permissions");
@@ -232,16 +234,17 @@ async fn server_status(
                 suggestions.push("MCP server initialization may be incomplete");
             }
             status_response["suggestions"] = json!(suggestions);
-        },
+        }
         "unhealthy" => {
-            status_response["message"] = json!("Service is experiencing issues - multiple components unavailable");
+            status_response["message"] =
+                json!("Service is experiencing issues - multiple components unavailable");
             status_response["suggestions"] = json!([
                 "Check database configuration and connectivity",
                 "Verify MCP server initialization",
                 "Review server logs for detailed error information",
                 "Consider restarting the service if issues persist"
             ]);
-        },
+        }
         _ => {}
     }
 

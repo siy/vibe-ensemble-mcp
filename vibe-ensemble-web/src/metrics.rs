@@ -23,10 +23,10 @@ impl MetricsCollector {
     /// Collect current system metrics
     pub async fn collect_system_metrics(&self) -> SystemMetrics {
         let uptime_seconds = self.start_time.elapsed().as_secs();
-        
+
         // Use cross-platform system information collection
         let (cpu_usage, memory_info, disk_info) = self.collect_system_info().await;
-        
+
         SystemMetrics {
             cpu_usage_percent: cpu_usage,
             memory_usage_mb: memory_info.0,
@@ -45,7 +45,7 @@ impl MetricsCollector {
             Ok(_) => {
                 // Database is healthy, collect metrics
                 let database_size = self.estimate_database_size().await;
-                
+
                 StorageMetrics {
                     database_size_mb: database_size,
                     total_queries: 0, // TODO: Add query counter to storage manager
@@ -73,11 +73,11 @@ impl MetricsCollector {
     async fn collect_system_info(&self) -> (f64, (u64, u64), (u64, u64)) {
         // Basic cross-platform system info collection
         // In a production system, you might use a crate like sysinfo for more detailed metrics
-        
+
         let cpu_usage = self.estimate_cpu_usage().await;
         let memory_info = self.get_memory_info().await;
         let disk_info = self.get_disk_info().await;
-        
+
         (cpu_usage, memory_info, disk_info)
     }
 
@@ -88,7 +88,7 @@ impl MetricsCollector {
         let load = std::thread::available_parallelism()
             .map(|p| p.get())
             .unwrap_or(1) as f64;
-        
+
         // Simulate some basic load calculation (placeholder)
         (load * 10.0).min(100.0)
     }
@@ -98,7 +98,7 @@ impl MetricsCollector {
         // Cross-platform memory info
         // This is a simplified implementation
         // In production, use system monitoring crates like sysinfo
-        
+
         #[cfg(unix)]
         {
             if let Ok(output) = tokio::process::Command::new("free")
@@ -120,7 +120,7 @@ impl MetricsCollector {
     async fn get_disk_info(&self) -> (u64, u64) {
         // Cross-platform disk info
         // This is a simplified implementation
-        
+
         #[cfg(unix)]
         {
             if let Ok(output) = tokio::process::Command::new("df")
@@ -180,11 +180,11 @@ impl MetricsCollector {
     async fn estimate_database_size(&self) -> u64 {
         // For SQLite, we could check the file size
         // For other databases, we'd need different approaches
-        
+
         // Simple estimation - this could be improved
         match tokio::fs::metadata("vibe_ensemble.db").await {
             Ok(metadata) => (metadata.len() / 1024 / 1024).max(1), // Convert to MB
-            Err(_) => 1, // 1MB default
+            Err(_) => 1,                                           // 1MB default
         }
     }
 }

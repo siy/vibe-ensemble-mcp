@@ -34,8 +34,8 @@ pub async fn health(State(storage): State<Arc<StorageManager>>) -> Result<impl I
 /// Dashboard page handler
 pub async fn dashboard(State(storage): State<Arc<StorageManager>>) -> Result<impl IntoResponse> {
     use crate::handlers::dashboard::index;
-    
-    // Delegate to the proper dashboard handler 
+
+    // Delegate to the proper dashboard handler
     index(State(storage)).await
 }
 

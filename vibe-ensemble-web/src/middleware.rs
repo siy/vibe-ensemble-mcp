@@ -58,13 +58,16 @@ pub async fn logging_middleware(req: Request, next: Next) -> Response {
 pub async fn security_headers_middleware(req: Request, next: Next) -> Response {
     let mut response = next.run(req).await;
     let headers = response.headers_mut();
-    
+
     // Add basic security headers
     headers.insert("X-Content-Type-Options", "nosniff".parse().unwrap());
     headers.insert("X-Frame-Options", "DENY".parse().unwrap());
     headers.insert("X-XSS-Protection", "1; mode=block".parse().unwrap());
-    headers.insert("Referrer-Policy", "strict-origin-when-cross-origin".parse().unwrap());
-    
+    headers.insert(
+        "Referrer-Policy",
+        "strict-origin-when-cross-origin".parse().unwrap(),
+    );
+
     // Add CSP header for basic protection
     headers.insert(
         "Content-Security-Policy",

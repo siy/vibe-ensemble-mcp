@@ -2,7 +2,7 @@
 
 use askama::Template;
 use serde::Serialize;
-use vibe_ensemble_core::{issue::Issue};
+use vibe_ensemble_core::issue::Issue;
 
 /// Activity entry for the dashboard
 #[derive(Debug, Serialize)]
@@ -32,7 +32,7 @@ impl SystemMetrics {
             0.0
         }
     }
-    
+
     pub fn memory_usage_percent_int(&self) -> u64 {
         self.memory_usage_percent() as u64
     }
@@ -44,11 +44,11 @@ impl SystemMetrics {
             0.0
         }
     }
-    
+
     pub fn disk_usage_percent_int(&self) -> u64 {
         self.disk_usage_percent() as u64
     }
-    
+
     pub fn cpu_usage_percent_int(&self) -> u64 {
         self.cpu_usage_percent as u64
     }
@@ -102,7 +102,7 @@ impl DashboardTemplate {
         recent_issues: Option<Vec<Issue>>,
     ) -> Self {
         let mut recent_activity = Vec::new();
-        
+
         // Convert recent issues to activity entries
         if let Some(issues) = recent_issues {
             for issue in issues.into_iter().take(5) {
