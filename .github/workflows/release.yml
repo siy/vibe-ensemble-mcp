@@ -43,31 +43,31 @@ jobs:
           draft: false
           prerelease: false
           body: |
-          ## Changes in ${{ steps.get_version.outputs.version }}
+            ## Changes in ${{ steps.get_version.outputs.version }}
 
-          ### Features
-          - Complete main server application with HTTP API endpoints
-          - Production-ready configuration and deployment setup
-          - Cross-platform installation packages
-          - Comprehensive documentation
+            ### Features
+            - Complete main server application with HTTP API endpoints
+            - Production-ready configuration and deployment setup
+            - Cross-platform installation packages
+            - Comprehensive documentation
 
-          ### Installation
+            ### Installation
 
-          **Quick install:**
-          ```bash
-          # macOS/Linux
-          curl -fsSL https://vibeensemble.dev/install.sh | bash
+            **Quick install:**
+            ```bash
+            # macOS/Linux
+            curl -fsSL https://vibeensemble.dev/install.sh | bash
 
-          # Windows PowerShell
-          iex ((New-Object System.Net.WebClient).DownloadString('https://vibeensemble.dev/install.ps1'))
-          ```
+            # Windows PowerShell
+            iex ((New-Object System.Net.WebClient).DownloadString('https://vibeensemble.dev/install.ps1'))
+            ```
 
-          **Docker:**
-          ```bash
-          docker run -d --name vibe-ensemble -p 8080:8080 -p 8081:8081 siy/vibe-ensemble-mcp:${{ steps.get_version.outputs.version }}
-          ```
+            **Docker:**
+            ```bash
+            docker run -d --name vibe-ensemble -p 8080:8080 -p 8081:8081 siy/vibe-ensemble-mcp:${{ steps.get_version.outputs.version }}
+            ```
 
-          See the full [Installation Guide](https://github.com/siy/vibe-ensemble-mcp/blob/main/docs/installation.md) for all installation methods.
+            See the full [Installation Guide](https://github.com/siy/vibe-ensemble-mcp/blob/main/docs/installation.md) for all installation methods.
 
   build-linux:
     needs: create-release
