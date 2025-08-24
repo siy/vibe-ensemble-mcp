@@ -15,9 +15,7 @@ use vibe_ensemble_web::WebServer;
 /// Shared application state for API handlers
 #[derive(Clone)]
 pub struct AppState {
-    #[allow(dead_code)] // Will be used by future API endpoints
     storage: Arc<StorageManager>,
-    #[allow(dead_code)] // Will be used by future API endpoints
     mcp_server: Arc<McpServer>,
 }
 
@@ -170,22 +168,36 @@ impl Server {
 
 // API Handler implementations
 
-async fn health_check() -> Json<Value> {
-    Json(json!({
-        "status": "healthy",
-        "timestamp": chrono::Utc::now(),
-        "version": env!("CARGO_PKG_VERSION")
-    }))
+async fn health_check(
+    State(state): State<AppState>,
+) -> std::result::Result<Json<Value>, StatusCode> {
+    // Check database health
+    match state.storage.health_check().await {
+        Ok(_) => Ok(Json(json!({
+            "status": "healthy",
+            "timestamp": chrono::Utc::now(),
+            "version": env!("CARGO_PKG_VERSION")
+        }))),
+        Err(_) => Err(StatusCode::SERVICE_UNAVAILABLE),
+    }
 }
 
 async fn server_status(
-    State(_state): State<AppState>,
+    State(state): State<AppState>,
 ) -> std::result::Result<Json<Value>, StatusCode> {
-    // Basic server status without complex queries
+    // Check both storage and MCP server status
+    let storage_healthy = state.storage.health_check().await.is_ok();
+    // MCP server is available if we can access it
+    let mcp_available = state.mcp_server.capabilities().tools.is_some();
+
     Ok(Json(json!({
-        "status": "operational",
+        "status": if storage_healthy { "operational" } else { "degraded" },
         "timestamp": chrono::Utc::now(),
         "version": env!("CARGO_PKG_VERSION"),
+        "components": {
+            "storage": if storage_healthy { "healthy" } else { "unhealthy" },
+            "mcp_server": if mcp_available { "available" } else { "unavailable" }
+        },
         "message": "Vibe Ensemble server is running"
     })))
 }

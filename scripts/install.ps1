@@ -32,7 +32,7 @@ function Write-Warn {
     Write-ColorOutput $Message "Yellow"
 }
 
-function Write-Error {
+function Fail {
     param([string]$Message)
     Write-ColorOutput $Message "Red"
     exit 1
@@ -48,7 +48,7 @@ function Get-Architecture {
     switch ($arch) {
         "AMD64" { return "x86_64-pc-windows-msvc" }
         "ARM64" { return "aarch64-pc-windows-msvc" }
-        default { Write-Error "Unsupported architecture: $arch" }
+        default { Fail "Unsupported architecture: $arch" }
     }
 }
 
@@ -59,7 +59,7 @@ function Get-LatestVersion {
             return $response.tag_name
         }
         catch {
-            Write-Error "Failed to get latest version: $_"
+            Fail "Failed to get latest version: $_"
         }
     }
     return $Version
@@ -105,7 +105,7 @@ function Install-Binaries {
     
     # Verify URL is HTTPS
     if (-not $url.StartsWith("https://")) {
-        Write-Error "Only HTTPS URLs are allowed for security"
+        Fail "Only HTTPS URLs are allowed for security"
     }
     
     # Download and extract
@@ -115,7 +115,7 @@ function Install-Binaries {
     $serverPath = "$InstallDir\vibe-ensemble-server.exe"
     $mcpPath = "$InstallDir\vibe-ensemble-mcp.exe"
     if (!(Test-Path $serverPath) -or !(Test-Path $mcpPath)) {
-        Write-Error "Expected binaries not found after extraction"
+        Fail "Expected binaries not found after extraction"
     }
     
     # Add to PATH if not already there
@@ -205,11 +205,11 @@ function Test-Installation {
     $mcpPath = "$InstallDir\vibe-ensemble-mcp.exe"
     
     if (!(Test-Path $serverPath)) {
-        Write-Error "Installation failed: vibe-ensemble-server.exe not found"
+        Fail "Installation failed: vibe-ensemble-server.exe not found"
     }
     
     if (!(Test-Path $mcpPath)) {
-        Write-Error "Installation failed: vibe-ensemble-mcp.exe not found"
+        Fail "Installation failed: vibe-ensemble-mcp.exe not found"
     }
     
     Write-Info "Installation verified successfully!"
@@ -249,7 +249,7 @@ function Main {
     
     # Check if running as administrator
     if (!(Test-Administrator)) {
-        Write-Error "This installer must be run as Administrator. Please run PowerShell as Administrator and try again."
+        Fail "This installer must be run as Administrator. Please run PowerShell as Administrator and try again."
     }
     
     # Detect platform
@@ -278,7 +278,7 @@ function Main {
 
 # Handle script interruption
 trap {
-    Write-Error "Installation interrupted: $_"
+    Fail "Installation interrupted: $_"
 }
 
 # Run main installation

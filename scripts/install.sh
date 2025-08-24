@@ -2,7 +2,7 @@
 # Vibe Ensemble MCP Installation Script
 # Usage: curl -fsSL https://get.vibe-ensemble.dev/install.sh | bash
 
-set -e
+set -Euo pipefail
 
 # Colors for output
 RED='\033[0;31m'
@@ -15,7 +15,6 @@ NC='\033[0m' # No Color
 REPO="siy/vibe-ensemble-mcp"
 INSTALL_DIR="/usr/local/bin"
 CONFIG_DIR="$HOME/.config/vibe-ensemble"
-SERVICE_NAME="vibe-ensemble"
 
 # Functions
 log() {
@@ -141,8 +140,8 @@ install_binaries() {
         error "Expected binaries not found in archive"
     fi
     
-    $SUDO install -m 755 vibe-ensemble-server "$INSTALL_DIR/"
-    $SUDO install -m 755 vibe-ensemble-mcp "$INSTALL_DIR/"
+    $SUDO install -m 755 "vibe-ensemble-server" "$INSTALL_DIR/"
+    $SUDO install -m 755 "vibe-ensemble-mcp" "$INSTALL_DIR/"
     
     # Cleanup
     cd /
