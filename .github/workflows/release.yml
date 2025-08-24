@@ -276,39 +276,39 @@ jobs:
 
           # Create RPM spec file
           cat > ~/rpmbuild/SPECS/vibe-ensemble-mcp.spec << EOF
-        Name: vibe-ensemble-mcp
-        Version: ${{ needs.create-release.outputs.version }}
-        Release: 1%{?dist}
-        Summary: MCP server for coordinating multiple Claude Code instances
-        License: MIT
-        URL: https://github.com/siy/vibe-ensemble-mcp
-        BuildArch: x86_64
+          Name: vibe-ensemble-mcp
+          Version: ${{ needs.create-release.outputs.version }}
+          Release: 1%{?dist}
+          Summary: MCP server for coordinating multiple Claude Code instances
+          License: MIT
+          URL: https://github.com/siy/vibe-ensemble-mcp
+          BuildArch: x86_64
 
-        %description
-        The Vibe Ensemble MCP server enables distributed task execution with
-        unified management, communication, and issue tracking capabilities.
+          %description
+          The Vibe Ensemble MCP server enables distributed task execution with
+          unified management, communication, and issue tracking capabilities.
 
-        %install
-        mkdir -p %{buildroot}/usr/local/bin
-        mkdir -p %{buildroot}/etc/vibe-ensemble
-        mkdir -p %{buildroot}/usr/lib/systemd/system
+          %install
+          mkdir -p %{buildroot}/usr/local/bin
+          mkdir -p %{buildroot}/etc/vibe-ensemble
+          mkdir -p %{buildroot}/usr/lib/systemd/system
 
-        # Install binaries
-        install -m 755 packaging/deb/vibe-ensemble-mcp/usr/local/bin/vibe-ensemble-server %{buildroot}/usr/local/bin/
-        install -m 755 packaging/deb/vibe-ensemble-mcp/usr/local/bin/vibe-ensemble-mcp %{buildroot}/usr/local/bin/
+          # Install binaries
+          install -m 755 packaging/deb/vibe-ensemble-mcp/usr/local/bin/vibe-ensemble-server %{buildroot}/usr/local/bin/
+          install -m 755 packaging/deb/vibe-ensemble-mcp/usr/local/bin/vibe-ensemble-mcp %{buildroot}/usr/local/bin/
 
-        # Install config
-        install -m 644 packaging/deb/vibe-ensemble-mcp/etc/vibe-ensemble/default.toml %{buildroot}/etc/vibe-ensemble/
+          # Install config
+          install -m 644 packaging/deb/vibe-ensemble-mcp/etc/vibe-ensemble/default.toml %{buildroot}/etc/vibe-ensemble/
 
-        # Install systemd service
-        install -m 644 packaging/deb/vibe-ensemble-mcp/usr/lib/systemd/system/vibe-ensemble.service %{buildroot}/usr/lib/systemd/system/
+          # Install systemd service
+          install -m 644 packaging/deb/vibe-ensemble-mcp/usr/lib/systemd/system/vibe-ensemble.service %{buildroot}/usr/lib/systemd/system/
 
-        %files
-        /usr/local/bin/vibe-ensemble-server
-        /usr/local/bin/vibe-ensemble-mcp
-        /etc/vibe-ensemble/default.toml
-        /usr/lib/systemd/system/vibe-ensemble.service
-        EOF
+          %files
+          /usr/local/bin/vibe-ensemble-server
+          /usr/local/bin/vibe-ensemble-mcp
+          /etc/vibe-ensemble/default.toml
+          /usr/lib/systemd/system/vibe-ensemble.service
+          EOF
 
           # Build RPM
           rpmbuild -ba ~/rpmbuild/SPECS/vibe-ensemble-mcp.spec
