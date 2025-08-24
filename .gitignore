@@ -4,7 +4,8 @@ debug/
 release/
 
 # Lock file (some projects prefer to track this, but for libraries it's often ignored)
-Cargo.lock
+# For applications like this MCP server, we want to track Cargo.lock for reproducible builds
+# Cargo.lock
 
 # Editor files
 .vscode/
