@@ -99,9 +99,9 @@ check_permissions() {
 # Get latest release version
 get_latest_version() {
     if command -v curl >/dev/null 2>&1; then
-        VERSION=$(curl -s "https://api.github.com/repos/$REPO/releases/latest" | grep '"tag_name":' | sed -E 's/.*"([^"]+)".*/\1/')
+        VERSION=$(curl -sSf "https://api.github.com/repos/$REPO/releases/latest" | grep '"tag_name":' | sed -E 's/.*"([^"]+)".*/\1/' || echo "")
     elif command -v wget >/dev/null 2>&1; then
-        VERSION=$(wget -qO- "https://api.github.com/repos/$REPO/releases/latest" | grep '"tag_name":' | sed -E 's/.*"([^"]+)".*/\1/')
+        VERSION=$(wget -qO- --https-only "https://api.github.com/repos/$REPO/releases/latest" | grep '"tag_name":' | sed -E 's/.*"([^"]+)".*/\1/' || echo "")
     else
         error "Neither curl nor wget found. Please install one of them."
     fi
@@ -123,9 +123,9 @@ install_binaries() {
     
     cd "$tmpdir"
     if command -v curl >/dev/null 2>&1; then
-        curl -L -o "$filename" "$url"
+        curl -sSfL -o "$filename" "$url"
     else
-        wget -O "$filename" "$url"
+        wget --https-only -O "$filename" "$url"
     fi
     
     log "Extracting archive..."
@@ -136,6 +136,11 @@ install_binaries() {
     fi
     
     log "Installing binaries to $INSTALL_DIR..."
+    # Verify binaries exist before installation
+    if [ ! -f "vibe-ensemble-server" ] || [ ! -f "vibe-ensemble-mcp" ]; then
+        error "Expected binaries not found in archive"
+    fi
+    
     $SUDO install -m 755 vibe-ensemble-server "$INSTALL_DIR/"
     $SUDO install -m 755 vibe-ensemble-mcp "$INSTALL_DIR/"
     

@@ -27,9 +27,9 @@ jobs:
       id: get_version
       run: |
         if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
-          echo "version=${{ github.event.inputs.tag }}" >> $GITHUB_OUTPUT
+          echo "version=${{ github.event.inputs.tag }}" >> "$GITHUB_OUTPUT"
         else
-          echo "version=${GITHUB_REF#refs/tags/}" >> $GITHUB_OUTPUT
+          echo "version=${GITHUB_REF#refs/tags/}" >> "$GITHUB_OUTPUT"
         fi
     
     - name: Create Release
@@ -195,7 +195,7 @@ jobs:
       id: extract_version
       run: |
         VERSION=${{ needs.create-release.outputs.version }}
-        echo "version=${VERSION#v}" >> $GITHUB_OUTPUT
+        echo "version=${VERSION#v}" >> "$GITHUB_OUTPUT"
     
     - name: Build and push Docker image
       uses: docker/build-push-action@v5

@@ -1,7 +1,7 @@
 [server]
 host = "0.0.0.0"
 port = 8080
-workers = 8
+workers = 0  # 0 = auto-detect CPU count; override with WORKERS env var
 
 [database]
 url = "postgres://vibe_ensemble:${DATABASE_PASSWORD}@${DATABASE_HOST}:5432/vibe_ensemble"

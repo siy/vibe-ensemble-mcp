@@ -1,5 +1,5 @@
 # Vibe Ensemble MCP Installation Script for Windows PowerShell
-# Usage: iex ((New-Object System.Net.WebClient).DownloadString('https://get.vibe-ensemble.dev/install.ps1'))
+# Usage: iex "& { irm https://get.vibe-ensemble.dev/install.ps1 }"
 
 param(
     [string]$Version = "latest",
@@ -75,6 +75,8 @@ function Download-AndExtract {
     
     try {
         Write-Info "Downloading from $Url..."
+        # Use TLS 1.2+ and verify certificates
+        [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
         Invoke-WebRequest -Uri $Url -OutFile $tempFile -UseBasicParsing
         
         Write-Info "Extracting to $DestinationPath..."
@@ -101,8 +103,20 @@ function Install-Binaries {
         New-Item -ItemType Directory -Path $InstallDir -Force | Out-Null
     }
     
+    # Verify URL is HTTPS
+    if (-not $url.StartsWith("https://")) {
+        Write-Error "Only HTTPS URLs are allowed for security"
+    }
+    
     # Download and extract
     Download-AndExtract -Url $url -DestinationPath $InstallDir
+    
+    # Verify binaries exist
+    $serverPath = "$InstallDir\vibe-ensemble-server.exe"
+    $mcpPath = "$InstallDir\vibe-ensemble-mcp.exe"
+    if (!(Test-Path $serverPath) -or !(Test-Path $mcpPath)) {
+        Write-Error "Expected binaries not found after extraction"
+    }
     
     # Add to PATH if not already there
     $currentPath = [Environment]::GetEnvironmentVariable("PATH", "Machine")

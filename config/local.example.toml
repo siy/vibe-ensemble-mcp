@@ -11,7 +11,7 @@ migrate_on_startup = true
 
 [web]
 enabled = true
-port = 3000
+port = 8081
 
 [logging]
 level = "debug"

@@ -7,10 +7,11 @@ members = [
     "vibe-ensemble-web",
     "vibe-ensemble-server",
 ]
-exclude = [
-    "vibe-ensemble-security",
-    "vibe-ensemble-monitoring",
-]
+# Optional: exclude list for auto-discovery (not needed with explicit members)
+# exclude = [
+#     "vibe-ensemble-security",
+#     "vibe-ensemble-monitoring",
+# ]
 resolver = "2"
 
 [workspace.package]
@@ -61,10 +62,13 @@ base64 = "0.22"
 async-trait = "0.1"
 futures = "0.3"
 
-# Web framework for MCP protocol and dashboard
+# Web framework for MCP protocol and dashboard  
 axum = "0.7"
 tower = "0.4"
 tower-http = { version = "0.5", features = ["cors", "trace"] }
+
+# Configuration management
+config = "0.14"
 
 # Template engine for web dashboard
 askama = "0.12"

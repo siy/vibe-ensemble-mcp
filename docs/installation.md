@@ -8,8 +8,8 @@ A comprehensive guide to installing and running the Vibe Ensemble MCP server for
 
 ```bash
 # Install via Homebrew (coming soon)
-brew tap siy/vibe-ensemble
-brew install vibe-ensemble-mcp
+# brew tap siy/vibe-ensemble
+# brew install vibe-ensemble-mcp
 
 # Start the server
 vibe-ensemble-server
@@ -31,7 +31,7 @@ sudo yum install vibe-ensemble-mcp  # or dnf for newer systems
 
 ```powershell
 # Install via PowerShell
-iex ((New-Object System.Net.WebClient).DownloadString('https://get.vibe-ensemble.dev/install.ps1'))
+iex "& { irm https://get.vibe-ensemble.dev/install.ps1 }"
 
 # Or download MSI installer
 # https://github.com/siy/vibe-ensemble-mcp/releases/latest
@@ -50,7 +50,7 @@ docker run -d \
 
 # Using Docker Compose
 curl -o docker-compose.yml https://raw.githubusercontent.com/siy/vibe-ensemble-mcp/main/docker-compose.yml
-docker-compose up -d
+docker compose up -d
 ```
 
 ## System Requirements
@@ -314,7 +314,7 @@ volumes:
   postgres_data:
 
 # Start services
-docker-compose up -d
+docker compose up -d
 ```
 
 ## Verification
@@ -327,15 +327,15 @@ curl http://localhost:8080/health
 # Expected response:
 # {
 #   "status": "healthy",
-#   "timestamp": "2024-01-15T10:30:00Z",
-#   "version": "0.1.0"
+#   "timestamp": "<ISO-8601 UTC>",
+#   "version": "<semver>"
 # }
 ```
 
 ### Web Interface
 Open your browser and navigate to:
-- **Dashboard**: http://localhost:8081
-- **API Documentation**: http://localhost:8080/docs (coming soon)
+- **Dashboard**: <http://localhost:8081>
+- **API Documentation**: <http://localhost:8080/docs> (coming soon)
 
 ### MCP Tools
 Test MCP server integration:
@@ -366,8 +366,8 @@ cargo install --force vibe-ensemble-server
 
 ### Docker
 ```bash
-docker-compose pull
-docker-compose up -d
+docker compose pull
+docker compose up -d
 ```
 
 ## Troubleshooting
@@ -409,7 +409,7 @@ chmod -R 755 ~/.config/vibe-ensemble
 sudo journalctl -u vibe-ensemble -f
 
 # View logs (Docker)
-docker-compose logs -f vibe-ensemble
+docker compose logs -f vibe-ensemble
 
 # Enable debug logging
 export RUST_LOG=debug
@@ -456,9 +456,9 @@ VACUUM;   -- PostgreSQL
 ## Support
 
 ### Getting Help
-- **Documentation**: https://vibe-ensemble.dev/docs
-- **GitHub Issues**: https://github.com/siy/vibe-ensemble-mcp/issues
-- **Discussions**: https://github.com/siy/vibe-ensemble-mcp/discussions
+- **Documentation**: <https://vibe-ensemble.dev/docs>
+- **GitHub Issues**: <https://github.com/siy/vibe-ensemble-mcp/issues>
+- **Discussions**: <https://github.com/siy/vibe-ensemble-mcp/discussions>
 
 ### Reporting Issues
 When reporting issues, please include:
