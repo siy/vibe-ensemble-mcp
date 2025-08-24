@@ -4,7 +4,6 @@ use crate::{config::Config, Result};
 use axum::{extract::State, http::StatusCode, response::Json, routing::get, Router};
 use serde_json::{json, Value};
 use std::sync::Arc;
-use tokio::signal;
 use tower::ServiceBuilder;
 use tower_http::{cors::CorsLayer, trace::TraceLayer};
 use tracing::{info, warn};
@@ -117,16 +116,35 @@ impl Server {
         // MCP server is available for protocol handling via handle_message
         info!("MCP server ready for protocol handling");
 
-        // Wait for shutdown signal while serving API
-        tokio::select! {
-            result = axum::serve(listener, app) => {
-                if let Err(e) = result {
-                    warn!("API server error: {}", e);
-                }
+        // Use axum's graceful shutdown for better connection draining
+        let shutdown = async {
+            let ctrl_c = async {
+                tokio::signal::ctrl_c()
+                    .await
+                    .expect("Failed to install Ctrl+C handler");
+            };
+
+            #[cfg(unix)]
+            let terminate = async {
+                tokio::signal::unix::signal(tokio::signal::unix::SignalKind::terminate())
+                    .expect("Failed to install signal handler")
+                    .recv()
+                    .await;
+            };
+
+            #[cfg(not(unix))]
+            let terminate = std::future::pending::<()>();
+
+            tokio::select! {
+                _ = ctrl_c => { info!("Shutdown signal received"); },
+                _ = terminate => { info!("Shutdown signal received"); },
             }
-            _ = self.wait_for_shutdown() => {
-                info!("Shutdown signal received");
-            }
+        };
+        
+        let graceful = axum::serve(listener, app).with_graceful_shutdown(shutdown);
+        
+        if let Err(e) = graceful.await {
+            warn!("API server error: {}", e);
         }
 
         // Graceful shutdown
@@ -138,31 +156,6 @@ impl Server {
 
         info!("Server shutdown complete");
         Ok(())
-    }
-
-    /// Wait for shutdown signal
-    async fn wait_for_shutdown(&self) {
-        let ctrl_c = async {
-            signal::ctrl_c()
-                .await
-                .expect("Failed to install Ctrl+C handler");
-        };
-
-        #[cfg(unix)]
-        let terminate = async {
-            signal::unix::signal(signal::unix::SignalKind::terminate())
-                .expect("Failed to install signal handler")
-                .recv()
-                .await;
-        };
-
-        #[cfg(not(unix))]
-        let terminate = std::future::pending::<()>();
-
-        tokio::select! {
-            _ = ctrl_c => {},
-            _ = terminate => {},
-        }
     }
 }
 
