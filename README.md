@@ -67,12 +67,12 @@ All agents use MCP coordination tools: `vibe/dependency/analyze`, `vibe/conflict
 
 **macOS/Linux:**
 ```bash
-curl -fsSL https://get.vibeensemble.dev/install.sh | bash
+curl -fsSL https://vibeensemble.dev/install.sh | bash
 ```
 
 **Windows PowerShell:**
 ```bash
-iex ((New-Object System.Net.WebClient).DownloadString('https://get.vibeensemble.dev/install.ps1'))
+iex ((New-Object System.Net.WebClient).DownloadString('https://vibeensemble.dev/install.ps1'))
 ```
 
 **Docker:**
