@@ -1,0 +1,21 @@
+# Local development configuration template
+# Copy to local.toml and customize as needed
+
+[server]
+host = "127.0.0.1"
+port = 8080
+
+[database]
+url = "sqlite:./dev.db"
+migrate_on_startup = true
+
+[web]
+enabled = true
+port = 3000
+
+[logging]
+level = "debug"
+format = "pretty"
+
+[monitoring]
+enabled = false

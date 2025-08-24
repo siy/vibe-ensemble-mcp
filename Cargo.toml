@@ -5,9 +5,9 @@ members = [
     "vibe-ensemble-prompts",
     "vibe-ensemble-mcp",
     "vibe-ensemble-web",
+    "vibe-ensemble-server",
 ]
 exclude = [
-    "vibe-ensemble-server", 
     "vibe-ensemble-security",
     "vibe-ensemble-monitoring",
 ]

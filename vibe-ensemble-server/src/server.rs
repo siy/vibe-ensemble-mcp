@@ -1,15 +1,23 @@
 //! Main server implementation
 
 use crate::{config::Config, Result};
+use axum::{extract::State, http::StatusCode, response::Json, routing::get, Router};
+use serde_json::{json, Value};
 use std::sync::Arc;
 use tokio::signal;
+use tower::ServiceBuilder;
+use tower_http::{cors::CorsLayer, trace::TraceLayer};
 use tracing::{info, warn};
 use vibe_ensemble_mcp::server::McpServer;
-use vibe_ensemble_monitoring::{
-    MonitoringConfig as MonitoringCrateConfig, MonitoringServer, ObservabilityService,
-};
 use vibe_ensemble_storage::StorageManager;
 use vibe_ensemble_web::WebServer;
+
+/// Shared application state for API handlers
+#[derive(Clone)]
+pub struct AppState {
+    storage: Arc<StorageManager>,
+    mcp_server: Arc<McpServer>,
+}
 
 /// Main server orchestrating all components
 pub struct Server {
@@ -17,8 +25,6 @@ pub struct Server {
     storage: Arc<StorageManager>,
     mcp_server: Arc<McpServer>,
     web_server: Option<WebServer>,
-    observability: Option<Arc<ObservabilityService>>,
-    monitoring_server: Option<MonitoringServer>,
 }
 
 impl Server {
@@ -31,6 +37,7 @@ impl Server {
             url: config.database.url.clone(),
             max_connections: config.database.max_connections,
             migrate_on_startup: config.database.migrate_on_startup,
+            performance_config: None,
         };
         let storage = Arc::new(StorageManager::new(&db_config).await?);
 
@@ -47,65 +54,10 @@ impl Server {
                 enabled: config.web.enabled,
                 host: config.web.host.clone(),
                 port: config.web.port,
-                static_files_path: config.web.static_files_path.clone(),
             };
             Some(WebServer::new(web_config, storage.clone()).await?)
         } else {
             None
-        };
-
-        // Initialize monitoring if enabled
-        let (observability, monitoring_server) = if config.monitoring.enabled {
-            let monitoring_config = MonitoringCrateConfig {
-                metrics: vibe_ensemble_monitoring::config::MetricsConfig {
-                    enabled: true,
-                    host: config.monitoring.metrics_host.clone(),
-                    port: config.monitoring.metrics_port,
-                    collection_interval: 15,
-                    system_metrics: true,
-                    business_metrics: true,
-                },
-                tracing: vibe_ensemble_monitoring::config::TracingConfig {
-                    enabled: config.monitoring.tracing_enabled,
-                    service_name: "vibe-ensemble-mcp".to_string(),
-                    jaeger_endpoint: config.monitoring.jaeger_endpoint.clone(),
-                    sampling_ratio: 1.0,
-                    max_spans: 10000,
-                    json_logs: config.logging.format == "json",
-                },
-                health: vibe_ensemble_monitoring::config::HealthConfig {
-                    enabled: true,
-                    host: config.monitoring.health_host.clone(),
-                    port: config.monitoring.health_port,
-                    timeout: 30,
-                    readiness_enabled: true,
-                    liveness_enabled: true,
-                },
-                alerting: vibe_ensemble_monitoring::config::AlertingConfig {
-                    enabled: config.monitoring.alerting_enabled,
-                    error_rate_threshold: 5.0,
-                    response_time_threshold: 1000,
-                    memory_threshold: 85.0,
-                    cpu_threshold: 80.0,
-                    check_interval: 60,
-                },
-            };
-
-            let mut observability_service =
-                ObservabilityService::new(monitoring_config).with_storage(storage.clone());
-
-            observability_service.initialize().await?;
-            let observability = Arc::new(observability_service);
-
-            let monitoring_server = MonitoringServer::new(
-                observability.clone(),
-                config.monitoring.health_host.clone(),
-                config.monitoring.health_port,
-            );
-
-            (Some(observability), Some(monitoring_server))
-        } else {
-            (None, None)
         };
 
         Ok(Self {
@@ -113,74 +65,75 @@ impl Server {
             storage,
             mcp_server,
             web_server,
-            observability,
-            monitoring_server,
         })
+    }
+
+    /// Create the main coordination API router
+    fn create_api_router(&self) -> Router {
+        let state = AppState {
+            storage: self.storage.clone(),
+            mcp_server: self.mcp_server.clone(),
+        };
+
+        Router::new()
+            // Health and status endpoints
+            .route("/health", get(health_check))
+            .route("/status", get(server_status))
+            .layer(
+                ServiceBuilder::new()
+                    .layer(TraceLayer::new_for_http())
+                    .layer(CorsLayer::permissive()),
+            )
+            .with_state(state)
     }
 
     /// Run the server
     pub async fn run(mut self) -> Result<()> {
         info!("Starting Vibe Ensemble MCP Server");
-        info!("MCP Server listening on {}", self.config.server_addr());
+        info!("Main API listening on {}", self.config.server_addr());
 
-        if let Some(web_server) = &self.web_server {
+        if let Some(_web_server) = &self.web_server {
             info!(
                 "Web interface available at http://{}",
                 self.config.web_addr()
             );
         }
 
-        if let Some(_) = &self.observability {
-            info!(
-                "Monitoring available at http://{}:{}",
-                self.config.monitoring.health_host, self.config.monitoring.health_port
-            );
-            info!(
-                "Metrics available at http://{}:{}/metrics",
-                self.config.monitoring.metrics_host, self.config.monitoring.metrics_port
-            );
-        }
+        // Create API router
+        let app = self.create_api_router();
+
+        // Start main API server
+        let listener = tokio::net::TcpListener::bind(self.config.server_addr()).await?;
 
         // Start web server in the background if enabled
-        let web_handle = if let Some(web_server) = self.web_server.take() {
-            Some(tokio::spawn(async move {
+        let web_handle = self.web_server.take().map(|web_server| {
+            tokio::spawn(async move {
                 if let Err(e) = web_server.run().await {
                     warn!("Web server error: {}", e);
                 }
-            }))
-        } else {
-            None
-        };
+            })
+        });
 
-        // Start monitoring server in the background if enabled
-        let monitoring_handle = if let Some(monitoring_server) = self.monitoring_server.take() {
-            Some(tokio::spawn(async move {
-                if let Err(e) = monitoring_server.run().await {
-                    warn!("Monitoring server error: {}", e);
+        // MCP server is available for protocol handling via handle_message
+        info!("MCP server ready for protocol handling");
+
+        // Wait for shutdown signal while serving API
+        tokio::select! {
+            result = axum::serve(listener, app) => {
+                if let Err(e) = result {
+                    warn!("API server error: {}", e);
                 }
-            }))
-        } else {
-            None
-        };
-
-        // Start MCP server (this would be the main event loop)
-        // For now, just wait for shutdown signal
-        self.wait_for_shutdown().await;
+            }
+            _ = self.wait_for_shutdown() => {
+                info!("Shutdown signal received");
+            }
+        }
 
         // Graceful shutdown
         info!("Shutting down server...");
 
         if let Some(handle) = web_handle {
             handle.abort();
-        }
-
-        if let Some(handle) = monitoring_handle {
-            handle.abort();
-        }
-
-        // Shutdown observability service gracefully
-        if let Some(observability) = &self.observability {
-            observability.shutdown().await;
         }
 
         info!("Server shutdown complete");
@@ -210,7 +163,27 @@ impl Server {
             _ = ctrl_c => {},
             _ = terminate => {},
         }
-
-        info!("Shutdown signal received");
     }
+}
+
+// API Handler implementations
+
+async fn health_check() -> Json<Value> {
+    Json(json!({
+        "status": "healthy",
+        "timestamp": chrono::Utc::now(),
+        "version": env!("CARGO_PKG_VERSION")
+    }))
+}
+
+async fn server_status(
+    State(_state): State<AppState>,
+) -> std::result::Result<Json<Value>, StatusCode> {
+    // Basic server status without complex queries
+    Ok(Json(json!({
+        "status": "operational",
+        "timestamp": chrono::Utc::now(),
+        "version": env!("CARGO_PKG_VERSION"),
+        "message": "Vibe Ensemble server is running"
+    })))
 }
