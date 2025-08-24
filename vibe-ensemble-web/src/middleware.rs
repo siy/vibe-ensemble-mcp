@@ -27,7 +27,7 @@ pub async fn logging_middleware(req: Request, next: Next) -> Response {
         "request",
         method = %method,
         uri = %uri,
-        matched_path = matched_path,
+        matched_path = %matched_path,
     );
 
     async move {

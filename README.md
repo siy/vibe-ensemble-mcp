@@ -61,55 +61,124 @@ All agents use MCP coordination tools: `vibe/dependency/analyze`, `vibe/conflict
 - **Cross-Platform Support**: Native binaries for Linux, macOS, and Windows
 - **Container Ready**: Docker images and orchestration support
 
-## Getting Started
+## Installation
 
-### Prerequisites
+### Quick Install (Recommended)
 
-- Rust 1.80+ with Cargo (as specified in rust-toolchain.toml)
-- SQLite (for development and testing)
-- Git
-- cargo-audit (for security auditing)
+**macOS/Linux:**
+```bash
+curl -fsSL https://get.vibe-ensemble.dev/install.sh | bash
+```
 
-### Development Setup
+**Windows PowerShell:**
+```bash
+iex ((New-Object System.Net.WebClient).DownloadString('https://get.vibe-ensemble.dev/install.ps1'))
+```
 
-1. **Clone the repository**:
+**Docker:**
+```bash
+docker run -d --name vibe-ensemble -p 8080:8080 -p 8081:8081 siy/vibe-ensemble-mcp:latest
+```
+
+### Platform-Specific Packages
+
+**Ubuntu/Debian:**
+```bash
+wget https://github.com/siy/vibe-ensemble-mcp/releases/latest/download/vibe-ensemble-mcp_v0.1.0_amd64.deb
+sudo dpkg -i vibe-ensemble-mcp_v0.1.0_amd64.deb
+```
+
+**CentOS/RHEL/Fedora:**
+```bash
+wget https://github.com/siy/vibe-ensemble-mcp/releases/latest/download/vibe-ensemble-mcp-v0.1.0-1.x86_64.rpm
+sudo rpm -i vibe-ensemble-mcp-v0.1.0-1.x86_64.rpm
+```
+
+**Binary Download:**
+Download the latest release for your platform from [GitHub Releases](https://github.com/siy/vibe-ensemble-mcp/releases/latest).
+
+### Starting the Server
+
+After installation, start the Vibe Ensemble server:
+
+```bash
+vibe-ensemble-server
+```
+
+The server will start with:
+- **Web Dashboard**: http://127.0.0.1:8081 (system monitoring, agent management)
+- **API Endpoints**: http://127.0.0.1:8080 (health, stats, coordination)
+- **MCP Server**: Running on configured transport (WebSocket/stdio)
+
+## Claude Code Setup
+
+### 1. Configure Claude Code MCP Settings
+
+Add the Vibe Ensemble MCP server to your Claude Code configuration:
+
+**Option A: Using Claude Code Settings UI**
+1. Open Claude Code settings (Cmd/Ctrl + ,)
+2. Navigate to "MCP Servers"
+3. Add a new server with:
+   - **Name**: `vibe-ensemble`
+   - **Command**: `vibe-ensemble-mcp`
+   - **Args**: `--transport=stdio`
+
+**Option B: Direct Configuration File**
+Add to your Claude Code MCP settings file (`~/.config/claude-code/mcp_settings.json`):
+
+```json
+{
+  "mcpServers": {
+    "vibe-ensemble": {
+      "command": "vibe-ensemble-mcp",
+      "args": ["--transport=stdio"]
+    }
+  }
+}
+```
+
+### 2. Available MCP Tools
+
+Once configured, Claude Code will have access to 42+ coordination tools including:
+
+**Agent Management:**
+- `vibe/agent/register` - Register a new agent with capabilities
+- `vibe/agent/list` - List all registered agents
+- `vibe/agent/message` - Send messages between agents
+
+**Task Coordination:**
+- `vibe/task/create` - Create and assign tasks
+- `vibe/task/update` - Update task status and progress
+- `vibe/dependency/analyze` - Analyze task dependencies
+- `vibe/conflict/detect` - Detect and resolve conflicts
+
+**Knowledge Management:**
+- `vibe/knowledge/store` - Store development patterns and insights
+- `vibe/knowledge/search` - Search organizational knowledge base
+- `vibe/guideline/enforce` - Apply organizational standards
+
+### 3. Multi-Agent Coordination
+
+For teams using multiple Claude Code instances:
+
+1. **Each agent registers automatically** when first using vibe tools
+2. **Coordinate work** using `vibe/coordination/escalate` for complex tasks
+3. **Share knowledge** through the centralized knowledge base
+4. **Monitor progress** via the web dashboard at http://127.0.0.1:8081
+
+### Building from Source (Development)
+
+If you prefer to build from source or contribute to development:
+
+1. **Prerequisites**: Rust 1.80+, SQLite, Git
+2. **Clone and build**:
    ```bash
-   git clone git@github.com:siy/vibe-ensemble-mcp.git
+   git clone https://github.com/siy/vibe-ensemble-mcp.git
    cd vibe-ensemble-mcp
+   cargo build --release
    ```
-
-2. **Build the project**:
-   ```bash
-   cargo build
-   ```
-
-3. **Run tests**:
-   ```bash
-   cargo test
-   ```
-
-4. **Verify setup and start production server**:
-   ```bash
-   # Run the full test suite (316+ tests)
-   cargo test --workspace
-   
-   # Check code quality
-   cargo clippy --all-targets --all-features
-   
-   # Verify security
-   cargo audit
-   
-   # Start the production server (includes MCP and web dashboard)
-   cargo run --bin vibe-ensemble-server
-   ```
-
-5. **Access the interfaces**:
-   - **Web Dashboard**: http://127.0.0.1:8081 (system monitoring, agent management)
-   - **API Endpoints**: http://127.0.0.1:8080 (health, stats, coordination)
-   - **Health Check**: http://127.0.0.1:8080/health
-   - **System Stats**: http://127.0.0.1:8080/status
-
-   **Note**: The production server includes comprehensive monitoring, security hardening, and system metrics.
+3. **Run**: `cargo run --bin vibe-ensemble-server`
 
 ### Configuration
 
