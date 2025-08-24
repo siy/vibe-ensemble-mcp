@@ -1,0 +1,33 @@
+[server]
+host = "0.0.0.0"
+port = 8080
+workers = 0  # 0 = auto-detect CPU count; override with WORKERS env var
+
+[database]
+url = "postgres://vibe_ensemble:${DATABASE_PASSWORD}@${DATABASE_HOST}:5432/vibe_ensemble"
+max_connections = 20
+migrate_on_startup = false
+
+[mcp]
+protocol_version = "1.0.0"
+heartbeat_interval = 60
+max_message_size = 2097152
+
+[web]
+enabled = true
+host = "0.0.0.0"
+port = 8081
+
+[logging]
+level = "info"
+format = "json"
+
+[monitoring]
+enabled = true
+metrics_host = "0.0.0.0"
+metrics_port = 9090
+health_host = "0.0.0.0"
+health_port = 8090
+tracing_enabled = true
+jaeger_endpoint = "${JAEGER_ENDPOINT}"
+alerting_enabled = true

@@ -1,0 +1,341 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Tag to release'
+        required: true
+        default: 'v0.1.0'
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  create-release:
+    runs-on: ubuntu-latest
+    outputs:
+      upload_url: ${{ steps.create_release.outputs.upload_url }}
+      version: ${{ steps.get_version.outputs.version }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Get version
+        id: get_version
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            echo "version=${{ github.event.inputs.tag }}" >> "$GITHUB_OUTPUT"
+          else
+            echo "version=${GITHUB_REF#refs/tags/}" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Create Release
+        id: create_release
+        uses: actions/create-release@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tag_name: ${{ steps.get_version.outputs.version }}
+          release_name: Vibe Ensemble MCP ${{ steps.get_version.outputs.version }}
+          draft: false
+          prerelease: false
+          body: |
+          ## Changes in ${{ steps.get_version.outputs.version }}
+
+          ### Features
+          - Complete main server application with HTTP API endpoints
+          - Production-ready configuration and deployment setup
+          - Cross-platform installation packages
+          - Comprehensive documentation
+
+          ### Installation
+
+          **Quick install:**
+          ```bash
+          # macOS/Linux
+          curl -fsSL https://get.vibe-ensemble.dev/install.sh | bash
+
+          # Windows PowerShell
+          iex ((New-Object System.Net.WebClient).DownloadString('https://get.vibe-ensemble.dev/install.ps1'))
+          ```
+
+          **Docker:**
+          ```bash
+          docker run -d --name vibe-ensemble -p 8080:8080 -p 8081:8081 siy/vibe-ensemble-mcp:${{ steps.get_version.outputs.version }}
+          ```
+
+          See the full [Installation Guide](https://github.com/siy/vibe-ensemble-mcp/blob/main/docs/installation.md) for all installation methods.
+
+  build-linux:
+    needs: create-release
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        target: [x86_64-unknown-linux-gnu, aarch64-unknown-linux-gnu]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+
+      - name: Install cross-compilation tools
+        if: matrix.target == 'aarch64-unknown-linux-gnu'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y gcc-aarch64-linux-gnu
+          echo "CARGO_TARGET_AARCH64_UNKNOWN_LINUX_GNU_LINKER=aarch64-linux-gnu-gcc" >> "$GITHUB_ENV"
+
+      - name: Build
+        run: cargo build --release --target ${{ matrix.target }}
+
+      - name: Create archive
+        run: |
+          mkdir -p dist
+          tar -czf dist/vibe-ensemble-mcp-linux-${{ matrix.target }}.tar.gz \
+            -C target/${{ matrix.target }}/release \
+            vibe-ensemble-server vibe-ensemble-mcp
+
+      - name: Upload Release Asset
+        uses: actions/upload-release-asset@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          upload_url: ${{ needs.create-release.outputs.upload_url }}
+          asset_path: ./dist/vibe-ensemble-mcp-linux-${{ matrix.target }}.tar.gz
+          asset_name: vibe-ensemble-mcp-linux-${{ matrix.target }}.tar.gz
+          asset_content_type: application/gzip
+
+  build-macos:
+    needs: create-release
+    runs-on: macos-latest
+    strategy:
+      matrix:
+        target: [x86_64-apple-darwin, aarch64-apple-darwin]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+
+      - name: Build
+        run: cargo build --release --target ${{ matrix.target }}
+
+      - name: Create archive
+        run: |
+          mkdir -p dist
+          tar -czf dist/vibe-ensemble-mcp-macos-${{ matrix.target }}.tar.gz \
+            -C target/${{ matrix.target }}/release \
+            vibe-ensemble-server vibe-ensemble-mcp
+
+      - name: Upload Release Asset
+        uses: actions/upload-release-asset@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          upload_url: ${{ needs.create-release.outputs.upload_url }}
+          asset_path: ./dist/vibe-ensemble-mcp-macos-${{ matrix.target }}.tar.gz
+          asset_name: vibe-ensemble-mcp-macos-${{ matrix.target }}.tar.gz
+          asset_content_type: application/gzip
+
+  build-windows:
+    needs: create-release
+    runs-on: windows-latest
+    strategy:
+      matrix:
+        target: [x86_64-pc-windows-msvc, aarch64-pc-windows-msvc]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+
+      - name: Build
+        run: cargo build --release --target ${{ matrix.target }}
+
+      - name: Create archive
+        run: |
+          mkdir dist
+          Compress-Archive -Path target/${{ matrix.target }}/release/vibe-ensemble-server.exe, target/${{ matrix.target }}/release/vibe-ensemble-mcp.exe -DestinationPath dist/vibe-ensemble-mcp-windows-${{ matrix.target }}.zip
+
+      - name: Upload Release Asset
+        uses: actions/upload-release-asset@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          upload_url: ${{ needs.create-release.outputs.upload_url }}
+          asset_path: ./dist/vibe-ensemble-mcp-windows-${{ matrix.target }}.zip
+          asset_name: vibe-ensemble-mcp-windows-${{ matrix.target }}.zip
+          asset_content_type: application/zip
+
+  build-docker:
+    needs: create-release
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to Docker Hub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKER_USERNAME }}
+          password: ${{ secrets.DOCKER_PASSWORD }}
+
+      - name: Extract version
+        id: extract_version
+        run: |
+          VERSION=${{ needs.create-release.outputs.version }}
+          echo "version=${VERSION#v}" >> "$GITHUB_OUTPUT"
+
+      - name: Build and push Docker image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: ./Dockerfile.production
+          platforms: linux/amd64,linux/arm64
+          push: true
+          tags: |
+            siy/vibe-ensemble-mcp:${{ steps.extract_version.outputs.version }}
+            siy/vibe-ensemble-mcp:latest
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+  create-packages:
+    needs: [create-release, build-linux]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download Linux x86_64 artifact
+        uses: actions/download-artifact@v3
+        with:
+          name: linux-x86_64
+          path: ./binaries/
+
+      - name: Install packaging tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y build-essential devscripts debhelper rpm
+
+      - name: Create DEB package
+        run: |
+          mkdir -p packaging/deb/vibe-ensemble-mcp/DEBIAN
+          mkdir -p packaging/deb/vibe-ensemble-mcp/usr/local/bin
+          mkdir -p packaging/deb/vibe-ensemble-mcp/etc/vibe-ensemble
+          mkdir -p packaging/deb/vibe-ensemble-mcp/usr/lib/systemd/system
+
+          # Extract binaries
+          tar -xzf binaries/vibe-ensemble-mcp-linux-x86_64-unknown-linux-gnu.tar.gz -C packaging/deb/vibe-ensemble-mcp/usr/local/bin/
+
+          # Copy config files
+          cp config/default.toml packaging/deb/vibe-ensemble-mcp/etc/vibe-ensemble/
+
+          # Create systemd service file
+          cat > packaging/deb/vibe-ensemble-mcp/usr/lib/systemd/system/vibe-ensemble.service << EOF
+          [Unit]
+          Description=Vibe Ensemble MCP Server
+          After=network.target
+
+          [Service]
+          Type=simple
+          User=vibe-ensemble
+          Group=vibe-ensemble
+          WorkingDirectory=/var/lib/vibe-ensemble
+          ExecStart=/usr/local/bin/vibe-ensemble-server
+          Restart=always
+          RestartSec=5
+
+          [Install]
+          WantedBy=multi-user.target
+          EOF
+
+          # Create control file
+          cat > packaging/deb/vibe-ensemble-mcp/DEBIAN/control << EOF
+          Package: vibe-ensemble-mcp
+          Version: ${{ needs.create-release.outputs.version }}
+          Section: net
+          Priority: optional
+          Architecture: amd64
+          Maintainer: Vibe Ensemble Team <hello@vibe-ensemble.dev>
+          Description: MCP server for coordinating multiple Claude Code instances
+           The Vibe Ensemble MCP server enables distributed task execution with
+           unified management, communication, and issue tracking capabilities.
+          EOF
+
+          # Build DEB package
+          dpkg-deb --build packaging/deb/vibe-ensemble-mcp
+          mv packaging/deb/vibe-ensemble-mcp.deb dist/vibe-ensemble-mcp_${{ needs.create-release.outputs.version }}_amd64.deb
+
+      - name: Create RPM package
+        run: |
+          mkdir -p ~/rpmbuild/{BUILD,BUILDROOT,RPMS,SOURCES,SPECS,SRPMS}
+
+          # Create RPM spec file
+          cat > ~/rpmbuild/SPECS/vibe-ensemble-mcp.spec << EOF
+        Name: vibe-ensemble-mcp
+        Version: ${{ needs.create-release.outputs.version }}
+        Release: 1%{?dist}
+        Summary: MCP server for coordinating multiple Claude Code instances
+        License: MIT
+        URL: https://github.com/siy/vibe-ensemble-mcp
+        BuildArch: x86_64
+
+        %description
+        The Vibe Ensemble MCP server enables distributed task execution with
+        unified management, communication, and issue tracking capabilities.
+
+        %install
+        mkdir -p %{buildroot}/usr/local/bin
+        mkdir -p %{buildroot}/etc/vibe-ensemble
+        mkdir -p %{buildroot}/usr/lib/systemd/system
+
+        # Install binaries
+        install -m 755 packaging/deb/vibe-ensemble-mcp/usr/local/bin/vibe-ensemble-server %{buildroot}/usr/local/bin/
+        install -m 755 packaging/deb/vibe-ensemble-mcp/usr/local/bin/vibe-ensemble-mcp %{buildroot}/usr/local/bin/
+
+        # Install config
+        install -m 644 packaging/deb/vibe-ensemble-mcp/etc/vibe-ensemble/default.toml %{buildroot}/etc/vibe-ensemble/
+
+        # Install systemd service
+        install -m 644 packaging/deb/vibe-ensemble-mcp/usr/lib/systemd/system/vibe-ensemble.service %{buildroot}/usr/lib/systemd/system/
+
+        %files
+        /usr/local/bin/vibe-ensemble-server
+        /usr/local/bin/vibe-ensemble-mcp
+        /etc/vibe-ensemble/default.toml
+        /usr/lib/systemd/system/vibe-ensemble.service
+        EOF
+
+          # Build RPM
+          rpmbuild -ba ~/rpmbuild/SPECS/vibe-ensemble-mcp.spec
+          cp ~/rpmbuild/RPMS/x86_64/vibe-ensemble-mcp-*.rpm dist/
+
+      - name: Upload DEB package
+        uses: actions/upload-release-asset@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          upload_url: ${{ needs.create-release.outputs.upload_url }}
+          asset_path: ./dist/vibe-ensemble-mcp_${{ needs.create-release.outputs.version }}_amd64.deb
+          asset_name: vibe-ensemble-mcp_${{ needs.create-release.outputs.version }}_amd64.deb
+          asset_content_type: application/vnd.debian.binary-package
+
+      - name: Upload RPM package
+        uses: actions/upload-release-asset@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          upload_url: ${{ needs.create-release.outputs.upload_url }}
+          asset_path: ./dist/vibe-ensemble-mcp-${{ needs.create-release.outputs.version }}-1.x86_64.rpm
+        asset_name: vibe-ensemble-mcp-${{ needs.create-release.outputs.version }}-1.x86_64.rpm
+        asset_content_type: application/x-rpm

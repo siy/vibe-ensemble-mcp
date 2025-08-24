@@ -18,11 +18,16 @@ vibe-ensemble-mcp = { path = "../vibe-ensemble-mcp" }
 vibe-ensemble-storage = { path = "../vibe-ensemble-storage" }
 vibe-ensemble-web = { path = "../vibe-ensemble-web" }
 vibe-ensemble-prompts = { path = "../vibe-ensemble-prompts" }
-vibe-ensemble-monitoring = { path = "../vibe-ensemble-monitoring" }
 tokio = { workspace = true }
 serde = { workspace = true }
+serde_json = { workspace = true }
 config = { workspace = true }
 tracing = { workspace = true }
 tracing-subscriber = { workspace = true }
 anyhow = { workspace = true }
 thiserror = { workspace = true }
+axum = { workspace = true }
+tower = { workspace = true }
+tower-http = { workspace = true }
+chrono = { workspace = true }
+uuid = { workspace = true }
