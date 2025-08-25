@@ -4,7 +4,7 @@ services:
   vibe-ensemble:
     build:
       context: .
-      dockerfile: Dockerfile
+      dockerfile: Dockerfile.optimized
       target: production
     image: vibe-ensemble:latest
     container_name: vibe-ensemble-server
