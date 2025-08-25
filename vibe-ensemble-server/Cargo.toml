@@ -9,7 +9,7 @@ description = "Main server application for Vibe Ensemble MCP"
 rust-version.workspace = true
 
 [[bin]]
-name = "vibe-ensemble-server"
+name = "vibe-ensemble"
 path = "src/main.rs"
 
 [dependencies]

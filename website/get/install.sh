@@ -147,7 +147,7 @@ install_binaries() {
     fi
     
     # Install binaries
-    local binaries=("vibe-ensemble-server" "vibe-ensemble-mcp")
+    local binaries=("vibe-ensemble" "vibe-ensemble-mcp")
     
     for binary in "${binaries[@]}"; do
         if [[ -f "$binary" ]]; then
@@ -168,12 +168,12 @@ install_binaries() {
 verify_installation() {
     log_info "Verifying installation..."
     
-    if command -v vibe-ensemble-server &> /dev/null; then
+    if command -v vibe-ensemble &> /dev/null; then
         local version
-        version=$(vibe-ensemble-server --version 2>/dev/null || echo "unknown")
-        log_success "vibe-ensemble-server installed: $version"
+        version=$(vibe-ensemble --version 2>/dev/null || echo "unknown")
+        log_success "vibe-ensemble installed: $version"
     else
-        log_error "vibe-ensemble-server not found in PATH"
+        log_error "vibe-ensemble not found in PATH"
         exit 1
     fi
     
@@ -199,17 +199,17 @@ print_next_steps() {
     echo
     echo -e "${BLUE}Next steps:${NC}"
     echo "1. Start the server:"
-    echo -e "   ${GREEN}vibe-ensemble-server${NC}"
+    echo -e "   ${GREEN}vibe-ensemble${NC}"
     echo
     echo "2. Add to Claude Code (choose one):"
     echo -e "   ${GREEN}# Local scope (current project only)${NC}"
-    echo '   claude mcp add vibe-ensemble vibe-ensemble-mcp --transport=stdio'
+    echo '   claude mcp add vibe-ensemble "vibe-ensemble --mcp-only --transport=stdio" --transport=stdio'
     echo
     echo -e "   ${GREEN}# User scope (all projects)${NC}"
-    echo '   claude mcp add vibe-ensemble vibe-ensemble-mcp --transport=stdio -s user'
+    echo '   claude mcp add vibe-ensemble "vibe-ensemble --mcp-only --transport=stdio" --transport=stdio -s user'
     echo
     echo -e "   ${GREEN}# Project scope (shared with team)${NC}"
-    echo '   claude mcp add vibe-ensemble vibe-ensemble-mcp --transport=stdio -s project'
+    echo '   claude mcp add vibe-ensemble "vibe-ensemble --mcp-only --transport=stdio" --transport=stdio -s project'
     echo
     echo "3. Access the web dashboard: http://127.0.0.1:8081"
     echo "4. Check health: http://127.0.0.1:8080/health"

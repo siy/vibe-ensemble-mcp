@@ -29,5 +29,5 @@ tracing-subscriber = "0.3"
 [dev-dependencies]
 sqlx = { workspace = true }
 
-# Binary removed - functionality consolidated into vibe-ensemble-server
-# Use: vibe-ensemble-server --mcp-only --transport=stdio
+# Binary removed - functionality consolidated into vibe-ensemble
+# Use: vibe-ensemble --mcp-only --transport=stdio

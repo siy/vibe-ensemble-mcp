@@ -102,7 +102,7 @@ Download the latest release for your platform from [GitHub Releases](https://git
 After installation, start the Vibe Ensemble server:
 
 ```bash
-vibe-ensemble-server
+vibe-ensemble
 ```
 
 The server will start with:
@@ -178,7 +178,7 @@ If you prefer to build from source or contribute to development:
    cd vibe-ensemble-mcp
    cargo build --release
    ```
-3. **Run**: `cargo run --bin vibe-ensemble-server`
+3. **Run**: `cargo run --bin vibe-ensemble`
 
 ### Configuration
 

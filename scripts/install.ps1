@@ -112,7 +112,7 @@ function Install-Binaries {
     Download-AndExtract -Url $url -DestinationPath $InstallDir
     
     # Verify binaries exist
-    $serverPath = "$InstallDir\vibe-ensemble-server.exe"
+    $serverPath = "$InstallDir\vibe-ensemble.exe"
     $mcpPath = "$InstallDir\vibe-ensemble-mcp.exe"
     if (!(Test-Path $serverPath) -or !(Test-Path $mcpPath)) {
         Fail "Expected binaries not found after extraction"
@@ -175,7 +175,7 @@ function Install-WindowsService {
         return
     }
     
-    $servicePath = "$InstallDir\vibe-ensemble-server.exe"
+    $servicePath = "$InstallDir\vibe-ensemble.exe"
     $serviceArgs = "--config `"$ConfigPath`""
     
     # Check if service already exists
@@ -196,16 +196,16 @@ function Install-WindowsService {
     }
     else {
         Write-Warn "Failed to install service: $result"
-        Write-Info "You can still run the server manually: vibe-ensemble-server.exe"
+        Write-Info "You can still run the server manually: vibe-ensemble.exe"
     }
 }
 
 function Test-Installation {
-    $serverPath = "$InstallDir\vibe-ensemble-server.exe"
+    $serverPath = "$InstallDir\vibe-ensemble.exe"
     $mcpPath = "$InstallDir\vibe-ensemble-mcp.exe"
     
     if (!(Test-Path $serverPath)) {
-        Fail "Installation failed: vibe-ensemble-server.exe not found"
+        Fail "Installation failed: vibe-ensemble.exe not found"
     }
     
     if (!(Test-Path $mcpPath)) {
@@ -223,7 +223,7 @@ function Show-PostInstallInstructions {
     Write-Host ""
     Write-Host "Next steps:"
     Write-Host "1. Start the server:"
-    Write-Host "   vibe-ensemble-server.exe" -ForegroundColor Cyan
+    Write-Host "   vibe-ensemble.exe" -ForegroundColor Cyan
     Write-Host ""
     if (!$NoService) {
         Write-Host "2. Or start as a Windows service:"
@@ -235,13 +235,13 @@ function Show-PostInstallInstructions {
     Write-Host ""
     Write-Host "4. Add to Claude Code (choose one):"
     Write-Host "   # Local scope (current project only)" -ForegroundColor Green
-    Write-Host "   claude mcp add vibe-ensemble vibe-ensemble-mcp --transport=stdio" -ForegroundColor Cyan
+    Write-Host "   claude mcp add vibe-ensemble `"vibe-ensemble --mcp-only --transport=stdio`" --transport=stdio" -ForegroundColor Cyan
     Write-Host ""
     Write-Host "   # User scope (all projects)" -ForegroundColor Green
-    Write-Host "   claude mcp add vibe-ensemble vibe-ensemble-mcp --transport=stdio -s user" -ForegroundColor Cyan
+    Write-Host "   claude mcp add vibe-ensemble `"vibe-ensemble --mcp-only --transport=stdio`" --transport=stdio -s user" -ForegroundColor Cyan
     Write-Host ""
     Write-Host "   # Project scope (shared with team)" -ForegroundColor Green
-    Write-Host "   claude mcp add vibe-ensemble vibe-ensemble-mcp --transport=stdio -s project" -ForegroundColor Cyan
+    Write-Host "   claude mcp add vibe-ensemble `"vibe-ensemble --mcp-only --transport=stdio`" --transport=stdio -s project" -ForegroundColor Cyan
     Write-Host ""
     Write-Host "5. Check the API:"
     Write-Host "   Invoke-RestMethod http://localhost:8080/health" -ForegroundColor Cyan

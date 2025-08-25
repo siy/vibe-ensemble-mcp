@@ -114,7 +114,7 @@ function Install-Binaries {
     }
     
     # Install binaries
-    $binaries = @("vibe-ensemble-server.exe", "vibe-ensemble-mcp.exe")
+    $binaries = @("vibe-ensemble.exe", "vibe-ensemble-mcp.exe")
     
     foreach ($binary in $binaries) {
         $sourcePath = Join-Path $TempDir $binary
@@ -158,14 +158,14 @@ function Add-ToPath {
 function Test-Installation {
     Write-Info "Verifying installation..."
     
-    $serverPath = Join-Path $InstallDir "vibe-ensemble-server.exe"
+    $serverPath = Join-Path $InstallDir "vibe-ensemble.exe"
     $mcpPath = Join-Path $InstallDir "vibe-ensemble-mcp.exe"
     
     if (Test-Path $serverPath) {
-        Write-Success "vibe-ensemble-server.exe installed"
+        Write-Success "vibe-ensemble.exe installed"
     }
     else {
-        Write-Error "vibe-ensemble-server.exe not found"
+        Write-Error "vibe-ensemble.exe not found"
         exit 1
     }
     
@@ -195,17 +195,17 @@ function Show-NextSteps {
     Write-Host "Next steps:" -ForegroundColor Blue
     Write-Host "1. Restart your terminal or run: refreshenv"
     Write-Host "2. Start the server:"
-    Write-Host "   vibe-ensemble-server" -ForegroundColor Green
+    Write-Host "   vibe-ensemble" -ForegroundColor Green
     Write-Host ""
     Write-Host "3. Add to Claude Code (choose one):"
     Write-Host "   # Local scope (current project only)" -ForegroundColor Green
-    Write-Host '   claude mcp add vibe-ensemble vibe-ensemble-mcp --transport=stdio'
+    Write-Host '   claude mcp add vibe-ensemble "vibe-ensemble --mcp-only --transport=stdio" --transport=stdio'
     Write-Host ""
     Write-Host "   # User scope (all projects)" -ForegroundColor Green
-    Write-Host '   claude mcp add vibe-ensemble vibe-ensemble-mcp --transport=stdio -s user'
+    Write-Host '   claude mcp add vibe-ensemble "vibe-ensemble --mcp-only --transport=stdio" --transport=stdio -s user'
     Write-Host ""
     Write-Host "   # Project scope (shared with team)" -ForegroundColor Green
-    Write-Host '   claude mcp add vibe-ensemble vibe-ensemble-mcp --transport=stdio -s project'
+    Write-Host '   claude mcp add vibe-ensemble "vibe-ensemble --mcp-only --transport=stdio" --transport=stdio -s project'
     Write-Host ""
     Write-Host "4. Access the web dashboard: http://127.0.0.1:8081"
     Write-Host "5. Check health: http://127.0.0.1:8080/health"

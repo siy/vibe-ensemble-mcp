@@ -14,7 +14,7 @@ use vibe_ensemble_server::{config::Config, server::Server, McpTransport, Operati
 
 /// Unified Vibe Ensemble Server
 #[derive(Parser)]
-#[command(name = "vibe-ensemble-server")]
+#[command(name = "vibe-ensemble")]
 #[command(about = "Unified Vibe Ensemble Server supporting multiple operational modes")]
 #[command(version)]
 struct Cli {
