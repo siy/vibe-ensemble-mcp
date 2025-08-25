@@ -5,14 +5,14 @@ use axum::{
     extract::{ws::WebSocket, State, WebSocketUpgrade},
     http::StatusCode,
     response::{Json, Response},
-    routing::{get, any},
+    routing::{any, get},
     Router,
 };
 use serde_json::{json, Value};
 use std::sync::Arc;
 use tower::ServiceBuilder;
 use tower_http::{cors::CorsLayer, trace::TraceLayer};
-use tracing::{info, warn, error};
+use tracing::{error, info, warn};
 use vibe_ensemble_mcp::server::McpServer;
 use vibe_ensemble_storage::StorageManager;
 use vibe_ensemble_web::WebServer;
@@ -36,8 +36,15 @@ pub struct Server {
 
 impl Server {
     /// Create a new server instance
-    pub async fn new(config: Config, operation_mode: OperationMode, transport: McpTransport) -> Result<Self> {
-        info!("Initializing server components for {:?} mode", operation_mode);
+    pub async fn new(
+        config: Config,
+        operation_mode: OperationMode,
+        transport: McpTransport,
+    ) -> Result<Self> {
+        info!(
+            "Initializing server components for {:?} mode",
+            operation_mode
+        );
 
         // Initialize storage
         let db_config = vibe_ensemble_storage::manager::DatabaseConfig {
@@ -58,7 +65,7 @@ impl Server {
             let issue_service = storage.issue_service();
             let message_service = storage.message_service();
             let knowledge_service = storage.knowledge_service();
-            
+
             Arc::new(McpServer::new_with_capabilities_and_all_services(
                 vibe_ensemble_mcp::protocol::ServerCapabilities {
                     experimental: None,
@@ -88,7 +95,9 @@ impl Server {
         };
 
         // Initialize web server if enabled
-        let web_server = if config.web.enabled && matches!(operation_mode, OperationMode::Full | OperationMode::WebOnly) {
+        let web_server = if config.web.enabled
+            && matches!(operation_mode, OperationMode::Full | OperationMode::WebOnly)
+        {
             let web_config = vibe_ensemble_web::server::WebConfig {
                 enabled: config.web.enabled,
                 host: config.web.host.clone(),
@@ -122,8 +131,11 @@ impl Server {
             .route("/status", get(server_status));
 
         // Add MCP WebSocket endpoint if MCP is enabled and WebSocket transport is supported
-        if matches!(self.operation_mode, OperationMode::Full | OperationMode::McpOnly) 
-            && matches!(self.transport, McpTransport::Websocket | McpTransport::Both) {
+        if matches!(
+            self.operation_mode,
+            OperationMode::Full | OperationMode::McpOnly
+        ) && matches!(self.transport, McpTransport::Websocket | McpTransport::Both)
+        {
             router = router.route("/mcp", any(mcp_websocket_handler));
             info!("MCP WebSocket endpoint enabled at /mcp");
         }
@@ -143,7 +155,9 @@ impl Server {
         self.config.print_startup_summary();
 
         match self.operation_mode {
-            OperationMode::Full => info!("Starting Vibe Ensemble Server in Full mode (API + Web + MCP)"),
+            OperationMode::Full => {
+                info!("Starting Vibe Ensemble Server in Full mode (API + Web + MCP)")
+            }
             OperationMode::WebOnly => return self.run_web_only().await,
             OperationMode::ApiOnly => info!("Starting Vibe Ensemble Server in API-only mode"),
             OperationMode::McpOnly => {
@@ -168,7 +182,10 @@ impl Server {
         });
 
         // MCP server is available for protocol handling via handle_message
-        if matches!(self.operation_mode, OperationMode::Full | OperationMode::McpOnly) {
+        if matches!(
+            self.operation_mode,
+            OperationMode::Full | OperationMode::McpOnly
+        ) {
             info!("MCP server ready for protocol handling");
         }
 
@@ -217,11 +234,13 @@ impl Server {
     /// Run server in web-only mode
     async fn run_web_only(mut self) -> Result<()> {
         info!("Starting Vibe Ensemble Server in Web-only mode");
-        
+
         if let Some(web_server) = self.web_server.take() {
             web_server.run().await.map_err(|e| e.into())
         } else {
-            Err(crate::Error::Configuration("Web server not configured".to_string()))
+            Err(crate::Error::Configuration(
+                "Web server not configured".to_string(),
+            ))
         }
     }
 }
@@ -324,29 +343,29 @@ async fn server_status(
 }
 
 /// MCP WebSocket handler
-async fn mcp_websocket_handler(
-    ws: WebSocketUpgrade,
-    State(state): State<AppState>,
-) -> Response {
+async fn mcp_websocket_handler(ws: WebSocketUpgrade, State(state): State<AppState>) -> Response {
     ws.on_upgrade(move |socket| handle_mcp_websocket(socket, state))
 }
 
 /// Handle MCP WebSocket connection
 async fn handle_mcp_websocket(mut socket: WebSocket, state: AppState) {
     info!("New MCP WebSocket connection established");
-    
+
     // Handle MCP messages over WebSocket
     loop {
         match socket.recv().await {
             Some(Ok(msg)) => {
                 if let Ok(text) = msg.to_text() {
                     tracing::debug!("Received MCP WebSocket message: {}", text);
-                    
+
                     // Process the message through MCP server
                     match state.mcp_server.handle_message(text).await {
                         Ok(Some(response)) => {
                             tracing::debug!("Sending MCP WebSocket response: {}", response);
-                            if let Err(e) = socket.send(axum::extract::ws::Message::Text(response)).await {
+                            if let Err(e) = socket
+                                .send(axum::extract::ws::Message::Text(response))
+                                .await
+                            {
                                 error!("Failed to send WebSocket response: {}", e);
                                 break;
                             }
@@ -365,7 +384,10 @@ async fn handle_mcp_websocket(mut socket: WebSocket, state: AppState) {
                                     "data": e.to_string()
                                 }
                             });
-                            if let Err(e) = socket.send(axum::extract::ws::Message::Text(error_response.to_string())).await {
+                            if let Err(e) = socket
+                                .send(axum::extract::ws::Message::Text(error_response.to_string()))
+                                .await
+                            {
                                 error!("Failed to send error response: {}", e);
                                 break;
                             }

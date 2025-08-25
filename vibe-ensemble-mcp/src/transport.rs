@@ -268,16 +268,19 @@ impl Transport for StdioTransport {
         }
 
         // Write message followed by newline
-        self.stdout.write_all(message.as_bytes()).await.map_err(|e| {
-            error!("Failed to write to stdout: {}", e);
-            Error::Transport(format!("Failed to write to stdout: {}", e))
-        })?;
-        
+        self.stdout
+            .write_all(message.as_bytes())
+            .await
+            .map_err(|e| {
+                error!("Failed to write to stdout: {}", e);
+                Error::Transport(format!("Failed to write to stdout: {}", e))
+            })?;
+
         self.stdout.write_all(b"\n").await.map_err(|e| {
             error!("Failed to write newline to stdout: {}", e);
             Error::Transport(format!("Failed to write newline to stdout: {}", e))
         })?;
-        
+
         self.stdout.flush().await.map_err(|e| {
             error!("Failed to flush stdout: {}", e);
             Error::Transport(format!("Failed to flush stdout: {}", e))
@@ -311,7 +314,10 @@ impl Transport for StdioTransport {
             }
             Err(e) => {
                 error!("Failed to read from stdin: {}", e);
-                Err(Error::Transport(format!("Failed to read from stdin: {}", e)))
+                Err(Error::Transport(format!(
+                    "Failed to read from stdin: {}",
+                    e
+                )))
             }
         }
     }

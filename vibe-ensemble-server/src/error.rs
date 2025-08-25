@@ -7,7 +7,7 @@ use thiserror::Error;
 pub enum Error {
     #[error("Configuration error: {0}")]
     Configuration(String),
-    
+
     #[error("Config file error: {0}")]
     ConfigFile(#[from] config::ConfigError),
 

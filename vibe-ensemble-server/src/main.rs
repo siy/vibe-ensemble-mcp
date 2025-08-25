@@ -90,7 +90,9 @@ async fn main() -> Result<()> {
         .init();
 
     // Handle MCP-only mode with stdio transport
-    if matches!(operation_mode, OperationMode::McpOnly) && matches!(cli.transport, McpTransport::Stdio) {
+    if matches!(operation_mode, OperationMode::McpOnly)
+        && matches!(cli.transport, McpTransport::Stdio)
+    {
         return run_mcp_stdio_mode().await;
     }
 
@@ -240,7 +242,7 @@ async fn run_mcp_stdio_mode() -> Result<()> {
         match transport.receive().await {
             Ok(message) => {
                 tracing::debug!("Received message: {}", message);
-                
+
                 // Process the message
                 match server.handle_message(&message).await {
                     Ok(Some(response)) => {
