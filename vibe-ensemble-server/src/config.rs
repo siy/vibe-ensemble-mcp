@@ -110,26 +110,37 @@ impl Default for Config {
     }
 }
 
-/// Get platform-appropriate default database path
+/// Get platform-appropriate default database URL for SQLx (always absolute, always encoded)
 fn get_default_database_path() -> String {
-    if let Some(data_dir) = dirs::data_local_dir() {
+    // Windows: use roaming AppData (%APPDATA%) to align with docs; others: local data dir.
+    #[cfg(target_os = "windows")]
+    let base_dir = dirs::data_dir();
+    #[cfg(not(target_os = "windows"))]
+    let base_dir = dirs::data_local_dir();
+
+    const FALLBACK: &str = "sqlite:./vibe_ensemble.db";
+
+    if let Some(data_dir) = base_dir {
         let app_data_dir = data_dir.join("vibe-ensemble");
         if let Err(e) = std::fs::create_dir_all(&app_data_dir) {
             warn!("Failed to create data directory {:?}: {}", app_data_dir, e);
-            return "sqlite:./vibe_ensemble.db".to_string();
+            return FALLBACK.to_string();
         }
-        // Use absolute path for SQLite with proper URI format
         let db_file = app_data_dir.join("vibe_ensemble.db");
-        let db_path = db_file.to_string_lossy();
-
-        // For paths with spaces, use file:// URI format which SQLx handles better
-        if db_path.contains(' ') {
-            format!("sqlite:///{}", db_path.replace(' ', "%20"))
-        } else {
-            format!("sqlite:{}", db_path)
+        // Build a proper file:// URL, then convert to sqlite:// which SQLx expects.
+        match url::Url::from_file_path(&db_file) {
+            Ok(file_url) => file_url.as_str().replacen("file:", "sqlite:", 1),
+            Err(_) => {
+                // Last-resort formatting: normalize separators and minimally encode spaces
+                #[cfg(windows)]
+                let path = db_file.to_string_lossy().replace('\\', "/");
+                #[cfg(not(windows))]
+                let path = db_file.to_string_lossy().to_string();
+                format!("sqlite://{}", path.replace(' ', "%20"))
+            }
         }
     } else {
-        "sqlite:./vibe_ensemble.db".to_string()
+        FALLBACK.to_string()
     }
 }
 

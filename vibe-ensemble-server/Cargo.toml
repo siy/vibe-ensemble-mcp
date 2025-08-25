@@ -32,3 +32,4 @@ tower-http = { workspace = true }
 chrono = { workspace = true }
 uuid = { workspace = true }
 dirs = { workspace = true }
+url = { workspace = true }

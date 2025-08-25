@@ -11,7 +11,7 @@ members = [
 resolver = "2"
 
 [workspace.package]
-version = "0.1.0"
+version = "0.1.1"
 edition = "2021"
 authors = ["Vibe Ensemble Team"]
 license = "MIT"
@@ -73,6 +73,7 @@ askama_axum = "0.4"
 # HTTP client and utilities
 reqwest = "0.12"
 hyper = "1.0"
+url = "2.5"
 
 # Security and authentication
 bcrypt = "0.15"

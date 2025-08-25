@@ -57,7 +57,7 @@ DATABASE_URL="sqlite::memory:" vibe-ensemble-server
 
 | OS | Recommended Location |
 |----|---------------------|
-| macOS | `~/.vibe-ensemble/` |
+| macOS | `~/Library/Application Support/vibe-ensemble/` |
 | Linux | `~/.local/share/vibe-ensemble/` |
 | Windows | `%APPDATA%\vibe-ensemble\` |
 
@@ -72,7 +72,7 @@ host = "127.0.0.1"
 port = 8080
 
 [database]
-url = "sqlite:/Users/yourusername/.vibe-ensemble/vibe-ensemble.db"
+url = "sqlite:///Users/yourusername/.vibe-ensemble/vibe-ensemble.db"
 migrate_on_startup = true
 
 [web]
