@@ -250,7 +250,17 @@ show_instructions() {
     echo "3. Access the web dashboard:"
     echo "   http://localhost:8081"
     echo
-    echo "4. Check the API:"
+    echo "4. Add to Claude Code (choose one):"
+    echo "   # Local scope (current project only)"
+    echo "   claude mcp add vibe-ensemble vibe-ensemble-mcp --transport=stdio"
+    echo
+    echo "   # User scope (all projects)"
+    echo "   claude mcp add vibe-ensemble vibe-ensemble-mcp --transport=stdio -s user"
+    echo
+    echo "   # Project scope (shared with team)"
+    echo "   claude mcp add vibe-ensemble vibe-ensemble-mcp --transport=stdio -s project"
+    echo
+    echo "5. Check the API:"
     echo "   curl http://localhost:8080/health"
     echo
     echo "Configuration: $CONFIG_DIR/config.toml"

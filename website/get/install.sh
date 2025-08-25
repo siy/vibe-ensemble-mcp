@@ -201,15 +201,15 @@ print_next_steps() {
     echo "1. Start the server:"
     echo -e "   ${GREEN}vibe-ensemble-server${NC}"
     echo
-    echo "2. Configure Claude Code MCP settings:"
-    echo '   {'
-    echo '     "mcpServers": {'
-    echo '       "vibe-ensemble": {'
-    echo '         "command": "vibe-ensemble-mcp",'
-    echo '         "args": ["--transport=stdio"]'
-    echo '       }'
-    echo '     }'
-    echo '   }'
+    echo "2. Add to Claude Code (choose one):"
+    echo -e "   ${GREEN}# Local scope (current project only)${NC}"
+    echo '   claude mcp add vibe-ensemble vibe-ensemble-mcp --transport=stdio'
+    echo
+    echo -e "   ${GREEN}# User scope (all projects)${NC}"
+    echo '   claude mcp add vibe-ensemble vibe-ensemble-mcp --transport=stdio -s user'
+    echo
+    echo -e "   ${GREEN}# Project scope (shared with team)${NC}"
+    echo '   claude mcp add vibe-ensemble vibe-ensemble-mcp --transport=stdio -s project'
     echo
     echo "3. Access the web dashboard: http://127.0.0.1:8081"
     echo "4. Check health: http://127.0.0.1:8080/health"

@@ -431,13 +431,31 @@ VACUUM;   -- PostgreSQL
 ## Integration with Claude Code
 
 ### Setup MCP Server in Claude Code
+
+#### Option 1: Claude CLI (Recommended)
+
+Use the Claude Code CLI to add the MCP server. Choose the appropriate scope for your needs:
+
+```bash
+# Local scope (current project only)
+claude mcp add vibe-ensemble vibe-ensemble-mcp --transport=stdio
+
+# User scope (available across all projects)
+claude mcp add vibe-ensemble vibe-ensemble-mcp --transport=stdio -s user
+
+# Project scope (shared with team)
+claude mcp add vibe-ensemble vibe-ensemble-mcp --transport=stdio -s project
+```
+
+#### Option 2: Manual JSON Configuration
+
 1. Open Claude Code settings
 2. Navigate to MCP servers
 3. Add new server:
    ```json
    {
      "command": "vibe-ensemble-mcp",
-     "args": [],
+     "args": ["--transport=stdio"],
      "env": {
        "VIBE_ENSEMBLE_SERVER_URL": "http://localhost:8080"
      }

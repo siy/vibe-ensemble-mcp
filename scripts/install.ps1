@@ -233,7 +233,17 @@ function Show-PostInstallInstructions {
     Write-Host "3. Access the web dashboard:"
     Write-Host "   http://localhost:8081" -ForegroundColor Cyan
     Write-Host ""
-    Write-Host "4. Check the API:"
+    Write-Host "4. Add to Claude Code (choose one):"
+    Write-Host "   # Local scope (current project only)" -ForegroundColor Green
+    Write-Host "   claude mcp add vibe-ensemble vibe-ensemble-mcp --transport=stdio" -ForegroundColor Cyan
+    Write-Host ""
+    Write-Host "   # User scope (all projects)" -ForegroundColor Green
+    Write-Host "   claude mcp add vibe-ensemble vibe-ensemble-mcp --transport=stdio -s user" -ForegroundColor Cyan
+    Write-Host ""
+    Write-Host "   # Project scope (shared with team)" -ForegroundColor Green
+    Write-Host "   claude mcp add vibe-ensemble vibe-ensemble-mcp --transport=stdio -s project" -ForegroundColor Cyan
+    Write-Host ""
+    Write-Host "5. Check the API:"
     Write-Host "   Invoke-RestMethod http://localhost:8080/health" -ForegroundColor Cyan
     Write-Host ""
     Write-Host "Installation directory: $InstallDir" -ForegroundColor Yellow

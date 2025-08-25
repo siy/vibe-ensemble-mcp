@@ -197,15 +197,15 @@ function Show-NextSteps {
     Write-Host "2. Start the server:"
     Write-Host "   vibe-ensemble-server" -ForegroundColor Green
     Write-Host ""
-    Write-Host "3. Configure Claude Code MCP settings:"
-    Write-Host '   {'
-    Write-Host '     "mcpServers": {'
-    Write-Host '       "vibe-ensemble": {'
-    Write-Host '         "command": "vibe-ensemble-mcp",'
-    Write-Host '         "args": ["--transport=stdio"]'
-    Write-Host '       }'
-    Write-Host '     }'
-    Write-Host '   }'
+    Write-Host "3. Add to Claude Code (choose one):"
+    Write-Host "   # Local scope (current project only)" -ForegroundColor Green
+    Write-Host '   claude mcp add vibe-ensemble vibe-ensemble-mcp --transport=stdio'
+    Write-Host ""
+    Write-Host "   # User scope (all projects)" -ForegroundColor Green
+    Write-Host '   claude mcp add vibe-ensemble vibe-ensemble-mcp --transport=stdio -s user'
+    Write-Host ""
+    Write-Host "   # Project scope (shared with team)" -ForegroundColor Green
+    Write-Host '   claude mcp add vibe-ensemble vibe-ensemble-mcp --transport=stdio -s project'
     Write-Host ""
     Write-Host "4. Access the web dashboard: http://127.0.0.1:8081"
     Write-Host "5. Check health: http://127.0.0.1:8080/health"
