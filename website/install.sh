@@ -106,9 +106,9 @@ download_and_extract() {
     local filename
     
     if [[ "$platform" == *"apple-darwin"* ]]; then
-        filename="vibe-ensemble-mcp-macos-${platform}.tar.gz"
+        filename="vibe-ensemble-mcp-${version}-macos-${platform}.tar.gz"
     else
-        filename="vibe-ensemble-mcp-linux-${platform}.tar.gz"
+        filename="vibe-ensemble-mcp-${version}-linux-${platform}.tar.gz"
     fi
     
     local download_url="https://github.com/$GITHUB_REPO/releases/download/$version/$filename"

@@ -115,7 +115,7 @@ get_latest_version() {
 # Download and install binaries
 install_binaries() {
     local tmpdir=$(mktemp -d)
-    local filename="vibe-ensemble-mcp-$OS-$TARGET.$ARCHIVE_EXT"
+    local filename="vibe-ensemble-mcp-$VERSION-$OS-$TARGET.$ARCHIVE_EXT"
     local url="https://github.com/$REPO/releases/download/$VERSION/$filename"
     
     log "Downloading $url..."

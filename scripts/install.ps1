@@ -95,7 +95,7 @@ function Install-Binaries {
         [string]$Target
     )
     
-    $filename = "vibe-ensemble-mcp-windows-$Target.zip"
+    $filename = "vibe-ensemble-mcp-$Version-windows-$Target.zip"
     $url = "https://github.com/$Repo/releases/download/$Version/$filename"
     
     # Create installation directory
