@@ -86,3 +86,6 @@ flate2 = "1.0"                      # Compression
 parking_lot = "0.12"                # High-performance synchronization
 rayon = "1.8"                       # Data parallelism
 num_cpus = "1.16"                   # CPU core detection
+
+# System directories
+dirs = "5.0"                        # Platform-appropriate directories
