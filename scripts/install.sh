@@ -134,12 +134,11 @@ install_binaries() {
     
     log "Installing binaries to $INSTALL_DIR..."
     # Verify binaries exist before installation
-    if [ ! -f "vibe-ensemble" ] || [ ! -f "vibe-ensemble-mcp" ]; then
+    if [ ! -f "vibe-ensemble" ]; then
         error "Expected binaries not found in archive"
     fi
-    
+
     $SUDO install -m 755 "vibe-ensemble" "$INSTALL_DIR/"
-    $SUDO install -m 755 "vibe-ensemble-mcp" "$INSTALL_DIR/"
     
     # Cleanup
     cd /

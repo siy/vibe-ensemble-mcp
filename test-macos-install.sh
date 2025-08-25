@@ -52,7 +52,7 @@ echo "   ✅ Version: $version"
 
 # Test 3: Filename Construction
 echo "3. Testing filename construction..."
-filename="vibe-ensemble-mcp-${version}-macos-${platform}.tar.gz"
+filename="vibe-ensemble-${version}-macos-${platform}.tar.gz"
 echo "   ✅ Filename: $filename"
 
 # Test 4: Download URL Test

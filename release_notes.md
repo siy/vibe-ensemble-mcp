@@ -62,7 +62,7 @@ iex ((New-Object System.Net.WebClient).DownloadString('https://vibeensemble.dev/
 
 Docker:
 ```bash
-docker run -d --name vibe-ensemble -p 8080:8080 -p 8081:8081 ghcr.io/siy/vibe-ensemble-mcp:v0.1.0
+docker run -d --name vibe-ensemble -p 8080:8080 -p 8081:8081 ghcr.io/siy/vibe-ensemble:v0.1.0
 ```
 
 **Manual Installation:**
@@ -78,8 +78,8 @@ After installation, configure Claude Code:
 {
   "mcpServers": {
     "vibe-ensemble": {
-      "command": "vibe-ensemble-mcp", 
-      "args": ["--transport=stdio"]
+      "command": "vibe-ensemble --mcp-only --transport=stdio", 
+      "args": []
     }
   }
 }

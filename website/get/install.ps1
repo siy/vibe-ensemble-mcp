@@ -72,7 +72,7 @@ function Install-Binaries {
         [string]$Platform
     )
     
-    $filename = "vibe-ensemble-mcp-$Version-windows-$Platform.zip"
+    $filename = "vibe-ensemble-$Version-windows-$Platform.zip"
     $downloadUrl = "https://github.com/$GitHubRepo/releases/download/$Version/$filename"
     
     Write-Info "Downloading Vibe Ensemble MCP Server $Version for $Platform..."
@@ -113,21 +113,19 @@ function Install-Binaries {
         New-Item -ItemType Directory -Path $InstallDir -Force | Out-Null
     }
     
-    # Install binaries
-    $binaries = @("vibe-ensemble.exe", "vibe-ensemble-mcp.exe")
+    # Install binary
+    $binary = "vibe-ensemble.exe"
+    $sourcePath = Join-Path $TempDir $binary
+    $destPath = Join-Path $InstallDir $binary
     
-    foreach ($binary in $binaries) {
-        $sourcePath = Join-Path $TempDir $binary
-        $destPath = Join-Path $InstallDir $binary
-        
-        if (Test-Path $sourcePath) {
-            Write-Info "Installing $binary..."
-            Copy-Item $sourcePath $destPath -Force
-            Write-Success "$binary installed successfully"
-        }
-        else {
-            Write-Warning "$binary not found in archive"
-        }
+    if (Test-Path $sourcePath) {
+        Write-Info "Installing $binary..."
+        Copy-Item $sourcePath $destPath -Force
+        Write-Success "$binary installed successfully"
+    }
+    else {
+        Write-Error "$binary not found in archive"
+        exit 1
     }
 }
 
@@ -158,22 +156,13 @@ function Add-ToPath {
 function Test-Installation {
     Write-Info "Verifying installation..."
     
-    $serverPath = Join-Path $InstallDir "vibe-ensemble.exe"
-    $mcpPath = Join-Path $InstallDir "vibe-ensemble-mcp.exe"
+    $binaryPath = Join-Path $InstallDir "vibe-ensemble.exe"
     
-    if (Test-Path $serverPath) {
+    if (Test-Path $binaryPath) {
         Write-Success "vibe-ensemble.exe installed"
     }
     else {
         Write-Error "vibe-ensemble.exe not found"
-        exit 1
-    }
-    
-    if (Test-Path $mcpPath) {
-        Write-Success "vibe-ensemble-mcp.exe installed"
-    }
-    else {
-        Write-Error "vibe-ensemble-mcp.exe not found"
         exit 1
     }
 }

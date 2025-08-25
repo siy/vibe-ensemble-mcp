@@ -114,7 +114,6 @@ curl -L -o vibe-ensemble-mcp.tar.gz \
 # Extract and install
 tar -xzf vibe-ensemble-mcp.tar.gz
 sudo mv vibe-ensemble /usr/local/bin/
-sudo mv vibe-ensemble-mcp /usr/local/bin/
 
 # Verify installation
 vibe-ensemble --version
@@ -153,7 +152,6 @@ cargo build --release
 
 # Install binaries
 sudo cp target/release/vibe-ensemble /usr/local/bin/
-sudo cp target/release/vibe-ensemble-mcp /usr/local/bin/
 
 # Verify installation
 vibe-ensemble --version

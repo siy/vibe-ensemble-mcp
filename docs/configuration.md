@@ -61,7 +61,7 @@ Located at `agent-templates/shared/.claude/settings.json`, this template provide
 The settings template supports these variables:
 
 - `${VIBE_ENSEMBLE_MCP_SERVER:-ws://localhost:8080}` - MCP server URL
-- `${VIBE_ENSEMBLE_MCP_BINARY:-vibe-ensemble-mcp}` - MCP binary path
+- `${VIBE_ENSEMBLE_MCP_BINARY:-vibe-ensemble --mcp-only --transport=stdio}` - MCP server command
 - `${WORKSPACE_ID}` - Unique workspace identifier
 - `${WORKSPACE_NAME}` - Human-readable workspace name  
 - `${TEMPLATE_NAME}` - Agent template being used
@@ -154,13 +154,13 @@ Each workspace contains:
 ### Starting MCP Server
 ```bash
 # Basic startup
-cargo run --bin vibe-ensemble-mcp
+vibe-ensemble --mcp-only --transport=stdio
 
-# With custom port
-SERVER_PORT=8081 cargo run --bin vibe-ensemble-mcp
+# With custom port for web server
+SERVER_PORT=8081 vibe-ensemble
 
 # With debug logging  
-RUST_LOG=debug cargo run --bin vibe-ensemble-mcp
+RUST_LOG=debug vibe-ensemble --mcp-only --transport=stdio
 ```
 
 ### Agent Startup

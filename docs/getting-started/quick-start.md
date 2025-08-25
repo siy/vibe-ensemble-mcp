@@ -41,8 +41,8 @@ cargo run --bin vibe-ensemble -- --migrate
 ### 4. Start the MCP Server
 
 ```bash
-# Start the MCP server (runs in background)
-cargo run --bin vibe-ensemble -- --mcp-only &
+# Start the server (runs in background)
+cargo run --bin vibe-ensemble &
 ```
 
 ## Connect Your First Agent

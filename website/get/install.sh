@@ -105,9 +105,9 @@ download_and_extract() {
     local filename
     
     if [[ "$platform" == *"apple-darwin"* ]]; then
-        filename="vibe-ensemble-mcp-${version}-macos-${platform}.tar.gz"
+        filename="vibe-ensemble-${version}-macos-${platform}.tar.gz"
     else
-        filename="vibe-ensemble-mcp-${version}-linux-${platform}.tar.gz"
+        filename="vibe-ensemble-${version}-linux-${platform}.tar.gz"
     fi
     
     local download_url="https://github.com/$GITHUB_REPO/releases/download/$version/$filename"
@@ -146,22 +146,21 @@ install_binaries() {
         sudo mkdir -p "$INSTALL_DIR"
     fi
     
-    # Install binaries
-    local binaries=("vibe-ensemble" "vibe-ensemble-mcp")
+    # Install binary
+    local binary="vibe-ensemble"
     
-    for binary in "${binaries[@]}"; do
-        if [[ -f "$binary" ]]; then
-            log_info "Installing $binary..."
-            if sudo cp "$binary" "$INSTALL_DIR/" && sudo chmod +x "$INSTALL_DIR/$binary"; then
-                log_success "$binary installed successfully"
-            else
-                log_error "Failed to install $binary"
-                exit 1
-            fi
+    if [[ -f "$binary" ]]; then
+        log_info "Installing $binary..."
+        if sudo cp "$binary" "$INSTALL_DIR/" && sudo chmod +x "$INSTALL_DIR/$binary"; then
+            log_success "$binary installed successfully"
         else
-            log_warning "$binary not found in archive"
+            log_error "Failed to install $binary"
+            exit 1
         fi
-    done
+    else
+        log_error "$binary not found in archive"
+        exit 1
+    fi
 }
 
 # Verify installation
@@ -177,12 +176,6 @@ verify_installation() {
         exit 1
     fi
     
-    if command -v vibe-ensemble-mcp &> /dev/null; then
-        log_success "vibe-ensemble-mcp installed and available in PATH"
-    else
-        log_error "vibe-ensemble-mcp not found in PATH"
-        exit 1
-    fi
 }
 
 # Cleanup

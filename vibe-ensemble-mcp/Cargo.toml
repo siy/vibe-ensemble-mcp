@@ -7,6 +7,7 @@ license.workspace = true
 repository.workspace = true
 description = "MCP protocol implementation for Vibe Ensemble"
 rust-version.workspace = true
+publish = false
 
 [dependencies]
 vibe-ensemble-core = { path = "../vibe-ensemble-core" }

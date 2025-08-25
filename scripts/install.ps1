@@ -202,14 +202,13 @@ function Install-WindowsService {
 
 function Test-Installation {
     $serverPath = "$InstallDir\vibe-ensemble.exe"
-    $mcpPath = "$InstallDir\vibe-ensemble-mcp.exe"
-    
     if (!(Test-Path $serverPath)) {
         Fail "Installation failed: vibe-ensemble.exe not found"
     }
-    
-    if (!(Test-Path $mcpPath)) {
-        Fail "Installation failed: vibe-ensemble-mcp.exe not found"
+    if (Test-Path "$InstallDir\vibe-ensemble-mcp.exe" -or Test-Path "$InstallDir\vibe-ensemble-mcp.cmd") {
+        Write-Info "legacy alias 'vibe-ensemble-mcp' is available"
+    } else {
+        Write-Info "legacy alias 'vibe-ensemble-mcp' not found (expected with unified binary)"
     }
     
     Write-Info "Installation verified successfully!"
