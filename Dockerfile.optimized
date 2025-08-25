@@ -60,7 +60,7 @@ RUN mkdir -p \
     && echo "" > vibe-ensemble-mcp/src/lib.rs
 
 # Build dependencies only (optimized for caching)
-RUN cargo build --release --locked --bin vibe-ensemble-server --jobs 0 \
+RUN cargo build --release --locked --bin vibe-ensemble-server  \
     && rm -rf target/release/deps/vibe_ensemble* target/release/build/vibe-ensemble* \
     && find target/release/deps -name "*vibe_ensemble*" -delete
 
@@ -82,7 +82,7 @@ COPY vibe-ensemble-web/templates/ ./vibe-ensemble-web/templates/
 COPY vibe-ensemble-storage/migrations/ ./vibe-ensemble-storage/migrations/
 
 # Final build with maximum optimization and parallel compilation
-RUN cargo build --release --locked --bin vibe-ensemble-server --jobs 0 \
+RUN cargo build --release --locked --bin vibe-ensemble-server  \
     && strip target/release/vibe-ensemble-server \
     && ls -la target/release/vibe-ensemble-server
 
