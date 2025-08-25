@@ -260,6 +260,12 @@ impl StdioTransport {
     }
 }
 
+impl Default for StdioTransport {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 #[async_trait::async_trait]
 impl Transport for StdioTransport {
     async fn send(&mut self, message: &str) -> Result<()> {
