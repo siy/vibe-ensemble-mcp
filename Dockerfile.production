@@ -81,8 +81,7 @@ RUN cargo build --release --locked --bin vibe-ensemble-server
 
 # Strip binary and verify
 RUN strip target/release/vibe-ensemble-server && \
-    ls -la target/release/vibe-ensemble-server && \
-    file target/release/vibe-ensemble-server
+    ls -la target/release/vibe-ensemble-server
 
 # Security scanner stage
 FROM builder AS security-scan

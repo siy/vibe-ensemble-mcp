@@ -102,7 +102,7 @@ jobs:
       - name: Create archive
         run: |
           mkdir -p dist
-          tar -czf dist/vibe-ensemble-mcp-linux-${{ matrix.target }}.tar.gz \
+          tar -czf dist/vibe-ensemble-mcp-${{ needs.create-release.outputs.version }}-linux-${{ matrix.target }}.tar.gz \
             -C target/${{ matrix.target }}/release \
             vibe-ensemble-server vibe-ensemble-mcp
 
@@ -112,8 +112,8 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
           upload_url: ${{ needs.create-release.outputs.upload_url }}
-          asset_path: ./dist/vibe-ensemble-mcp-linux-${{ matrix.target }}.tar.gz
-          asset_name: vibe-ensemble-mcp-linux-${{ matrix.target }}.tar.gz
+          asset_path: ./dist/vibe-ensemble-mcp-${{ needs.create-release.outputs.version }}-linux-${{ matrix.target }}.tar.gz
+          asset_name: vibe-ensemble-mcp-${{ needs.create-release.outputs.version }}-linux-${{ matrix.target }}.tar.gz
           asset_content_type: application/gzip
 
   build-macos:
@@ -136,7 +136,7 @@ jobs:
       - name: Create archive
         run: |
           mkdir -p dist
-          tar -czf dist/vibe-ensemble-mcp-macos-${{ matrix.target }}.tar.gz \
+          tar -czf dist/vibe-ensemble-mcp-${{ needs.create-release.outputs.version }}-macos-${{ matrix.target }}.tar.gz \
             -C target/${{ matrix.target }}/release \
             vibe-ensemble-server vibe-ensemble-mcp
 
@@ -146,8 +146,8 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
           upload_url: ${{ needs.create-release.outputs.upload_url }}
-          asset_path: ./dist/vibe-ensemble-mcp-macos-${{ matrix.target }}.tar.gz
-          asset_name: vibe-ensemble-mcp-macos-${{ matrix.target }}.tar.gz
+          asset_path: ./dist/vibe-ensemble-mcp-${{ needs.create-release.outputs.version }}-macos-${{ matrix.target }}.tar.gz
+          asset_name: vibe-ensemble-mcp-${{ needs.create-release.outputs.version }}-macos-${{ matrix.target }}.tar.gz
           asset_content_type: application/gzip
 
   build-windows:
@@ -170,7 +170,7 @@ jobs:
       - name: Create archive
         run: |
           New-Item -ItemType Directory -Path dist -Force
-          Compress-Archive -Path target/${{ matrix.target }}/release/vibe-ensemble-server.exe, target/${{ matrix.target }}/release/vibe-ensemble-mcp.exe -DestinationPath dist/vibe-ensemble-mcp-windows-${{ matrix.target }}.zip
+          Compress-Archive -Path target/${{ matrix.target }}/release/vibe-ensemble-server.exe, target/${{ matrix.target }}/release/vibe-ensemble-mcp.exe -DestinationPath dist/vibe-ensemble-mcp-${{ needs.create-release.outputs.version }}-windows-${{ matrix.target }}.zip
 
       - name: Upload Release Asset
         uses: actions/upload-release-asset@v1
@@ -178,8 +178,8 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
           upload_url: ${{ needs.create-release.outputs.upload_url }}
-          asset_path: ./dist/vibe-ensemble-mcp-windows-${{ matrix.target }}.zip
-          asset_name: vibe-ensemble-mcp-windows-${{ matrix.target }}.zip
+          asset_path: ./dist/vibe-ensemble-mcp-${{ needs.create-release.outputs.version }}-windows-${{ matrix.target }}.zip
+          asset_name: vibe-ensemble-mcp-${{ needs.create-release.outputs.version }}-windows-${{ matrix.target }}.zip
           asset_content_type: application/zip
 
   build-docker:
