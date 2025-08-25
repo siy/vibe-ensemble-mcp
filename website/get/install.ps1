@@ -55,7 +55,6 @@ function Test-Administrator {
 
 # Get latest release version
 function Get-LatestVersion {
-    Write-Info "Fetching latest release version..."
     try {
         $response = Invoke-RestMethod -Uri "https://api.github.com/repos/$GitHubRepo/releases/latest"
         return $response.tag_name
@@ -234,6 +233,7 @@ function Install-VibeEnsemble {
     
     # Get version
     if ($Version -eq "latest") {
+        Write-Info "Fetching latest release version..."
         $Version = Get-LatestVersion
     }
     Write-Info "Installing version: $Version"

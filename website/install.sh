@@ -93,7 +93,6 @@ check_dependencies() {
 
 # Get latest release version
 get_latest_version() {
-    log_info "Fetching latest release version..."
     curl -s "https://api.github.com/repos/$GITHUB_REPO/releases/latest" | \
         grep '"tag_name":' | \
         sed -E 's/.*"([^"]+)".*/\1/'
@@ -234,6 +233,7 @@ main() {
     log_info "Detected platform: $platform"
     
     local version
+    log_info "Fetching latest release version..."
     version=$(get_latest_version)
     if [[ -z "$version" ]]; then
         log_error "Failed to fetch latest version"

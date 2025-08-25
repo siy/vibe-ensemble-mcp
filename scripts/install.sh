@@ -108,8 +108,6 @@ get_latest_version() {
     if [ -z "$VERSION" ]; then
         error "Failed to get latest version"
     fi
-    
-    log "Latest version: $VERSION"
 }
 
 # Download and install binaries
@@ -267,7 +265,9 @@ main() {
     
     detect_platform
     check_permissions
+    log "Fetching latest release version..."
     get_latest_version
+    log "Latest version: $VERSION"
     install_binaries
     setup_config
     install_service
