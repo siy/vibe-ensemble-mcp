@@ -100,7 +100,7 @@ async fn main() -> Result<()> {
 
     // Load base configuration
     let mut config = if let Some(ref config_path) = cli.config {
-        Config::load_from_file(&config_path).map_err(|e| {
+        Config::load_from_file(config_path).map_err(|e| {
             error!("Failed to load configuration from {}: {}", config_path, e);
             e
         })?
