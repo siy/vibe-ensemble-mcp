@@ -104,7 +104,7 @@ jobs:
           mkdir -p dist
           tar -czf dist/vibe-ensemble-mcp-${{ needs.create-release.outputs.version }}-linux-${{ matrix.target }}.tar.gz \
             -C target/${{ matrix.target }}/release \
-            vibe-ensemble-server vibe-ensemble-mcp
+            vibe-ensemble
 
       - name: Upload Release Asset
         uses: actions/upload-release-asset@v1
@@ -138,7 +138,7 @@ jobs:
           mkdir -p dist
           tar -czf dist/vibe-ensemble-mcp-${{ needs.create-release.outputs.version }}-macos-${{ matrix.target }}.tar.gz \
             -C target/${{ matrix.target }}/release \
-            vibe-ensemble-server vibe-ensemble-mcp
+            vibe-ensemble
 
       - name: Upload Release Asset
         uses: actions/upload-release-asset@v1
@@ -170,7 +170,7 @@ jobs:
       - name: Create archive
         run: |
           New-Item -ItemType Directory -Path dist -Force
-          Compress-Archive -Path target/${{ matrix.target }}/release/vibe-ensemble-server.exe, target/${{ matrix.target }}/release/vibe-ensemble-mcp.exe -DestinationPath dist/vibe-ensemble-mcp-${{ needs.create-release.outputs.version }}-windows-${{ matrix.target }}.zip
+          Compress-Archive -Path target/${{ matrix.target }}/release/vibe-ensemble.exe -DestinationPath dist/vibe-ensemble-mcp-${{ needs.create-release.outputs.version }}-windows-${{ matrix.target }}.zip
 
       - name: Upload Release Asset
         uses: actions/upload-release-asset@v1

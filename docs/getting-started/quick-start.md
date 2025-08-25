@@ -35,14 +35,14 @@ export RUST_LOG="info,vibe_ensemble=debug"
 
 ```bash
 # Run migrations to set up the database
-cargo run --bin vibe-ensemble-server -- --migrate
+cargo run --bin vibe-ensemble -- --migrate
 ```
 
 ### 4. Start the MCP Server
 
 ```bash
 # Start the MCP server (runs in background)
-cargo run --bin vibe-ensemble-mcp &
+cargo run --bin vibe-ensemble -- --mcp-only &
 ```
 
 ## Connect Your First Agent

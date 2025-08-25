@@ -146,41 +146,33 @@ install_binaries() {
         sudo mkdir -p "$INSTALL_DIR"
     fi
     
-    # Install binaries
-    local binaries=("vibe-ensemble-server" "vibe-ensemble-mcp")
+    # Install binary
+    local binary="vibe-ensemble"
     
-    for binary in "${binaries[@]}"; do
-        if [[ -f "$binary" ]]; then
-            log_info "Installing $binary..."
-            if sudo cp "$binary" "$INSTALL_DIR/" && sudo chmod +x "$INSTALL_DIR/$binary"; then
-                log_success "$binary installed successfully"
-            else
-                log_error "Failed to install $binary"
-                exit 1
-            fi
+    if [[ -f "$binary" ]]; then
+        log_info "Installing $binary..."
+        if sudo cp "$binary" "$INSTALL_DIR/" && sudo chmod +x "$INSTALL_DIR/$binary"; then
+            log_success "$binary installed successfully"
         else
-            log_warning "$binary not found in archive"
+            log_error "Failed to install $binary"
+            exit 1
         fi
-    done
+    else
+        log_error "$binary not found in archive"
+        exit 1
+    fi
 }
 
 # Verify installation
 verify_installation() {
     log_info "Verifying installation..."
     
-    if command -v vibe-ensemble-server &> /dev/null; then
+    if command -v vibe-ensemble &> /dev/null; then
         local version
-        version=$(vibe-ensemble-server --version 2>/dev/null || echo "unknown")
-        log_success "vibe-ensemble-server installed: $version"
+        version=$(vibe-ensemble --version 2>/dev/null || echo "unknown")
+        log_success "vibe-ensemble installed: $version"
     else
-        log_error "vibe-ensemble-server not found in PATH"
-        exit 1
-    fi
-    
-    if command -v vibe-ensemble-mcp &> /dev/null; then
-        log_success "vibe-ensemble-mcp installed and available in PATH"
-    else
-        log_error "vibe-ensemble-mcp not found in PATH"
+        log_error "vibe-ensemble not found in PATH"
         exit 1
     fi
 }
@@ -199,17 +191,10 @@ print_next_steps() {
     echo
     echo -e "${BLUE}Next steps:${NC}"
     echo "1. Start the server:"
-    echo -e "   ${GREEN}vibe-ensemble-server${NC}"
+    echo -e "   ${GREEN}vibe-ensemble${NC}"
     echo
-    echo "2. Configure Claude Code MCP settings:"
-    echo '   {'
-    echo '     "mcpServers": {'
-    echo '       "vibe-ensemble": {'
-    echo '         "command": "vibe-ensemble-mcp",'
-    echo '         "args": ["--transport=stdio"]'
-    echo '       }'
-    echo '     }'
-    echo '   }'
+    echo "2. Configure Claude Code to connect to MCP server:"
+    echo -e "   ${GREEN}claude mcp add vibe-ensemble \"vibe-ensemble --mcp-only --transport=stdio\" --transport=stdio${NC}"
     echo
     echo "3. Access the web dashboard: http://127.0.0.1:8081"
     echo "4. Check health: http://127.0.0.1:8080/health"
