@@ -1,12 +1,13 @@
 //! Vibe Ensemble MCP Server binary
 //!
 //! This binary provides the main entry point for the MCP server, handling
-//! database connections, service initialization, and server startup.
+//! database connections, service initialization, and stdio transport.
 
 use std::env;
-use tracing::{error, info, warn};
+use tracing::{debug, error, info, warn};
 use tracing_subscriber::fmt::init;
 use vibe_ensemble_mcp::server::McpServer;
+use vibe_ensemble_mcp::transport::TransportFactory;
 use vibe_ensemble_storage::manager::DatabaseConfig;
 use vibe_ensemble_storage::StorageManager;
 
@@ -15,12 +16,12 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Initialize tracing
     init();
 
-    info!("Starting Vibe Ensemble MCP Server v0.1.0");
+    info!("Starting Vibe Ensemble MCP Server v0.1.1");
 
     // Get database URL from environment variable
     let database_url = env::var("DATABASE_URL").unwrap_or_else(|_| {
         warn!("DATABASE_URL not set, using default SQLite database");
-        "sqlite:./vibe-ensemble.db".to_string()
+        "sqlite:./vibe_ensemble.db".to_string()
     });
 
     info!("Connecting to database: {}", database_url);
@@ -54,7 +55,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     info!("Services initialized");
 
     // Create MCP server with all services
-    let _server = McpServer::new_with_capabilities_and_all_services(
+    let server = McpServer::new_with_capabilities_and_all_services(
         vibe_ensemble_mcp::protocol::ServerCapabilities {
             experimental: None,
             logging: None,
@@ -80,12 +81,44 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     );
 
     info!("MCP server initialized successfully");
-    info!("Server is ready to accept connections");
 
-    // For now, just keep the server running
-    // In a full implementation, this would start an actual transport layer (WebSocket, etc.)
-    tokio::signal::ctrl_c().await?;
+    // Create stdio transport
+    let mut transport = TransportFactory::stdio();
+    info!("Server is ready to accept connections via stdio");
+
+    // Main server loop - handle messages from stdin and send responses to stdout
+    loop {
+        match transport.receive().await {
+            Ok(message) => {
+                debug!("Received message: {}", message);
+                
+                // Process the message
+                match server.handle_message(&message).await {
+                    Ok(Some(response)) => {
+                        debug!("Sending response: {}", response);
+                        if let Err(e) = transport.send(&response).await {
+                            error!("Failed to send response: {}", e);
+                            break;
+                        }
+                    }
+                    Ok(None) => {
+                        debug!("No response required");
+                    }
+                    Err(e) => {
+                        error!("Error processing message: {}", e);
+                        // Continue processing other messages
+                    }
+                }
+            }
+            Err(e) => {
+                debug!("Transport error: {}", e);
+                break;
+            }
+        }
+    }
+
     info!("Shutting down MCP server");
+    transport.close().await?;
 
     Ok(())
 }

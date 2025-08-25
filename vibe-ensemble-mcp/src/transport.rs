@@ -5,6 +5,7 @@
 
 use crate::{Error, Result};
 use futures_util::{SinkExt, StreamExt};
+use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader, Stdin, Stdout};
 use tokio::sync::mpsc;
 use tokio_tungstenite::tungstenite::protocol::Message;
 use tokio_tungstenite::{accept_async, connect_async, WebSocketStream};
@@ -241,6 +242,87 @@ impl Transport for InMemoryTransport {
     }
 }
 
+/// Stdio transport implementation for MCP protocol communication over stdin/stdout
+pub struct StdioTransport {
+    stdin_reader: BufReader<Stdin>,
+    stdout: Stdout,
+    is_closed: bool,
+}
+
+impl StdioTransport {
+    /// Create a new stdio transport
+    pub fn new() -> Self {
+        Self {
+            stdin_reader: BufReader::new(tokio::io::stdin()),
+            stdout: tokio::io::stdout(),
+            is_closed: false,
+        }
+    }
+}
+
+#[async_trait::async_trait]
+impl Transport for StdioTransport {
+    async fn send(&mut self, message: &str) -> Result<()> {
+        if self.is_closed {
+            return Err(Error::Transport("Stdio transport is closed".to_string()));
+        }
+
+        // Write message followed by newline
+        self.stdout.write_all(message.as_bytes()).await.map_err(|e| {
+            error!("Failed to write to stdout: {}", e);
+            Error::Transport(format!("Failed to write to stdout: {}", e))
+        })?;
+        
+        self.stdout.write_all(b"\n").await.map_err(|e| {
+            error!("Failed to write newline to stdout: {}", e);
+            Error::Transport(format!("Failed to write newline to stdout: {}", e))
+        })?;
+        
+        self.stdout.flush().await.map_err(|e| {
+            error!("Failed to flush stdout: {}", e);
+            Error::Transport(format!("Failed to flush stdout: {}", e))
+        })?;
+
+        debug!("Sent message via stdio: {}", message);
+        Ok(())
+    }
+
+    async fn receive(&mut self) -> Result<String> {
+        if self.is_closed {
+            return Err(Error::Transport("Stdio transport is closed".to_string()));
+        }
+
+        let mut line = String::new();
+        match self.stdin_reader.read_line(&mut line).await {
+            Ok(0) => {
+                debug!("Stdin reached EOF");
+                Err(Error::Connection("Stdin reached EOF".to_string()))
+            }
+            Ok(_) => {
+                // Remove trailing newline
+                if line.ends_with('\n') {
+                    line.pop();
+                    if line.ends_with('\r') {
+                        line.pop();
+                    }
+                }
+                debug!("Received message via stdio: {}", line);
+                Ok(line)
+            }
+            Err(e) => {
+                error!("Failed to read from stdin: {}", e);
+                Err(Error::Transport(format!("Failed to read from stdin: {}", e)))
+            }
+        }
+    }
+
+    async fn close(&mut self) -> Result<()> {
+        self.is_closed = true;
+        debug!("Stdio transport closed");
+        Ok(())
+    }
+}
+
 /// Transport factory for creating different transport types
 pub struct TransportFactory;
 
@@ -252,6 +334,11 @@ impl TransportFactory {
         >::connect(url)
         .await?;
         Ok(Box::new(transport))
+    }
+
+    /// Create a stdio transport
+    pub fn stdio() -> Box<dyn Transport> {
+        Box::new(StdioTransport::new())
     }
 
     /// Create an in-memory transport pair for testing
