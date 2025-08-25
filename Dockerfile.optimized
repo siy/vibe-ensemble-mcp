@@ -36,8 +36,6 @@ COPY vibe-ensemble-server/Cargo.toml ./vibe-ensemble-server/
 COPY vibe-ensemble-storage/Cargo.toml ./vibe-ensemble-storage/
 COPY vibe-ensemble-web/Cargo.toml ./vibe-ensemble-web/
 COPY vibe-ensemble-prompts/Cargo.toml ./vibe-ensemble-prompts/
-COPY vibe-ensemble-security/Cargo.toml ./vibe-ensemble-security/
-COPY vibe-ensemble-monitoring/Cargo.toml ./vibe-ensemble-monitoring/
 COPY vibe-ensemble-mcp/Cargo.toml ./vibe-ensemble-mcp/
 
 # Create minimal dummy source files for dependency caching
@@ -47,16 +45,12 @@ RUN mkdir -p \
     vibe-ensemble-storage/src \
     vibe-ensemble-web/src \
     vibe-ensemble-prompts/src \
-    vibe-ensemble-security/src \
-    vibe-ensemble-monitoring/src \
     vibe-ensemble-mcp/src \
     && echo "fn main() {}" > vibe-ensemble-server/src/main.rs \
     && echo "" > vibe-ensemble-core/src/lib.rs \
     && echo "" > vibe-ensemble-storage/src/lib.rs \
     && echo "" > vibe-ensemble-web/src/lib.rs \
     && echo "" > vibe-ensemble-prompts/src/lib.rs \
-    && echo "" > vibe-ensemble-security/src/lib.rs \
-    && echo "" > vibe-ensemble-monitoring/src/lib.rs \
     && echo "" > vibe-ensemble-mcp/src/lib.rs
 
 # Build dependencies only (optimized for caching)
@@ -73,8 +67,6 @@ COPY vibe-ensemble-server/src/ ./vibe-ensemble-server/src/
 COPY vibe-ensemble-storage/src/ ./vibe-ensemble-storage/src/
 COPY vibe-ensemble-web/src/ ./vibe-ensemble-web/src/
 COPY vibe-ensemble-prompts/src/ ./vibe-ensemble-prompts/src/
-COPY vibe-ensemble-security/src/ ./vibe-ensemble-security/src/
-COPY vibe-ensemble-monitoring/src/ ./vibe-ensemble-monitoring/src/
 COPY vibe-ensemble-mcp/src/ ./vibe-ensemble-mcp/src/
 
 # Copy required resources
@@ -141,8 +133,11 @@ HEALTHCHECK --interval=30s --timeout=10s --start-period=60s --retries=3 \
 ENTRYPOINT ["/usr/bin/dumb-init", "--"]
 CMD ["vibe-ensemble"]
 
+# Production stage (alias for runtime - used by docker-compose.yml)
+FROM runtime AS production
+
 # Metadata
 LABEL maintainer="Vibe Ensemble Team"
-LABEL version="0.1.0"
+LABEL version="0.2.0"
 LABEL description="Vibe Ensemble MCP Server - Production Optimized"
 LABEL security.non-root="true"
