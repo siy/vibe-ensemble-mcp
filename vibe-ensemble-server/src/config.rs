@@ -110,6 +110,40 @@ impl Default for Config {
     }
 }
 
+/// Get platform-appropriate default database URL for SQLx (always absolute, always encoded)
+fn get_default_database_path() -> String {
+    // Windows: use roaming AppData (%APPDATA%) to align with docs; others: local data dir.
+    #[cfg(target_os = "windows")]
+    let base_dir = dirs::data_dir();
+    #[cfg(not(target_os = "windows"))]
+    let base_dir = dirs::data_local_dir();
+
+    const FALLBACK: &str = "sqlite:./vibe_ensemble.db";
+
+    if let Some(data_dir) = base_dir {
+        let app_data_dir = data_dir.join("vibe-ensemble");
+        if let Err(e) = std::fs::create_dir_all(&app_data_dir) {
+            warn!("Failed to create data directory {:?}: {}", app_data_dir, e);
+            return FALLBACK.to_string();
+        }
+        let db_file = app_data_dir.join("vibe_ensemble.db");
+        // Build a proper file:// URL, then convert to sqlite:// which SQLx expects.
+        match url::Url::from_file_path(&db_file) {
+            Ok(file_url) => file_url.as_str().replacen("file:", "sqlite:", 1),
+            Err(_) => {
+                // Last-resort formatting: normalize separators and minimally encode spaces
+                #[cfg(windows)]
+                let path = db_file.to_string_lossy().replace('\\', "/");
+                #[cfg(not(windows))]
+                let path = db_file.to_string_lossy().to_string();
+                format!("sqlite://{}", path.replace(' ', "%20"))
+            }
+        }
+    } else {
+        FALLBACK.to_string()
+    }
+}
+
 impl Config {
     /// Load configuration from environment and config files with security validation
     pub fn load() -> Result<Self, config::ConfigError> {
@@ -119,7 +153,7 @@ impl Config {
             .add_source(config::Environment::with_prefix("VIBE_ENSEMBLE"))
             .set_default("server.host", "127.0.0.1")?
             .set_default("server.port", 8080)?
-            .set_default("database.url", "sqlite:./vibe_ensemble.db")?
+            .set_default("database.url", get_default_database_path())?
             .set_default("database.migrate_on_startup", true)?
             .set_default("mcp.protocol_version", "1.0.0")?
             .set_default("mcp.heartbeat_interval", 30)?
