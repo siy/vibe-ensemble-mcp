@@ -6,7 +6,10 @@ use thiserror::Error;
 #[derive(Error, Debug)]
 pub enum Error {
     #[error("Configuration error: {0}")]
-    Configuration(#[from] config::ConfigError),
+    Configuration(String),
+    
+    #[error("Config file error: {0}")]
+    ConfigFile(#[from] config::ConfigError),
 
     #[error("MCP protocol error: {0}")]
     Mcp(#[from] vibe_ensemble_mcp::Error),

@@ -29,6 +29,5 @@ tracing-subscriber = "0.3"
 [dev-dependencies]
 sqlx = { workspace = true }
 
-[[bin]]
-name = "vibe-ensemble-mcp"
-path = "src/main.rs"
+# Binary removed - functionality consolidated into vibe-ensemble-server
+# Use: vibe-ensemble-server --mcp-only --transport=stdio
