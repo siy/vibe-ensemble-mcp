@@ -120,19 +120,19 @@
                 <div class="install-card">
                     <h3>Docker</h3>
                     <div class="code-block">
-                        <code>docker run -d --name vibe-ensemble -p 8080:8080 -p 8081:8081 ghcr.io/siy/vibe-ensemble-mcp:latest</code>
-                        <button class="copy-btn" onclick="copyToClipboard('docker run -d --name vibe-ensemble -p 8080:8080 -p 8081:8081 ghcr.io/siy/vibe-ensemble-mcp:latest')">Copy</button>
+                        <code>docker run -d --name vibe-ensemble -p 8080:8080 -p 8081:8081 ghcr.io/siy/vibe-ensemble:latest</code>
+                        <button class="copy-btn" onclick="copyToClipboard('docker run -d --name vibe-ensemble -p 8080:8080 -p 8081:8081 ghcr.io/siy/vibe-ensemble:latest')">Copy</button>
                     </div>
                 </div>
             </div>
             <div class="download-alternatives">
                 <h4>Alternative Downloads</h4>
                 <div class="download-links">
-                    <a href="https://github.com/siy/vibe-ensemble-mcp/releases/latest/download/vibe-ensemble-mcp_v0.1.0_amd64.deb" class="download-link">
+                    <a href="https://github.com/siy/vibe-ensemble-mcp/releases/latest/download/vibe-ensemble_v0.1.0_amd64.deb" class="download-link">
                         <span class="download-icon">📦</span>
                         <span>Ubuntu/Debian (.deb)</span>
                     </a>
-                    <a href="https://github.com/siy/vibe-ensemble-mcp/releases/latest/download/vibe-ensemble-mcp-v0.1.0-1.x86_64.rpm" class="download-link">
+                    <a href="https://github.com/siy/vibe-ensemble-mcp/releases/latest/download/vibe-ensemble-v0.1.0-1.x86_64.rpm" class="download-link">
                         <span class="download-icon">📦</span>
                         <span>CentOS/RHEL/Fedora (.rpm)</span>
                     </a>
@@ -155,8 +155,8 @@
                         <h3>Start the Server</h3>
                         <p>After installation, start the Vibe Ensemble server:</p>
                         <div class="code-block">
-                            <code>vibe-ensemble-server</code>
-                            <button class="copy-btn" onclick="copyToClipboard('vibe-ensemble-server')">Copy</button>
+                            <code>vibe-ensemble</code>
+                            <button class="copy-btn" onclick="copyToClipboard('vibe-ensemble')">Copy</button>
                         </div>
                     </div>
                 </div>
@@ -167,14 +167,14 @@
                         <p>Add Vibe Ensemble using the Claude CLI (choose one):</p>
                         <div class="code-block">
                             <code># Local scope (current project)
-claude mcp add vibe-ensemble vibe-ensemble-mcp --transport=stdio
+claude mcp add vibe-ensemble "vibe-ensemble --mcp-only --transport=stdio" --transport=stdio
 
 # User scope (all projects)
-claude mcp add vibe-ensemble vibe-ensemble-mcp --transport=stdio -s user
+claude mcp add vibe-ensemble "vibe-ensemble --mcp-only --transport=stdio" --transport=stdio -s user
 
 # Project scope (shared with team)
-claude mcp add vibe-ensemble vibe-ensemble-mcp --transport=stdio -s project</code>
-                            <button class="copy-btn" onclick="copyToClipboard('claude mcp add vibe-ensemble vibe-ensemble-mcp --transport=stdio')">Copy Local</button>
+claude mcp add vibe-ensemble "vibe-ensemble --mcp-only --transport=stdio" --transport=stdio -s project</code>
+                            <button class="copy-btn" onclick="copyToClipboard('claude mcp add vibe-ensemble \"vibe-ensemble --mcp-only --transport=stdio\" --transport=stdio')">Copy Local</button>
                         </div>
                     </div>
                 </div>

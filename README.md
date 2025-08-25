@@ -84,14 +84,14 @@ docker run -d --name vibe-ensemble -p 8080:8080 -p 8081:8081 ghcr.io/siy/vibe-en
 
 **Ubuntu/Debian:**
 ```bash
-wget https://github.com/siy/vibe-ensemble-mcp/releases/latest/download/vibe-ensemble-mcp_v0.1.0_amd64.deb
-sudo dpkg -i vibe-ensemble-mcp_v0.1.0_amd64.deb
+wget https://github.com/siy/vibe-ensemble-mcp/releases/latest/download/vibe-ensemble_v0.1.0_amd64.deb
+sudo dpkg -i vibe-ensemble_v0.1.0_amd64.deb
 ```
 
 **CentOS/RHEL/Fedora:**
 ```bash
-wget https://github.com/siy/vibe-ensemble-mcp/releases/latest/download/vibe-ensemble-mcp-v0.1.0-1.x86_64.rpm
-sudo rpm -i vibe-ensemble-mcp-v0.1.0-1.x86_64.rpm
+wget https://github.com/siy/vibe-ensemble-mcp/releases/latest/download/vibe-ensemble-v0.1.0-1.x86_64.rpm
+sudo rpm -i vibe-ensemble-v0.1.0-1.x86_64.rpm
 ```
 
 **Binary Download:**
@@ -102,7 +102,7 @@ Download the latest release for your platform from [GitHub Releases](https://git
 After installation, start the Vibe Ensemble server:
 
 ```bash
-vibe-ensemble-server
+vibe-ensemble
 ```
 
 The server will start with:
@@ -121,7 +121,7 @@ Add the Vibe Ensemble MCP server to your Claude Code configuration:
 2. Navigate to "MCP Servers"
 3. Add a new server with:
    - **Name**: `vibe-ensemble`
-   - **Command**: `vibe-ensemble-mcp`
+   - **Command**: `vibe-ensemble --mcp-only --transport=stdio`
    - **Args**: `--transport=stdio`
 
 **Option B: Direct Configuration File**
@@ -131,8 +131,8 @@ Add to your Claude Code MCP settings file (`~/.config/claude-code/mcp_settings.j
 {
   "mcpServers": {
     "vibe-ensemble": {
-      "command": "vibe-ensemble-mcp",
-      "args": ["--transport=stdio"]
+      "command": "vibe-ensemble --mcp-only --transport=stdio",
+      "args": []
     }
   }
 }
@@ -178,7 +178,7 @@ If you prefer to build from source or contribute to development:
    cd vibe-ensemble-mcp
    cargo build --release
    ```
-3. **Run**: `cargo run --bin vibe-ensemble-server`
+3. **Run**: `cargo run --bin vibe-ensemble`
 
 ### Configuration
 

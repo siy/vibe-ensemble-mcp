@@ -8,9 +8,8 @@ repository.workspace = true
 description = "Web interface for Vibe Ensemble MCP server"
 rust-version.workspace = true
 
-[[bin]]
-name = "vibe-ensemble-web"
-path = "src/main.rs"
+# Binary removed - functionality consolidated into vibe-ensemble
+# Use: vibe-ensemble --web-only
 
 [dependencies]
 vibe-ensemble-core = { path = "../vibe-ensemble-core" }

@@ -134,12 +134,11 @@ install_binaries() {
     
     log "Installing binaries to $INSTALL_DIR..."
     # Verify binaries exist before installation
-    if [ ! -f "vibe-ensemble-server" ] || [ ! -f "vibe-ensemble-mcp" ]; then
+    if [ ! -f "vibe-ensemble" ]; then
         error "Expected binaries not found in archive"
     fi
-    
-    $SUDO install -m 755 "vibe-ensemble-server" "$INSTALL_DIR/"
-    $SUDO install -m 755 "vibe-ensemble-mcp" "$INSTALL_DIR/"
+
+    $SUDO install -m 755 "vibe-ensemble" "$INSTALL_DIR/"
     
     # Cleanup
     cd /
@@ -197,7 +196,7 @@ Type=simple
 User=$USER
 Group=$USER
 WorkingDirectory=$HOME
-ExecStart=$INSTALL_DIR/vibe-ensemble-server --config $CONFIG_DIR/config.toml
+ExecStart=$INSTALL_DIR/vibe-ensemble --config $CONFIG_DIR/config.toml
 Restart=always
 RestartSec=5
 Environment=RUST_LOG=info
@@ -214,7 +213,7 @@ EOF
 verify_installation() {
     log "Verifying installation..."
     
-    if ! command -v vibe-ensemble-server >/dev/null 2>&1; then
+    if ! command -v vibe-ensemble >/dev/null 2>&1; then
         if [ "$INSTALL_DIR" != "/usr/local/bin" ]; then
             warn "Binary not in PATH. You may need to add $INSTALL_DIR to your PATH"
             echo "export PATH=\"$INSTALL_DIR:\$PATH\"" >> "$HOME/.bashrc"
@@ -227,8 +226,8 @@ verify_installation() {
     log "Installation verified successfully!"
     
     # Show version
-    if command -v vibe-ensemble-server >/dev/null 2>&1; then
-        vibe-ensemble-server --version 2>/dev/null || log "Installed vibe-ensemble-server"
+    if command -v vibe-ensemble >/dev/null 2>&1; then
+        vibe-ensemble --version 2>/dev/null || log "Installed vibe-ensemble"
     fi
 }
 
@@ -241,7 +240,7 @@ show_instructions() {
     echo
     echo "Next steps:"
     echo "1. Start the server:"
-    echo "   vibe-ensemble-server"
+    echo "   vibe-ensemble"
     echo
     echo "2. Or run as a service (Linux with systemd):"
     echo "   sudo systemctl enable vibe-ensemble"
@@ -252,13 +251,13 @@ show_instructions() {
     echo
     echo "4. Add to Claude Code (choose one):"
     echo "   # Local scope (current project only)"
-    echo "   claude mcp add vibe-ensemble vibe-ensemble-mcp --transport=stdio"
+    echo '   claude mcp add vibe-ensemble "vibe-ensemble --mcp-only --transport=stdio" --transport=stdio'
     echo
     echo "   # User scope (all projects)"
-    echo "   claude mcp add vibe-ensemble vibe-ensemble-mcp --transport=stdio -s user"
+    echo '   claude mcp add vibe-ensemble "vibe-ensemble --mcp-only --transport=stdio" --transport=stdio -s user'
     echo
     echo "   # Project scope (shared with team)"
-    echo "   claude mcp add vibe-ensemble vibe-ensemble-mcp --transport=stdio -s project"
+    echo '   claude mcp add vibe-ensemble "vibe-ensemble --mcp-only --transport=stdio" --transport=stdio -s project'
     echo
     echo "5. Check the API:"
     echo "   curl http://localhost:8080/health"

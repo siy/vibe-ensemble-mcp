@@ -91,7 +91,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         match transport.receive().await {
             Ok(message) => {
                 debug!("Received message: {}", message);
-                
+
                 // Process the message
                 match server.handle_message(&message).await {
                     Ok(Some(response)) => {

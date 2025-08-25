@@ -180,6 +180,40 @@ impl Config {
         Ok(config)
     }
 
+    /// Load configuration from a specific file path with security validation
+    pub fn load_from_file(config_path: &str) -> Result<Self, config::ConfigError> {
+        let settings = config::Config::builder()
+            .add_source(config::File::with_name(config_path).required(true))
+            .add_source(config::Environment::with_prefix("VIBE_ENSEMBLE"))
+            .set_default("server.host", "127.0.0.1")?
+            .set_default("server.port", 8080)?
+            .set_default("database.url", get_default_database_path())?
+            .set_default("database.migrate_on_startup", true)?
+            .set_default("mcp.protocol_version", "1.0.0")?
+            .set_default("mcp.heartbeat_interval", 30)?
+            .set_default("mcp.max_message_size", 1048576)?
+            .set_default("web.enabled", true)?
+            .set_default("web.host", "127.0.0.1")?
+            .set_default("web.port", 8081)?
+            .set_default("logging.level", "info")?
+            .set_default("logging.format", "json")?
+            .set_default("monitoring.enabled", true)?
+            .set_default("monitoring.metrics_host", "127.0.0.1")?
+            .set_default("monitoring.metrics_port", 9090)?
+            .set_default("monitoring.health_host", "127.0.0.1")?
+            .set_default("monitoring.health_port", 8090)?
+            .set_default("monitoring.tracing_enabled", true)?
+            .set_default("monitoring.alerting_enabled", true)?
+            .build()?;
+
+        let config: Config = settings.try_deserialize()?;
+
+        // Perform security validation and warnings
+        config.validate_security_settings()?;
+
+        Ok(config)
+    }
+
     /// Validate configuration for security concerns and provide warnings
     pub fn validate_security_settings(&self) -> Result<(), config::ConfigError> {
         // Check for 0.0.0.0 binding in production

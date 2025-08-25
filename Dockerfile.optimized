@@ -60,7 +60,7 @@ RUN mkdir -p \
     && echo "" > vibe-ensemble-mcp/src/lib.rs
 
 # Build dependencies only (optimized for caching)
-RUN cargo build --release --locked --bin vibe-ensemble-server  \
+RUN cargo build --release --locked --bin vibe-ensemble  \
     && rm -rf target/release/deps/vibe_ensemble* target/release/build/vibe-ensemble* \
     && find target/release/deps -name "*vibe_ensemble*" -delete
 
@@ -82,9 +82,9 @@ COPY vibe-ensemble-web/templates/ ./vibe-ensemble-web/templates/
 COPY vibe-ensemble-storage/migrations/ ./vibe-ensemble-storage/migrations/
 
 # Final build with maximum optimization and parallel compilation
-RUN cargo build --release --locked --bin vibe-ensemble-server  \
-    && strip target/release/vibe-ensemble-server \
-    && ls -la target/release/vibe-ensemble-server
+RUN cargo build --release --locked --bin vibe-ensemble  \
+    && strip target/release/vibe-ensemble \
+    && ls -la target/release/vibe-ensemble
 
 # Runtime stage - Minimal production image
 FROM debian:bookworm-slim AS runtime
@@ -112,8 +112,8 @@ RUN mkdir -p /app/data /app/logs /app/config /app/tmp \
     && chown -R vibe-ensemble:vibe-ensemble /app
 
 # Copy binary and resources from builder
-COPY --from=builder --chown=root:root /app/target/release/vibe-ensemble-server /usr/local/bin/vibe-ensemble-server
-RUN chmod 755 /usr/local/bin/vibe-ensemble-server
+COPY --from=builder --chown=root:root /app/target/release/vibe-ensemble /usr/local/bin/vibe-ensemble
+RUN chmod 755 /usr/local/bin/vibe-ensemble
 COPY --from=builder --chown=vibe-ensemble:vibe-ensemble /app/vibe-ensemble-storage/migrations/ /app/migrations/
 COPY --from=builder --chown=vibe-ensemble:vibe-ensemble /app/vibe-ensemble-web/templates/ /app/templates/
 
@@ -139,7 +139,7 @@ HEALTHCHECK --interval=30s --timeout=10s --start-period=60s --retries=3 \
 
 # Use dumb-init for proper signal handling
 ENTRYPOINT ["/usr/bin/dumb-init", "--"]
-CMD ["vibe-ensemble-server"]
+CMD ["vibe-ensemble"]
 
 # Metadata
 LABEL maintainer="Vibe Ensemble Team"

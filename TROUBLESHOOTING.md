@@ -25,30 +25,30 @@ The latest version (v0.1.1+) automatically uses platform-appropriate directories
 
 Simply run the server from any directory:
 ```bash
-vibe-ensemble-server
+vibe-ensemble
 ```
 
 #### Option 2: Run from your home directory
 ```bash
 cd ~
-vibe-ensemble-server
+vibe-ensemble
 ```
 
 #### Option 3: Create a dedicated directory
 ```bash
 mkdir -p ~/.vibe-ensemble
 cd ~/.vibe-ensemble
-vibe-ensemble-server
+vibe-ensemble
 ```
 
 #### Option 4: Specify custom database location
 ```bash
-DATABASE_URL="sqlite://$HOME/.vibe-ensemble/data.db" vibe-ensemble-server
+DATABASE_URL="sqlite://$HOME/.vibe-ensemble/data.db" vibe-ensemble
 ```
 
 #### Option 5: Use in-memory database (temporary, data not persisted)
 ```bash
-DATABASE_URL="sqlite::memory:" vibe-ensemble-server
+DATABASE_URL="sqlite::memory:" vibe-ensemble
 ```
 
 **Note:** If you see this error only during server shutdown (while the server runs normally), it can be safely ignored - this is a known cleanup issue that doesn't affect server operation.
@@ -87,7 +87,7 @@ format = "pretty"
 
 Then run:
 ```bash
-vibe-ensemble-server --config ~/.vibe-ensemble/config.toml
+vibe-ensemble --config ~/.vibe-ensemble/config.toml
 ```
 
 ## Port Already In Use
@@ -101,23 +101,23 @@ lsof -i :8080
 lsof -i :8081
 
 # Use different ports
-SERVER_PORT=8082 WEB_PORT=8083 vibe-ensemble-server
+SERVER_PORT=8082 WEB_PORT=8083 vibe-ensemble
 ```
 
 ## Permission Denied for Binary
 
-**Error:** `Permission denied` when running `vibe-ensemble-server`
+**Error:** `Permission denied` when running `vibe-ensemble`
 
 **Solution:**
 ```bash
-chmod +x /usr/local/bin/vibe-ensemble-server
+chmod +x /usr/local/bin/vibe-ensemble
 # or
-sudo chmod +x /usr/local/bin/vibe-ensemble-server
+sudo chmod +x /usr/local/bin/vibe-ensemble
 ```
 
 ## Binary Not Found
 
-**Error:** `command not found: vibe-ensemble-server`
+**Error:** `command not found: vibe-ensemble`
 
 **Solutions:**
 1. Add to PATH:
@@ -128,7 +128,7 @@ sudo chmod +x /usr/local/bin/vibe-ensemble-server
 
 2. Run with full path:
    ```bash
-   /usr/local/bin/vibe-ensemble-server
+   /usr/local/bin/vibe-ensemble
    ```
 
 ## Health Check

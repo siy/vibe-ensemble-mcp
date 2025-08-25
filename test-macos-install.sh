@@ -52,7 +52,7 @@ echo "   ✅ Version: $version"
 
 # Test 3: Filename Construction
 echo "3. Testing filename construction..."
-filename="vibe-ensemble-mcp-${version}-macos-${platform}.tar.gz"
+filename="vibe-ensemble-${version}-macos-${platform}.tar.gz"
 echo "   ✅ Filename: $filename"
 
 # Test 4: Download URL Test
@@ -98,24 +98,23 @@ fi
 
 # Test 7: Binary Verification
 echo "7. Testing binary presence and permissions..."
-if [[ -f "vibe-ensemble-server" && -f "vibe-ensemble-mcp" ]]; then
-    echo "   ✅ Both binaries present"
+if [[ -f "vibe-ensemble" ]]; then
+    echo "   ✅ Binary present"
     
-    if [[ -x "vibe-ensemble-server" && -x "vibe-ensemble-mcp" ]]; then
-        echo "   ✅ Both binaries executable"
+    if [[ -x "vibe-ensemble" ]]; then
+        echo "   ✅ Binary executable"
     else
-        echo "   ❌ Binaries not executable"
-        ls -la vibe-ensemble-*
+        echo "   ❌ Binary not executable"
+        ls -la vibe-ensemble*
     fi
     
     # Test binary architecture if file command available
     if command -v file >/dev/null 2>&1; then
         echo "   Binary info:"
-        echo "     vibe-ensemble-server: $(file vibe-ensemble-server | cut -d: -f2 | xargs)"
-        echo "     vibe-ensemble-mcp: $(file vibe-ensemble-mcp | cut -d: -f2 | xargs)"
+        echo "     vibe-ensemble: $(file vibe-ensemble | cut -d: -f2 | xargs)"
     fi
 else
-    echo "   ❌ Missing binaries"
+    echo "   ❌ Missing binary"
     echo "   Contents of archive:"
     ls -la
 fi

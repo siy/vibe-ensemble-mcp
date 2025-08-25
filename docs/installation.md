@@ -12,7 +12,7 @@ A comprehensive guide to installing and running the Vibe Ensemble MCP server for
 # brew install vibe-ensemble-mcp
 
 # Start the server
-vibe-ensemble-server
+vibe-ensemble
 ```
 
 ### Linux (Package Manager)
@@ -113,11 +113,10 @@ curl -L -o vibe-ensemble-mcp.tar.gz \
 
 # Extract and install
 tar -xzf vibe-ensemble-mcp.tar.gz
-sudo mv vibe-ensemble-server /usr/local/bin/
-sudo mv vibe-ensemble-mcp /usr/local/bin/
+sudo mv vibe-ensemble /usr/local/bin/
 
 # Verify installation
-vibe-ensemble-server --version
+vibe-ensemble --version
 ```
 
 #### Linux
@@ -128,11 +127,11 @@ curl -L -o vibe-ensemble-mcp.tar.gz \
 
 # Extract and install
 tar -xzf vibe-ensemble-mcp.tar.gz
-sudo mv vibe-ensemble-server /usr/local/bin/
-sudo chmod +x /usr/local/bin/vibe-ensemble-server
+sudo mv vibe-ensemble /usr/local/bin/
+sudo chmod +x /usr/local/bin/vibe-ensemble
 
 # Verify installation
-vibe-ensemble-server --version
+vibe-ensemble --version
 ```
 
 #### Windows
@@ -152,21 +151,20 @@ cd vibe-ensemble-mcp
 cargo build --release
 
 # Install binaries
-sudo cp target/release/vibe-ensemble-server /usr/local/bin/
-sudo cp target/release/vibe-ensemble-mcp /usr/local/bin/
+sudo cp target/release/vibe-ensemble /usr/local/bin/
 
 # Verify installation
-vibe-ensemble-server --version
+vibe-ensemble --version
 ```
 
 ### Method 3: Cargo Install
 
 ```bash
 # Install from crates.io
-cargo install vibe-ensemble-server
+cargo install vibe-ensemble
 
 # Or install from Git
-cargo install --git https://github.com/siy/vibe-ensemble-mcp.git vibe-ensemble-server
+cargo install --git https://github.com/siy/vibe-ensemble-mcp.git vibe-ensemble
 ```
 
 ## Configuration
@@ -240,13 +238,13 @@ export VIBE_ENSEMBLE_WEB__PORT=3000
 ### Development Mode
 ```bash
 # Start with default configuration
-vibe-ensemble-server
+vibe-ensemble
 
 # Start with custom config
-vibe-ensemble-server --config /path/to/config.toml
+vibe-ensemble --config /path/to/config.toml
 
 # Start with environment override
-VIBE_ENSEMBLE_SERVER__PORT=9000 vibe-ensemble-server
+VIBE_ENSEMBLE_SERVER__PORT=9000 vibe-ensemble
 ```
 
 ### Production Mode
@@ -264,7 +262,7 @@ Type=simple
 User=vibe-ensemble
 Group=vibe-ensemble
 WorkingDirectory=/var/lib/vibe-ensemble
-ExecStart=/usr/local/bin/vibe-ensemble-server
+ExecStart=/usr/local/bin/vibe-ensemble
 Restart=always
 RestartSec=5
 Environment=RUST_LOG=info
@@ -355,13 +353,13 @@ curl -L -o vibe-ensemble-mcp.tar.gz \
 # Stop service, update, and restart
 sudo systemctl stop vibe-ensemble  # if using systemd
 tar -xzf vibe-ensemble-mcp.tar.gz
-sudo mv vibe-ensemble-server /usr/local/bin/
+sudo mv vibe-ensemble /usr/local/bin/
 sudo systemctl start vibe-ensemble
 ```
 
 ### Cargo Install
 ```bash
-cargo install --force vibe-ensemble-server
+cargo install --force vibe-ensemble
 ```
 
 ### Docker
@@ -397,7 +395,7 @@ psql -U vibe_ensemble -d vibe_ensemble -h localhost
 #### Permission Denied
 ```bash
 # Fix binary permissions
-chmod +x /usr/local/bin/vibe-ensemble-server
+chmod +x /usr/local/bin/vibe-ensemble
 
 # Fix config directory permissions
 chmod -R 755 ~/.config/vibe-ensemble
@@ -413,7 +411,7 @@ docker compose logs -f vibe-ensemble
 
 # Enable debug logging
 export RUST_LOG=debug
-vibe-ensemble-server
+vibe-ensemble
 ```
 
 ### Performance Issues
@@ -438,13 +436,13 @@ Use the Claude Code CLI to add the MCP server. Choose the appropriate scope for 
 
 ```bash
 # Local scope (current project only)
-claude mcp add vibe-ensemble vibe-ensemble-mcp --transport=stdio
+claude mcp add vibe-ensemble "vibe-ensemble --mcp-only --transport=stdio" --transport=stdio
 
 # User scope (available across all projects)
-claude mcp add vibe-ensemble vibe-ensemble-mcp --transport=stdio -s user
+claude mcp add vibe-ensemble "vibe-ensemble --mcp-only --transport=stdio" --transport=stdio -s user
 
 # Project scope (shared with team)
-claude mcp add vibe-ensemble vibe-ensemble-mcp --transport=stdio -s project
+claude mcp add vibe-ensemble "vibe-ensemble --mcp-only --transport=stdio" --transport=stdio -s project
 ```
 
 #### Option 2: Manual JSON Configuration
@@ -454,8 +452,8 @@ claude mcp add vibe-ensemble vibe-ensemble-mcp --transport=stdio -s project
 3. Add new server:
    ```json
    {
-     "command": "vibe-ensemble-mcp",
-     "args": ["--transport=stdio"],
+     "command": "vibe-ensemble",
+     "args": ["--mcp-only", "--transport=stdio"],
      "env": {
        "VIBE_ENSEMBLE_SERVER_URL": "http://localhost:8080"
      }
