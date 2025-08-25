@@ -73,8 +73,10 @@ COPY vibe-ensemble-monitoring/src/ ./vibe-ensemble-monitoring/src/
 # Copy additional required files
 COPY vibe-ensemble-web/templates/ ./vibe-ensemble-web/templates/
 COPY vibe-ensemble-storage/migrations/ ./vibe-ensemble-storage/migrations/
+COPY .sqlx/ ./.sqlx/
 
 # Build the application with optimizations
+ENV SQLX_OFFLINE=true
 RUN cargo build --release --locked --bin vibe-ensemble-server
 
 # Strip binary and verify
