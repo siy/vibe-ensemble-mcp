@@ -121,7 +121,7 @@ fn get_default_database_path() -> String {
         // Use absolute path for SQLite with proper URI format
         let db_file = app_data_dir.join("vibe_ensemble.db");
         let db_path = db_file.to_string_lossy();
-        
+
         // For paths with spaces, use file:// URI format which SQLx handles better
         if db_path.contains(' ') {
             format!("sqlite:///{}", db_path.replace(' ', "%20"))
