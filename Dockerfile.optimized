@@ -136,7 +136,7 @@ CMD ["vibe-ensemble"]
 FROM runtime AS production
 
 # Metadata
-ARG VERSION=0.2.1
+ARG VERSION=0.2.2
 LABEL maintainer="Vibe Ensemble Team"
 LABEL version="${VERSION}"
 LABEL description="Vibe Ensemble MCP Server - Production Optimized"

@@ -9,6 +9,9 @@ pub mod config;
 pub mod error;
 pub mod server;
 
+#[cfg(test)]
+mod config_tests;
+
 pub use error::{Error, Result};
 
 /// Re-export all core modules for convenience

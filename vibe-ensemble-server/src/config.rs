@@ -110,7 +110,7 @@ impl Default for Config {
     }
 }
 
-/// Get platform-appropriate default database URL for SQLx (always absolute, always encoded)
+/// Get platform-appropriate default database URL for SQLx (simple absolute path)
 fn get_default_database_path() -> String {
     // Windows: use roaming AppData (%APPDATA%) to align with docs; others: local data dir.
     #[cfg(target_os = "windows")]
@@ -127,18 +127,10 @@ fn get_default_database_path() -> String {
             return FALLBACK.to_string();
         }
         let db_file = app_data_dir.join("vibe_ensemble.db");
-        // Build a proper file:// URL, then convert to sqlite:// which SQLx expects.
-        match url::Url::from_file_path(&db_file) {
-            Ok(file_url) => file_url.as_str().replacen("file:", "sqlite:", 1),
-            Err(_) => {
-                // Last-resort formatting: normalize separators and minimally encode spaces
-                #[cfg(windows)]
-                let path = db_file.to_string_lossy().replace('\\', "/");
-                #[cfg(not(windows))]
-                let path = db_file.to_string_lossy().to_string();
-                format!("sqlite://{}", path.replace(' ', "%20"))
-            }
-        }
+
+        // Use simple absolute path without URL encoding to avoid SQLite issues with %20 encoding
+        // SQLx can handle absolute paths with spaces natively
+        format!("sqlite:{}", db_file.display())
     } else {
         FALLBACK.to_string()
     }

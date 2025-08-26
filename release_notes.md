@@ -1,3 +1,37 @@
+## 🔧 Vibe Ensemble MCP v0.2.2 - Database Configuration Fix
+
+This patch release fixes critical database configuration issues discovered in production environments.
+
+### 🐛 Bug Fixes
+
+**Database Configuration Unification**
+- ✅ **Fixed URL encoding issue** in `get_default_database_path()` - removed %20 encoding that caused SQLite connection failures
+- ✅ **Streamlined configuration system** - unified all operational modes to use consistent configuration approach
+- ✅ **Eliminated special-case code** - removed MCP-only bypass logic that caused configuration inconsistencies
+- ✅ **Enhanced error handling** - improved database connection error messages and debugging information
+
+### 🧪 Testing & Validation
+
+- ✅ All 316 existing tests pass
+- ✅ Added 6 new comprehensive configuration tests
+- ✅ Validated all operational modes with default configuration:
+  - Full mode: `vibe-ensemble`
+  - MCP WebSocket: `vibe-ensemble --mcp-only --transport=websocket`  
+  - MCP Stdio: `vibe-ensemble --mcp-only --transport=stdio`
+  - Web-only: `vibe-ensemble --web-only`
+  - API-only: `vibe-ensemble --api-only`
+
+### 📦 Installation
+
+Docker:
+```bash
+docker run -d --name vibe-ensemble -p 8080:8080 -p 8081:8081 ghcr.io/siy/vibe-ensemble-mcp:v0.2.2
+```
+
+**Full Changelog:** [v0.2.2 commits](https://github.com/siy/vibe-ensemble-mcp/commits/v0.2.2)
+
+---
+
 ## 🎉 Vibe Ensemble MCP v0.2.1 - Production-Ready Release
 
 The first stable release of Vibe Ensemble MCP Server is here! This comprehensive MCP server enables seamless coordination between multiple Claude Code instances with intelligent task distribution, real-time communication, and unified management.
@@ -62,7 +96,7 @@ iex ((New-Object System.Net.WebClient).DownloadString('https://vibeensemble.dev/
 
 Docker:
 ```bash
-docker run -d --name vibe-ensemble -p 8080:8080 -p 8081:8081 ghcr.io/siy/vibe-ensemble:v0.2.1
+docker run -d --name vibe-ensemble -p 8080:8080 -p 8081:8081 ghcr.io/siy/vibe-ensemble-mcp:v0.2.1
 ```
 
 **Manual Installation:**

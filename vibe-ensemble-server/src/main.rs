@@ -8,7 +8,20 @@
 
 use clap::Parser;
 use std::env;
-use tracing::{error, info, warn};
+use tracing::{error, info};
+
+/// Helper function to get database scheme type for safe logging
+fn db_scheme(url: &str) -> &'static str {
+    if url.starts_with("postgres://") {
+        "PostgreSQL"
+    } else if url.starts_with("mysql://") {
+        "MySQL"
+    } else if url.starts_with("sqlite:") {
+        "SQLite"
+    } else {
+        "Unknown DB"
+    }
+}
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 use vibe_ensemble_server::{config::Config, server::Server, McpTransport, OperationMode, Result};
 
@@ -89,13 +102,6 @@ async fn main() -> Result<()> {
         .with(tracing_subscriber::fmt::layer())
         .init();
 
-    // Handle MCP-only mode with stdio transport
-    if matches!(operation_mode, OperationMode::McpOnly)
-        && matches!(cli.transport, McpTransport::Stdio)
-    {
-        return run_mcp_stdio_mode().await;
-    }
-
     info!("Starting Vibe Ensemble Server in {:?} mode", operation_mode);
 
     // Load base configuration
@@ -116,7 +122,14 @@ async fn main() -> Result<()> {
 
     info!("Configuration loaded successfully");
 
-    // Create and start server
+    // Handle MCP-only mode with stdio transport (use unified config but specialized execution)
+    if matches!(operation_mode, OperationMode::McpOnly)
+        && matches!(cli.transport, McpTransport::Stdio)
+    {
+        return run_mcp_stdio_mode_unified(&config).await;
+    }
+
+    // Create and start server for all other modes
     let server = Server::new(config, operation_mode, cli.transport).await?;
 
     info!("Server initialized, starting...");
@@ -166,28 +179,31 @@ fn apply_cli_overrides(config: &mut Config, cli: &Cli, mode: OperationMode) {
     }
 }
 
-/// Run MCP server in stdio mode (for Claude Code integration)
-async fn run_mcp_stdio_mode() -> Result<()> {
+/// Run MCP server in stdio mode using unified configuration (for Claude Code integration)
+async fn run_mcp_stdio_mode_unified(config: &Config) -> Result<()> {
     info!("Starting Vibe Ensemble MCP Server in stdio mode");
 
-    // Get database URL from environment variable
+    // Use unified config database URL with environment variable override support
     let database_url = env::var("DATABASE_URL").unwrap_or_else(|_| {
-        warn!("DATABASE_URL not set, using default SQLite database");
-        "sqlite:./vibe_ensemble.db".to_string()
+        info!(
+            "DATABASE_URL not set, using configuration default for {}",
+            db_scheme(&config.database.url)
+        );
+        config.database.url.clone()
     });
 
-    info!("Connecting to database: {}", database_url);
+    info!("Connecting to database ({})", db_scheme(&database_url));
 
-    // Create database configuration
-    let config = vibe_ensemble_storage::manager::DatabaseConfig {
+    // Create database configuration using unified config values
+    let db_config = vibe_ensemble_storage::manager::DatabaseConfig {
         url: database_url,
-        max_connections: Some(10),
-        migrate_on_startup: true,
+        max_connections: config.database.max_connections,
+        migrate_on_startup: config.database.migrate_on_startup,
         performance_config: None,
     };
 
     // Initialize storage manager
-    let storage_manager = vibe_ensemble_storage::StorageManager::new(&config)
+    let storage_manager = vibe_ensemble_storage::StorageManager::new(&db_config)
         .await
         .map_err(|e| {
             error!("Failed to initialize storage manager: {}", e);
@@ -195,7 +211,16 @@ async fn run_mcp_stdio_mode() -> Result<()> {
         })?;
 
     info!("Database connection established");
-    info!("Database migrations completed");
+
+    if config.database.migrate_on_startup {
+        storage_manager.migrate().await.map_err(|e| {
+            error!("Failed to run database migrations: {}", e);
+            e
+        })?;
+        info!("Database migrations completed");
+    } else {
+        info!("Database auto-migration disabled");
+    }
 
     // Get services from storage manager
     let agent_service = storage_manager.agent_service();
