@@ -36,6 +36,7 @@ uuid = { workspace = true }
 dirs = { workspace = true }
 url = { workspace = true }
 clap = { workspace = true }
+async-stream = { workspace = true }
 
 [dev-dependencies]
 serial_test = "3"

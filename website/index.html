@@ -158,18 +158,18 @@
                             <code>
 # Local scope (current project)
 <br/>
-claude mcp add vibe-ensemble "vibe-ensemble --mcp-only --transport=stdio" --transport=stdio
+claude mcp add vibe-ensemble --transport=stdio -- vibe-ensemble --mcp-only --transport=stdio
 <br/>
 <br/>
 # User scope (all projects)
 <br/>
-claude mcp add vibe-ensemble "vibe-ensemble --mcp-only --transport=stdio" --transport=stdio -s user
+claude mcp add vibe-ensemble -s user --transport=stdio -- vibe-ensemble --mcp-only --transport=stdio
 <br/>
 <br/>
 # Project scope (shared with team)
 <br/>
-claude mcp add vibe-ensemble "vibe-ensemble --mcp-only --transport=stdio" --transport=stdio -s project</code>
-                            <button class="copy-btn" onclick="copyToClipboard('claude mcp add vibe-ensemble &quot;vibe-ensemble --mcp-only --transport=stdio&quot; --transport=stdio -s project')">Copy Local</button>
+claude mcp add vibe-ensemble -s project --transport=stdio -- vibe-ensemble --mcp-only --transport=stdio</code>
+                            <button class="copy-btn" onclick="copyToClipboard('claude mcp add vibe-ensemble -s project --transport=stdio -- vibe-ensemble --mcp-only --transport=stdio')">Copy Local</button>
                         </div>
                     </div>
                 </div>

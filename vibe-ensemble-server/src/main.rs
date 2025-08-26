@@ -122,9 +122,10 @@ async fn main() -> Result<()> {
 
     info!("Configuration loaded successfully");
 
-    // Handle MCP-only mode with stdio transport (use unified config but specialized execution)
+    // Handle MCP-only mode with stdio transport (use specialized execution only if web is disabled)
     if matches!(operation_mode, OperationMode::McpOnly)
         && matches!(cli.transport, McpTransport::Stdio)
+        && !config.web.enabled
     {
         return run_mcp_stdio_mode_unified(&config).await;
     }
@@ -167,7 +168,8 @@ fn apply_cli_overrides(config: &mut Config, cli: &Cli, mode: OperationMode) {
             // All components enabled (default config)
         }
         OperationMode::McpOnly => {
-            config.web.enabled = false;
+            // Keep web dashboard enabled for monitoring even in MCP-only mode
+            // This allows users to monitor the system while using Claude Code integration
             // MCP will be handled separately
         }
         OperationMode::WebOnly => {

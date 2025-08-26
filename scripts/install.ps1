@@ -234,13 +234,13 @@ function Show-PostInstallInstructions {
     Write-Host ""
     Write-Host "4. Add to Claude Code (choose one):"
     Write-Host "   # Local scope (current project only)" -ForegroundColor Green
-    Write-Host "   claude mcp add vibe-ensemble `"vibe-ensemble --mcp-only --transport=stdio`" --transport=stdio" -ForegroundColor Cyan
+    Write-Host "   claude mcp add vibe-ensemble --transport=stdio -- vibe-ensemble --mcp-only --transport=stdio" -ForegroundColor Cyan
     Write-Host ""
     Write-Host "   # User scope (all projects)" -ForegroundColor Green
-    Write-Host "   claude mcp add vibe-ensemble `"vibe-ensemble --mcp-only --transport=stdio`" --transport=stdio -s user" -ForegroundColor Cyan
+    Write-Host "   claude mcp add vibe-ensemble -s user --transport=stdio -- vibe-ensemble --mcp-only --transport=stdio" -ForegroundColor Cyan
     Write-Host ""
     Write-Host "   # Project scope (shared with team)" -ForegroundColor Green
-    Write-Host "   claude mcp add vibe-ensemble `"vibe-ensemble --mcp-only --transport=stdio`" --transport=stdio -s project" -ForegroundColor Cyan
+    Write-Host "   claude mcp add vibe-ensemble -s project --transport=stdio -- vibe-ensemble --mcp-only --transport=stdio" -ForegroundColor Cyan
     Write-Host ""
     Write-Host "5. Check the API:"
     Write-Host "   Invoke-RestMethod http://localhost:8080/api/health" -ForegroundColor Cyan

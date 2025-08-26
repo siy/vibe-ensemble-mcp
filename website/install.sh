@@ -194,7 +194,7 @@ print_next_steps() {
     echo -e "   ${GREEN}vibe-ensemble${NC}"
     echo
     echo "2. Configure Claude Code to connect to MCP server:"
-    echo -e "   ${GREEN}claude mcp add vibe-ensemble \"vibe-ensemble --mcp-only --transport=stdio\" --transport=stdio${NC}"
+    echo -e "   ${GREEN}claude mcp add vibe-ensemble --transport=stdio -- vibe-ensemble --mcp-only --transport=stdio${NC}"
     echo
     echo "3. Access the web dashboard: http://127.0.0.1:8081"
     echo "4. Check health: http://127.0.0.1:8080/api/health"

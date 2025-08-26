@@ -251,13 +251,13 @@ show_instructions() {
     echo
     echo "4. Add to Claude Code (choose one):"
     echo "   # Local scope (current project only)"
-    echo '   claude mcp add vibe-ensemble "vibe-ensemble --mcp-only --transport=stdio" --transport=stdio'
+    echo '   claude mcp add vibe-ensemble --transport=stdio -- vibe-ensemble --mcp-only --transport=stdio'
     echo
     echo "   # User scope (all projects)"
-    echo '   claude mcp add vibe-ensemble "vibe-ensemble --mcp-only --transport=stdio" --transport=stdio -s user'
+    echo '   claude mcp add vibe-ensemble -s user --transport=stdio -- vibe-ensemble --mcp-only --transport=stdio'
     echo
     echo "   # Project scope (shared with team)"
-    echo '   claude mcp add vibe-ensemble "vibe-ensemble --mcp-only --transport=stdio" --transport=stdio -s project'
+    echo '   claude mcp add vibe-ensemble -s project --transport=stdio -- vibe-ensemble --mcp-only --transport=stdio'
     echo
     echo "5. Check the API:"
     echo "   curl http://localhost:8080/api/health"

@@ -4,10 +4,13 @@ use crate::{config::Config, McpTransport, OperationMode, Result};
 use axum::{
     extract::{ws::WebSocket, State, WebSocketUpgrade},
     http::StatusCode,
-    response::{Json, Response},
+    response::{Json, Response, Sse},
     routing::{get, post},
     Router,
 };
+use axum::response::sse::{Event, KeepAlive};
+use futures_util::Stream;
+use tokio::time::{interval, Duration};
 use serde_json::{json, Value};
 use std::sync::Arc;
 use tower::ServiceBuilder;
@@ -96,7 +99,10 @@ impl Server {
 
         // Initialize web server if enabled
         let web_server = if config.web.enabled
-            && matches!(operation_mode, OperationMode::Full | OperationMode::WebOnly)
+            && matches!(
+                operation_mode,
+                OperationMode::Full | OperationMode::WebOnly | OperationMode::McpOnly
+            )
         {
             let web_config = vibe_ensemble_web::server::WebConfig {
                 enabled: config.web.enabled,
@@ -143,12 +149,18 @@ impl Server {
                 McpTransport::Stdio => {
                     // Stdio transport doesn't need HTTP endpoints - it's handled separately in main.rs
                 }
+                McpTransport::Sse => {
+                    router = router.route("/mcp/sse", get(mcp_sse_handler));
+                    info!("MCP SSE endpoint enabled at /mcp/sse (GET)");
+                }
                 McpTransport::Both => {
                     router = router
                         .route("/mcp", get(mcp_websocket_handler))
-                        .route("/mcp", post(mcp_http_handler));
+                        .route("/mcp", post(mcp_http_handler))
+                        .route("/mcp/sse", get(mcp_sse_handler));
                     info!("MCP WebSocket endpoint enabled at /mcp (GET)");
                     info!("MCP HTTP endpoint enabled at /mcp (POST)");
+                    info!("MCP SSE endpoint enabled at /mcp/sse (GET)");
                 }
             }
         }
@@ -194,13 +206,54 @@ impl Server {
             })
         });
 
-        // MCP server is available for protocol handling via handle_message
-        if matches!(
+        // Start MCP stdio handler in the background if needed
+        let mcp_stdio_handle = if matches!(
             self.operation_mode,
             OperationMode::Full | OperationMode::McpOnly
-        ) {
+        ) && matches!(self.transport, McpTransport::Stdio)
+        {
+            let mcp_server = self.mcp_server.clone();
+            Some(tokio::spawn(async move {
+                info!("Starting MCP stdio handler");
+                let mut transport = vibe_ensemble_mcp::transport::TransportFactory::stdio();
+                
+                loop {
+                    match transport.receive().await {
+                        Ok(message) => {
+                            tracing::debug!("Received MCP message: {}", message);
+                            
+                            match mcp_server.handle_message(&message).await {
+                                Ok(Some(response)) => {
+                                    tracing::debug!("Sending MCP response: {}", response);
+                                    if let Err(e) = transport.send(&response).await {
+                                        error!("Failed to send MCP response: {}", e);
+                                        break;
+                                    }
+                                }
+                                Ok(None) => {
+                                    tracing::debug!("No MCP response required");
+                                }
+                                Err(e) => {
+                                    error!("Error processing MCP message: {}", e);
+                                }
+                            }
+                        }
+                        Err(e) => {
+                            tracing::debug!("MCP transport error: {}", e);
+                            break;
+                        }
+                    }
+                }
+                
+                if let Err(e) = transport.close().await {
+                    warn!("Error closing MCP transport: {}", e);
+                }
+                info!("MCP stdio handler stopped");
+            }))
+        } else {
             info!("MCP server ready for protocol handling");
-        }
+            None
+        };
 
         // Use axum's graceful shutdown for better connection draining
         let shutdown = async {
@@ -237,6 +290,10 @@ impl Server {
         info!("Shutting down server...");
 
         if let Some(handle) = web_handle {
+            handle.abort();
+        }
+        
+        if let Some(handle) = mcp_stdio_handle {
             handle.abort();
         }
 
@@ -469,4 +526,44 @@ async fn handle_mcp_websocket(mut socket: WebSocket, state: AppState) {
             }
         }
     }
+}
+
+/// MCP SSE handler for real-time monitoring (read-only)
+/// Note: SSE is unidirectional, so this provides system status updates rather than full MCP protocol
+async fn mcp_sse_handler(
+    State(state): State<AppState>,
+) -> Sse<impl Stream<Item = std::result::Result<Event, axum::BoxError>>> {
+    let stream = async_stream::stream! {
+        let mut interval = interval(Duration::from_secs(10));
+        
+        loop {
+            interval.tick().await;
+            
+            // Get current system status
+            let agent_count = state.storage.agent_service().list_agents().await.unwrap_or_default().len();
+            let issue_count = state.storage.issue_service().list_issues().await.unwrap_or_default().len();
+            
+            let status = json!({
+                "timestamp": chrono::Utc::now().to_rfc3339(),
+                "agents": {
+                    "count": agent_count,
+                },
+                "issues": {
+                    "count": issue_count,
+                },
+                "server": {
+                    "status": "running",
+                    "uptime": "unknown"
+                }
+            });
+            
+            let event = Event::default()
+                .json_data(status)
+                .map_err(|e| axum::BoxError::from(e));
+                
+            yield event;
+        }
+    };
+
+    Sse::new(stream).keep_alive(KeepAlive::default())
 }

@@ -196,13 +196,13 @@ print_next_steps() {
     echo
     echo "2. Add to Claude Code (choose one):"
     echo -e "   ${GREEN}# Local scope (current project only)${NC}"
-    echo '   claude mcp add vibe-ensemble "vibe-ensemble --mcp-only --transport=stdio" --transport=stdio'
+    echo '   claude mcp add vibe-ensemble --transport=stdio -- vibe-ensemble --mcp-only --transport=stdio'
     echo
     echo -e "   ${GREEN}# User scope (all projects)${NC}"
-    echo '   claude mcp add vibe-ensemble "vibe-ensemble --mcp-only --transport=stdio" --transport=stdio -s user'
+    echo '   claude mcp add vibe-ensemble -s user --transport=stdio -- vibe-ensemble --mcp-only --transport=stdio'
     echo
     echo -e "   ${GREEN}# Project scope (shared with team)${NC}"
-    echo '   claude mcp add vibe-ensemble "vibe-ensemble --mcp-only --transport=stdio" --transport=stdio -s project'
+    echo '   claude mcp add vibe-ensemble -s project --transport=stdio -- vibe-ensemble --mcp-only --transport=stdio'
     echo
     echo "3. Access the web dashboard: http://127.0.0.1:8081"
     echo "4. Check health: http://127.0.0.1:8080/api/health"

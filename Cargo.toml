@@ -75,6 +75,7 @@ reqwest = "0.12"
 hyper = "1.0"
 url = "2.5"
 clap = { version = "4.0", features = ["derive"] }
+async-stream = "0.3"
 
 # Security and authentication
 bcrypt = "0.15"
