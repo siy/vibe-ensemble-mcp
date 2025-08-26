@@ -393,7 +393,7 @@ claude mcp add --transport http vibe-ensemble http://localhost:8080/mcp
 
 # SSE transport (event stream monitoring)
 # Connect Claude Code to the SSE endpoint for real-time events:
-claude mcp add --transport sse vibe-ensemble http://localhost:8080/mcp/sse
+claude mcp add --transport sse vibe-ensemble http://localhost:8080/mcp/events
 ```
 
 #### Option 2: Manual JSON Configuration

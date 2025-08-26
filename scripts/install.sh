@@ -263,7 +263,7 @@ show_instructions() {
     echo '   claude mcp add --transport http vibe-ensemble http://localhost:8080/mcp'
     echo
     echo "   # SSE transport (event stream monitoring)"
-    echo '   claude mcp add --transport sse vibe-ensemble http://localhost:8080/mcp/sse'
+    echo '   claude mcp add --transport sse vibe-ensemble http://localhost:8080/mcp/events'
     echo
     echo "5. Check the API:"
     echo "   curl http://localhost:8080/api/health"
