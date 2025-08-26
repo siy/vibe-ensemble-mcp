@@ -29,7 +29,7 @@ curl -fsSL https://vibeensemble.dev/install.sh | sudo bash
 
 ```powershell
 # Install via PowerShell
-iex (irm https://vibeensemble.dev/install.ps1)
+iex (irm 'https://vibeensemble.dev/install.ps1')
 
 # Or download MSI installer
 # https://github.com/siy/vibe-ensemble-mcp/releases/latest
@@ -281,7 +281,7 @@ curl http://localhost:8080/api/health
 Open your browser and navigate to:
 - **Dashboard**: <http://localhost:8081>
 - **API Health**: <http://localhost:8080/api/health>
-# If metrics are enabled in your deployment:
+_If metrics are enabled in your deployment:_
 - **Metrics**: <http://localhost:9090/metrics>
 
 ### MCP Tools
