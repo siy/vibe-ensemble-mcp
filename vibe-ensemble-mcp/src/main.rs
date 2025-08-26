@@ -16,7 +16,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Initialize tracing
     init();
 
-    info!("Starting Vibe Ensemble MCP Server v0.2.1");
+    info!("Starting Vibe Ensemble MCP Server v{}", env!("CARGO_PKG_VERSION"));
 
     // Get database URL from environment variable
     let database_url = env::var("DATABASE_URL").unwrap_or_else(|_| {

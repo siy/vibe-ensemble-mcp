@@ -59,7 +59,7 @@ mod tests {
         let init_result = result.unwrap().unwrap();
         assert_eq!(init_result.protocol_version, MCP_VERSION);
         assert_eq!(init_result.server_info.name, "vibe-ensemble-mcp");
-        assert_eq!(init_result.server_info.version, "0.2.1");
+        assert_eq!(init_result.server_info.version, env!("CARGO_PKG_VERSION"));
 
         // Wait for server task to complete
         server_handle.await.unwrap();
@@ -319,7 +319,7 @@ mod tests {
         use vibe_ensemble_storage::{repositories::AgentRepository, services::AgentService};
 
         // Create in-memory database for testing
-        let pool = sqlx::SqlitePool::connect(":memory:").await.unwrap();
+        let pool = sqlx::SqlitePool::connect("sqlite::memory:?cache=shared").await.unwrap();
         vibe_ensemble_storage::migrations::run_migrations(&pool)
             .await
             .unwrap();
@@ -367,7 +367,7 @@ mod tests {
         use vibe_ensemble_storage::{repositories::AgentRepository, services::AgentService};
 
         // Create in-memory database and add test agents
-        let pool = sqlx::SqlitePool::connect(":memory:").await.unwrap();
+        let pool = sqlx::SqlitePool::connect("sqlite::memory:?cache=shared").await.unwrap();
         vibe_ensemble_storage::migrations::run_migrations(&pool)
             .await
             .unwrap();
@@ -474,7 +474,7 @@ mod tests {
         use vibe_ensemble_storage::{repositories::AgentRepository, services::AgentService};
 
         // Create in-memory database and add test agent
-        let pool = sqlx::SqlitePool::connect(":memory:").await.unwrap();
+        let pool = sqlx::SqlitePool::connect("sqlite::memory:?cache=shared").await.unwrap();
         vibe_ensemble_storage::migrations::run_migrations(&pool)
             .await
             .unwrap();
@@ -541,7 +541,7 @@ mod tests {
         use vibe_ensemble_storage::{repositories::AgentRepository, services::AgentService};
 
         // Create in-memory database for testing
-        let pool = sqlx::SqlitePool::connect(":memory:").await.unwrap();
+        let pool = sqlx::SqlitePool::connect("sqlite::memory:?cache=shared").await.unwrap();
         vibe_ensemble_storage::migrations::run_migrations(&pool)
             .await
             .unwrap();
@@ -607,7 +607,7 @@ mod tests {
         use vibe_ensemble_storage::{repositories::AgentRepository, services::AgentService};
 
         // Create in-memory database for testing
-        let pool = sqlx::SqlitePool::connect(":memory:").await.unwrap();
+        let pool = sqlx::SqlitePool::connect("sqlite::memory:?cache=shared").await.unwrap();
         vibe_ensemble_storage::migrations::run_migrations(&pool)
             .await
             .unwrap();
@@ -695,7 +695,7 @@ mod tests {
         };
 
         // Create in-memory database for testing
-        let pool = sqlx::SqlitePool::connect(":memory:").await.unwrap();
+        let pool = sqlx::SqlitePool::connect("sqlite::memory:?cache=shared").await.unwrap();
         vibe_ensemble_storage::migrations::run_migrations(&pool)
             .await
             .unwrap();
@@ -899,7 +899,7 @@ mod tests {
         };
 
         // Create in-memory database for testing
-        let pool = sqlx::SqlitePool::connect(":memory:").await.unwrap();
+        let pool = sqlx::SqlitePool::connect("sqlite::memory:?cache=shared").await.unwrap();
         vibe_ensemble_storage::migrations::run_migrations(&pool)
             .await
             .unwrap();
@@ -994,7 +994,7 @@ mod tests {
         };
 
         // Create in-memory database for testing
-        let pool = sqlx::SqlitePool::connect(":memory:").await.unwrap();
+        let pool = sqlx::SqlitePool::connect("sqlite::memory:?cache=shared").await.unwrap();
         vibe_ensemble_storage::migrations::run_migrations(&pool)
             .await
             .unwrap();
