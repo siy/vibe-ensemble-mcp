@@ -60,7 +60,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     };
 
     info!("Database connection established");
-    
+
     if config.migrate_on_startup {
         storage_manager.migrate().await.map_err(|e| {
             error!("Failed to run database migrations: {}", e);

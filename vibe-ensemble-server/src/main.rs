@@ -211,7 +211,7 @@ async fn run_mcp_stdio_mode_unified(config: &Config) -> Result<()> {
         })?;
 
     info!("Database connection established");
-    
+
     if config.database.migrate_on_startup {
         storage_manager.migrate().await.map_err(|e| {
             error!("Failed to run database migrations: {}", e);
