@@ -126,8 +126,6 @@
       ".zsh",
       ".fish",
       ".ps1",
-      ".dockerfile",
-      ".dockerignore",
       ".gitignore",
       ".gitattributes",
       ".env",

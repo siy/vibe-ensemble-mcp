@@ -237,7 +237,7 @@ async fn test_knowledge_collaboration_e2e() {
     let agents = vec![
         MockAgent::with_capabilities("backend-expert", vec!["rust".to_string(), "databases".to_string()]),
         MockAgent::with_capabilities("frontend-expert", vec!["react".to_string(), "typescript".to_string()]),
-        MockAgent::with_capabilities("devops-expert", vec!["docker".to_string(), "kubernetes".to_string()]),
+        MockAgent::with_capabilities("devops-expert", vec!["kubernetes".to_string(), "monitoring".to_string()]),
     ];
     
     // Register agents
@@ -272,7 +272,7 @@ async fn test_knowledge_collaboration_e2e() {
         .knowledge_type(KnowledgeType::TroubleshootingGuide)
         .access_level(AccessLevel::TeamVisible)
         .created_by(agents[2].id())
-        .tags(vec!["kubernetes".to_string(), "docker".to_string(), "troubleshooting".to_string()])
+        .tags(vec!["kubernetes".to_string(), "monitoring".to_string(), "troubleshooting".to_string()])
         .build()
         .unwrap();
     
