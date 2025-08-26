@@ -1,5 +1,6 @@
 # Vibe Ensemble MCP Server Installation Script for Windows
-# Usage: iex ((New-Object System.Net.WebClient).DownloadString('https://vibeensemble.dev/install.ps1'))
+# Usage: iwr -useb https://vibeensemble.dev/install.ps1 | iex
+#   or:  iex (irm 'https://vibeensemble.dev/install.ps1')
 
 param(
     [string]$InstallDir = "$env:LOCALAPPDATA\Programs\VibeEnsemble",
