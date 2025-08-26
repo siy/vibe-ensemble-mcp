@@ -287,8 +287,13 @@ Open your browser and navigate to:
 ### MCP Tools
 Test MCP server integration:
 ```bash
-# Using the MCP client
-echo '{"jsonrpc": "2.0", "id": 1, "method": "vibe/agent/list", "params": {}}' | vibe-ensemble-mcp
+# Using stdio transport
+echo '{"jsonrpc":"2.0","id":1,"method":"vibe/agent/list","params":{}}' | vibe-ensemble --mcp-only --transport=stdio
+
+# Or via HTTP:
+curl -sS -H 'Content-Type: application/json' \
+  -d '{"jsonrpc":"2.0","id":1,"method":"vibe/agent/list","params":{}}' \
+  http://localhost:8080/mcp
 ```
 
 ## Updating
