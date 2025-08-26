@@ -415,7 +415,7 @@ claude mcp add vibe-ensemble -s project --transport=stdio -- vibe-ensemble --mcp
 ## Support
 
 ### Getting Help
-- **Documentation**: <https://vibe-ensemble.dev/docs>
+- **Documentation**: <https://vibeensemble.dev/docs>
 - **GitHub Issues**: <https://github.com/siy/vibe-ensemble-mcp/issues>
 - **Discussions**: <https://github.com/siy/vibe-ensemble-mcp/discussions>
 

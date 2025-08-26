@@ -868,98 +868,39 @@ impl McpServer {
 
         debug!("Tool call: {} with arguments: {}", tool_name, arguments);
 
-        // Convert snake_case tool name to slash-separated method name
-        // e.g., "vibe_agent_register" -> "vibe/agent/register"
-        let method_name = tool_name.replace('_', "/");
-        debug!("Converted tool {} to method {}", tool_name, method_name);
+        // Generic mapping: "vibe_agent_register" -> "vibe/agent/register", etc.
+        let method = if let Some(stripped) = tool_name.strip_prefix("vibe_") {
+            format!("vibe/{}", stripped.replace('_', "/"))
+        } else {
+            // Keep legacy names working if already slash-formatted
+            tool_name.replace('_', "/")
+        };
 
-        // Create a new request with the converted method name and forward to existing handlers
-        let forwarded_request = JsonRpcRequest {
+        let subreq = JsonRpcRequest {
             jsonrpc: request.jsonrpc.clone(),
             id: request.id.clone(),
-            method: method_name.clone(),
+            method,
             params: Some(arguments),
         };
 
-        // Forward to the appropriate handler based on the converted method name
-        let handler_result = match method_name.as_str() {
-            methods::AGENT_REGISTER => self.handle_agent_register(forwarded_request).await,
-            methods::AGENT_STATUS => self.handle_agent_status(forwarded_request).await,
-            methods::AGENT_LIST => self.handle_agent_list(forwarded_request).await,
-            methods::AGENT_DEREGISTER => self.handle_agent_deregister(forwarded_request).await,
-            methods::ISSUE_CREATE => self.handle_issue_create_new(forwarded_request).await,
-            methods::ISSUE_LIST => self.handle_issue_list_new(forwarded_request).await,
-            methods::ISSUE_ASSIGN => self.handle_issue_assign(forwarded_request).await,
-            methods::ISSUE_UPDATE => self.handle_issue_update_new(forwarded_request).await,
-            methods::ISSUE_CLOSE => self.handle_issue_close(forwarded_request).await,
-            methods::MESSAGE_SEND => self.handle_message_send(forwarded_request).await,
-            methods::MESSAGE_BROADCAST => self.handle_message_broadcast(forwarded_request).await,
-            methods::KNOWLEDGE_QUERY => self.handle_knowledge_query(forwarded_request).await,
-            methods::WORKER_MESSAGE => self.handle_worker_message(forwarded_request).await,
-            methods::WORKER_REQUEST => self.handle_worker_request(forwarded_request).await,
-            methods::WORKER_COORDINATE => self.handle_worker_coordinate(forwarded_request).await,
-            methods::PROJECT_LOCK => self.handle_project_lock(forwarded_request).await,
-            methods::DEPENDENCY_DECLARE => self.handle_dependency_declare(forwarded_request).await,
-            methods::COORDINATOR_REQUEST_WORKER => {
-                self.handle_coordinator_request_worker(forwarded_request)
-                    .await
-            }
-            methods::WORK_COORDINATE => self.handle_work_coordinate(forwarded_request).await,
-            methods::CONFLICT_RESOLVE => self.handle_conflict_resolve(forwarded_request).await,
-            methods::SCHEDULE_COORDINATE => {
-                self.handle_schedule_coordinate(forwarded_request).await
-            }
-            methods::CONFLICT_PREDICT => self.handle_conflict_predict(forwarded_request).await,
-            methods::RESOURCE_RESERVE => self.handle_resource_reserve(forwarded_request).await,
-            methods::MERGE_COORDINATE => self.handle_merge_coordinate(forwarded_request).await,
-            methods::KNOWLEDGE_QUERY_COORDINATION => {
-                self.handle_knowledge_query_coordination(forwarded_request)
-                    .await
-            }
-            methods::PATTERN_SUGGEST => self.handle_pattern_suggest(forwarded_request).await,
-            methods::GUIDELINE_ENFORCE => self.handle_guideline_enforce(forwarded_request).await,
-            methods::LEARNING_CAPTURE => self.handle_learning_capture(forwarded_request).await,
-            _ => {
-                // Unknown method - return error immediately
-                return Ok(Some(JsonRpcResponse::error(
-                    request.id,
-                    JsonRpcError {
-                        code: error_codes::METHOD_NOT_FOUND,
-                        message: format!("Unknown tool: {}", tool_name),
-                        data: None,
-                    },
-                )));
-            }
+        // Re-dispatch to the regular handler set
+        let result = match self.handle_request(subreq).await? {
+            Some(response) => response.result.unwrap_or(serde_json::Value::Null),
+            None => serde_json::Value::Null,
         };
 
-        match handler_result? {
-            Some(response) => {
-                // Extract the result and wrap it in the expected MCP tool response format
-                let result = response.result.unwrap_or(serde_json::Value::Null);
-                Ok(Some(JsonRpcResponse::success(
-                    request.id,
-                    serde_json::json!({
-                        "content": [
-                            {
-                                "type": "text",
-                                "text": serde_json::to_string_pretty(&result).unwrap_or_else(|_| "Tool executed successfully".to_string())
-                            }
-                        ]
-                    }),
-                )))
-            }
-            None => {
-                // If no response, return an error
-                Ok(Some(JsonRpcResponse::error(
-                    request.id,
-                    JsonRpcError {
-                        code: error_codes::METHOD_NOT_FOUND,
-                        message: format!("Unknown tool: {}", tool_name),
-                        data: None,
-                    },
-                )))
-            }
-        }
+        Ok(Some(JsonRpcResponse::success(
+            request.id,
+            serde_json::json!({
+                "content": [
+                    {
+                        "type": "text",
+                        "text": serde_json::to_string_pretty(&result)
+                            .unwrap_or_else(|_| "Tool executed successfully".to_string())
+                    }
+                ]
+            }),
+        )))
     }
 
     /// Handle resources list request
