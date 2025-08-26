@@ -198,7 +198,7 @@ print_next_steps() {
     echo "   Or with HTTP transport:"
     echo -e "   ${GREEN}claude mcp add --transport http vibe-ensemble http://localhost:8080/mcp${NC}"
     echo "   Or with SSE transport:"
-    echo -e "   ${GREEN}claude mcp add --transport sse vibe-ensemble http://localhost:8080/mcp/sse${NC}"
+    echo -e "   ${GREEN}claude mcp add --transport sse vibe-ensemble http://localhost:8080/mcp/events${NC}"
     echo
     echo "3. Access the web dashboard: http://127.0.0.1:8081"
     echo "4. Check health: http://127.0.0.1:8080/api/health"

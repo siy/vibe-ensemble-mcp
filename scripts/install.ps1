@@ -246,7 +246,7 @@ function Show-PostInstallInstructions {
     Write-Host "   claude mcp add --transport http vibe-ensemble http://localhost:8080/mcp" -ForegroundColor Cyan
     Write-Host ""
     Write-Host "   # SSE transport (event stream monitoring)" -ForegroundColor Green
-    Write-Host "   claude mcp add --transport sse vibe-ensemble http://localhost:8080/mcp/sse" -ForegroundColor Cyan
+    Write-Host "   claude mcp add --transport sse vibe-ensemble http://localhost:8080/mcp/events" -ForegroundColor Cyan
     Write-Host ""
     Write-Host "5. Check the API:"
     Write-Host "   Invoke-RestMethod http://localhost:8080/api/health" -ForegroundColor Cyan

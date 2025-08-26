@@ -149,17 +149,17 @@ impl Server {
                     // Stdio transport doesn't need HTTP endpoints - it's handled separately in main.rs
                 }
                 McpTransport::Sse => {
-                    router = router.route("/mcp/sse", get(mcp_sse_handler));
-                    info!("MCP SSE endpoint enabled at /mcp/sse (GET)");
+                    router = router.route("/mcp/events", get(mcp_sse_handler));
+                    info!("MCP SSE endpoint enabled at /mcp/events (GET)");
                 }
                 McpTransport::Both => {
                     router = router
                         .route("/mcp", get(mcp_websocket_handler))
                         .route("/mcp", post(mcp_http_handler))
-                        .route("/mcp/sse", get(mcp_sse_handler));
+                        .route("/mcp/events", get(mcp_sse_handler));
                     info!("MCP WebSocket endpoint enabled at /mcp (GET)");
                     info!("MCP HTTP endpoint enabled at /mcp (POST)");
-                    info!("MCP SSE endpoint enabled at /mcp/sse (GET)");
+                    info!("MCP SSE endpoint enabled at /mcp/events (GET)");
                 }
             }
         }

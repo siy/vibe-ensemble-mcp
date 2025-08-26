@@ -191,7 +191,7 @@ function Show-NextSteps {
     Write-Host "   Or with HTTP transport:"
     Write-Host "   claude mcp add --transport http vibe-ensemble http://localhost:8080/mcp" -ForegroundColor Green
     Write-Host "   Or with SSE transport:"
-    Write-Host "   claude mcp add --transport sse vibe-ensemble http://localhost:8080/mcp/sse" -ForegroundColor Green
+    Write-Host "   claude mcp add --transport sse vibe-ensemble http://localhost:8080/mcp/events" -ForegroundColor Green
     Write-Host ""
     Write-Host "4. Access the web dashboard: http://127.0.0.1:8081"
     Write-Host "5. Check health: http://127.0.0.1:8080/api/health"

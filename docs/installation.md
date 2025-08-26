@@ -20,11 +20,9 @@ vibe-ensemble
 ```bash
 # Ubuntu/Debian
 curl -fsSL https://vibeensemble.dev/install.sh | sudo bash
-sudo apt update && sudo apt install vibe-ensemble-mcp
 
 # CentOS/RHEL/Fedora
 curl -fsSL https://vibeensemble.dev/install.sh | sudo bash
-sudo yum install vibe-ensemble-mcp  # or dnf for newer systems
 ```
 
 ### Windows (PowerShell)
@@ -281,9 +279,10 @@ curl http://localhost:8080/api/health
 
 ### Web Interface
 Open your browser and navigate to:
-- **Dashboard**: <http://localhost:8080>
-- **Metrics**: <http://localhost:9090/metrics>
+- **Dashboard**: <http://localhost:8081>
 - **API Health**: <http://localhost:8080/api/health>
+# If metrics are enabled in your deployment:
+- **Metrics**: <http://localhost:9090/metrics>
 
 ### MCP Tools
 Test MCP server integration:
