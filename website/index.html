@@ -113,25 +113,21 @@
                 <div class="install-card">
                     <h3>Windows PowerShell</h3>
                     <div class="code-block">
-                        <code>iex ((New-Object System.Net.WebClient).DownloadString('https://vibeensemble.dev/install.ps1'))</code>
-                        <button class="copy-btn" onclick="copyToClipboard('iex ((New-Object System.Net.WebClient).DownloadString(\\\'https://vibeensemble.dev/install.ps1\\\'))')">Copy</button>
+                        <code>iwr https://vibeensemble.dev/install.ps1 -UseBasicParsing | iex</code>
+                        <button class="copy-btn" onclick="copyToClipboard('iwr https://vibeensemble.dev/install.ps1 -UseBasicParsing | iex')">Copy</button>
                     </div>
                 </div>
             </div>
             <div class="download-alternatives">
                 <h4>Alternative Downloads</h4>
                 <div class="download-links">
-                    <a href="https://github.com/siy/vibe-ensemble-mcp/releases/latest/download/vibe-ensemble_v0.2.3_amd64.deb" class="download-link">
-                        <span class="download-icon">📦</span>
-                        <span>Ubuntu/Debian (.deb)</span>
-                    </a>
-                    <a href="https://github.com/siy/vibe-ensemble-mcp/releases/latest/download/vibe-ensemble-v0.2.3-1.x86_64.rpm" class="download-link">
-                        <span class="download-icon">📦</span>
-                        <span>CentOS/RHEL/Fedora (.rpm)</span>
-                    </a>
                     <a href="https://github.com/siy/vibe-ensemble-mcp/releases/latest" class="download-link">
                         <span class="download-icon">⬇️</span>
-                        <span>All Releases</span>
+                        <span>Platform Binaries</span>
+                    </a>
+                    <a href="https://github.com/siy/vibe-ensemble-mcp" class="download-link">
+                        <span class="download-icon">📁</span>
+                        <span>Source Code</span>
                     </a>
                 </div>
             </div>

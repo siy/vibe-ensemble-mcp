@@ -28,12 +28,12 @@ curl -fsSL https://vibeensemble.dev/install.sh | bash
 
 **Windows PowerShell:**
 ```powershell
-iex ((New-Object System.Net.WebClient).DownloadString('https://vibeensemble.dev/install.ps1'))
+iwr https://vibeensemble.dev/install.ps1 -UseBasicParsing | iex
 ```
 
-**Package Managers:**
-- Ubuntu/Debian: `wget https://github.com/siy/vibe-ensemble-mcp/releases/latest/download/vibe-ensemble_v0.2.3_amd64.deb && sudo dpkg -i vibe-ensemble_v0.2.3_amd64.deb`
-- CentOS/RHEL/Fedora: `wget https://github.com/siy/vibe-ensemble-mcp/releases/latest/download/vibe-ensemble-v0.2.3-1.x86_64.rpm && sudo rpm -i vibe-ensemble-v0.2.3-1.x86_64.rpm`
+**Binary Downloads:**
+- Download platform-specific binaries from [GitHub Releases](https://github.com/siy/vibe-ensemble-mcp/releases/v0.2.3)
+- Extract and install according to your platform's conventions
 
 **Full Changelog:** [v0.2.3 commits](https://github.com/siy/vibe-ensemble-mcp/commits/v0.2.3)
 
@@ -133,7 +133,7 @@ curl -fsSL https://vibeensemble.dev/install.sh | bash
 
 Windows PowerShell:
 ```powershell
-iex ((New-Object System.Net.WebClient).DownloadString('https://vibeensemble.dev/install.ps1'))
+iwr https://vibeensemble.dev/install.ps1 -UseBasicParsing | iex
 ```
 
 Binary Installation:
