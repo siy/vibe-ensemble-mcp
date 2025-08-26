@@ -1,6 +1,6 @@
 #!/bin/bash
 # Vibe Ensemble MCP Installation Script
-# Usage: curl -fsSL https://get.vibe-ensemble.dev/install.sh | bash
+# Usage: curl -fsSL https://get.vibeensemble.dev/install.sh | bash
 
 set -Euo pipefail
 

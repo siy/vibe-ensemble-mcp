@@ -61,10 +61,10 @@ jobs:
             **Quick install:**
             ```bash
             # macOS/Linux
-            curl -fsSL https://vibeensemble.dev/install.sh | bash
+            curl -fsSL https://get.vibeensemble.dev/install.sh | bash
 
             # Windows PowerShell
-            iex ((New-Object System.Net.WebClient).DownloadString('https://vibeensemble.dev/install.ps1'))
+            iex ((New-Object System.Net.WebClient).DownloadString('https://get.vibeensemble.dev/install.ps1'))
             ```
 
 

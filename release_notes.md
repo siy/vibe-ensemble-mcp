@@ -23,12 +23,12 @@ Use the native installation methods for better performance:
 
 **macOS/Linux:**
 ```bash
-curl -fsSL https://vibeensemble.dev/install.sh | bash
+curl -fsSL https://get.vibeensemble.dev/install.sh | bash
 ```
 
 **Windows PowerShell:**
 ```powershell
-iwr https://vibeensemble.dev/install.ps1 -UseBasicParsing | iex
+iwr https://get.vibeensemble.dev/install.ps1 -UseBasicParsing | iex
 ```
 
 **Binary Downloads:**
@@ -128,12 +128,12 @@ The first stable release of Vibe Ensemble MCP Server is here! This comprehensive
 
 macOS/Linux:
 ```bash
-curl -fsSL https://vibeensemble.dev/install.sh | bash
+curl -fsSL https://get.vibeensemble.dev/install.sh | bash
 ```
 
 Windows PowerShell:
 ```powershell
-iwr https://vibeensemble.dev/install.ps1 -UseBasicParsing | iex
+iwr https://get.vibeensemble.dev/install.ps1 -UseBasicParsing | iex
 ```
 
 Binary Installation:

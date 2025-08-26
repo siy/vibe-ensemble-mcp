@@ -106,15 +106,15 @@
                 <div class="install-card">
                     <h3>macOS / Linux</h3>
                     <div class="code-block">
-                        <code>curl -fsSL https://vibeensemble.dev/install.sh | bash</code>
-                        <button class="copy-btn" onclick="copyToClipboard('curl -fsSL https://vibeensemble.dev/install.sh | bash')">Copy</button>
+                        <code>curl -fsSL https://get.vibeensemble.dev/install.sh | bash</code>
+                        <button class="copy-btn" onclick="copyToClipboard('curl -fsSL https://get.vibeensemble.dev/install.sh | bash')">Copy</button>
                     </div>
                 </div>
                 <div class="install-card">
                     <h3>Windows PowerShell</h3>
                     <div class="code-block">
-                        <code>iwr https://vibeensemble.dev/install.ps1 -UseBasicParsing | iex</code>
-                        <button class="copy-btn" onclick="copyToClipboard('iwr https://vibeensemble.dev/install.ps1 -UseBasicParsing | iex')">Copy</button>
+                        <code>iwr https://get.vibeensemble.dev/install.ps1 -UseBasicParsing | iex</code>
+                        <button class="copy-btn" onclick="copyToClipboard('iwr https://get.vibeensemble.dev/install.ps1 -UseBasicParsing | iex')">Copy</button>
                     </div>
                 </div>
             </div>
@@ -169,7 +169,9 @@ claude mcp add vibe-ensemble -s user --transport=stdio -- vibe-ensemble --mcp-on
 # Project scope (shared with team)
 <br/>
 claude mcp add vibe-ensemble -s project --transport=stdio -- vibe-ensemble --mcp-only --transport=stdio</code>
-                            <button class="copy-btn" onclick="copyToClipboard('claude mcp add vibe-ensemble -s project --transport=stdio -- vibe-ensemble --mcp-only --transport=stdio')">Copy Local</button>
+                            <button class="copy-btn" onclick="copyToClipboard('claude mcp add vibe-ensemble --transport=stdio -- vibe-ensemble --mcp-only --transport=stdio')">Copy Local</button>
+                            <button class="copy-btn" onclick="copyToClipboard('claude mcp add vibe-ensemble -s user --transport=stdio -- vibe-ensemble --mcp-only --transport=stdio')">Copy User</button>
+                            <button class="copy-btn" onclick="copyToClipboard('claude mcp add vibe-ensemble -s project --transport=stdio -- vibe-ensemble --mcp-only --transport=stdio')">Copy Project</button>
                         </div>
                     </div>
                 </div>
