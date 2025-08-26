@@ -5,6 +5,19 @@
 
 use std::env;
 use tracing::{debug, error, info, warn};
+
+/// Helper function to get database scheme type for safe logging
+fn db_scheme(url: &str) -> &'static str {
+    if url.starts_with("postgres://") {
+        "PostgreSQL"
+    } else if url.starts_with("mysql://") {
+        "MySQL"
+    } else if url.starts_with("sqlite:") {
+        "SQLite"
+    } else {
+        "Unknown DB"
+    }
+}
 use tracing_subscriber::fmt::init;
 use vibe_ensemble_mcp::server::McpServer;
 use vibe_ensemble_mcp::transport::TransportFactory;
@@ -27,7 +40,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         "sqlite:./vibe_ensemble.db".to_string()
     });
 
-    info!("Connecting to database: {}", database_url);
+    info!("Connecting to database ({})", db_scheme(&database_url));
 
     // Create database configuration
     let config = DatabaseConfig {
@@ -47,7 +60,16 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     };
 
     info!("Database connection established");
-    info!("Database migrations completed");
+    
+    if config.migrate_on_startup {
+        storage_manager.migrate().await.map_err(|e| {
+            error!("Failed to run database migrations: {}", e);
+            e
+        })?;
+        info!("Database migrations completed");
+    } else {
+        info!("Database auto-migration disabled");
+    }
 
     // Get services from storage manager
     let agent_service = storage_manager.agent_service();

@@ -127,7 +127,7 @@ fn get_default_database_path() -> String {
             return FALLBACK.to_string();
         }
         let db_file = app_data_dir.join("vibe_ensemble.db");
-        
+
         // Use simple absolute path without URL encoding to avoid SQLite issues with %20 encoding
         // SQLx can handle absolute paths with spaces natively
         format!("sqlite:{}", db_file.display())
