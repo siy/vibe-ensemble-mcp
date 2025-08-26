@@ -44,13 +44,16 @@ iex "& { irm https://get.vibe-ensemble.dev/install.ps1 }"
 docker run -d \
   --name vibe-ensemble \
   -p 8080:8080 \
-  -p 8081:8081 \
-  -v vibe_data:/data \
-  siy/vibe-ensemble-mcp:latest
+  -p 9090:9090 \
+  -v vibe_data:/app/data \
+  -v vibe_logs:/app/logs \
+  vibe-ensemble:latest
 
-# Using Docker Compose
-curl -o docker-compose.yml https://raw.githubusercontent.com/siy/vibe-ensemble-mcp/main/docker-compose.yml
-docker compose up -d
+# Using Docker Compose (recommended)
+git clone https://github.com/siy/vibe-ensemble-mcp.git
+cd vibe-ensemble-mcp
+cp .env.example .env  # Edit as needed
+docker compose up -d --build
 ```
 
 ## System Requirements
@@ -280,39 +283,24 @@ sudo systemctl status vibe-ensemble
 
 #### Using Docker
 ```bash
-# Create docker-compose.yml
-version: '3.8'
-services:
-  vibe-ensemble:
-    image: siy/vibe-ensemble-mcp:latest
-    ports:
-      - "8080:8080"
-      - "8081:8081"
-    environment:
-      - VIBE_ENSEMBLE_DATABASE__URL=postgres://vibe:password@db:5432/vibe_ensemble
-    volumes:
-      - vibe_data:/data
-      - ./config.toml:/etc/vibe-ensemble/config.toml
-    restart: unless-stopped
-    depends_on:
-      - db
+# Clone repository and set up environment
+git clone https://github.com/siy/vibe-ensemble-mcp.git
+cd vibe-ensemble-mcp
+cp .env.example .env
 
-  db:
-    image: postgres:15
-    environment:
-      - POSTGRES_DB=vibe_ensemble
-      - POSTGRES_USER=vibe
-      - POSTGRES_PASSWORD=password
-    volumes:
-      - postgres_data:/var/lib/postgresql/data
-    restart: unless-stopped
-
-volumes:
-  vibe_data:
-  postgres_data:
+# Configure environment variables in .env file
+# SERVER_PORT=8080
+# METRICS_PORT=9090
+# RUST_LOG=info,vibe_ensemble=debug
 
 # Start services
-docker compose up -d
+docker compose up -d --build
+
+# View logs
+docker compose logs -f vibe-ensemble
+
+# Stop services
+docker compose down
 ```
 
 ## Verification
@@ -332,8 +320,9 @@ curl http://localhost:8080/health
 
 ### Web Interface
 Open your browser and navigate to:
-- **Dashboard**: <http://localhost:8081>
-- **API Documentation**: <http://localhost:8080/docs> (coming soon)
+- **Dashboard**: <http://localhost:8080>
+- **Metrics**: <http://localhost:9090/metrics>
+- **API Health**: <http://localhost:8080/api/health>
 
 ### MCP Tools
 Test MCP server integration:
