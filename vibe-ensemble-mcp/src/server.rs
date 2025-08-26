@@ -300,6 +300,7 @@ impl McpServer {
             methods::INITIALIZE => self.handle_initialize(request).await,
             methods::PING => self.handle_ping(request).await,
             methods::LIST_TOOLS => self.handle_list_tools(request).await,
+            methods::CALL_TOOL => self.handle_call_tool(request).await,
             methods::LIST_RESOURCES => self.handle_list_resources(request).await,
             methods::LIST_PROMPTS => self.handle_list_prompts(request).await,
 
@@ -844,6 +845,94 @@ impl McpServer {
         });
 
         Ok(Some(JsonRpcResponse::success(request.id, result)))
+    }
+
+    /// Handle tool call request
+    async fn handle_call_tool(&self, request: JsonRpcRequest) -> Result<Option<JsonRpcResponse>> {
+        debug!("Handling tool call request");
+
+        let params: serde_json::Value = request.params.ok_or_else(|| Error::InvalidParams {
+            message: "Missing tool call parameters".to_string(),
+        })?;
+
+        let tool_name = params["name"].as_str().ok_or_else(|| Error::InvalidParams {
+            message: "Missing tool name".to_string(),
+        })?;
+
+        let arguments = params.get("arguments").cloned().unwrap_or(serde_json::Value::Object(serde_json::Map::new()));
+
+        debug!("Tool call: {} with arguments: {}", tool_name, arguments);
+
+        // Route tool calls to appropriate handlers based on tool name
+        let result = match tool_name {
+            "vibe_agent_register" => {
+                let register_request = JsonRpcRequest {
+                    jsonrpc: request.jsonrpc.clone(),
+                    id: request.id.clone(),
+                    method: "vibe/agent/register".to_string(),
+                    params: Some(arguments),
+                };
+                match self.handle_agent_register(register_request).await? {
+                    Some(response) => response.result.unwrap_or(serde_json::Value::Null),
+                    None => serde_json::Value::Null,
+                }
+            }
+            "vibe_agent_status" => {
+                let status_request = JsonRpcRequest {
+                    jsonrpc: request.jsonrpc.clone(),
+                    id: request.id.clone(),
+                    method: "vibe/agent/status".to_string(),
+                    params: Some(arguments),
+                };
+                match self.handle_agent_status(status_request).await? {
+                    Some(response) => response.result.unwrap_or(serde_json::Value::Null),
+                    None => serde_json::Value::Null,
+                }
+            }
+            "vibe_agent_list" => {
+                let list_request = JsonRpcRequest {
+                    jsonrpc: request.jsonrpc.clone(),
+                    id: request.id.clone(),
+                    method: "vibe/agent/list".to_string(),
+                    params: Some(arguments),
+                };
+                match self.handle_agent_list(list_request).await? {
+                    Some(response) => response.result.unwrap_or(serde_json::Value::Null),
+                    None => serde_json::Value::Null,
+                }
+            }
+            "vibe_agent_deregister" => {
+                let deregister_request = JsonRpcRequest {
+                    jsonrpc: request.jsonrpc.clone(),
+                    id: request.id.clone(),
+                    method: "vibe/agent/deregister".to_string(),
+                    params: Some(arguments),
+                };
+                match self.handle_agent_deregister(deregister_request).await? {
+                    Some(response) => response.result.unwrap_or(serde_json::Value::Null),
+                    None => serde_json::Value::Null,
+                }
+            }
+            _ => {
+                return Ok(Some(JsonRpcResponse::error(
+                    request.id,
+                    JsonRpcError {
+                        code: error_codes::METHOD_NOT_FOUND,
+                        message: format!("Unknown tool: {}", tool_name),
+                        data: None,
+                    },
+                )));
+            }
+        };
+
+        Ok(Some(JsonRpcResponse::success(request.id, serde_json::json!({
+            "content": [
+                {
+                    "type": "text",
+                    "text": serde_json::to_string_pretty(&result).unwrap_or_else(|_| "Tool executed successfully".to_string())
+                }
+            ]
+        }))))
     }
 
     /// Handle resources list request

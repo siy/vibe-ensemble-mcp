@@ -48,7 +48,7 @@ struct Cli {
     api_only: bool,
 
     /// MCP transport type (when MCP is enabled)
-    #[arg(long, value_enum, default_value = "websocket")]
+    #[arg(long, value_enum, default_value = "both")]
     transport: McpTransport,
 
     /// Override server host

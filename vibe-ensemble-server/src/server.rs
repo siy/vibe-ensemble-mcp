@@ -5,7 +5,7 @@ use axum::{
     extract::{ws::WebSocket, State, WebSocketUpgrade},
     http::StatusCode,
     response::{Json, Response},
-    routing::{any, get},
+    routing::{get, post},
     Router,
 };
 use serde_json::{json, Value};
@@ -130,14 +130,27 @@ impl Server {
             .route("/health", get(health_check))
             .route("/status", get(server_status));
 
-        // Add MCP WebSocket endpoint if MCP is enabled and WebSocket transport is supported
+        // Add MCP endpoints if MCP is enabled
         if matches!(
             self.operation_mode,
             OperationMode::Full | OperationMode::McpOnly
-        ) && matches!(self.transport, McpTransport::Websocket | McpTransport::Both)
-        {
-            router = router.route("/mcp", any(mcp_websocket_handler));
-            info!("MCP WebSocket endpoint enabled at /mcp");
+        ) {
+            match self.transport {
+                McpTransport::Websocket => {
+                    router = router.route("/mcp", get(mcp_websocket_handler));
+                    info!("MCP WebSocket endpoint enabled at /mcp (GET)");
+                }
+                McpTransport::Stdio => {
+                    // Stdio transport doesn't need HTTP endpoints - it's handled separately in main.rs
+                }
+                McpTransport::Both => {
+                    router = router
+                        .route("/mcp", get(mcp_websocket_handler))
+                        .route("/mcp", post(mcp_http_handler));
+                    info!("MCP WebSocket endpoint enabled at /mcp (GET)");
+                    info!("MCP HTTP endpoint enabled at /mcp (POST)");
+                }
+            }
         }
 
         router
@@ -345,6 +358,55 @@ async fn server_status(
 /// MCP WebSocket handler
 async fn mcp_websocket_handler(ws: WebSocketUpgrade, State(state): State<AppState>) -> Response {
     ws.on_upgrade(move |socket| handle_mcp_websocket(socket, state))
+}
+
+/// MCP HTTP handler for POST requests (Claude Code JSON-RPC 2.0)
+async fn mcp_http_handler(
+    State(state): State<AppState>,
+    Json(payload): Json<Value>,
+) -> std::result::Result<Json<Value>, StatusCode> {
+    tracing::debug!("Received MCP HTTP request: {}", payload);
+
+    // Convert JSON to string for MCP server processing
+    let message = serde_json::to_string(&payload)
+        .map_err(|e| {
+            error!("Failed to serialize JSON payload: {}", e);
+            StatusCode::BAD_REQUEST
+        })?;
+
+    // Process through MCP server
+    match state.mcp_server.handle_message(&message).await {
+        Ok(Some(response)) => {
+            tracing::debug!("Sending MCP HTTP response: {}", response);
+            // Parse response back to JSON
+            match serde_json::from_str::<Value>(&response) {
+                Ok(json_response) => Ok(Json(json_response)),
+                Err(e) => {
+                    error!("Failed to parse MCP response as JSON: {}", e);
+                    Err(StatusCode::INTERNAL_SERVER_ERROR)
+                }
+            }
+        }
+        Ok(None) => {
+            tracing::debug!("No response required for MCP message");
+            // For notifications (no response expected), return 204 No Content
+            Err(StatusCode::NO_CONTENT)
+        }
+        Err(e) => {
+            error!("Error processing MCP message: {}", e);
+            // Return JSON-RPC error response
+            let error_response = json!({
+                "jsonrpc": "2.0",
+                "error": {
+                    "code": -32603,
+                    "message": "Internal error",
+                    "data": e.to_string()
+                },
+                "id": payload.get("id")
+            });
+            Ok(Json(error_response))
+        }
+    }
 }
 
 /// Handle MCP WebSocket connection

@@ -139,9 +139,17 @@ fn get_default_database_path() -> String {
 impl Config {
     /// Load configuration from environment and config files with security validation
     pub fn load() -> Result<Self, config::ConfigError> {
-        let settings = config::Config::builder()
-            .add_source(config::File::with_name("config/default").required(false))
-            .add_source(config::File::with_name("config/local").required(false))
+        let mut builder = config::Config::builder();
+        
+        // Only add config files if they exist to avoid directory errors
+        if std::path::Path::new("config/default.toml").exists() {
+            builder = builder.add_source(config::File::with_name("config/default").required(false));
+        }
+        if std::path::Path::new("config/local.toml").exists() {
+            builder = builder.add_source(config::File::with_name("config/local").required(false));
+        }
+        
+        let settings = builder
             .add_source(config::Environment::with_prefix("VIBE_ENSEMBLE"))
             .set_default("server.host", "127.0.0.1")?
             .set_default("server.port", 8080)?
