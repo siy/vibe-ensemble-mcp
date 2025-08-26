@@ -1,4 +1,4 @@
-## 🎉 Vibe Ensemble MCP v0.2.1 - Production Ready Release
+## 🎉 Vibe Ensemble MCP v0.2.1 - Production-Ready Release
 
 The first stable release of Vibe Ensemble MCP Server is here! This comprehensive MCP server enables seamless coordination between multiple Claude Code instances with intelligent task distribution, real-time communication, and unified management.
 
@@ -72,7 +72,7 @@ Download the appropriate binary for your platform below.
 
 After installation, configure Claude Code:
 
-1. Start the server: `vibe-ensemble-server`
+1. Start the server: `vibe-ensemble`
 2. Add to Claude Code MCP settings:
 ```json
 {
@@ -113,7 +113,7 @@ After installation, configure Claude Code:
 
 Future releases will include additional cross-platform binaries, enhanced monitoring capabilities, and expanded coordination intelligence.
 
-**Full Changelog:** https://github.com/siy/vibe-ensemble-mcp/commits/v0.2.1
+**Full Changelog:** [v0.2.1 commits](https://github.com/siy/vibe-ensemble-mcp/commits/v0.2.1)
 
 ---
 Built with ❤️ using Rust and the Model Context Protocol

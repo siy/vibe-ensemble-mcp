@@ -43,7 +43,7 @@ vibe-ensemble
 
 #### Option 4: Specify custom database location
 ```bash
-DATABASE_URL="sqlite://$HOME/.vibe-ensemble/data.db" vibe-ensemble
+DATABASE_URL="sqlite:///$HOME/.vibe-ensemble/data.db" vibe-ensemble
 ```
 
 #### Option 5: Use in-memory database (temporary, data not persisted)
