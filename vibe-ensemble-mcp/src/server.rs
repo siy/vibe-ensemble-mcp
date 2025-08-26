@@ -412,7 +412,7 @@ impl McpServer {
             protocol_version: MCP_VERSION.to_string(),
             server_info: ServerInfo {
                 name: "vibe-ensemble-mcp".to_string(),
-                version: "0.1.0".to_string(),
+                version: "0.2.1".to_string(),
             },
             capabilities: self.capabilities.clone(),
             instructions: Some(
@@ -434,7 +434,7 @@ impl McpServer {
         let result = serde_json::json!({
             "timestamp": chrono::Utc::now(),
             "server": "vibe-ensemble-mcp",
-            "version": "0.1.0"
+            "version": "0.2.1"
         });
 
         Ok(Some(JsonRpcResponse::success(request.id, result)))

@@ -59,7 +59,7 @@ mod tests {
         let init_result = result.unwrap().unwrap();
         assert_eq!(init_result.protocol_version, MCP_VERSION);
         assert_eq!(init_result.server_info.name, "vibe-ensemble-mcp");
-        assert_eq!(init_result.server_info.version, "0.1.0");
+        assert_eq!(init_result.server_info.version, "0.2.1");
 
         // Wait for server task to complete
         server_handle.await.unwrap();

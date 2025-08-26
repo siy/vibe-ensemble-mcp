@@ -137,6 +137,6 @@ FROM runtime AS production
 
 # Metadata
 LABEL maintainer="Vibe Ensemble Team"
-LABEL version="0.2.0"
+LABEL version="0.2.1"
 LABEL description="Vibe Ensemble MCP Server - Production Optimized"
 LABEL security.non-root="true"
