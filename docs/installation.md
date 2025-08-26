@@ -44,10 +44,10 @@ iex "& { irm https://get.vibe-ensemble.dev/install.ps1 }"
 docker run -d \
   --name vibe-ensemble \
   -p 8080:8080 \
-  -p 9090:9090 \
+  -p 8081:8081 \
   -v vibe_data:/app/data \
   -v vibe_logs:/app/logs \
-  vibe-ensemble:latest
+  ghcr.io/siy/vibe-ensemble-mcp:latest
 
 # Using Docker Compose (recommended)
 git clone https://github.com/siy/vibe-ensemble-mcp.git
