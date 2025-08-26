@@ -155,15 +155,21 @@
                         <h3>Configure Claude Code</h3>
                         <p>Add Vibe Ensemble using the Claude CLI (choose one):</p>
                         <div class="code-block">
-                            <code># Local scope (current project)
+                            <code>
+# Local scope (current project)
+<br/>
 claude mcp add vibe-ensemble "vibe-ensemble --mcp-only --transport=stdio" --transport=stdio
-
+<br/>
+<br/>
 # User scope (all projects)
+<br/>
 claude mcp add vibe-ensemble "vibe-ensemble --mcp-only --transport=stdio" --transport=stdio -s user
-
+<br/>
+<br/>
 # Project scope (shared with team)
+<br/>
 claude mcp add vibe-ensemble "vibe-ensemble --mcp-only --transport=stdio" --transport=stdio -s project</code>
-                            <button class="copy-btn" onclick="copyToClipboard('claude mcp add vibe-ensemble \"vibe-ensemble --mcp-only --transport=stdio\" --transport=stdio')">Copy Local</button>
+                            <button class="copy-btn" onclick="copyToClipboard('claude mcp add vibe-ensemble &quot;vibe-ensemble --mcp-only --transport=stdio&quot; --transport=stdio -s project')">Copy Local</button>
                         </div>
                     </div>
                 </div>
