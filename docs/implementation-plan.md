@@ -268,7 +268,7 @@ Implement a comprehensive MCP (Model Context Protocol) server in Rust for coordi
 ## Deployment & Operations
 
 ### Development Environment
-- Docker Compose setup with all dependencies
+- Native development environment with local dependencies
 - Development database with sample data
 - Hot-reload for rapid iteration
 - Web interface development server

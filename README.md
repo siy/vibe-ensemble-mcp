@@ -59,7 +59,6 @@ All agents use MCP coordination tools: `vibe/dependency/analyze`, `vibe/conflict
 - **Performance Logging**: Request timing and slow query detection
 - **Security Headers**: CSRF protection, content type validation, and XSS prevention
 - **Cross-Platform Support**: Native binaries for Linux, macOS, and Windows
-- **Container Ready**: Docker images and orchestration support
 
 ## Installation
 
@@ -72,29 +71,11 @@ curl -fsSL https://vibeensemble.dev/install.sh | bash
 
 **Windows PowerShell:**
 ```bash
-iex ((New-Object System.Net.WebClient).DownloadString('https://vibeensemble.dev/install.ps1'))
+iwr https://vibeensemble.dev/install.ps1 -UseBasicParsing | iex
 ```
 
-**Docker:**
-```bash
-docker run -d --name vibe-ensemble -p 8080:8080 -p 8081:8081 ghcr.io/siy/vibe-ensemble-mcp:latest
-```
 
-### Platform-Specific Packages
-
-**Ubuntu/Debian:**
-```bash
-wget https://github.com/siy/vibe-ensemble-mcp/releases/latest/download/vibe-ensemble_v0.2.2_amd64.deb
-sudo dpkg -i vibe-ensemble_v0.2.2_amd64.deb
-```
-
-**CentOS/RHEL/Fedora:**
-```bash
-wget https://github.com/siy/vibe-ensemble-mcp/releases/latest/download/vibe-ensemble-v0.2.2-1.x86_64.rpm
-sudo rpm -i vibe-ensemble-v0.2.2-1.x86_64.rpm
-```
-
-**Binary Download:**
+### Binary Download
 Download the latest release for your platform from [GitHub Releases](https://github.com/siy/vibe-ensemble-mcp/releases/latest).
 
 ### Starting the Server

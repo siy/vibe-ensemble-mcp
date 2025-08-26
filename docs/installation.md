@@ -37,24 +37,6 @@ iex "& { irm https://get.vibe-ensemble.dev/install.ps1 }"
 # https://github.com/siy/vibe-ensemble-mcp/releases/latest
 ```
 
-### Docker
-
-```bash
-# Quick start with Docker
-docker run -d \
-  --name vibe-ensemble \
-  -p 8080:8080 \
-  -p 8081:8081 \
-  -v vibe_data:/app/data \
-  -v vibe_logs:/app/logs \
-  ghcr.io/siy/vibe-ensemble-mcp:latest
-
-# Using Docker Compose (recommended)
-git clone https://github.com/siy/vibe-ensemble-mcp.git
-cd vibe-ensemble-mcp
-cp .env.example .env  # Edit as needed
-docker compose up -d --build
-```
 
 ## System Requirements
 
@@ -281,27 +263,6 @@ sudo systemctl start vibe-ensemble
 sudo systemctl status vibe-ensemble
 ```
 
-#### Using Docker
-```bash
-# Clone repository and set up environment
-git clone https://github.com/siy/vibe-ensemble-mcp.git
-cd vibe-ensemble-mcp
-cp .env.example .env
-
-# Configure environment variables in .env file
-# SERVER_PORT=8080
-# METRICS_PORT=9090
-# RUST_LOG=info,vibe_ensemble=debug
-
-# Start services
-docker compose up -d --build
-
-# View logs
-docker compose logs -f vibe-ensemble
-
-# Stop services
-docker compose down
-```
 
 ## Verification
 
@@ -351,11 +312,6 @@ sudo systemctl start vibe-ensemble
 cargo install --force vibe-ensemble
 ```
 
-### Docker
-```bash
-docker compose pull
-docker compose up -d
-```
 
 ## Troubleshooting
 
@@ -395,8 +351,6 @@ chmod -R 755 ~/.config/vibe-ensemble
 # View logs (systemd)
 sudo journalctl -u vibe-ensemble -f
 
-# View logs (Docker)
-docker compose logs -f vibe-ensemble
 
 # Enable debug logging
 export RUST_LOG=debug
