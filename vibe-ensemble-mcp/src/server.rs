@@ -902,14 +902,18 @@ impl McpServer {
             methods::WORKER_COORDINATE => self.handle_worker_coordinate(subreq).await,
             methods::PROJECT_LOCK => self.handle_project_lock(subreq).await,
             methods::DEPENDENCY_DECLARE => self.handle_dependency_declare(subreq).await,
-            methods::COORDINATOR_REQUEST_WORKER => self.handle_coordinator_request_worker(subreq).await,
+            methods::COORDINATOR_REQUEST_WORKER => {
+                self.handle_coordinator_request_worker(subreq).await
+            }
             methods::WORK_COORDINATE => self.handle_work_coordinate(subreq).await,
             methods::CONFLICT_RESOLVE => self.handle_conflict_resolve(subreq).await,
             methods::SCHEDULE_COORDINATE => self.handle_schedule_coordinate(subreq).await,
             methods::CONFLICT_PREDICT => self.handle_conflict_predict(subreq).await,
             methods::RESOURCE_RESERVE => self.handle_resource_reserve(subreq).await,
             methods::MERGE_COORDINATE => self.handle_merge_coordinate(subreq).await,
-            methods::KNOWLEDGE_QUERY_COORDINATION => self.handle_knowledge_query_coordination(subreq).await,
+            methods::KNOWLEDGE_QUERY_COORDINATION => {
+                self.handle_knowledge_query_coordination(subreq).await
+            }
             methods::PATTERN_SUGGEST => self.handle_pattern_suggest(subreq).await,
             methods::GUIDELINE_ENFORCE => self.handle_guideline_enforce(subreq).await,
             methods::LEARNING_CAPTURE => self.handle_learning_capture(subreq).await,
@@ -919,7 +923,7 @@ impl McpServer {
                 });
             }
         };
-        
+
         let response_result = match result? {
             Some(response) => response.result.unwrap_or(serde_json::Value::Null),
             None => serde_json::Value::Null,
