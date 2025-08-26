@@ -557,7 +557,7 @@ async fn mcp_sse_handler(
 
             let event = Event::default()
                 .json_data(status)
-                .map_err(|e| axum::BoxError::from(e));
+                .map_err(axum::BoxError::from);
 
             yield event;
         }
