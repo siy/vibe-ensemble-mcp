@@ -901,16 +901,20 @@ impl McpServer {
             methods::PROJECT_LOCK => self.handle_project_lock(forwarded_request).await,
             methods::DEPENDENCY_DECLARE => self.handle_dependency_declare(forwarded_request).await,
             methods::COORDINATOR_REQUEST_WORKER => {
-                self.handle_coordinator_request_worker(forwarded_request).await
+                self.handle_coordinator_request_worker(forwarded_request)
+                    .await
             }
             methods::WORK_COORDINATE => self.handle_work_coordinate(forwarded_request).await,
             methods::CONFLICT_RESOLVE => self.handle_conflict_resolve(forwarded_request).await,
-            methods::SCHEDULE_COORDINATE => self.handle_schedule_coordinate(forwarded_request).await,
+            methods::SCHEDULE_COORDINATE => {
+                self.handle_schedule_coordinate(forwarded_request).await
+            }
             methods::CONFLICT_PREDICT => self.handle_conflict_predict(forwarded_request).await,
             methods::RESOURCE_RESERVE => self.handle_resource_reserve(forwarded_request).await,
             methods::MERGE_COORDINATE => self.handle_merge_coordinate(forwarded_request).await,
             methods::KNOWLEDGE_QUERY_COORDINATION => {
-                self.handle_knowledge_query_coordination(forwarded_request).await
+                self.handle_knowledge_query_coordination(forwarded_request)
+                    .await
             }
             methods::PATTERN_SUGGEST => self.handle_pattern_suggest(forwarded_request).await,
             methods::GUIDELINE_ENFORCE => self.handle_guideline_enforce(forwarded_request).await,
