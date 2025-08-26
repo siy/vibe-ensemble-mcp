@@ -879,12 +879,48 @@ impl McpServer {
         let subreq = JsonRpcRequest {
             jsonrpc: request.jsonrpc.clone(),
             id: request.id.clone(),
-            method,
+            method: method.clone(),
             params: Some(arguments),
         };
 
-        // Re-dispatch to the regular handler set
-        let result = match self.handle_request(subreq).await? {
+        // Direct dispatch to specific handlers to avoid recursion
+        let result = match method.as_str() {
+            methods::AGENT_REGISTER => self.handle_agent_register(subreq).await,
+            methods::AGENT_STATUS => self.handle_agent_status(subreq).await,
+            methods::AGENT_LIST => self.handle_agent_list(subreq).await,
+            methods::AGENT_DEREGISTER => self.handle_agent_deregister(subreq).await,
+            methods::ISSUE_CREATE => self.handle_issue_create_new(subreq).await,
+            methods::ISSUE_LIST => self.handle_issue_list_new(subreq).await,
+            methods::ISSUE_ASSIGN => self.handle_issue_assign(subreq).await,
+            methods::ISSUE_UPDATE => self.handle_issue_update_new(subreq).await,
+            methods::ISSUE_CLOSE => self.handle_issue_close(subreq).await,
+            methods::MESSAGE_SEND => self.handle_message_send(subreq).await,
+            methods::MESSAGE_BROADCAST => self.handle_message_broadcast(subreq).await,
+            methods::KNOWLEDGE_QUERY => self.handle_knowledge_query(subreq).await,
+            methods::WORKER_MESSAGE => self.handle_worker_message(subreq).await,
+            methods::WORKER_REQUEST => self.handle_worker_request(subreq).await,
+            methods::WORKER_COORDINATE => self.handle_worker_coordinate(subreq).await,
+            methods::PROJECT_LOCK => self.handle_project_lock(subreq).await,
+            methods::DEPENDENCY_DECLARE => self.handle_dependency_declare(subreq).await,
+            methods::COORDINATOR_REQUEST_WORKER => self.handle_coordinator_request_worker(subreq).await,
+            methods::WORK_COORDINATE => self.handle_work_coordinate(subreq).await,
+            methods::CONFLICT_RESOLVE => self.handle_conflict_resolve(subreq).await,
+            methods::SCHEDULE_COORDINATE => self.handle_schedule_coordinate(subreq).await,
+            methods::CONFLICT_PREDICT => self.handle_conflict_predict(subreq).await,
+            methods::RESOURCE_RESERVE => self.handle_resource_reserve(subreq).await,
+            methods::MERGE_COORDINATE => self.handle_merge_coordinate(subreq).await,
+            methods::KNOWLEDGE_QUERY_COORDINATION => self.handle_knowledge_query_coordination(subreq).await,
+            methods::PATTERN_SUGGEST => self.handle_pattern_suggest(subreq).await,
+            methods::GUIDELINE_ENFORCE => self.handle_guideline_enforce(subreq).await,
+            methods::LEARNING_CAPTURE => self.handle_learning_capture(subreq).await,
+            _ => {
+                return Err(Error::InvalidParams {
+                    message: format!("Unknown tool: {}", tool_name),
+                });
+            }
+        };
+        
+        let response_result = match result? {
             Some(response) => response.result.unwrap_or(serde_json::Value::Null),
             None => serde_json::Value::Null,
         };
@@ -895,7 +931,7 @@ impl McpServer {
                 "content": [
                     {
                         "type": "text",
-                        "text": serde_json::to_string_pretty(&result)
+                        "text": serde_json::to_string_pretty(&response_result)
                             .unwrap_or_else(|_| "Tool executed successfully".to_string())
                     }
                 ]
