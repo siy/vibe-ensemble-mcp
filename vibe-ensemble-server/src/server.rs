@@ -1,6 +1,7 @@
 //! Main server implementation
 
 use crate::{config::Config, McpTransport, OperationMode, Result};
+use axum::response::sse::{Event, KeepAlive};
 use axum::{
     extract::{ws::WebSocket, State, WebSocketUpgrade},
     http::StatusCode,
@@ -8,11 +9,10 @@ use axum::{
     routing::{get, post},
     Router,
 };
-use axum::response::sse::{Event, KeepAlive};
 use futures_util::Stream;
-use tokio::time::{interval, Duration};
 use serde_json::{json, Value};
 use std::sync::Arc;
+use tokio::time::{interval, Duration};
 use tower::ServiceBuilder;
 use tower_http::{cors::CorsLayer, trace::TraceLayer};
 use tracing::{error, info, warn};
@@ -102,8 +102,7 @@ impl Server {
             && matches!(
                 operation_mode,
                 OperationMode::Full | OperationMode::WebOnly | OperationMode::McpOnly
-            )
-        {
+            ) {
             let web_config = vibe_ensemble_web::server::WebConfig {
                 enabled: config.web.enabled,
                 host: config.web.host.clone(),
@@ -216,12 +215,12 @@ impl Server {
             Some(tokio::spawn(async move {
                 info!("Starting MCP stdio handler");
                 let mut transport = vibe_ensemble_mcp::transport::TransportFactory::stdio();
-                
+
                 loop {
                     match transport.receive().await {
                         Ok(message) => {
                             tracing::debug!("Received MCP message: {}", message);
-                            
+
                             match mcp_server.handle_message(&message).await {
                                 Ok(Some(response)) => {
                                     tracing::debug!("Sending MCP response: {}", response);
@@ -244,7 +243,7 @@ impl Server {
                         }
                     }
                 }
-                
+
                 if let Err(e) = transport.close().await {
                     warn!("Error closing MCP transport: {}", e);
                 }
@@ -292,7 +291,7 @@ impl Server {
         if let Some(handle) = web_handle {
             handle.abort();
         }
-        
+
         if let Some(handle) = mcp_stdio_handle {
             handle.abort();
         }
@@ -425,11 +424,10 @@ async fn mcp_http_handler(
     tracing::debug!("Received MCP HTTP request: {}", payload);
 
     // Convert JSON to string for MCP server processing
-    let message = serde_json::to_string(&payload)
-        .map_err(|e| {
-            error!("Failed to serialize JSON payload: {}", e);
-            StatusCode::BAD_REQUEST
-        })?;
+    let message = serde_json::to_string(&payload).map_err(|e| {
+        error!("Failed to serialize JSON payload: {}", e);
+        StatusCode::BAD_REQUEST
+    })?;
 
     // Process through MCP server
     match state.mcp_server.handle_message(&message).await {
@@ -535,14 +533,14 @@ async fn mcp_sse_handler(
 ) -> Sse<impl Stream<Item = std::result::Result<Event, axum::BoxError>>> {
     let stream = async_stream::stream! {
         let mut interval = interval(Duration::from_secs(10));
-        
+
         loop {
             interval.tick().await;
-            
+
             // Get current system status
             let agent_count = state.storage.agent_service().list_agents().await.unwrap_or_default().len();
             let issue_count = state.storage.issue_service().list_issues().await.unwrap_or_default().len();
-            
+
             let status = json!({
                 "timestamp": chrono::Utc::now().to_rfc3339(),
                 "agents": {
@@ -556,11 +554,11 @@ async fn mcp_sse_handler(
                     "uptime": "unknown"
                 }
             });
-            
+
             let event = Event::default()
                 .json_data(status)
                 .map_err(|e| axum::BoxError::from(e));
-                
+
             yield event;
         }
     };

@@ -140,7 +140,7 @@ impl Config {
     /// Load configuration from environment and config files with security validation
     pub fn load() -> Result<Self, config::ConfigError> {
         let mut builder = config::Config::builder();
-        
+
         // Only add config files if they exist to avoid directory errors
         if std::path::Path::new("config/default.toml").exists() {
             builder = builder.add_source(config::File::with_name("config/default").required(false));
@@ -148,7 +148,7 @@ impl Config {
         if std::path::Path::new("config/local.toml").exists() {
             builder = builder.add_source(config::File::with_name("config/local").required(false));
         }
-        
+
         let settings = builder
             .add_source(config::Environment::with_prefix("VIBE_ENSEMBLE"))
             .set_default("server.host", "127.0.0.1")?

@@ -855,11 +855,16 @@ impl McpServer {
             message: "Missing tool call parameters".to_string(),
         })?;
 
-        let tool_name = params["name"].as_str().ok_or_else(|| Error::InvalidParams {
-            message: "Missing tool name".to_string(),
-        })?;
+        let tool_name = params["name"]
+            .as_str()
+            .ok_or_else(|| Error::InvalidParams {
+                message: "Missing tool name".to_string(),
+            })?;
 
-        let arguments = params.get("arguments").cloned().unwrap_or(serde_json::Value::Object(serde_json::Map::new()));
+        let arguments = params
+            .get("arguments")
+            .cloned()
+            .unwrap_or(serde_json::Value::Object(serde_json::Map::new()));
 
         debug!("Tool call: {} with arguments: {}", tool_name, arguments);
 
@@ -925,14 +930,17 @@ impl McpServer {
             }
         };
 
-        Ok(Some(JsonRpcResponse::success(request.id, serde_json::json!({
-            "content": [
-                {
-                    "type": "text",
-                    "text": serde_json::to_string_pretty(&result).unwrap_or_else(|_| "Tool executed successfully".to_string())
-                }
-            ]
-        }))))
+        Ok(Some(JsonRpcResponse::success(
+            request.id,
+            serde_json::json!({
+                "content": [
+                    {
+                        "type": "text",
+                        "text": serde_json::to_string_pretty(&result).unwrap_or_else(|_| "Tool executed successfully".to_string())
+                    }
+                ]
+            }),
+        )))
     }
 
     /// Handle resources list request
