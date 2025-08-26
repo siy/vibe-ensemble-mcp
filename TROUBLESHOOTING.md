@@ -135,7 +135,7 @@ sudo chmod +x /usr/local/bin/vibe-ensemble
 
 Verify the server is running:
 ```bash
-curl http://127.0.0.1:8080/health
+curl http://127.0.0.1:8080/api/health
 ```
 
 Expected response:
@@ -147,7 +147,7 @@ Expected response:
 
 Open in browser:
 - Dashboard: http://127.0.0.1:8081/dashboard
-- Health: http://127.0.0.1:8080/health
+- Health: http://127.0.0.1:8080/api/health
 
 ## Getting Help
 

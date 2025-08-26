@@ -243,7 +243,7 @@ function Show-PostInstallInstructions {
     Write-Host "   claude mcp add vibe-ensemble `"vibe-ensemble --mcp-only --transport=stdio`" --transport=stdio -s project" -ForegroundColor Cyan
     Write-Host ""
     Write-Host "5. Check the API:"
-    Write-Host "   Invoke-RestMethod http://localhost:8080/health" -ForegroundColor Cyan
+    Write-Host "   Invoke-RestMethod http://localhost:8080/api/health" -ForegroundColor Cyan
     Write-Host ""
     Write-Host "Installation directory: $InstallDir" -ForegroundColor Yellow
     Write-Host "Configuration: $env:APPDATA\vibe-ensemble\config.toml" -ForegroundColor Yellow

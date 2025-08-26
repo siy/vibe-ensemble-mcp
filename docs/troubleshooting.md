@@ -6,7 +6,7 @@ Common issues when running Vibe Ensemble MCP server in production environments f
 
 ```bash
 # Check production server status
-curl http://localhost:8080/health
+curl http://localhost:8080/api/health
 
 # Check web dashboard availability
 curl http://localhost:8081/dashboard
@@ -325,7 +325,7 @@ rm config/local.toml
 cargo run --bin vibe-ensemble-server
 
 # Verify recovery
-curl http://localhost:8080/health
+curl http://localhost:8080/api/health
 curl http://localhost:8081/dashboard
 ```
 

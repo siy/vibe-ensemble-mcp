@@ -308,7 +308,7 @@ docker compose down
 ### Health Check
 ```bash
 # Check server health
-curl http://localhost:8080/health
+curl http://localhost:8080/api/health
 
 # Expected response:
 # {

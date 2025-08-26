@@ -197,7 +197,7 @@ print_next_steps() {
     echo -e "   ${GREEN}claude mcp add vibe-ensemble \"vibe-ensemble --mcp-only --transport=stdio\" --transport=stdio${NC}"
     echo
     echo "3. Access the web dashboard: http://127.0.0.1:8081"
-    echo "4. Check health: http://127.0.0.1:8080/health"
+    echo "4. Check health: http://127.0.0.1:8080/api/health"
     echo
     echo -e "${BLUE}Documentation:${NC} https://vibeensemble.dev"
     echo -e "${BLUE}GitHub:${NC} https://github.com/$GITHUB_REPO"

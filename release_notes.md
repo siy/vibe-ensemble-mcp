@@ -87,7 +87,7 @@ After installation, configure Claude Code:
 
 3. Access interfaces:
    - Web Dashboard: http://127.0.0.1:8081
-   - Health Check: http://127.0.0.1:8080/health
+   - Health Check: http://127.0.0.1:8080/api/health
 
 ### 📈 Technical Achievements
 
