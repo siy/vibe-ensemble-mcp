@@ -188,13 +188,19 @@ function Show-NextSteps {
     Write-Host ""
     Write-Host "3. Add to Claude Code (choose one):"
     Write-Host "   # Local scope (current project only)" -ForegroundColor Green
-    Write-Host '   claude mcp add vibe-ensemble --transport=stdio -- vibe-ensemble --mcp-only --transport=stdio'
+    Write-Host '   claude mcp add vibe-ensemble -- vibe-ensemble --mcp-only --transport=stdio'
     Write-Host ""
     Write-Host "   # User scope (all projects)" -ForegroundColor Green
-    Write-Host '   claude mcp add vibe-ensemble -s user --transport=stdio -- vibe-ensemble --mcp-only --transport=stdio'
+    Write-Host '   claude mcp add -s user vibe-ensemble -- vibe-ensemble --mcp-only --transport=stdio'
     Write-Host ""
     Write-Host "   # Project scope (shared with team)" -ForegroundColor Green
-    Write-Host '   claude mcp add vibe-ensemble -s project --transport=stdio -- vibe-ensemble --mcp-only --transport=stdio'
+    Write-Host '   claude mcp add -s project vibe-ensemble -- vibe-ensemble --mcp-only --transport=stdio'
+    Write-Host ""
+    Write-Host "   # HTTP transport (server already running on 8080)" -ForegroundColor Green
+    Write-Host '   claude mcp add --transport http vibe-ensemble http://localhost:8080/mcp'
+    Write-Host ""
+    Write-Host "   # SSE transport (event stream monitoring)" -ForegroundColor Green
+    Write-Host '   claude mcp add --transport sse vibe-ensemble http://localhost:8080/mcp/sse'
     Write-Host ""
     Write-Host "4. Access the web dashboard: http://127.0.0.1:8081"
     Write-Host "5. Check health: http://127.0.0.1:8080/api/health"

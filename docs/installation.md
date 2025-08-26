@@ -379,13 +379,21 @@ Use the Claude Code CLI to add the MCP server. Choose the appropriate scope for 
 
 ```bash
 # Local scope (current project only)
-claude mcp add vibe-ensemble --transport=stdio -- vibe-ensemble --mcp-only --transport=stdio
+claude mcp add vibe-ensemble -- vibe-ensemble --mcp-only --transport=stdio
 
 # User scope (available across all projects)
-claude mcp add vibe-ensemble -s user --transport=stdio -- vibe-ensemble --mcp-only --transport=stdio
+claude mcp add -s user vibe-ensemble -- vibe-ensemble --mcp-only --transport=stdio
 
 # Project scope (shared with team)
-claude mcp add vibe-ensemble -s project --transport=stdio -- vibe-ensemble --mcp-only --transport=stdio
+claude mcp add -s project vibe-ensemble -- vibe-ensemble --mcp-only --transport=stdio
+
+# HTTP transport (server already running on 8080)
+# Connect Claude Code to the HTTP JSON-RPC endpoint:
+claude mcp add --transport http vibe-ensemble http://localhost:8080/mcp
+
+# SSE transport (event stream monitoring)
+# Connect Claude Code to the SSE endpoint for real-time events:
+claude mcp add --transport sse vibe-ensemble http://localhost:8080/mcp/sse
 ```
 
 #### Option 2: Manual JSON Configuration
