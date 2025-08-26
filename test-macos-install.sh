@@ -131,3 +131,6 @@ echo "curl -fsSL https://raw.githubusercontent.com/siy/vibe-ensemble-mcp/main/we
 echo ""
 echo "Or use the official command:"
 echo "curl -fsSL https://vibeensemble.dev/install.sh | bash"
+echo ""
+echo "Then add to Claude Code:"
+echo "claude mcp add vibe-ensemble -- vibe-ensemble --mcp-only --transport=stdio"
