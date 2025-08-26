@@ -1,3 +1,44 @@
+## 📦 Vibe Ensemble MCP v0.2.3 - Streamlined Installation
+
+This release focuses on simplifying installation and reducing maintenance overhead by removing Docker support.
+
+### 🗑️ Removals
+
+**Docker Support Removal**
+- ✅ **Removed Docker images** - Eliminated Docker build pipeline due to excessive build times and complexity
+- ✅ **Removed Docker Compose** - Simplified deployment to focus on native binary installation
+- ✅ **Updated documentation** - Cleaned up all Docker references from installation guides and examples
+- ✅ **Streamlined CI/CD** - Faster release pipeline without Docker builds
+
+### 💡 Benefits
+
+- **Faster Releases** - Eliminated long Docker build times from CI/CD pipeline
+- **Simpler Installation** - Focus on native binaries and platform-specific packages
+- **Reduced Complexity** - Less maintenance overhead and configuration options
+- **Better Performance** - Native binaries run faster than containerized versions
+
+### 📦 Recommended Installation
+
+Use the native installation methods for better performance:
+
+**macOS/Linux:**
+```bash
+curl -fsSL https://vibeensemble.dev/install.sh | bash
+```
+
+**Windows PowerShell:**
+```powershell
+iex ((New-Object System.Net.WebClient).DownloadString('https://vibeensemble.dev/install.ps1'))
+```
+
+**Package Managers:**
+- Ubuntu/Debian: `wget https://github.com/siy/vibe-ensemble-mcp/releases/latest/download/vibe-ensemble_v0.2.3_amd64.deb && sudo dpkg -i vibe-ensemble_v0.2.3_amd64.deb`
+- CentOS/RHEL/Fedora: `wget https://github.com/siy/vibe-ensemble-mcp/releases/latest/download/vibe-ensemble-v0.2.3-1.x86_64.rpm && sudo rpm -i vibe-ensemble-v0.2.3-1.x86_64.rpm`
+
+**Full Changelog:** [v0.2.3 commits](https://github.com/siy/vibe-ensemble-mcp/commits/v0.2.3)
+
+---
+
 ## 🔧 Vibe Ensemble MCP v0.2.2 - Database Configuration Fix
 
 This patch release fixes critical database configuration issues discovered in production environments.
@@ -23,9 +64,10 @@ This patch release fixes critical database configuration issues discovered in pr
 
 ### 📦 Installation
 
-Docker:
+Binary Installation:
 ```bash
-docker run -d --name vibe-ensemble -p 8080:8080 -p 8081:8081 ghcr.io/siy/vibe-ensemble-mcp:v0.2.2
+# Download and install appropriate binary for your platform
+# See: https://github.com/siy/vibe-ensemble-mcp/releases/v0.2.2
 ```
 
 **Full Changelog:** [v0.2.2 commits](https://github.com/siy/vibe-ensemble-mcp/commits/v0.2.2)
@@ -94,9 +136,10 @@ Windows PowerShell:
 iex ((New-Object System.Net.WebClient).DownloadString('https://vibeensemble.dev/install.ps1'))
 ```
 
-Docker:
+Binary Installation:
 ```bash
-docker run -d --name vibe-ensemble -p 8080:8080 -p 8081:8081 ghcr.io/siy/vibe-ensemble-mcp:v0.2.1
+# Download and install appropriate binary for your platform
+# See: https://github.com/siy/vibe-ensemble-mcp/releases/v0.2.1
 ```
 
 **Manual Installation:**
