@@ -136,7 +136,12 @@ CMD ["vibe-ensemble"]
 FROM runtime AS production
 
 # Metadata
+ARG VERSION=0.2.1
 LABEL maintainer="Vibe Ensemble Team"
-LABEL version="0.2.0"
+LABEL version="${VERSION}"
 LABEL description="Vibe Ensemble MCP Server - Production Optimized"
 LABEL security.non-root="true"
+LABEL org.opencontainers.image.version="${VERSION}" \
+      org.opencontainers.image.title="Vibe Ensemble MCP Server" \
+      org.opencontainers.image.description="Vibe Ensemble MCP Server - Production Optimized" \
+      org.opencontainers.image.source="https://github.com/siy/vibe-ensemble-mcp"

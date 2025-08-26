@@ -84,14 +84,14 @@ docker run -d --name vibe-ensemble -p 8080:8080 -p 8081:8081 ghcr.io/siy/vibe-en
 
 **Ubuntu/Debian:**
 ```bash
-wget https://github.com/siy/vibe-ensemble-mcp/releases/latest/download/vibe-ensemble_v0.1.0_amd64.deb
-sudo dpkg -i vibe-ensemble_v0.1.0_amd64.deb
+wget https://github.com/siy/vibe-ensemble-mcp/releases/latest/download/vibe-ensemble_v0.2.1_amd64.deb
+sudo dpkg -i vibe-ensemble_v0.2.1_amd64.deb
 ```
 
 **CentOS/RHEL/Fedora:**
 ```bash
-wget https://github.com/siy/vibe-ensemble-mcp/releases/latest/download/vibe-ensemble-v0.1.0-1.x86_64.rpm
-sudo rpm -i vibe-ensemble-v0.1.0-1.x86_64.rpm
+wget https://github.com/siy/vibe-ensemble-mcp/releases/latest/download/vibe-ensemble-v0.2.1-1.x86_64.rpm
+sudo rpm -i vibe-ensemble-v0.2.1-1.x86_64.rpm
 ```
 
 **Binary Download:**

@@ -18,7 +18,7 @@ Error: Storage(Database(Database(SqliteError { code: 14, message: "unable to ope
 **Solutions:**
 
 #### Option 1: Update to Latest Version (Recommended)
-The latest version (v0.1.1+) automatically uses platform-appropriate directories:
+The latest version (v0.2.1+) automatically uses platform-appropriate directories:
 - **macOS**: `~/Library/Application Support/vibe-ensemble/`
 - **Linux**: `~/.local/share/vibe-ensemble/`
 - **Windows**: `%APPDATA%\vibe-ensemble\`
@@ -43,7 +43,7 @@ vibe-ensemble
 
 #### Option 4: Specify custom database location
 ```bash
-DATABASE_URL="sqlite://$HOME/.vibe-ensemble/data.db" vibe-ensemble
+DATABASE_URL="sqlite:///$HOME/.vibe-ensemble/data.db" vibe-ensemble
 ```
 
 #### Option 5: Use in-memory database (temporary, data not persisted)
@@ -135,19 +135,19 @@ sudo chmod +x /usr/local/bin/vibe-ensemble
 
 Verify the server is running:
 ```bash
-curl http://127.0.0.1:8080/health
+curl http://127.0.0.1:8080/api/health
 ```
 
 Expected response:
 ```json
-{"status":"healthy","timestamp":"...","version":"0.1.1"}
+{"status":"healthy","timestamp":"...","version":"0.2.1"}
 ```
 
 ## Web Dashboard
 
 Open in browser:
 - Dashboard: http://127.0.0.1:8081/dashboard
-- Health: http://127.0.0.1:8080/health
+- Health: http://127.0.0.1:8080/api/health
 
 ## Getting Help
 

@@ -197,7 +197,7 @@ function Show-NextSteps {
     Write-Host '   claude mcp add vibe-ensemble "vibe-ensemble --mcp-only --transport=stdio" --transport=stdio -s project'
     Write-Host ""
     Write-Host "4. Access the web dashboard: http://127.0.0.1:8081"
-    Write-Host "5. Check health: http://127.0.0.1:8080/health"
+    Write-Host "5. Check health: http://127.0.0.1:8080/api/health"
     Write-Host ""
     Write-Host "Documentation: https://vibeensemble.dev" -ForegroundColor Blue
     Write-Host "GitHub: https://github.com/$GitHubRepo" -ForegroundColor Blue

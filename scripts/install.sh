@@ -260,7 +260,7 @@ show_instructions() {
     echo '   claude mcp add vibe-ensemble "vibe-ensemble --mcp-only --transport=stdio" --transport=stdio -s project'
     echo
     echo "5. Check the API:"
-    echo "   curl http://localhost:8080/health"
+    echo "   curl http://localhost:8080/api/health"
     echo
     echo "Configuration: $CONFIG_DIR/config.toml"
     echo "Documentation: https://github.com/$REPO/blob/main/docs/installation.md"
