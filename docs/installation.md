@@ -31,7 +31,7 @@ sudo yum install vibe-ensemble-mcp  # or dnf for newer systems
 
 ```powershell
 # Install via PowerShell
-iex "& { irm https://vibeensemble.dev/install.ps1 }"
+iex (irm https://vibeensemble.dev/install.ps1)
 
 # Or download MSI installer
 # https://github.com/siy/vibe-ensemble-mcp/releases/latest
