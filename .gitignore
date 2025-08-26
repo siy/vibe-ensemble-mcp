@@ -25,6 +25,8 @@ Thumbs.db
 # Database files
 *.db
 *.db-journal
+*.db-shm
+*.db-wal
 
 # Log files
 *.log
