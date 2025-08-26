@@ -39,7 +39,7 @@ mod tests {
             config.database.max_connections.is_none()
                 || config.database.max_connections == Some(10)
         );
-        assert_eq!(config.database.migrate_on_startup, true);
+        assert!(config.database.migrate_on_startup);
     }
 
     #[test]
