@@ -19,11 +19,11 @@ vibe-ensemble
 
 ```bash
 # Ubuntu/Debian
-curl -fsSL https://get.vibeensemble.dev/install.sh | sudo bash
+curl -fsSL https://vibeensemble.dev/install.sh | sudo bash
 sudo apt update && sudo apt install vibe-ensemble-mcp
 
 # CentOS/RHEL/Fedora
-curl -fsSL https://get.vibeensemble.dev/install.sh | sudo bash
+curl -fsSL https://vibeensemble.dev/install.sh | sudo bash
 sudo yum install vibe-ensemble-mcp  # or dnf for newer systems
 ```
 
@@ -31,7 +31,7 @@ sudo yum install vibe-ensemble-mcp  # or dnf for newer systems
 
 ```powershell
 # Install via PowerShell
-iex "& { irm https://get.vibeensemble.dev/install.ps1 }"
+iex "& { irm https://vibeensemble.dev/install.ps1 }"
 
 # Or download MSI installer
 # https://github.com/siy/vibe-ensemble-mcp/releases/latest

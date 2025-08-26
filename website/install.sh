@@ -3,7 +3,7 @@
 set -e
 
 # Vibe Ensemble MCP Server Installation Script
-# Usage: curl -fsSL https://get.vibeensemble.dev/install.sh | bash
+# Usage: curl -fsSL https://vibeensemble.dev/install.sh | bash
 
 GITHUB_REPO="siy/vibe-ensemble-mcp"
 INSTALL_DIR="/usr/local/bin"

@@ -1,5 +1,5 @@
 # Vibe Ensemble MCP Installation Script for Windows PowerShell
-# Usage: iex "& { irm https://get.vibeensemble.dev/install.ps1 }"
+# Usage: iex "& { irm https://vibeensemble.dev/install.ps1 }"
 
 param(
     [string]$Version = "latest",
