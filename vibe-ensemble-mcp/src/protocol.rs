@@ -57,57 +57,149 @@ pub struct JsonRpcError {
     pub data: Option<serde_json::Value>,
 }
 
-/// MCP specific method names
+/// MCP specific method names - Streamlined to 8 essential core methods
 pub mod methods {
-    // Standard MCP protocol methods
+    // Standard MCP protocol methods (5 core methods)
     pub const INITIALIZE: &str = "initialize";
     pub const INITIALIZED: &str = "initialized";
     pub const PING: &str = "ping";
     pub const LIST_TOOLS: &str = "tools/list";
     pub const CALL_TOOL: &str = "tools/call";
     pub const LIST_RESOURCES: &str = "resources/list";
-    pub const GET_RESOURCE: &str = "resources/get";
     pub const LIST_PROMPTS: &str = "prompts/list";
-    pub const GET_PROMPT: &str = "prompts/get";
 
-    // Vibe Ensemble extensions
+    // Streamlined Vibe Ensemble extensions (3 essential methods for all functionality)
+    /// Agent operations: register, status, list, deregister, capabilities
+    pub const VIBE_AGENT: &str = "vibe/agent";
+
+    /// Issue operations: create, list, assign, update, close
+    pub const VIBE_ISSUE: &str = "vibe/issue";
+
+    /// Coordination operations: messaging, workflows, knowledge, resources, dependencies, conflicts
+    pub const VIBE_COORDINATION: &str = "vibe/coordination";
+
+    // Legacy method constants for backward compatibility - deprecated
+    #[deprecated(since = "0.3.0", note = "Use VIBE_AGENT with operation parameter")]
     pub const AGENT_REGISTER: &str = "vibe/agent/register";
+    #[deprecated(since = "0.3.0", note = "Use VIBE_AGENT with operation parameter")]
     pub const AGENT_STATUS: &str = "vibe/agent/status";
+    #[deprecated(since = "0.3.0", note = "Use VIBE_AGENT with operation parameter")]
     pub const AGENT_LIST: &str = "vibe/agent/list";
+    #[deprecated(since = "0.3.0", note = "Use VIBE_AGENT with operation parameter")]
     pub const AGENT_DEREGISTER: &str = "vibe/agent/deregister";
+    #[deprecated(since = "0.3.0", note = "Use VIBE_AGENT with operation parameter")]
     pub const AGENT_CAPABILITIES: &str = "vibe/agent/capabilities";
+
+    #[deprecated(since = "0.3.0", note = "Use VIBE_ISSUE with operation parameter")]
     pub const ISSUE_CREATE: &str = "vibe/issue/create";
+    #[deprecated(since = "0.3.0", note = "Use VIBE_ISSUE with operation parameter")]
     pub const ISSUE_LIST: &str = "vibe/issue/list";
+    #[deprecated(since = "0.3.0", note = "Use VIBE_ISSUE with operation parameter")]
     pub const ISSUE_ASSIGN: &str = "vibe/issue/assign";
+    #[deprecated(since = "0.3.0", note = "Use VIBE_ISSUE with operation parameter")]
     pub const ISSUE_UPDATE: &str = "vibe/issue/update";
+    #[deprecated(since = "0.3.0", note = "Use VIBE_ISSUE with operation parameter")]
     pub const ISSUE_CLOSE: &str = "vibe/issue/close";
+
+    #[deprecated(
+        since = "0.3.0",
+        note = "Use VIBE_COORDINATION with operation parameter"
+    )]
     pub const MESSAGE_SEND: &str = "vibe/message/send";
+    #[deprecated(
+        since = "0.3.0",
+        note = "Use VIBE_COORDINATION with operation parameter"
+    )]
     pub const MESSAGE_BROADCAST: &str = "vibe/message/broadcast";
-    pub const KNOWLEDGE_QUERY: &str = "vibe/knowledge/query";
-    pub const KNOWLEDGE_SUBMIT: &str = "vibe/knowledge/submit";
-
-    // Worker communication methods
+    #[deprecated(
+        since = "0.3.0",
+        note = "Use VIBE_COORDINATION with operation parameter"
+    )]
     pub const WORKER_MESSAGE: &str = "vibe/worker/message";
+    #[deprecated(
+        since = "0.3.0",
+        note = "Use VIBE_COORDINATION with operation parameter"
+    )]
     pub const WORKER_REQUEST: &str = "vibe/worker/request";
+    #[deprecated(
+        since = "0.3.0",
+        note = "Use VIBE_COORDINATION with operation parameter"
+    )]
     pub const WORKER_COORDINATE: &str = "vibe/worker/coordinate";
+    #[deprecated(
+        since = "0.3.0",
+        note = "Use VIBE_COORDINATION with operation parameter"
+    )]
     pub const PROJECT_LOCK: &str = "vibe/project/lock";
-
-    // Cross-project dependency coordination methods
+    #[deprecated(
+        since = "0.3.0",
+        note = "Use VIBE_COORDINATION with operation parameter"
+    )]
     pub const DEPENDENCY_DECLARE: &str = "vibe/dependency/declare";
+    #[deprecated(
+        since = "0.3.0",
+        note = "Use VIBE_COORDINATION with operation parameter"
+    )]
     pub const COORDINATOR_REQUEST_WORKER: &str = "vibe/coordinator/request_worker";
+    #[deprecated(
+        since = "0.3.0",
+        note = "Use VIBE_COORDINATION with operation parameter"
+    )]
     pub const WORK_COORDINATE: &str = "vibe/work/coordinate";
+    #[deprecated(
+        since = "0.3.0",
+        note = "Use VIBE_COORDINATION with operation parameter"
+    )]
     pub const CONFLICT_RESOLVE: &str = "vibe/conflict/resolve";
-
-    // Issue #52: Intelligent Work Orchestration methods
+    #[deprecated(
+        since = "0.3.0",
+        note = "Use VIBE_COORDINATION with operation parameter"
+    )]
     pub const SCHEDULE_COORDINATE: &str = "vibe/schedule/coordinate";
+    #[deprecated(
+        since = "0.3.0",
+        note = "Use VIBE_COORDINATION with operation parameter"
+    )]
     pub const CONFLICT_PREDICT: &str = "vibe/conflict/predict";
+    #[deprecated(
+        since = "0.3.0",
+        note = "Use VIBE_COORDINATION with operation parameter"
+    )]
     pub const RESOURCE_RESERVE: &str = "vibe/resource/reserve";
+    #[deprecated(
+        since = "0.3.0",
+        note = "Use VIBE_COORDINATION with operation parameter"
+    )]
     pub const MERGE_COORDINATE: &str = "vibe/merge/coordinate";
-
-    // Issue #53: Knowledge-Driven Coordination methods
+    #[deprecated(
+        since = "0.3.0",
+        note = "Use VIBE_COORDINATION with operation parameter"
+    )]
+    pub const KNOWLEDGE_QUERY: &str = "vibe/knowledge/query";
+    #[deprecated(
+        since = "0.3.0",
+        note = "Use VIBE_COORDINATION with operation parameter"
+    )]
+    pub const KNOWLEDGE_SUBMIT: &str = "vibe/knowledge/submit";
+    #[deprecated(
+        since = "0.3.0",
+        note = "Use VIBE_COORDINATION with operation parameter"
+    )]
     pub const KNOWLEDGE_QUERY_COORDINATION: &str = "vibe/knowledge/query/coordination";
+    #[deprecated(
+        since = "0.3.0",
+        note = "Use VIBE_COORDINATION with operation parameter"
+    )]
     pub const PATTERN_SUGGEST: &str = "vibe/pattern/suggest";
+    #[deprecated(
+        since = "0.3.0",
+        note = "Use VIBE_COORDINATION with operation parameter"
+    )]
     pub const GUIDELINE_ENFORCE: &str = "vibe/guideline/enforce";
+    #[deprecated(
+        since = "0.3.0",
+        note = "Use VIBE_COORDINATION with operation parameter"
+    )]
     pub const LEARNING_CAPTURE: &str = "vibe/learning/capture";
 }
 
@@ -270,6 +362,32 @@ pub struct AgentDeregisterResult {
     #[serde(rename = "cleanupStatus")]
     pub cleanup_status: String,
 }
+
+// Consolidated Vibe extension parameters and results
+
+/// Generic Vibe operation parameters for all consolidated endpoints
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct VibeOperationParams {
+    /// The specific operation to perform (e.g., "register", "create", "send")
+    pub operation: String,
+    /// Operation-specific parameters
+    pub params: serde_json::Value,
+}
+
+/// Generic Vibe operation result for all consolidated endpoints
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct VibeOperationResult {
+    /// The operation that was performed
+    pub operation: String,
+    /// Whether the operation succeeded
+    pub success: bool,
+    /// Operation-specific result data
+    pub data: serde_json::Value,
+    /// Human-readable message
+    pub message: String,
+}
+
+// Legacy parameter structures for backward compatibility
 
 // Issue tracking MCP tool parameters and results
 

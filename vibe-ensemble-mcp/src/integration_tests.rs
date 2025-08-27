@@ -3,6 +3,8 @@
 //! These tests verify the complete MCP protocol implementation including
 //! initialization, capability negotiation, tool discovery, and error handling.
 
+#![allow(deprecated)] // Allow deprecated method constants for backward compatibility
+
 #[cfg(test)]
 mod tests {
     use crate::{client::McpClient, protocol::*, server::McpServer, transport::TransportFactory};
