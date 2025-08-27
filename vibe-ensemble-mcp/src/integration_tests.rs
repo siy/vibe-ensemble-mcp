@@ -328,7 +328,7 @@ mod tests {
 
         let agent_repo = Arc::new(AgentRepository::new(pool));
         let agent_service = Arc::new(AgentService::new(agent_repo));
-        let server = McpServer::new_with_agent_service(agent_service);
+        let server = McpServer::with_services(Some(agent_service), None, None, None, None);
 
         // Test status query (no parameters)
         let status_request = JsonRpcRequest::new(methods::AGENT_STATUS, None);
@@ -378,7 +378,7 @@ mod tests {
 
         let agent_repo = Arc::new(AgentRepository::new(pool));
         let agent_service = Arc::new(AgentService::new(agent_repo.clone()));
-        let server = McpServer::new_with_agent_service(agent_service.clone());
+        let server = McpServer::with_services(Some(agent_service.clone()), None, None, None, None);
 
         // Create test agents
         let test_agent1 = Agent::new(
@@ -487,7 +487,7 @@ mod tests {
 
         let agent_repo = Arc::new(AgentRepository::new(pool));
         let agent_service = Arc::new(AgentService::new(agent_repo.clone()));
-        let server = McpServer::new_with_agent_service(agent_service.clone());
+        let server = McpServer::with_services(Some(agent_service.clone()), None, None, None, None);
 
         // Register an agent first
         let test_agent = Agent::new(
@@ -556,7 +556,7 @@ mod tests {
 
         let agent_repo = Arc::new(AgentRepository::new(pool));
         let agent_service = Arc::new(AgentService::new(agent_repo));
-        let server = McpServer::new_with_agent_service(agent_service);
+        let server = McpServer::with_services(Some(agent_service), None, None, None, None);
 
         // Test agent status with invalid agent ID
         let invalid_status_params = json!({
@@ -624,7 +624,7 @@ mod tests {
 
         let agent_repo = Arc::new(AgentRepository::new(pool));
         let agent_service = Arc::new(AgentService::new(agent_repo));
-        let server = McpServer::new_with_agent_service(agent_service);
+        let server = McpServer::with_services(Some(agent_service), None, None, None, None);
 
         // 1. Register agent
         let register_params = json!({
@@ -717,7 +717,8 @@ mod tests {
         let agent_service = Arc::new(AgentService::new(agent_repo));
         let issue_service = Arc::new(IssueService::new(issue_repo));
 
-        let server = McpServer::new_with_services(agent_service, issue_service);
+        let server =
+            McpServer::with_services(Some(agent_service), Some(issue_service), None, None, None);
 
         // Create test agent for issue operations
         let register_params = json!({
@@ -923,7 +924,8 @@ mod tests {
         let agent_service = Arc::new(AgentService::new(agent_repo));
         let issue_service = Arc::new(IssueService::new(issue_repo));
 
-        let server = McpServer::new_with_services(agent_service, issue_service);
+        let server =
+            McpServer::with_services(Some(agent_service), Some(issue_service), None, None, None);
 
         // Test create issue with missing required fields
         let invalid_create_params = json!({
@@ -1020,7 +1022,8 @@ mod tests {
         let agent_service = Arc::new(AgentService::new(agent_repo));
         let issue_service = Arc::new(IssueService::new(issue_repo));
 
-        let server = McpServer::new_with_services(agent_service, issue_service);
+        let server =
+            McpServer::with_services(Some(agent_service), Some(issue_service), None, None, None);
 
         // Register coordinator agent
         let coordinator_params = json!({

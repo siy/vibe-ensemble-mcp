@@ -99,30 +99,32 @@ impl Server {
             let message_service = storage.message_service();
             let knowledge_service = storage.knowledge_service();
 
-            Arc::new(McpServer::new_with_capabilities_and_all_services(
-                vibe_ensemble_mcp::protocol::ServerCapabilities {
-                    experimental: None,
-                    logging: None,
-                    prompts: Some(vibe_ensemble_mcp::protocol::PromptsCapability {
-                        list_changed: Some(true),
-                    }),
-                    resources: Some(vibe_ensemble_mcp::protocol::ResourcesCapability {
-                        subscribe: Some(true),
-                        list_changed: Some(true),
-                    }),
-                    tools: Some(vibe_ensemble_mcp::protocol::ToolsCapability {
-                        list_changed: Some(true),
-                    }),
-                    vibe_agent_management: Some(true),
-                    vibe_issue_tracking: Some(true),
-                    vibe_messaging: Some(true),
-                    vibe_knowledge_management: Some(true),
-                },
-                agent_service,
-                issue_service,
-                message_service,
-                knowledge_service,
-            ))
+            Arc::new(
+                McpServer::builder()
+                    .with_capabilities(vibe_ensemble_mcp::protocol::ServerCapabilities {
+                        experimental: None,
+                        logging: None,
+                        prompts: Some(vibe_ensemble_mcp::protocol::PromptsCapability {
+                            list_changed: Some(true),
+                        }),
+                        resources: Some(vibe_ensemble_mcp::protocol::ResourcesCapability {
+                            subscribe: Some(true),
+                            list_changed: Some(true),
+                        }),
+                        tools: Some(vibe_ensemble_mcp::protocol::ToolsCapability {
+                            list_changed: Some(true),
+                        }),
+                        vibe_agent_management: Some(true),
+                        vibe_issue_tracking: Some(true),
+                        vibe_messaging: Some(true),
+                        vibe_knowledge_management: Some(true),
+                    })
+                    .with_agent_service(agent_service)
+                    .with_issue_service(issue_service)
+                    .with_message_service(message_service)
+                    .with_knowledge_service(knowledge_service)
+                    .build(),
+            )
         } else {
             Arc::new(McpServer::new())
         };

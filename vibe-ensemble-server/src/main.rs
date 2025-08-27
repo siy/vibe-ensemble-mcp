@@ -232,9 +232,9 @@ async fn run_mcp_stdio_mode_unified(config: &Config) -> Result<()> {
 
     info!("Services initialized");
 
-    // Create MCP server with all services
-    let server = vibe_ensemble_mcp::server::McpServer::new_with_capabilities_and_all_services(
-        vibe_ensemble_mcp::protocol::ServerCapabilities {
+    // Create MCP server with all services using builder pattern
+    let server = vibe_ensemble_mcp::server::McpServer::builder()
+        .with_capabilities(vibe_ensemble_mcp::protocol::ServerCapabilities {
             experimental: None,
             logging: None,
             prompts: Some(vibe_ensemble_mcp::protocol::PromptsCapability {
@@ -251,12 +251,12 @@ async fn run_mcp_stdio_mode_unified(config: &Config) -> Result<()> {
             vibe_issue_tracking: Some(true),
             vibe_messaging: Some(true),
             vibe_knowledge_management: Some(true),
-        },
-        agent_service,
-        issue_service,
-        message_service,
-        knowledge_service,
-    );
+        })
+        .with_agent_service(agent_service)
+        .with_issue_service(issue_service)
+        .with_message_service(message_service)
+        .with_knowledge_service(knowledge_service)
+        .build();
 
     info!("MCP server initialized successfully");
 

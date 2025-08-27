@@ -33,15 +33,17 @@ mod tests {
         let agent_service = Arc::new(AgentService::new(agent_repo));
         let message_service = Arc::new(MessageService::new(message_repo));
 
-        // Create server with all services
-        let server = McpServer::new_with_all_services(
-            agent_service.clone(),
-            Arc::new(vibe_ensemble_storage::services::IssueService::new(
-                Arc::new(vibe_ensemble_storage::repositories::IssueRepository::new(
-                    pool,
+        // Create server with all services using with_services method
+        let server = McpServer::with_services(
+            Some(agent_service.clone()),
+            Some(Arc::new(
+                vibe_ensemble_storage::services::IssueService::new(Arc::new(
+                    vibe_ensemble_storage::repositories::IssueRepository::new(pool),
                 )),
             )),
-            message_service.clone(),
+            Some(message_service.clone()),
+            None,
+            None,
         );
 
         (server, agent_service, message_service)
