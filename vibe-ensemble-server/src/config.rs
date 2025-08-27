@@ -37,6 +37,7 @@ pub struct McpConfig {
     pub protocol_version: String,
     pub heartbeat_interval: u64,
     pub max_message_size: usize,
+    pub session_timeout: u64,
 }
 
 /// Web interface configuration
@@ -85,6 +86,7 @@ impl Default for Config {
                 protocol_version: "1.0.0".to_string(),
                 heartbeat_interval: 30,
                 max_message_size: 1024 * 1024, // 1MB
+                session_timeout: 300,          // 5 minutes
             },
             web: WebConfig {
                 enabled: true,
@@ -158,6 +160,7 @@ impl Config {
             .set_default("mcp.protocol_version", "1.0.0")?
             .set_default("mcp.heartbeat_interval", 30)?
             .set_default("mcp.max_message_size", 1048576)?
+            .set_default("mcp.session_timeout", 300)?
             .set_default("web.enabled", true)?
             .set_default("web.host", "127.0.0.1")?
             .set_default("web.port", 8081)?
@@ -192,6 +195,7 @@ impl Config {
             .set_default("mcp.protocol_version", "1.0.0")?
             .set_default("mcp.heartbeat_interval", 30)?
             .set_default("mcp.max_message_size", 1048576)?
+            .set_default("mcp.session_timeout", 300)?
             .set_default("web.enabled", true)?
             .set_default("web.host", "127.0.0.1")?
             .set_default("web.port", 8081)?

@@ -1,7 +1,7 @@
 //! Main server implementation
 
 use crate::{config::Config, McpTransport, OperationMode, Result};
-use axum::response::sse::{Event, KeepAlive};
+use axum::response::sse::Event;
 use axum::{
     extract::{ws::WebSocket, Path, Query, State, WebSocketUpgrade},
     http::StatusCode,
@@ -64,6 +64,7 @@ pub struct Server {
     web_server: Option<WebServer>,
     operation_mode: OperationMode,
     transport: McpTransport,
+    sse_sessions: SessionManager,
 }
 
 impl Server {
@@ -142,6 +143,8 @@ impl Server {
             None
         };
 
+        let sse_sessions = Arc::new(RwLock::new(HashMap::new()));
+
         Ok(Self {
             config,
             storage,
@@ -149,16 +152,16 @@ impl Server {
             web_server,
             operation_mode,
             transport,
+            sse_sessions,
         })
     }
 
     /// Create the main coordination API router
     fn create_api_router(&self) -> (Router, SessionManager) {
-        let sse_sessions = Arc::new(RwLock::new(HashMap::new()));
         let state = AppState {
             storage: self.storage.clone(),
             mcp_server: self.mcp_server.clone(),
-            sse_sessions: sse_sessions.clone(),
+            sse_sessions: self.sse_sessions.clone(),
         };
 
         // Note: Session cleanup task will be started in the run() method
@@ -210,7 +213,7 @@ impl Server {
             )
             .with_state(state);
 
-        (app, sse_sessions)
+        (app, self.sse_sessions.clone())
     }
 
     /// Run the server
@@ -236,11 +239,12 @@ impl Server {
         // Start SSE session cleanup task if SSE is enabled
         if matches!(self.transport, McpTransport::Sse | McpTransport::Both) {
             let session_cleanup = sse_sessions;
+            let session_timeout = self.config.mcp.session_timeout;
             tokio::spawn(async move {
                 let mut cleanup_interval = interval(Duration::from_secs(30));
                 loop {
                     cleanup_interval.tick().await;
-                    Self::cleanup_expired_sessions(&session_cleanup).await;
+                    Self::cleanup_expired_sessions(&session_cleanup, session_timeout).await;
                 }
             });
         }
@@ -353,10 +357,10 @@ impl Server {
     }
 
     /// Clean up expired SSE sessions
-    async fn cleanup_expired_sessions(sessions: &SessionManager) {
+    async fn cleanup_expired_sessions(sessions: &SessionManager, session_timeout_secs: u64) {
         let mut sessions = sessions.write().await;
         let now = Instant::now();
-        let timeout = Duration::from_secs(300); // 5 minutes
+        let timeout = Duration::from_secs(session_timeout_secs);
 
         let expired_sessions: Vec<String> = sessions
             .iter()
@@ -496,7 +500,13 @@ async fn mcp_http_handler(
     State(state): State<AppState>,
     Json(payload): Json<Value>,
 ) -> std::result::Result<Json<Value>, StatusCode> {
-    debug!("Received MCP HTTP request: {}", payload);
+    // Extract method and id for logging, avoid logging full payload to prevent PII leakage
+    let method = payload
+        .get("method")
+        .and_then(|m| m.as_str())
+        .unwrap_or("unknown");
+    let id = payload.get("id").and_then(|i| i.as_str()).unwrap_or("none");
+    debug!("Received MCP HTTP request - method: {}, id: {}", method, id);
 
     // Convert JSON to string for MCP server processing
     let message = serde_json::to_string(&payload).map_err(|e| {
@@ -606,22 +616,24 @@ async fn mcp_sse_handler(
     State(state): State<AppState>,
     Query(params): Query<SseQuery>,
 ) -> Sse<impl Stream<Item = std::result::Result<Event, axum::BoxError>>> {
-    // Generate session ID
-    let session_id = params
+    // Generate session ID and check for duplicates
+    let mut session_id = params
         .session_id
         .unwrap_or_else(|| format!("sse_{}", Uuid::new_v4()));
-
-    info!(
-        "New SSE connection established with session_id: {}",
-        session_id
-    );
 
     // Create channel for sending messages to this SSE connection
     let (sender, mut receiver) = mpsc::unbounded_channel::<String>();
 
-    // Register session
+    // Register session, checking for duplicates
     {
         let mut sessions = state.sse_sessions.write().await;
+        while sessions.contains_key(&session_id) {
+            warn!(
+                "Session {} already exists; generating a new session id",
+                session_id
+            );
+            session_id = format!("sse_{}", Uuid::new_v4());
+        }
         sessions.insert(
             session_id.clone(),
             SseSession {
@@ -631,6 +643,11 @@ async fn mcp_sse_handler(
             },
         );
     }
+
+    info!(
+        "New SSE connection established with session_id: {}",
+        session_id
+    );
 
     // Send initial session_init event
     let init_event = json!({
@@ -643,6 +660,12 @@ async fn mcp_sse_handler(
         error!("Failed to send session_init event: {}", e);
     } else {
         debug!("Sent session_init for session: {}", session_id);
+        // Mark session as initialized
+        let mut sessions = state.sse_sessions.write().await;
+        if let Some(s) = sessions.get_mut(&session_id) {
+            s.initialized = true;
+            s.last_activity = Instant::now();
+        }
     }
 
     // Clone state for cleanup
@@ -707,7 +730,8 @@ async fn mcp_sse_handler(
         sessions.remove(&cleanup_session_id);
     };
 
-    Sse::new(stream).keep_alive(KeepAlive::default())
+    // We emit structured heartbeats; extra comment keepalives not needed.
+    Sse::new(stream)
 }
 
 /// MCP SSE POST handler for Claude Code integration
@@ -716,9 +740,15 @@ async fn mcp_sse_post_handler(
     Path(session_id): Path<String>,
     Json(payload): Json<Value>,
 ) -> std::result::Result<Json<Value>, StatusCode> {
+    // Extract method and id for logging, avoid logging full payload to prevent PII leakage
+    let method = payload
+        .get("method")
+        .and_then(|m| m.as_str())
+        .unwrap_or("unknown");
+    let id = payload.get("id").and_then(|i| i.as_str()).unwrap_or("none");
     debug!(
-        "Received MCP SSE POST request for session {}: {}",
-        session_id, payload
+        "Received MCP SSE POST request for session {} - method: {}, id: {}",
+        session_id, method, id
     );
 
     // Convert JSON to string for MCP server processing
@@ -730,7 +760,8 @@ async fn mcp_sse_post_handler(
     // Process through MCP server
     match state.mcp_server.handle_message(&message).await {
         Ok(Some(response)) => {
-            debug!("MCP server produced response: {}", response);
+            // Avoid logging full response to prevent PII leakage
+            debug!("MCP server produced response for session: {}", session_id);
 
             // Try to send response via SSE channel
             let mut sessions = state.sse_sessions.write().await;
