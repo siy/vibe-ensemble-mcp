@@ -429,8 +429,11 @@ impl Transport for SseTransport {
         let response = self.send_post(session_id, &json_payload).await?;
 
         if !response.status().is_success() {
-            // Retry once on 404 to self-heal lost sessions
-            if response.status() == 404 && self.session_id.is_some() {
+            // Retry once on 404/410 to self-heal lost sessions
+            if (response.status() == reqwest::StatusCode::NOT_FOUND
+                || response.status() == reqwest::StatusCode::GONE)
+                && self.session_id.is_some()
+            {
                 warn!("Session {} lost, attempting to reconnect", session_id);
                 self.session_id = None;
                 self.connect().await?;

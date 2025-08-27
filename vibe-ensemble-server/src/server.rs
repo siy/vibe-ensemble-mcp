@@ -31,8 +31,8 @@ use vibe_ensemble_web::WebServer;
 /// - Initialization state to track session lifecycle
 #[derive(Debug)]
 struct SseSession {
-    /// Channel to send messages to SSE client
-    sender: mpsc::UnboundedSender<String>,
+    /// Channel to send messages to SSE client (bounded to prevent OOM)
+    sender: mpsc::Sender<String>,
     /// Last activity timestamp for session cleanup
     last_activity: Instant,
     /// Whether session has been initialized with session_init
@@ -244,7 +244,18 @@ impl Server {
                 let mut cleanup_interval = interval(Duration::from_secs(30));
                 loop {
                     cleanup_interval.tick().await;
-                    Self::cleanup_expired_sessions(&session_cleanup, session_timeout).await;
+                    // Add basic error recovery for cleanup failures
+                    match tokio::time::timeout(
+                        Duration::from_secs(10),
+                        Self::cleanup_expired_sessions(&session_cleanup, session_timeout),
+                    )
+                    .await
+                    {
+                        Ok(()) => {}
+                        Err(_) => {
+                            error!("Session cleanup task timed out after 10 seconds");
+                        }
+                    }
                 }
             });
         }
@@ -621,8 +632,8 @@ async fn mcp_sse_handler(
         .session_id
         .unwrap_or_else(|| format!("sse_{}", Uuid::new_v4()));
 
-    // Create channel for sending messages to this SSE connection
-    let (sender, mut receiver) = mpsc::unbounded_channel::<String>();
+    // Create bounded channel for sending messages to this SSE connection (1024 message buffer)
+    let (sender, mut receiver) = mpsc::channel::<String>(1024);
 
     // Register session, handling reconnects gracefully
     {
@@ -656,7 +667,7 @@ async fn mcp_sse_handler(
         "timestamp": chrono::Utc::now().to_rfc3339()
     });
 
-    if let Err(e) = sender.send(init_event.to_string()) {
+    if let Err(e) = sender.try_send(init_event.to_string()) {
         error!("Failed to send session_init event: {}", e);
     } else {
         debug!("Sent session_init for session: {}", session_id);
@@ -692,7 +703,14 @@ async fn mcp_sse_handler(
                             };
 
                             match event {
-                                Ok(e) => yield Ok(e),
+                                Ok(e) => {
+                                    yield Ok(e);
+                                    // Update activity on successful message delivery
+                                    let mut sessions = cleanup_sessions.write().await;
+                                    if let Some(s) = sessions.get_mut(&session_id) {
+                                        s.last_activity = Instant::now();
+                                    }
+                                }
                                 Err(err) => {
                                     error!("Failed to create SSE event: {}", err);
                                     // Continue stream instead of yielding error
@@ -720,6 +738,11 @@ async fn mcp_sse_handler(
                         .map_err(axum::BoxError::from);
 
                     yield event;
+                    // Update activity on heartbeat
+                    let mut sessions = cleanup_sessions.write().await;
+                    if let Some(s) = sessions.get_mut(&session_id) {
+                        s.last_activity = Instant::now();
+                    }
                 }
             }
         }
@@ -771,7 +794,7 @@ async fn mcp_sse_post_handler(
                 session.initialized = true;
 
                 // Send response via SSE channel
-                if let Err(e) = session.sender.send(response.clone()) {
+                if let Err(e) = session.sender.try_send(response.clone()) {
                     warn!(
                         "Failed to send response via SSE channel for session {}: {}",
                         session_id, e
