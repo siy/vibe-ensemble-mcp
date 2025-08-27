@@ -364,14 +364,14 @@ impl SseTransport {
         // In a real implementation, this would come from the SSE session_init event
         use std::collections::hash_map::DefaultHasher;
         use std::hash::{Hash, Hasher};
-        
+
         let mut hasher = DefaultHasher::new();
         std::time::SystemTime::now().hash(&mut hasher);
         let session_id = format!("sse-{}", hasher.finish());
-        
+
         self.session_id = Some(session_id.clone());
         info!("SSE transport initialized with session ID: {}", session_id);
-        
+
         Ok(session_id)
     }
 }
@@ -396,7 +396,8 @@ impl Transport for SseTransport {
         let json_payload: serde_json::Value = serde_json::from_str(message)
             .map_err(|e| Error::Transport(format!("Invalid JSON message: {}", e)))?;
 
-        let response = self.client
+        let response = self
+            .client
             .post(&post_url)
             .json(&json_payload)
             .send()
@@ -405,7 +406,7 @@ impl Transport for SseTransport {
 
         if !response.status().is_success() {
             return Err(Error::Transport(format!(
-                "HTTP POST failed with status: {}", 
+                "HTTP POST failed with status: {}",
                 response.status()
             )));
         }
@@ -420,7 +421,7 @@ impl Transport for SseTransport {
         // For the current implementation, we will return an error
         // since the server-side SSE handler manages the responses.
         Err(Error::Transport(
-            "SSE transport receive not implemented - responses come via SSE stream".to_string()
+            "SSE transport receive not implemented - responses come via SSE stream".to_string(),
         ))
     }
 

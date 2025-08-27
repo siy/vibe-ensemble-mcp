@@ -3,7 +3,7 @@
 use crate::{config::Config, McpTransport, OperationMode, Result};
 use axum::response::sse::{Event, KeepAlive};
 use axum::{
-    extract::{ws::WebSocket, State, WebSocketUpgrade, Path},
+    extract::{ws::WebSocket, Path, State, WebSocketUpgrade},
     http::StatusCode,
     response::{Json, Response, Sse},
     routing::{get, post},
@@ -17,7 +17,7 @@ use tokio::sync::{broadcast, RwLock};
 // use tokio::time::{interval, Duration}; // Removed - no longer needed for SSE monitoring
 use tower::ServiceBuilder;
 use tower_http::{cors::CorsLayer, trace::TraceLayer};
-use tracing::{error, info, warn, debug};
+use tracing::{debug, error, info, warn};
 use uuid::Uuid;
 use vibe_ensemble_mcp::server::McpServer;
 use vibe_ensemble_storage::StorageManager;
@@ -558,10 +558,13 @@ async fn mcp_sse_handler(
     // Store the session
     {
         let mut sessions = state.sse_sessions.write().await;
-        sessions.insert(session_id.clone(), SseSession {
-            session_id: session_id.clone(),
-            sender: sender.clone(),
-        });
+        sessions.insert(
+            session_id.clone(),
+            SseSession {
+                session_id: session_id.clone(),
+                sender: sender.clone(),
+            },
+        );
     }
 
     // Send session initialization message
@@ -591,7 +594,7 @@ async fn mcp_sse_handler(
             match receiver.recv().await {
                 Ok(message) => {
                     debug!("Sending MCP SSE message: {}", message);
-                    
+
                     // Try to parse as JSON to validate format
                     let json_message: Value = match serde_json::from_str(&message) {
                         Ok(json) => json,
@@ -638,7 +641,10 @@ async fn mcp_sse_post_handler(
     State(state): State<AppState>,
     Json(payload): Json<Value>,
 ) -> std::result::Result<Json<Value>, StatusCode> {
-    debug!("Received MCP SSE POST request for session {}: {}", session_id, payload);
+    debug!(
+        "Received MCP SSE POST request for session {}: {}",
+        session_id, payload
+    );
 
     // Find the SSE session
     let session = {
@@ -663,11 +669,17 @@ async fn mcp_sse_post_handler(
     // Process through MCP server
     match state.mcp_server.handle_message(&message).await {
         Ok(Some(response)) => {
-            debug!("Sending MCP SSE response via session {}: {}", session_id, response);
-            
+            debug!(
+                "Sending MCP SSE response via session {}: {}",
+                session_id, response
+            );
+
             // Send response back through SSE channel
             if let Err(e) = session.sender.send(response.clone()) {
-                warn!("Failed to send response to SSE session {}: {}", session_id, e);
+                warn!(
+                    "Failed to send response to SSE session {}: {}",
+                    session_id, e
+                );
                 return Err(StatusCode::INTERNAL_SERVER_ERROR);
             }
 
@@ -681,13 +693,19 @@ async fn mcp_sse_post_handler(
             }
         }
         Ok(None) => {
-            debug!("No response required for MCP message in session {}", session_id);
+            debug!(
+                "No response required for MCP message in session {}",
+                session_id
+            );
             // For notifications (no response expected), return 204 No Content
             Err(StatusCode::NO_CONTENT)
         }
         Err(e) => {
-            error!("Error processing MCP message in session {}: {}", session_id, e);
-            
+            error!(
+                "Error processing MCP message in session {}: {}",
+                session_id, e
+            );
+
             // Create JSON-RPC error response
             let error_response = json!({
                 "jsonrpc": "2.0",
@@ -700,7 +718,10 @@ async fn mcp_sse_post_handler(
             });
 
             // Send error through SSE channel as well
-            if let Err(e) = session.sender.send(serde_json::to_string(&error_response).unwrap_or_default()) {
+            if let Err(e) = session
+                .sender
+                .send(serde_json::to_string(&error_response).unwrap_or_default())
+            {
                 warn!("Failed to send error to SSE session {}: {}", session_id, e);
             }
 
