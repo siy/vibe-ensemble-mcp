@@ -286,11 +286,11 @@ impl Server {
                 loop {
                     match transport.receive().await {
                         Ok(message) => {
-                            debug!("Received MCP message: {}", message);
+                            debug!("Received MCP message ({} bytes)", message.len());
 
                             match mcp_server.handle_message(&message).await {
                                 Ok(Some(response)) => {
-                                    debug!("Sending MCP response: {}", response);
+                                    debug!("Sending MCP response ({} bytes)", response.len());
                                     if let Err(e) = transport.send(&response).await {
                                         error!("Failed to send MCP response: {}", e);
                                         break;
@@ -569,12 +569,12 @@ async fn handle_mcp_websocket(mut socket: WebSocket, state: AppState) {
         match socket.recv().await {
             Some(Ok(msg)) => {
                 if let Ok(text) = msg.to_text() {
-                    debug!("Received MCP WebSocket message: {}", text);
+                    debug!("Received MCP WebSocket message ({} bytes)", text.len());
 
                     // Process the message through MCP server
                     match state.mcp_server.handle_message(text).await {
                         Ok(Some(response)) => {
-                            debug!("Sending MCP WebSocket response: {}", response);
+                            debug!("Sending MCP WebSocket response ({} bytes)", response.len());
                             if let Err(e) = socket
                                 .send(axum::extract::ws::Message::Text(response))
                                 .await
@@ -794,26 +794,38 @@ async fn mcp_sse_post_handler(
                 session.initialized = true;
 
                 // Send response via SSE channel
-                if let Err(e) = session.sender.try_send(response.clone()) {
-                    warn!(
-                        "Failed to send response via SSE channel for session {}: {}",
-                        session_id, e
-                    );
-                    // SSE channel is closed, mark session as disconnected
-                    sessions.remove(&session_id);
-                    // Return error to indicate SSE channel failure
-                    return Err(StatusCode::GONE); // 410 Gone - session expired
+                use tokio::sync::mpsc::error::TrySendError;
+                let send_result = session.sender.try_send(response.clone());
+                if let Err(err) = send_result {
+                    match err {
+                        TrySendError::Full(_msg) => {
+                            warn!(
+                                "SSE channel full for session {}, signaling backpressure",
+                                session_id
+                            );
+                            return Err(StatusCode::TOO_MANY_REQUESTS); // 429 Too Many Requests
+                        }
+                        TrySendError::Closed(_msg) => {
+                            warn!(
+                                "SSE channel closed for session {}, expiring session",
+                                session_id
+                            );
+                            sessions.remove(&session_id);
+                            return Err(StatusCode::GONE); // 410 Gone - session expired
+                        }
+                    }
                 } else {
                     debug!("Response sent via SSE channel for session: {}", session_id);
                 }
             } else {
                 debug!(
-                    "Session {} not found, will return HTTP response only",
+                    "Session {} not found; signaling client to reconnect",
                     session_id
                 );
+                return Err(StatusCode::GONE);
             }
 
-            // Always return HTTP response as well for compatibility
+            // Also return HTTP response for non-SSE callers
             match serde_json::from_str::<Value>(&response) {
                 Ok(json_response) => Ok(Json(json_response)),
                 Err(e) => {
