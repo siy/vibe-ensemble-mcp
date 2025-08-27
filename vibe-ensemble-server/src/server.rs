@@ -188,7 +188,7 @@ impl Server {
                     router = router
                         .route("/mcp/events", get(mcp_sse_handler))
                         .route("/mcp/sse/:session_id", post(mcp_sse_post_handler));
-                    info!("MCP SSE endpoint enabled at /mcp/events (GET)");
+                    info!("MCP SSE endpoint enabled at /mcp/events (GET) - for Claude Code integration");
                     info!("MCP SSE POST endpoint enabled at /mcp/sse/:session_id (POST)");
                 }
                 McpTransport::Both => {
@@ -622,7 +622,7 @@ async fn handle_mcp_websocket(mut socket: WebSocket, state: AppState) {
     }
 }
 
-/// MCP SSE handler for Claude Code integration - bidirectional MCP communication
+/// MCP SSE handler for Claude Code integration - full MCP protocol over SSE
 async fn mcp_sse_handler(
     State(state): State<AppState>,
     Query(params): Query<SseQuery>,
@@ -656,21 +656,42 @@ async fn mcp_sse_handler(
     }
 
     info!(
-        "New SSE connection established with session_id: {}",
+        "New MCP SSE connection established with session_id: {}",
         session_id
     );
 
-    // Send initial session_init event
-    let init_event = json!({
-        "type": "session_init",
-        "session_id": session_id,
-        "timestamp": chrono::Utc::now().to_rfc3339()
-    });
+    // For Claude Code, immediately send MCP initialization response
+    // Claude Code expects this to happen automatically when connecting to /mcp/events
+    let init_response = {
+        use vibe_ensemble_mcp::protocol::{InitializeResult, ServerInfo, MCP_VERSION};
+        
+        let result = InitializeResult {
+            protocol_version: MCP_VERSION.to_string(),
+            server_info: ServerInfo {
+                name: "vibe-ensemble".to_string(),
+                version: env!("CARGO_PKG_VERSION").to_string(),
+            },
+            capabilities: state.mcp_server.capabilities().clone(),
+            instructions: Some(
+                "Vibe Ensemble MCP Server - Coordinating multiple Claude Code instances via SSE".to_string(),
+            ),
+        };
+        
+        // Create proper MCP JSON-RPC response
+        let mcp_response = vibe_ensemble_mcp::protocol::JsonRpcResponse {
+            jsonrpc: "2.0".to_string(),
+            id: serde_json::Value::String(session_id.clone()),
+            result: Some(serde_json::to_value(result).unwrap()),
+            error: None,
+        };
+        
+        serde_json::to_string(&mcp_response).unwrap()
+    };
 
-    if let Err(e) = sender.try_send(init_event.to_string()) {
-        error!("Failed to send session_init event: {}", e);
+    if let Err(e) = sender.try_send(init_response) {
+        error!("Failed to send MCP initialization response: {}", e);
     } else {
-        debug!("Sent session_init for session: {}", session_id);
+        debug!("Sent MCP initialization response for session: {}", session_id);
         // Mark session as initialized
         let mut sessions = state.sse_sessions.write().await;
         if let Some(s) = sessions.get_mut(&session_id) {
