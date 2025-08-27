@@ -63,7 +63,7 @@ pub struct ClientSession {
 }
 
 impl McpServer {
-    /// Create a new MCP server with default capabilities
+    /// Create a new MCP server with default capabilities and no services
     pub fn new() -> Self {
         Self {
             clients: Arc::new(RwLock::new(HashMap::new())),
@@ -76,171 +76,27 @@ impl McpServer {
         }
     }
 
-    /// Create a new MCP server with custom capabilities
-    pub fn new_with_capabilities(capabilities: ServerCapabilities) -> Self {
-        Self {
-            clients: Arc::new(RwLock::new(HashMap::new())),
-            capabilities,
-            agent_service: None,
-            issue_service: None,
-            message_service: None,
-            coordination_service: None,
-            knowledge_service: None,
-        }
+    /// Create a builder for configuring an MCP server
+    pub fn builder() -> McpServerBuilder {
+        McpServerBuilder::new()
     }
 
-    /// Create a new MCP server with agent service integration
-    pub fn new_with_agent_service(agent_service: Arc<AgentService>) -> Self {
-        Self {
-            clients: Arc::new(RwLock::new(HashMap::new())),
-            capabilities: ServerCapabilities::default(),
-            agent_service: Some(agent_service),
-            issue_service: None,
-            message_service: None,
-            coordination_service: None,
-            knowledge_service: None,
-        }
-    }
-
-    /// Create a new MCP server with custom capabilities and agent service
-    pub fn new_with_capabilities_and_agent_service(
-        capabilities: ServerCapabilities,
-        agent_service: Arc<AgentService>,
-    ) -> Self {
-        Self {
-            clients: Arc::new(RwLock::new(HashMap::new())),
-            capabilities,
-            agent_service: Some(agent_service),
-            issue_service: None,
-            message_service: None,
-            coordination_service: None,
-            knowledge_service: None,
-        }
-    }
-
-    /// Create a new MCP server with issue service integration
-    pub fn new_with_issue_service(issue_service: Arc<IssueService>) -> Self {
-        Self {
-            clients: Arc::new(RwLock::new(HashMap::new())),
-            capabilities: ServerCapabilities::default(),
-            agent_service: None,
-            issue_service: Some(issue_service),
-            message_service: None,
-            coordination_service: None,
-            knowledge_service: None,
-        }
-    }
-
-    /// Create a new MCP server with both agent and issue services
-    pub fn new_with_services(
-        agent_service: Arc<AgentService>,
-        issue_service: Arc<IssueService>,
+    /// Create a new MCP server with services directly (for testing and simple cases)
+    pub fn with_services(
+        agent_service: Option<Arc<AgentService>>,
+        issue_service: Option<Arc<IssueService>>,
+        message_service: Option<Arc<MessageService>>,
+        coordination_service: Option<Arc<CoordinationService>>,
+        knowledge_service: Option<Arc<KnowledgeService>>,
     ) -> Self {
         Self {
             clients: Arc::new(RwLock::new(HashMap::new())),
             capabilities: ServerCapabilities::default(),
-            agent_service: Some(agent_service),
-            issue_service: Some(issue_service),
-            message_service: None,
-            coordination_service: None,
-            knowledge_service: None,
-        }
-    }
-
-    /// Create a new MCP server with custom capabilities and both services
-    pub fn new_with_capabilities_and_services(
-        capabilities: ServerCapabilities,
-        agent_service: Arc<AgentService>,
-        issue_service: Arc<IssueService>,
-    ) -> Self {
-        Self {
-            clients: Arc::new(RwLock::new(HashMap::new())),
-            capabilities,
-            agent_service: Some(agent_service),
-            issue_service: Some(issue_service),
-            message_service: None,
-            coordination_service: None,
-            knowledge_service: None,
-        }
-    }
-
-    /// Create a new MCP server with message service integration
-    pub fn new_with_message_service(message_service: Arc<MessageService>) -> Self {
-        Self {
-            clients: Arc::new(RwLock::new(HashMap::new())),
-            capabilities: ServerCapabilities::default(),
-            agent_service: None,
-            issue_service: None,
-            message_service: Some(message_service),
-            coordination_service: None,
-            knowledge_service: None,
-        }
-    }
-
-    /// Create a new MCP server with all services
-    pub fn new_with_all_services(
-        agent_service: Arc<AgentService>,
-        issue_service: Arc<IssueService>,
-        message_service: Arc<MessageService>,
-    ) -> Self {
-        Self {
-            clients: Arc::new(RwLock::new(HashMap::new())),
-            capabilities: ServerCapabilities::default(),
-            agent_service: Some(agent_service),
-            issue_service: Some(issue_service),
-            message_service: Some(message_service),
-            coordination_service: None,
-            knowledge_service: None,
-        }
-    }
-
-    /// Create a new MCP server with custom capabilities and all services
-    pub fn new_with_capabilities_and_all_services(
-        capabilities: ServerCapabilities,
-        agent_service: Arc<AgentService>,
-        issue_service: Arc<IssueService>,
-        message_service: Arc<MessageService>,
-        knowledge_service: Arc<KnowledgeService>,
-    ) -> Self {
-        Self {
-            clients: Arc::new(RwLock::new(HashMap::new())),
-            capabilities,
-            agent_service: Some(agent_service),
-            issue_service: Some(issue_service),
-            message_service: Some(message_service),
-            coordination_service: None,
-            knowledge_service: Some(knowledge_service),
-        }
-    }
-
-    /// Create a new MCP server with coordination service
-    pub fn new_with_coordination_service(coordination_service: Arc<CoordinationService>) -> Self {
-        Self {
-            clients: Arc::new(RwLock::new(HashMap::new())),
-            capabilities: ServerCapabilities::default(),
-            agent_service: None,
-            issue_service: None,
-            message_service: None,
-            coordination_service: Some(coordination_service),
-            knowledge_service: None,
-        }
-    }
-
-    /// Create a new MCP server with all services including coordination
-    pub fn new_with_full_services(
-        agent_service: Arc<AgentService>,
-        issue_service: Arc<IssueService>,
-        message_service: Arc<MessageService>,
-        coordination_service: Arc<CoordinationService>,
-    ) -> Self {
-        Self {
-            clients: Arc::new(RwLock::new(HashMap::new())),
-            capabilities: ServerCapabilities::default(),
-            agent_service: Some(agent_service),
-            issue_service: Some(issue_service),
-            message_service: Some(message_service),
-            coordination_service: Some(coordination_service),
-            knowledge_service: None,
+            agent_service,
+            issue_service,
+            message_service,
+            coordination_service,
+            knowledge_service,
         }
     }
 
@@ -5225,6 +5081,90 @@ impl McpServer {
 
         rec_stack[node] = false;
         false
+    }
+}
+
+/// Builder pattern for configuring MCP server instances
+#[derive(Default)]
+pub struct McpServerBuilder {
+    capabilities: Option<ServerCapabilities>,
+    agent_service: Option<Arc<AgentService>>,
+    issue_service: Option<Arc<IssueService>>,
+    message_service: Option<Arc<MessageService>>,
+    coordination_service: Option<Arc<CoordinationService>>,
+    knowledge_service: Option<Arc<KnowledgeService>>,
+}
+
+impl McpServerBuilder {
+    /// Create a new builder
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    /// Set custom server capabilities
+    pub fn with_capabilities(mut self, capabilities: ServerCapabilities) -> Self {
+        self.capabilities = Some(capabilities);
+        self
+    }
+
+    /// Add agent service
+    pub fn with_agent_service(mut self, service: Arc<AgentService>) -> Self {
+        self.agent_service = Some(service);
+        self
+    }
+
+    /// Add issue service
+    pub fn with_issue_service(mut self, service: Arc<IssueService>) -> Self {
+        self.issue_service = Some(service);
+        self
+    }
+
+    /// Add message service
+    pub fn with_message_service(mut self, service: Arc<MessageService>) -> Self {
+        self.message_service = Some(service);
+        self
+    }
+
+    /// Add coordination service
+    pub fn with_coordination_service(mut self, service: Arc<CoordinationService>) -> Self {
+        self.coordination_service = Some(service);
+        self
+    }
+
+    /// Add knowledge service
+    pub fn with_knowledge_service(mut self, service: Arc<KnowledgeService>) -> Self {
+        self.knowledge_service = Some(service);
+        self
+    }
+
+    /// Add all services at once
+    pub fn with_all_services(
+        mut self,
+        agent_service: Arc<AgentService>,
+        issue_service: Arc<IssueService>,
+        message_service: Arc<MessageService>,
+        coordination_service: Arc<CoordinationService>,
+        knowledge_service: Arc<KnowledgeService>,
+    ) -> Self {
+        self.agent_service = Some(agent_service);
+        self.issue_service = Some(issue_service);
+        self.message_service = Some(message_service);
+        self.coordination_service = Some(coordination_service);
+        self.knowledge_service = Some(knowledge_service);
+        self
+    }
+
+    /// Build the MCP server instance
+    pub fn build(self) -> McpServer {
+        McpServer {
+            clients: Arc::new(RwLock::new(HashMap::new())),
+            capabilities: self.capabilities.unwrap_or_default(),
+            agent_service: self.agent_service,
+            issue_service: self.issue_service,
+            message_service: self.message_service,
+            coordination_service: self.coordination_service,
+            knowledge_service: self.knowledge_service,
+        }
     }
 }
 
