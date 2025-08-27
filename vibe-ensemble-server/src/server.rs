@@ -99,7 +99,8 @@ impl Server {
             let message_service = storage.message_service();
             let knowledge_service = storage.knowledge_service();
 
-            Arc::new(McpServer::builder()
+            Arc::new(
+                McpServer::builder()
                     .with_capabilities(vibe_ensemble_mcp::protocol::ServerCapabilities {
                         experimental: None,
                         logging: None,
@@ -122,7 +123,8 @@ impl Server {
                     .with_issue_service(issue_service)
                     .with_message_service(message_service)
                     .with_knowledge_service(knowledge_service)
-                    .build())
+                    .build(),
+            )
         } else {
             Arc::new(McpServer::new())
         };
