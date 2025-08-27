@@ -303,7 +303,9 @@ impl StdioTransport {
     }
 
     /// Validate that a message is proper JSON-RPC and doesn't contain embedded newlines
-    fn validate_message(message: &str) -> Result<()> {
+    /// Strict per JSON-RPC 2.0: root must be Object or Array; every object must have "jsonrpc":"2.0".
+    #[doc(hidden)]
+    pub fn validate_message(message: &str) -> Result<()> {
         // Check for embedded newlines (MCP requirement)
         if message.contains('\n') || message.contains('\r') {
             return Err(Error::Transport(
@@ -315,45 +317,59 @@ impl StdioTransport {
         let parsed: Value = serde_json::from_str(message)
             .map_err(|e| Error::Transport(format!("Invalid JSON in message: {}", e)))?;
 
-        // Basic JSON-RPC 2.0 validation
-        if let Some(jsonrpc) = parsed.get("jsonrpc") {
-            if jsonrpc.as_str() != Some("2.0") {
-                return Err(Error::Transport(
+        // Strict JSON-RPC 2.0 validation
+        fn ensure_v2(obj: &serde_json::Map<String, Value>) -> Result<()> {
+            match obj.get("jsonrpc").and_then(|v| v.as_str()) {
+                Some("2.0") => Ok(()),
+                _ => Err(Error::Transport(
                     "Message must use JSON-RPC 2.0 protocol".to_string(),
-                ));
+                )),
             }
         }
 
-        // Validate UTF-8 encoding (implicit in Rust strings, but let's be explicit)
-        if !message.is_ascii() && !message.chars().all(|c| c.is_ascii() || c.len_utf8() <= 4) {
-            return Err(Error::Transport(
-                "Message contains invalid UTF-8 sequences".to_string(),
-            ));
+        match &parsed {
+            Value::Object(obj) => ensure_v2(obj)?,
+            Value::Array(items) => {
+                if items.is_empty() {
+                    return Err(Error::Transport("Batch must not be empty".to_string()));
+                }
+                for item in items {
+                    if let Value::Object(obj) = item {
+                        ensure_v2(obj)?
+                    } else {
+                        return Err(Error::Transport(
+                            "Batch items must be JSON objects".to_string(),
+                        ));
+                    }
+                }
+            }
+            _ => {
+                return Err(Error::Transport(
+                    "JSON-RPC message must be an object or non-empty array".to_string(),
+                ));
+            }
         }
 
         debug!("Message validation passed: JSON-RPC 2.0, no embedded newlines, valid UTF-8");
         Ok(())
     }
 
-    /// Check if the transport should shut down due to system signals
-    async fn check_shutdown_signal() -> bool {
-        // Check for common termination signals
+    /// Wait until a shutdown signal is received (SIGINT/SIGTERM)
+    async fn check_shutdown_signal() {
         tokio::select! {
             _ = signal::ctrl_c() => {
                 info!("Received SIGINT (Ctrl+C), initiating graceful shutdown");
-                true
             }
             _ = Self::wait_for_sigterm() => {
                 info!("Received SIGTERM, initiating graceful shutdown");
-                true
             }
-            else => false
         }
     }
 
     /// Wait for SIGTERM signal (Unix-like systems)
-    #[cfg(unix)]
-    async fn wait_for_sigterm() {
+    #[cfg(any(unix, test))]
+    #[doc(hidden)]
+    pub async fn wait_for_sigterm() {
         use tokio::signal::unix::{signal, SignalKind};
         if let Ok(mut sigterm) = signal(SignalKind::terminate()) {
             sigterm.recv().await;
@@ -361,8 +377,9 @@ impl StdioTransport {
     }
 
     /// Wait for SIGTERM signal (Windows - no-op as SIGTERM doesn't exist)
-    #[cfg(not(unix))]
-    async fn wait_for_sigterm() {
+    #[cfg(all(not(unix), not(test)))]
+    #[doc(hidden)]
+    pub async fn wait_for_sigterm() {
         // On Windows, we only handle Ctrl+C
         std::future::pending::<()>().await;
     }
@@ -494,13 +511,10 @@ impl Transport for StdioTransport {
                             }
                         }
                     }
-                    shutdown = Self::check_shutdown_signal() => {
-                        if shutdown {
-                            info!("Graceful shutdown initiated via signal");
-                            self.is_closed = true;
-                            return Err(Error::Connection("Shutdown signal received".to_string()));
-                        }
-                        // If check_shutdown_signal returns false, continue the loop
+                    _ = Self::check_shutdown_signal() => {
+                        info!("Graceful shutdown initiated via signal");
+                        self.is_closed = true;
+                        return Err(Error::Connection("Shutdown signal received".to_string()));
                     }
                 }
             }
@@ -783,9 +797,25 @@ mod tests {
         let wrong_version = r#"{"jsonrpc":"1.0","id":1,"method":"test"}"#;
         assert!(StdioTransport::validate_message(wrong_version).is_err());
 
-        // Valid message without explicit JSON-RPC version (should pass)
+        // Message without explicit JSON-RPC version (should fail with strict validation)
         let no_version = r#"{"id":1,"method":"test","params":{}}"#;
-        assert!(StdioTransport::validate_message(no_version).is_ok());
+        assert!(StdioTransport::validate_message(no_version).is_err());
+
+        // Valid batch request
+        let valid_batch = r#"[{"jsonrpc":"2.0","id":1,"method":"test1"},{"jsonrpc":"2.0","id":2,"method":"test2"}]"#;
+        assert!(StdioTransport::validate_message(valid_batch).is_ok());
+
+        // Empty batch (should fail)
+        let empty_batch = "[]";
+        assert!(StdioTransport::validate_message(empty_batch).is_err());
+
+        // Batch with invalid item (should fail)
+        let invalid_batch = r#"[{"jsonrpc":"2.0","id":1},"not an object"]"#;
+        assert!(StdioTransport::validate_message(invalid_batch).is_err());
+
+        // Non-object/array root (should fail)
+        let primitive_root = "\"just a string\"";
+        assert!(StdioTransport::validate_message(primitive_root).is_err());
     }
 
     #[tokio::test]

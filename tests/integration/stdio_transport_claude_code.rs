@@ -47,6 +47,9 @@ async fn test_json_rpc_message_framing() {
         r#"{"jsonrpc":"1.0","id":1}"#,  // Wrong version
         "{\"jsonrpc\":\"2.0\",\n\"id\":1}",  // Embedded newline
         "{\"jsonrpc\":\"2.0\",\r\"id\":1}",  // Embedded carriage return
+        r#"{"id":1,"method":"test"}"#,  // Missing jsonrpc field (strict validation)
+        "[]",  // Empty batch
+        "\"just a string\"",  // Non-object/array root
     ];
 
     for message in invalid_messages {
