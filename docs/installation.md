@@ -279,9 +279,9 @@ curl http://localhost:8080/api/health
 
 ### Web Interface
 Open your browser and navigate to:
-- **Dashboard**: <http://localhost:8081>
+- **Dashboard**: <http://localhost:8081> _(or your configured `VIBE_ENSEMBLE_WEB__PORT`)_
 - **API Health**: <http://localhost:8080/api/health>
-_If metrics are enabled in your deployment:_
+> Note: Metrics are optional in some deployments.
 - **Metrics**: <http://localhost:9090/metrics>
 
 ### MCP Tools
@@ -293,7 +293,7 @@ echo '{"jsonrpc":"2.0","id":1,"method":"vibe/agent/list","params":{}}' | vibe-en
 # Or via HTTP:
 curl -sS -H 'Content-Type: application/json' \
   -d '{"jsonrpc":"2.0","id":1,"method":"vibe/agent/list","params":{}}' \
-  http://localhost:8080/mcp
+  http://localhost:8080/mcp | jq .
 ```
 
 ## Updating
