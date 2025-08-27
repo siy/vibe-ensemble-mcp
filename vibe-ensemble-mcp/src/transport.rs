@@ -352,7 +352,7 @@ pub struct SseTransport {
 
 impl SseTransport {
     /// Create a new SSE transport
-    /// 
+    ///
     /// # Arguments
     /// * `base_url` - The base URL of the server to connect to (e.g., "http://localhost:8080")
     pub fn new(base_url: &str) -> Self {
@@ -365,10 +365,10 @@ impl SseTransport {
     }
 
     /// Initialize connection by generating a unique session ID for communication
-    /// 
+    ///
     /// # Returns
     /// The generated session ID that will be used for all subsequent communications
-    /// 
+    ///
     /// # Errors
     /// Returns an error if the transport is already closed
     pub async fn connect(&mut self) -> Result<String> {
@@ -388,10 +388,14 @@ impl SseTransport {
     }
 
     /// Helper method to send POST requests, reducing code duplication
-    async fn send_post(&self, session_id: &str, json_payload: &serde_json::Value) -> Result<reqwest::Response> {
+    async fn send_post(
+        &self,
+        session_id: &str,
+        json_payload: &serde_json::Value,
+    ) -> Result<reqwest::Response> {
         let post_url = format!("{}/mcp/sse/{}", self.base_url, session_id);
         debug!("Sending SSE POST message to: {}", post_url);
-        
+
         self.client
             .post(&post_url)
             .json(json_payload)
@@ -413,7 +417,9 @@ impl Transport for SseTransport {
             self.connect().await?;
         }
 
-        let session_id = self.session_id.as_ref()
+        let session_id = self
+            .session_id
+            .as_ref()
             .ok_or_else(|| Error::Transport("Session ID not set".to_string()))?;
 
         // Parse message as JSON to send as structured data
@@ -430,7 +436,9 @@ impl Transport for SseTransport {
                 self.connect().await?;
 
                 // Retry with new session
-                let new_session_id = self.session_id.as_ref()
+                let new_session_id = self
+                    .session_id
+                    .as_ref()
                     .ok_or_else(|| Error::Transport("Failed to get new session ID".to_string()))?;
                 let retry_response = self.send_post(new_session_id, &json_payload).await?;
 
@@ -484,7 +492,7 @@ impl TransportFactory {
     }
 
     /// Create an SSE client transport
-    /// 
+    ///
     /// Note: Call `connect()` on the transport to establish the SSE connection.
     pub fn sse_client(base_url: &str) -> Box<dyn Transport> {
         Box::new(SseTransport::new(base_url))

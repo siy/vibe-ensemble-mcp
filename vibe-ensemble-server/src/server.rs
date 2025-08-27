@@ -24,7 +24,7 @@ use vibe_ensemble_storage::StorageManager;
 use vibe_ensemble_web::WebServer;
 
 /// SSE session information for managing Claude Code connections
-/// 
+///
 /// Each session represents an active SSE connection and maintains:
 /// - A message channel for server-to-client communication
 /// - Activity tracking for automatic cleanup of stale connections
@@ -209,7 +209,7 @@ impl Server {
                     .layer(CorsLayer::permissive()),
             )
             .with_state(state);
-            
+
         (app, sse_sessions)
     }
 
@@ -234,10 +234,7 @@ impl Server {
         let (app, sse_sessions) = self.create_api_router();
 
         // Start SSE session cleanup task if SSE is enabled
-        if matches!(
-            self.transport, 
-            McpTransport::Sse | McpTransport::Both
-        ) {
+        if matches!(self.transport, McpTransport::Sse | McpTransport::Both) {
             let session_cleanup = sse_sessions;
             tokio::spawn(async move {
                 let mut cleanup_interval = interval(Duration::from_secs(30));
