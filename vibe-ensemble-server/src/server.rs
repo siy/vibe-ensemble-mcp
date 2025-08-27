@@ -617,22 +617,22 @@ async fn mcp_sse_handler(
     Query(params): Query<SseQuery>,
 ) -> Sse<impl Stream<Item = std::result::Result<Event, axum::BoxError>>> {
     // Generate session ID and check for duplicates
-    let mut session_id = params
+    let session_id = params
         .session_id
         .unwrap_or_else(|| format!("sse_{}", Uuid::new_v4()));
 
     // Create channel for sending messages to this SSE connection
     let (sender, mut receiver) = mpsc::unbounded_channel::<String>();
 
-    // Register session, checking for duplicates
+    // Register session, handling reconnects gracefully
     {
         let mut sessions = state.sse_sessions.write().await;
-        while sessions.contains_key(&session_id) {
+        if sessions.contains_key(&session_id) {
             warn!(
-                "Session {} already exists; generating a new session id",
+                "SSE session {} already exists; replacing for reconnect",
                 session_id
             );
-            session_id = format!("sse_{}", Uuid::new_v4());
+            sessions.remove(&session_id);
         }
         sessions.insert(
             session_id.clone(),

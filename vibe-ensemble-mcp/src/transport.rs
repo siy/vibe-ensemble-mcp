@@ -493,7 +493,8 @@ impl TransportFactory {
 
     /// Create an SSE client transport
     ///
-    /// Note: Call `connect()` on the transport to establish the SSE connection.
+    /// Note: Connection/session is established lazily on first `send()`. You may
+    /// call `connect()` if you need the session_id eagerly, but it's not required.
     pub fn sse_client(base_url: &str) -> Box<dyn Transport> {
         Box::new(SseTransport::new(base_url))
     }
