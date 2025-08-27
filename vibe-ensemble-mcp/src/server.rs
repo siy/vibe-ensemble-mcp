@@ -5491,16 +5491,14 @@ impl McpServer {
                 ))
                 .await
             }
-            "knowledge_submit" => {
-                Ok(Some(JsonRpcResponse::error(
-                    request.id,
-                    JsonRpcError {
-                        code: error_codes::METHOD_NOT_FOUND,
-                        message: "knowledge_submit is not implemented yet".to_string(),
-                        data: None,
-                    },
-                )))
-            }
+            "knowledge_submit" => Ok(Some(JsonRpcResponse::error(
+                request.id,
+                JsonRpcError {
+                    code: error_codes::METHOD_NOT_FOUND,
+                    message: "knowledge_submit is not implemented yet".to_string(),
+                    data: None,
+                },
+            ))),
             "knowledge_query_coordination" => {
                 let coord_query_params =
                     serde_json::from_value(params.params).map_err(|e| Error::InvalidParams {
