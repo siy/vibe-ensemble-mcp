@@ -36,11 +36,11 @@ mod tests {
         // Create server with all services using with_services method
         let server = McpServer::with_services(
             Some(agent_service.clone()),
-            Some(Arc::new(vibe_ensemble_storage::services::IssueService::new(
-                Arc::new(vibe_ensemble_storage::repositories::IssueRepository::new(
-                    pool,
+            Some(Arc::new(
+                vibe_ensemble_storage::services::IssueService::new(Arc::new(
+                    vibe_ensemble_storage::repositories::IssueRepository::new(pool),
                 )),
-            ))),
+            )),
             Some(message_service.clone()),
             None,
             None,

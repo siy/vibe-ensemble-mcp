@@ -717,7 +717,8 @@ mod tests {
         let agent_service = Arc::new(AgentService::new(agent_repo));
         let issue_service = Arc::new(IssueService::new(issue_repo));
 
-        let server = McpServer::with_services(Some(agent_service), Some(issue_service), None, None, None);
+        let server =
+            McpServer::with_services(Some(agent_service), Some(issue_service), None, None, None);
 
         // Create test agent for issue operations
         let register_params = json!({
@@ -923,7 +924,8 @@ mod tests {
         let agent_service = Arc::new(AgentService::new(agent_repo));
         let issue_service = Arc::new(IssueService::new(issue_repo));
 
-        let server = McpServer::with_services(Some(agent_service), Some(issue_service), None, None, None);
+        let server =
+            McpServer::with_services(Some(agent_service), Some(issue_service), None, None, None);
 
         // Test create issue with missing required fields
         let invalid_create_params = json!({
@@ -1020,7 +1022,8 @@ mod tests {
         let agent_service = Arc::new(AgentService::new(agent_repo));
         let issue_service = Arc::new(IssueService::new(issue_repo));
 
-        let server = McpServer::with_services(Some(agent_service), Some(issue_service), None, None, None);
+        let server =
+            McpServer::with_services(Some(agent_service), Some(issue_service), None, None, None);
 
         // Register coordinator agent
         let coordinator_params = json!({
