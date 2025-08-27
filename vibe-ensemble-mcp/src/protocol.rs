@@ -61,7 +61,7 @@ pub struct JsonRpcError {
 pub mod methods {
     // Standard MCP protocol methods (5 core methods)
     pub const INITIALIZE: &str = "initialize";
-    pub const INITIALIZED: &str = "initialized"; 
+    pub const INITIALIZED: &str = "initialized";
     pub const PING: &str = "ping";
     pub const LIST_TOOLS: &str = "tools/list";
     pub const CALL_TOOL: &str = "tools/call";
@@ -71,10 +71,10 @@ pub mod methods {
     // Streamlined Vibe Ensemble extensions (3 essential methods for all functionality)
     /// Agent operations: register, status, list, deregister, capabilities
     pub const VIBE_AGENT: &str = "vibe/agent";
-    
-    /// Issue operations: create, list, assign, update, close 
+
+    /// Issue operations: create, list, assign, update, close
     pub const VIBE_ISSUE: &str = "vibe/issue";
-    
+
     /// Coordination operations: messaging, workflows, knowledge, resources, dependencies, conflicts
     pub const VIBE_COORDINATION: &str = "vibe/coordination";
 
@@ -89,7 +89,7 @@ pub mod methods {
     pub const AGENT_DEREGISTER: &str = "vibe/agent/deregister";
     #[deprecated(since = "0.3.0", note = "Use VIBE_AGENT with operation parameter")]
     pub const AGENT_CAPABILITIES: &str = "vibe/agent/capabilities";
-    
+
     #[deprecated(since = "0.3.0", note = "Use VIBE_ISSUE with operation parameter")]
     pub const ISSUE_CREATE: &str = "vibe/issue/create";
     #[deprecated(since = "0.3.0", note = "Use VIBE_ISSUE with operation parameter")]
@@ -100,46 +100,106 @@ pub mod methods {
     pub const ISSUE_UPDATE: &str = "vibe/issue/update";
     #[deprecated(since = "0.3.0", note = "Use VIBE_ISSUE with operation parameter")]
     pub const ISSUE_CLOSE: &str = "vibe/issue/close";
-    
-    #[deprecated(since = "0.3.0", note = "Use VIBE_COORDINATION with operation parameter")]
+
+    #[deprecated(
+        since = "0.3.0",
+        note = "Use VIBE_COORDINATION with operation parameter"
+    )]
     pub const MESSAGE_SEND: &str = "vibe/message/send";
-    #[deprecated(since = "0.3.0", note = "Use VIBE_COORDINATION with operation parameter")]
+    #[deprecated(
+        since = "0.3.0",
+        note = "Use VIBE_COORDINATION with operation parameter"
+    )]
     pub const MESSAGE_BROADCAST: &str = "vibe/message/broadcast";
-    #[deprecated(since = "0.3.0", note = "Use VIBE_COORDINATION with operation parameter")]
+    #[deprecated(
+        since = "0.3.0",
+        note = "Use VIBE_COORDINATION with operation parameter"
+    )]
     pub const WORKER_MESSAGE: &str = "vibe/worker/message";
-    #[deprecated(since = "0.3.0", note = "Use VIBE_COORDINATION with operation parameter")]
+    #[deprecated(
+        since = "0.3.0",
+        note = "Use VIBE_COORDINATION with operation parameter"
+    )]
     pub const WORKER_REQUEST: &str = "vibe/worker/request";
-    #[deprecated(since = "0.3.0", note = "Use VIBE_COORDINATION with operation parameter")]
+    #[deprecated(
+        since = "0.3.0",
+        note = "Use VIBE_COORDINATION with operation parameter"
+    )]
     pub const WORKER_COORDINATE: &str = "vibe/worker/coordinate";
-    #[deprecated(since = "0.3.0", note = "Use VIBE_COORDINATION with operation parameter")]
+    #[deprecated(
+        since = "0.3.0",
+        note = "Use VIBE_COORDINATION with operation parameter"
+    )]
     pub const PROJECT_LOCK: &str = "vibe/project/lock";
-    #[deprecated(since = "0.3.0", note = "Use VIBE_COORDINATION with operation parameter")]
+    #[deprecated(
+        since = "0.3.0",
+        note = "Use VIBE_COORDINATION with operation parameter"
+    )]
     pub const DEPENDENCY_DECLARE: &str = "vibe/dependency/declare";
-    #[deprecated(since = "0.3.0", note = "Use VIBE_COORDINATION with operation parameter")]
+    #[deprecated(
+        since = "0.3.0",
+        note = "Use VIBE_COORDINATION with operation parameter"
+    )]
     pub const COORDINATOR_REQUEST_WORKER: &str = "vibe/coordinator/request_worker";
-    #[deprecated(since = "0.3.0", note = "Use VIBE_COORDINATION with operation parameter")]
+    #[deprecated(
+        since = "0.3.0",
+        note = "Use VIBE_COORDINATION with operation parameter"
+    )]
     pub const WORK_COORDINATE: &str = "vibe/work/coordinate";
-    #[deprecated(since = "0.3.0", note = "Use VIBE_COORDINATION with operation parameter")]
+    #[deprecated(
+        since = "0.3.0",
+        note = "Use VIBE_COORDINATION with operation parameter"
+    )]
     pub const CONFLICT_RESOLVE: &str = "vibe/conflict/resolve";
-    #[deprecated(since = "0.3.0", note = "Use VIBE_COORDINATION with operation parameter")]
+    #[deprecated(
+        since = "0.3.0",
+        note = "Use VIBE_COORDINATION with operation parameter"
+    )]
     pub const SCHEDULE_COORDINATE: &str = "vibe/schedule/coordinate";
-    #[deprecated(since = "0.3.0", note = "Use VIBE_COORDINATION with operation parameter")]
+    #[deprecated(
+        since = "0.3.0",
+        note = "Use VIBE_COORDINATION with operation parameter"
+    )]
     pub const CONFLICT_PREDICT: &str = "vibe/conflict/predict";
-    #[deprecated(since = "0.3.0", note = "Use VIBE_COORDINATION with operation parameter")]
+    #[deprecated(
+        since = "0.3.0",
+        note = "Use VIBE_COORDINATION with operation parameter"
+    )]
     pub const RESOURCE_RESERVE: &str = "vibe/resource/reserve";
-    #[deprecated(since = "0.3.0", note = "Use VIBE_COORDINATION with operation parameter")]
+    #[deprecated(
+        since = "0.3.0",
+        note = "Use VIBE_COORDINATION with operation parameter"
+    )]
     pub const MERGE_COORDINATE: &str = "vibe/merge/coordinate";
-    #[deprecated(since = "0.3.0", note = "Use VIBE_COORDINATION with operation parameter")]
+    #[deprecated(
+        since = "0.3.0",
+        note = "Use VIBE_COORDINATION with operation parameter"
+    )]
     pub const KNOWLEDGE_QUERY: &str = "vibe/knowledge/query";
-    #[deprecated(since = "0.3.0", note = "Use VIBE_COORDINATION with operation parameter")]
+    #[deprecated(
+        since = "0.3.0",
+        note = "Use VIBE_COORDINATION with operation parameter"
+    )]
     pub const KNOWLEDGE_SUBMIT: &str = "vibe/knowledge/submit";
-    #[deprecated(since = "0.3.0", note = "Use VIBE_COORDINATION with operation parameter")]
+    #[deprecated(
+        since = "0.3.0",
+        note = "Use VIBE_COORDINATION with operation parameter"
+    )]
     pub const KNOWLEDGE_QUERY_COORDINATION: &str = "vibe/knowledge/query/coordination";
-    #[deprecated(since = "0.3.0", note = "Use VIBE_COORDINATION with operation parameter")]
+    #[deprecated(
+        since = "0.3.0",
+        note = "Use VIBE_COORDINATION with operation parameter"
+    )]
     pub const PATTERN_SUGGEST: &str = "vibe/pattern/suggest";
-    #[deprecated(since = "0.3.0", note = "Use VIBE_COORDINATION with operation parameter")]
+    #[deprecated(
+        since = "0.3.0",
+        note = "Use VIBE_COORDINATION with operation parameter"
+    )]
     pub const GUIDELINE_ENFORCE: &str = "vibe/guideline/enforce";
-    #[deprecated(since = "0.3.0", note = "Use VIBE_COORDINATION with operation parameter")]
+    #[deprecated(
+        since = "0.3.0",
+        note = "Use VIBE_COORDINATION with operation parameter"
+    )]
     pub const LEARNING_CAPTURE: &str = "vibe/learning/capture";
 }
 

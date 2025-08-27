@@ -169,49 +169,49 @@ impl McpServer {
 
             // Legacy method support (backward compatibility through consolidated handlers)
             #[allow(deprecated)]
-            methods::AGENT_REGISTER | 
-            methods::AGENT_STATUS |
-            methods::AGENT_LIST |
-            methods::AGENT_DEREGISTER |
-            methods::AGENT_CAPABILITIES => {
+            methods::AGENT_REGISTER
+            | methods::AGENT_STATUS
+            | methods::AGENT_LIST
+            | methods::AGENT_DEREGISTER
+            | methods::AGENT_CAPABILITIES => {
                 // Route legacy agent methods to consolidated handler
                 self.handle_vibe_agent_legacy(request).await
-            },
-            
-            #[allow(deprecated)]
-            methods::ISSUE_CREATE |
-            methods::ISSUE_LIST |
-            methods::ISSUE_ASSIGN |
-            methods::ISSUE_UPDATE |
-            methods::ISSUE_CLOSE => {
-                // Route legacy issue methods to consolidated handler
-                self.handle_vibe_issue_legacy(request).await
-            },
+            }
 
             #[allow(deprecated)]
-            methods::MESSAGE_SEND |
-            methods::MESSAGE_BROADCAST |
-            methods::WORKER_MESSAGE |
-            methods::WORKER_REQUEST |
-            methods::WORKER_COORDINATE |
-            methods::PROJECT_LOCK |
-            methods::DEPENDENCY_DECLARE |
-            methods::COORDINATOR_REQUEST_WORKER |
-            methods::WORK_COORDINATE |
-            methods::CONFLICT_RESOLVE |
-            methods::SCHEDULE_COORDINATE |
-            methods::CONFLICT_PREDICT |
-            methods::RESOURCE_RESERVE |
-            methods::MERGE_COORDINATE |
-            methods::KNOWLEDGE_QUERY |
-            methods::KNOWLEDGE_SUBMIT |
-            methods::KNOWLEDGE_QUERY_COORDINATION |
-            methods::PATTERN_SUGGEST |
-            methods::GUIDELINE_ENFORCE |
-            methods::LEARNING_CAPTURE => {
+            methods::ISSUE_CREATE
+            | methods::ISSUE_LIST
+            | methods::ISSUE_ASSIGN
+            | methods::ISSUE_UPDATE
+            | methods::ISSUE_CLOSE => {
+                // Route legacy issue methods to consolidated handler
+                self.handle_vibe_issue_legacy(request).await
+            }
+
+            #[allow(deprecated)]
+            methods::MESSAGE_SEND
+            | methods::MESSAGE_BROADCAST
+            | methods::WORKER_MESSAGE
+            | methods::WORKER_REQUEST
+            | methods::WORKER_COORDINATE
+            | methods::PROJECT_LOCK
+            | methods::DEPENDENCY_DECLARE
+            | methods::COORDINATOR_REQUEST_WORKER
+            | methods::WORK_COORDINATE
+            | methods::CONFLICT_RESOLVE
+            | methods::SCHEDULE_COORDINATE
+            | methods::CONFLICT_PREDICT
+            | methods::RESOURCE_RESERVE
+            | methods::MERGE_COORDINATE
+            | methods::KNOWLEDGE_QUERY
+            | methods::KNOWLEDGE_SUBMIT
+            | methods::KNOWLEDGE_QUERY_COORDINATION
+            | methods::PATTERN_SUGGEST
+            | methods::GUIDELINE_ENFORCE
+            | methods::LEARNING_CAPTURE => {
                 // Route legacy coordination methods to consolidated handler
                 self.handle_vibe_coordination_legacy(request).await
-            },
+            }
 
             _ => {
                 warn!("Unknown method: {}", request.method);
@@ -5127,44 +5127,62 @@ impl McpServer {
 
         match params.operation.as_str() {
             "register" => {
-                let agent_params: AgentRegisterParams = serde_json::from_value(params.params).map_err(|e| Error::InvalidParams {
-                    message: format!("Invalid register parameters: {}", e),
-                })?;
+                let agent_params: AgentRegisterParams = serde_json::from_value(params.params)
+                    .map_err(|e| Error::InvalidParams {
+                        message: format!("Invalid register parameters: {}", e),
+                    })?;
                 #[allow(deprecated)]
-                let register_request = JsonRpcRequest::new_with_id(request.id.clone(), methods::AGENT_REGISTER, Some(serde_json::to_value(agent_params)?));
+                let register_request = JsonRpcRequest::new_with_id(
+                    request.id.clone(),
+                    methods::AGENT_REGISTER,
+                    Some(serde_json::to_value(agent_params)?),
+                );
                 self.handle_agent_register(register_request).await
             }
             "status" => {
-                let status_params: AgentStatusParams = serde_json::from_value(params.params).map_err(|e| Error::InvalidParams {
-                    message: format!("Invalid status parameters: {}", e),
-                })?;
-                let status_request = JsonRpcRequest::new_with_id(request.id.clone(), methods::AGENT_STATUS, Some(serde_json::to_value(status_params)?));
+                let status_params: AgentStatusParams = serde_json::from_value(params.params)
+                    .map_err(|e| Error::InvalidParams {
+                        message: format!("Invalid status parameters: {}", e),
+                    })?;
+                let status_request = JsonRpcRequest::new_with_id(
+                    request.id.clone(),
+                    methods::AGENT_STATUS,
+                    Some(serde_json::to_value(status_params)?),
+                );
                 self.handle_agent_status(status_request).await
             }
             "list" => {
-                let list_params: AgentListParams = serde_json::from_value(params.params).map_err(|e| Error::InvalidParams {
-                    message: format!("Invalid list parameters: {}", e),
-                })?;
-                let list_request = JsonRpcRequest::new_with_id(request.id.clone(), methods::AGENT_LIST, Some(serde_json::to_value(list_params)?));
+                let list_params: AgentListParams =
+                    serde_json::from_value(params.params).map_err(|e| Error::InvalidParams {
+                        message: format!("Invalid list parameters: {}", e),
+                    })?;
+                let list_request = JsonRpcRequest::new_with_id(
+                    request.id.clone(),
+                    methods::AGENT_LIST,
+                    Some(serde_json::to_value(list_params)?),
+                );
                 self.handle_agent_list(list_request).await
             }
             "deregister" => {
-                let deregister_params: AgentDeregisterParams = serde_json::from_value(params.params).map_err(|e| Error::InvalidParams {
-                    message: format!("Invalid deregister parameters: {}", e),
-                })?;
-                let deregister_request = JsonRpcRequest::new_with_id(request.id.clone(), methods::AGENT_DEREGISTER, Some(serde_json::to_value(deregister_params)?));
+                let deregister_params: AgentDeregisterParams =
+                    serde_json::from_value(params.params).map_err(|e| Error::InvalidParams {
+                        message: format!("Invalid deregister parameters: {}", e),
+                    })?;
+                let deregister_request = JsonRpcRequest::new_with_id(
+                    request.id.clone(),
+                    methods::AGENT_DEREGISTER,
+                    Some(serde_json::to_value(deregister_params)?),
+                );
                 self.handle_agent_deregister(deregister_request).await
             }
-            _ => {
-                Ok(Some(JsonRpcResponse::error(
-                    request.id,
-                    JsonRpcError {
-                        code: error_codes::INVALID_PARAMS,
-                        message: format!("Unknown agent operation: {}", params.operation),
-                        data: None,
-                    },
-                )))
-            }
+            _ => Ok(Some(JsonRpcResponse::error(
+                request.id,
+                JsonRpcError {
+                    code: error_codes::INVALID_PARAMS,
+                    message: format!("Unknown agent operation: {}", params.operation),
+                    data: None,
+                },
+            ))),
         }
     }
 
@@ -5187,55 +5205,81 @@ impl McpServer {
 
         match params.operation.as_str() {
             "create" => {
-                let create_params: IssueCreateParams = serde_json::from_value(params.params).map_err(|e| Error::InvalidParams {
-                    message: format!("Invalid create parameters: {}", e),
-                })?;
-                let create_request = JsonRpcRequest::new_with_id(request.id.clone(), methods::ISSUE_CREATE, Some(serde_json::to_value(create_params)?));
+                let create_params: IssueCreateParams = serde_json::from_value(params.params)
+                    .map_err(|e| Error::InvalidParams {
+                        message: format!("Invalid create parameters: {}", e),
+                    })?;
+                let create_request = JsonRpcRequest::new_with_id(
+                    request.id.clone(),
+                    methods::ISSUE_CREATE,
+                    Some(serde_json::to_value(create_params)?),
+                );
                 self.handle_issue_create_new(create_request).await
             }
             "list" => {
-                let list_params: IssueListParams = serde_json::from_value(params.params).map_err(|e| Error::InvalidParams {
-                    message: format!("Invalid list parameters: {}", e),
-                })?;
-                let list_request = JsonRpcRequest::new_with_id(request.id.clone(), methods::ISSUE_LIST, Some(serde_json::to_value(list_params)?));
+                let list_params: IssueListParams =
+                    serde_json::from_value(params.params).map_err(|e| Error::InvalidParams {
+                        message: format!("Invalid list parameters: {}", e),
+                    })?;
+                let list_request = JsonRpcRequest::new_with_id(
+                    request.id.clone(),
+                    methods::ISSUE_LIST,
+                    Some(serde_json::to_value(list_params)?),
+                );
                 self.handle_issue_list_new(list_request).await
             }
             "assign" => {
-                let assign_params: IssueAssignParams = serde_json::from_value(params.params).map_err(|e| Error::InvalidParams {
-                    message: format!("Invalid assign parameters: {}", e),
-                })?;
-                let assign_request = JsonRpcRequest::new_with_id(request.id.clone(), methods::ISSUE_ASSIGN, Some(serde_json::to_value(assign_params)?));
+                let assign_params: IssueAssignParams = serde_json::from_value(params.params)
+                    .map_err(|e| Error::InvalidParams {
+                        message: format!("Invalid assign parameters: {}", e),
+                    })?;
+                let assign_request = JsonRpcRequest::new_with_id(
+                    request.id.clone(),
+                    methods::ISSUE_ASSIGN,
+                    Some(serde_json::to_value(assign_params)?),
+                );
                 self.handle_issue_assign(assign_request).await
             }
             "update" => {
-                let update_params: IssueUpdateParams = serde_json::from_value(params.params).map_err(|e| Error::InvalidParams {
-                    message: format!("Invalid update parameters: {}", e),
-                })?;
-                let update_request = JsonRpcRequest::new_with_id(request.id.clone(), methods::ISSUE_UPDATE, Some(serde_json::to_value(update_params)?));
+                let update_params: IssueUpdateParams = serde_json::from_value(params.params)
+                    .map_err(|e| Error::InvalidParams {
+                        message: format!("Invalid update parameters: {}", e),
+                    })?;
+                let update_request = JsonRpcRequest::new_with_id(
+                    request.id.clone(),
+                    methods::ISSUE_UPDATE,
+                    Some(serde_json::to_value(update_params)?),
+                );
                 self.handle_issue_update_new(update_request).await
             }
             "close" => {
-                let close_params: IssueCloseParams = serde_json::from_value(params.params).map_err(|e| Error::InvalidParams {
-                    message: format!("Invalid close parameters: {}", e),
-                })?;
-                let close_request = JsonRpcRequest::new_with_id(request.id.clone(), methods::ISSUE_CLOSE, Some(serde_json::to_value(close_params)?));
+                let close_params: IssueCloseParams = serde_json::from_value(params.params)
+                    .map_err(|e| Error::InvalidParams {
+                        message: format!("Invalid close parameters: {}", e),
+                    })?;
+                let close_request = JsonRpcRequest::new_with_id(
+                    request.id.clone(),
+                    methods::ISSUE_CLOSE,
+                    Some(serde_json::to_value(close_params)?),
+                );
                 self.handle_issue_close(close_request).await
             }
-            _ => {
-                Ok(Some(JsonRpcResponse::error(
-                    request.id,
-                    JsonRpcError {
-                        code: error_codes::INVALID_PARAMS,
-                        message: format!("Unknown issue operation: {}", params.operation),
-                        data: None,
-                    },
-                )))
-            }
+            _ => Ok(Some(JsonRpcResponse::error(
+                request.id,
+                JsonRpcError {
+                    code: error_codes::INVALID_PARAMS,
+                    message: format!("Unknown issue operation: {}", params.operation),
+                    data: None,
+                },
+            ))),
         }
     }
 
     /// Handle consolidated coordination operations
-    async fn handle_vibe_coordination(&self, request: JsonRpcRequest) -> Result<Option<JsonRpcResponse>> {
+    async fn handle_vibe_coordination(
+        &self,
+        request: JsonRpcRequest,
+    ) -> Result<Option<JsonRpcResponse>> {
         let params: VibeOperationParams = if let Some(params) = request.params {
             serde_json::from_value(params).map_err(|e| Error::InvalidParams {
                 message: format!("Invalid vibe/coordination parameters: {}", e),
@@ -5254,153 +5298,274 @@ impl McpServer {
         match params.operation.as_str() {
             // Messaging operations
             "message_send" => {
-                let msg_params = serde_json::from_value(params.params).map_err(|e| Error::InvalidParams {
-                    message: format!("Invalid message send parameters: {}", e),
-                })?;
-                self.handle_message_send(JsonRpcRequest::new_with_id(request.id, "vibe/message/send", Some(msg_params))).await
+                let msg_params =
+                    serde_json::from_value(params.params).map_err(|e| Error::InvalidParams {
+                        message: format!("Invalid message send parameters: {}", e),
+                    })?;
+                self.handle_message_send(JsonRpcRequest::new_with_id(
+                    request.id,
+                    "vibe/message/send",
+                    Some(msg_params),
+                ))
+                .await
             }
             "message_broadcast" => {
-                let msg_params = serde_json::from_value(params.params).map_err(|e| Error::InvalidParams {
-                    message: format!("Invalid message broadcast parameters: {}", e),
-                })?;
-                self.handle_message_broadcast(JsonRpcRequest::new_with_id(request.id, "vibe/message/broadcast", Some(msg_params))).await
+                let msg_params =
+                    serde_json::from_value(params.params).map_err(|e| Error::InvalidParams {
+                        message: format!("Invalid message broadcast parameters: {}", e),
+                    })?;
+                self.handle_message_broadcast(JsonRpcRequest::new_with_id(
+                    request.id,
+                    "vibe/message/broadcast",
+                    Some(msg_params),
+                ))
+                .await
             }
             "worker_message" => {
-                let msg_params = serde_json::from_value(params.params).map_err(|e| Error::InvalidParams {
-                    message: format!("Invalid worker message parameters: {}", e),
-                })?;
-                self.handle_legacy_worker_message(JsonRpcRequest::new_with_id(request.id, "vibe/worker/message", Some(msg_params))).await
+                let msg_params =
+                    serde_json::from_value(params.params).map_err(|e| Error::InvalidParams {
+                        message: format!("Invalid worker message parameters: {}", e),
+                    })?;
+                self.handle_legacy_worker_message(JsonRpcRequest::new_with_id(
+                    request.id,
+                    "vibe/worker/message",
+                    Some(msg_params),
+                ))
+                .await
             }
-            
+
             // Worker coordination operations
             "worker_request" => {
-                let req_params = serde_json::from_value(params.params).map_err(|e| Error::InvalidParams {
-                    message: format!("Invalid worker request parameters: {}", e),
-                })?;
-                self.handle_legacy_worker_request(JsonRpcRequest::new_with_id(request.id, "vibe/worker/request", Some(req_params))).await
+                let req_params =
+                    serde_json::from_value(params.params).map_err(|e| Error::InvalidParams {
+                        message: format!("Invalid worker request parameters: {}", e),
+                    })?;
+                self.handle_legacy_worker_request(JsonRpcRequest::new_with_id(
+                    request.id,
+                    "vibe/worker/request",
+                    Some(req_params),
+                ))
+                .await
             }
             "worker_coordinate" => {
-                let coord_params = serde_json::from_value(params.params).map_err(|e| Error::InvalidParams {
-                    message: format!("Invalid worker coordinate parameters: {}", e),
-                })?;
-                self.handle_legacy_worker_coordinate(JsonRpcRequest::new_with_id(request.id, "vibe/worker/coordinate", Some(coord_params))).await
+                let coord_params =
+                    serde_json::from_value(params.params).map_err(|e| Error::InvalidParams {
+                        message: format!("Invalid worker coordinate parameters: {}", e),
+                    })?;
+                self.handle_legacy_worker_coordinate(JsonRpcRequest::new_with_id(
+                    request.id,
+                    "vibe/worker/coordinate",
+                    Some(coord_params),
+                ))
+                .await
             }
-            
+
             // Resource operations
             "project_lock" => {
-                let lock_params = serde_json::from_value(params.params).map_err(|e| Error::InvalidParams {
-                    message: format!("Invalid project lock parameters: {}", e),
-                })?;
-                self.handle_legacy_project_lock(JsonRpcRequest::new_with_id(request.id, "vibe/project/lock", Some(lock_params))).await
+                let lock_params =
+                    serde_json::from_value(params.params).map_err(|e| Error::InvalidParams {
+                        message: format!("Invalid project lock parameters: {}", e),
+                    })?;
+                self.handle_legacy_project_lock(JsonRpcRequest::new_with_id(
+                    request.id,
+                    "vibe/project/lock",
+                    Some(lock_params),
+                ))
+                .await
             }
             "resource_reserve" => {
-                let res_params = serde_json::from_value(params.params).map_err(|e| Error::InvalidParams {
-                    message: format!("Invalid resource reserve parameters: {}", e),
-                })?;
-                self.handle_legacy_resource_reserve(JsonRpcRequest::new_with_id(request.id, "vibe/resource/reserve", Some(res_params))).await
+                let res_params =
+                    serde_json::from_value(params.params).map_err(|e| Error::InvalidParams {
+                        message: format!("Invalid resource reserve parameters: {}", e),
+                    })?;
+                self.handle_legacy_resource_reserve(JsonRpcRequest::new_with_id(
+                    request.id,
+                    "vibe/resource/reserve",
+                    Some(res_params),
+                ))
+                .await
             }
-            
+
             // Cross-project dependency operations
             "dependency_declare" => {
-                let dep_params = serde_json::from_value(params.params).map_err(|e| Error::InvalidParams {
-                    message: format!("Invalid dependency declare parameters: {}", e),
-                })?;
-                self.handle_legacy_dependency_declare(JsonRpcRequest::new_with_id(request.id, "vibe/dependency/declare", Some(dep_params))).await
+                let dep_params =
+                    serde_json::from_value(params.params).map_err(|e| Error::InvalidParams {
+                        message: format!("Invalid dependency declare parameters: {}", e),
+                    })?;
+                self.handle_legacy_dependency_declare(JsonRpcRequest::new_with_id(
+                    request.id,
+                    "vibe/dependency/declare",
+                    Some(dep_params),
+                ))
+                .await
             }
             "coordinator_request_worker" => {
-                let coord_params = serde_json::from_value(params.params).map_err(|e| Error::InvalidParams {
-                    message: format!("Invalid coordinator request worker parameters: {}", e),
-                })?;
-                self.handle_legacy_coordinator_request_worker(JsonRpcRequest::new_with_id(request.id, "vibe/coordinator/request_worker", Some(coord_params))).await
+                let coord_params =
+                    serde_json::from_value(params.params).map_err(|e| Error::InvalidParams {
+                        message: format!("Invalid coordinator request worker parameters: {}", e),
+                    })?;
+                self.handle_legacy_coordinator_request_worker(JsonRpcRequest::new_with_id(
+                    request.id,
+                    "vibe/coordinator/request_worker",
+                    Some(coord_params),
+                ))
+                .await
             }
             "work_coordinate" => {
-                let work_params = serde_json::from_value(params.params).map_err(|e| Error::InvalidParams {
-                    message: format!("Invalid work coordinate parameters: {}", e),
-                })?;
-                self.handle_legacy_work_coordinate(JsonRpcRequest::new_with_id(request.id, "vibe/work/coordinate", Some(work_params))).await
+                let work_params =
+                    serde_json::from_value(params.params).map_err(|e| Error::InvalidParams {
+                        message: format!("Invalid work coordinate parameters: {}", e),
+                    })?;
+                self.handle_legacy_work_coordinate(JsonRpcRequest::new_with_id(
+                    request.id,
+                    "vibe/work/coordinate",
+                    Some(work_params),
+                ))
+                .await
             }
             "conflict_resolve" => {
-                let conflict_params = serde_json::from_value(params.params).map_err(|e| Error::InvalidParams {
-                    message: format!("Invalid conflict resolve parameters: {}", e),
-                })?;
-                self.handle_legacy_conflict_resolve(JsonRpcRequest::new_with_id(request.id, "vibe/conflict/resolve", Some(conflict_params))).await
+                let conflict_params =
+                    serde_json::from_value(params.params).map_err(|e| Error::InvalidParams {
+                        message: format!("Invalid conflict resolve parameters: {}", e),
+                    })?;
+                self.handle_legacy_conflict_resolve(JsonRpcRequest::new_with_id(
+                    request.id,
+                    "vibe/conflict/resolve",
+                    Some(conflict_params),
+                ))
+                .await
             }
-            
+
             // Workflow orchestration operations
             "schedule_coordinate" => {
-                let sched_params = serde_json::from_value(params.params).map_err(|e| Error::InvalidParams {
-                    message: format!("Invalid schedule coordinate parameters: {}", e),
-                })?;
-                self.handle_legacy_schedule_coordinate(JsonRpcRequest::new_with_id(request.id, "vibe/schedule/coordinate", Some(sched_params))).await
+                let sched_params =
+                    serde_json::from_value(params.params).map_err(|e| Error::InvalidParams {
+                        message: format!("Invalid schedule coordinate parameters: {}", e),
+                    })?;
+                self.handle_legacy_schedule_coordinate(JsonRpcRequest::new_with_id(
+                    request.id,
+                    "vibe/schedule/coordinate",
+                    Some(sched_params),
+                ))
+                .await
             }
             "conflict_predict" => {
-                let pred_params = serde_json::from_value(params.params).map_err(|e| Error::InvalidParams {
-                    message: format!("Invalid conflict predict parameters: {}", e),
-                })?;
-                self.handle_legacy_conflict_predict(JsonRpcRequest::new_with_id(request.id, "vibe/conflict/predict", Some(pred_params))).await
+                let pred_params =
+                    serde_json::from_value(params.params).map_err(|e| Error::InvalidParams {
+                        message: format!("Invalid conflict predict parameters: {}", e),
+                    })?;
+                self.handle_legacy_conflict_predict(JsonRpcRequest::new_with_id(
+                    request.id,
+                    "vibe/conflict/predict",
+                    Some(pred_params),
+                ))
+                .await
             }
             "merge_coordinate" => {
-                let merge_params = serde_json::from_value(params.params).map_err(|e| Error::InvalidParams {
-                    message: format!("Invalid merge coordinate parameters: {}", e),
-                })?;
-                self.handle_legacy_merge_coordinate(JsonRpcRequest::new_with_id(request.id, "vibe/merge/coordinate", Some(merge_params))).await
+                let merge_params =
+                    serde_json::from_value(params.params).map_err(|e| Error::InvalidParams {
+                        message: format!("Invalid merge coordinate parameters: {}", e),
+                    })?;
+                self.handle_legacy_merge_coordinate(JsonRpcRequest::new_with_id(
+                    request.id,
+                    "vibe/merge/coordinate",
+                    Some(merge_params),
+                ))
+                .await
             }
-            
+
             // Knowledge operations
             "knowledge_query" => {
-                let query_params = serde_json::from_value(params.params).map_err(|e| Error::InvalidParams {
-                    message: format!("Invalid knowledge query parameters: {}", e),
-                })?;
-                self.handle_knowledge_query(JsonRpcRequest::new_with_id(request.id, "vibe/knowledge/query", Some(query_params))).await
+                let query_params =
+                    serde_json::from_value(params.params).map_err(|e| Error::InvalidParams {
+                        message: format!("Invalid knowledge query parameters: {}", e),
+                    })?;
+                self.handle_knowledge_query(JsonRpcRequest::new_with_id(
+                    request.id,
+                    "vibe/knowledge/query",
+                    Some(query_params),
+                ))
+                .await
             }
             "knowledge_submit" => {
                 // For now, route to knowledge query since submit functionality isn't implemented yet
-                let submit_params = serde_json::from_value(params.params).map_err(|e| Error::InvalidParams {
-                    message: format!("Invalid knowledge submit parameters: {}", e),
-                })?;
-                self.handle_knowledge_query(JsonRpcRequest::new_with_id(request.id, "vibe/knowledge/query", Some(submit_params))).await
+                let submit_params =
+                    serde_json::from_value(params.params).map_err(|e| Error::InvalidParams {
+                        message: format!("Invalid knowledge submit parameters: {}", e),
+                    })?;
+                self.handle_knowledge_query(JsonRpcRequest::new_with_id(
+                    request.id,
+                    "vibe/knowledge/query",
+                    Some(submit_params),
+                ))
+                .await
             }
             "knowledge_query_coordination" => {
-                let coord_query_params = serde_json::from_value(params.params).map_err(|e| Error::InvalidParams {
-                    message: format!("Invalid knowledge query coordination parameters: {}", e),
-                })?;
-                self.handle_legacy_knowledge_query_coordination(JsonRpcRequest::new_with_id(request.id, "vibe/knowledge/query/coordination", Some(coord_query_params))).await
+                let coord_query_params =
+                    serde_json::from_value(params.params).map_err(|e| Error::InvalidParams {
+                        message: format!("Invalid knowledge query coordination parameters: {}", e),
+                    })?;
+                self.handle_legacy_knowledge_query_coordination(JsonRpcRequest::new_with_id(
+                    request.id,
+                    "vibe/knowledge/query/coordination",
+                    Some(coord_query_params),
+                ))
+                .await
             }
             "pattern_suggest" => {
-                let pattern_params = serde_json::from_value(params.params).map_err(|e| Error::InvalidParams {
-                    message: format!("Invalid pattern suggest parameters: {}", e),
-                })?;
-                self.handle_legacy_pattern_suggest(JsonRpcRequest::new_with_id(request.id, "vibe/pattern/suggest", Some(pattern_params))).await
+                let pattern_params =
+                    serde_json::from_value(params.params).map_err(|e| Error::InvalidParams {
+                        message: format!("Invalid pattern suggest parameters: {}", e),
+                    })?;
+                self.handle_legacy_pattern_suggest(JsonRpcRequest::new_with_id(
+                    request.id,
+                    "vibe/pattern/suggest",
+                    Some(pattern_params),
+                ))
+                .await
             }
             "guideline_enforce" => {
-                let guide_params = serde_json::from_value(params.params).map_err(|e| Error::InvalidParams {
-                    message: format!("Invalid guideline enforce parameters: {}", e),
-                })?;
-                self.handle_legacy_guideline_enforce(JsonRpcRequest::new_with_id(request.id, "vibe/guideline/enforce", Some(guide_params))).await
+                let guide_params =
+                    serde_json::from_value(params.params).map_err(|e| Error::InvalidParams {
+                        message: format!("Invalid guideline enforce parameters: {}", e),
+                    })?;
+                self.handle_legacy_guideline_enforce(JsonRpcRequest::new_with_id(
+                    request.id,
+                    "vibe/guideline/enforce",
+                    Some(guide_params),
+                ))
+                .await
             }
             "learning_capture" => {
-                let learn_params = serde_json::from_value(params.params).map_err(|e| Error::InvalidParams {
-                    message: format!("Invalid learning capture parameters: {}", e),
-                })?;
-                self.handle_legacy_learning_capture(JsonRpcRequest::new_with_id(request.id, "vibe/learning/capture", Some(learn_params))).await
-            }
-            
-            _ => {
-                Ok(Some(JsonRpcResponse::error(
+                let learn_params =
+                    serde_json::from_value(params.params).map_err(|e| Error::InvalidParams {
+                        message: format!("Invalid learning capture parameters: {}", e),
+                    })?;
+                self.handle_legacy_learning_capture(JsonRpcRequest::new_with_id(
                     request.id,
-                    JsonRpcError {
-                        code: error_codes::INVALID_PARAMS,
-                        message: format!("Unknown coordination operation: {}", params.operation),
-                        data: None,
-                    },
-                )))
+                    "vibe/learning/capture",
+                    Some(learn_params),
+                ))
+                .await
             }
+
+            _ => Ok(Some(JsonRpcResponse::error(
+                request.id,
+                JsonRpcError {
+                    code: error_codes::INVALID_PARAMS,
+                    message: format!("Unknown coordination operation: {}", params.operation),
+                    data: None,
+                },
+            ))),
         }
     }
 
     /// Handle consolidated workflow operations
     #[allow(dead_code)]
-    async fn handle_vibe_workflow(&self, request: JsonRpcRequest) -> Result<Option<JsonRpcResponse>> {
+    async fn handle_vibe_workflow(
+        &self,
+        request: JsonRpcRequest,
+    ) -> Result<Option<JsonRpcResponse>> {
         let params: VibeOperationParams = if let Some(params) = request.params {
             serde_json::from_value(params).map_err(|e| Error::InvalidParams {
                 message: format!("Invalid vibe/workflow parameters: {}", e),
@@ -5418,42 +5583,58 @@ impl McpServer {
 
         match params.operation.as_str() {
             "schedule_coordinate" => {
-                let schedule_params: ScheduleCoordinateParams = serde_json::from_value(params.params).map_err(|e| Error::InvalidParams {
-                    message: format!("Invalid schedule coordinate parameters: {}", e),
-                })?;
-                self.handle_legacy_schedule_coordinate(JsonRpcRequest::new_with_id(request.id.clone(), "vibe/schedule/coordinate", Some(serde_json::to_value(schedule_params)?)))
-                    .await
+                let schedule_params: ScheduleCoordinateParams =
+                    serde_json::from_value(params.params).map_err(|e| Error::InvalidParams {
+                        message: format!("Invalid schedule coordinate parameters: {}", e),
+                    })?;
+                self.handle_legacy_schedule_coordinate(JsonRpcRequest::new_with_id(
+                    request.id.clone(),
+                    "vibe/schedule/coordinate",
+                    Some(serde_json::to_value(schedule_params)?),
+                ))
+                .await
             }
             "conflict_predict" => {
-                let predict_params: ConflictPredictParams = serde_json::from_value(params.params).map_err(|e| Error::InvalidParams {
+                let predict_params: ConflictPredictParams = serde_json::from_value(params.params)
+                    .map_err(|e| Error::InvalidParams {
                     message: format!("Invalid conflict predict parameters: {}", e),
                 })?;
-                self.handle_legacy_conflict_predict(JsonRpcRequest::new_with_id(request.id.clone(), "vibe/conflict/predict", Some(serde_json::to_value(predict_params)?)))
-                    .await
+                self.handle_legacy_conflict_predict(JsonRpcRequest::new_with_id(
+                    request.id.clone(),
+                    "vibe/conflict/predict",
+                    Some(serde_json::to_value(predict_params)?),
+                ))
+                .await
             }
             "merge_coordinate" => {
-                let merge_params: MergeCoordinateParams = serde_json::from_value(params.params).map_err(|e| Error::InvalidParams {
-                    message: format!("Invalid merge coordinate parameters: {}", e),
-                })?;
-                self.handle_legacy_merge_coordinate(JsonRpcRequest::new_with_id(request.id.clone(), "vibe/merge/coordinate", Some(serde_json::to_value(merge_params)?)))
-                    .await
+                let merge_params: MergeCoordinateParams = serde_json::from_value(params.params)
+                    .map_err(|e| Error::InvalidParams {
+                        message: format!("Invalid merge coordinate parameters: {}", e),
+                    })?;
+                self.handle_legacy_merge_coordinate(JsonRpcRequest::new_with_id(
+                    request.id.clone(),
+                    "vibe/merge/coordinate",
+                    Some(serde_json::to_value(merge_params)?),
+                ))
+                .await
             }
-            _ => {
-                Ok(Some(JsonRpcResponse::error(
-                    request.id,
-                    JsonRpcError {
-                        code: error_codes::INVALID_PARAMS,
-                        message: format!("Unknown workflow operation: {}", params.operation),
-                        data: None,
-                    },
-                )))
-            }
+            _ => Ok(Some(JsonRpcResponse::error(
+                request.id,
+                JsonRpcError {
+                    code: error_codes::INVALID_PARAMS,
+                    message: format!("Unknown workflow operation: {}", params.operation),
+                    data: None,
+                },
+            ))),
         }
     }
 
     /// Handle consolidated knowledge operations
     #[allow(dead_code)]
-    async fn handle_vibe_knowledge(&self, request: JsonRpcRequest) -> Result<Option<JsonRpcResponse>> {
+    async fn handle_vibe_knowledge(
+        &self,
+        request: JsonRpcRequest,
+    ) -> Result<Option<JsonRpcResponse>> {
         let params: VibeOperationParams = if let Some(params) = request.params {
             serde_json::from_value(params).map_err(|e| Error::InvalidParams {
                 message: format!("Invalid vibe/knowledge parameters: {}", e),
@@ -5471,49 +5652,70 @@ impl McpServer {
 
         match params.operation.as_str() {
             "query_coordination" => {
-                let query_params: KnowledgeQueryCoordinationParams = serde_json::from_value(params.params).map_err(|e| Error::InvalidParams {
-                    message: format!("Invalid query coordination parameters: {}", e),
-                })?;
-                self.handle_legacy_knowledge_query_coordination(JsonRpcRequest::new_with_id(request.id.clone(), "vibe/knowledge/query/coordination", Some(serde_json::to_value(query_params)?)))
-                    .await
+                let query_params: KnowledgeQueryCoordinationParams =
+                    serde_json::from_value(params.params).map_err(|e| Error::InvalidParams {
+                        message: format!("Invalid query coordination parameters: {}", e),
+                    })?;
+                self.handle_legacy_knowledge_query_coordination(JsonRpcRequest::new_with_id(
+                    request.id.clone(),
+                    "vibe/knowledge/query/coordination",
+                    Some(serde_json::to_value(query_params)?),
+                ))
+                .await
             }
             "pattern_suggest" => {
-                let pattern_params: PatternSuggestParams = serde_json::from_value(params.params).map_err(|e| Error::InvalidParams {
-                    message: format!("Invalid pattern suggest parameters: {}", e),
-                })?;
-                self.handle_legacy_pattern_suggest(JsonRpcRequest::new_with_id(request.id.clone(), "vibe/pattern/suggest", Some(serde_json::to_value(pattern_params)?)))
-                    .await
+                let pattern_params: PatternSuggestParams = serde_json::from_value(params.params)
+                    .map_err(|e| Error::InvalidParams {
+                        message: format!("Invalid pattern suggest parameters: {}", e),
+                    })?;
+                self.handle_legacy_pattern_suggest(JsonRpcRequest::new_with_id(
+                    request.id.clone(),
+                    "vibe/pattern/suggest",
+                    Some(serde_json::to_value(pattern_params)?),
+                ))
+                .await
             }
             "guideline_enforce" => {
-                let guideline_params: GuidelineEnforceParams = serde_json::from_value(params.params).map_err(|e| Error::InvalidParams {
-                    message: format!("Invalid guideline enforce parameters: {}", e),
-                })?;
-                self.handle_legacy_guideline_enforce(JsonRpcRequest::new_with_id(request.id.clone(), "vibe/guideline/enforce", Some(serde_json::to_value(guideline_params)?)))
-                    .await
+                let guideline_params: GuidelineEnforceParams =
+                    serde_json::from_value(params.params).map_err(|e| Error::InvalidParams {
+                        message: format!("Invalid guideline enforce parameters: {}", e),
+                    })?;
+                self.handle_legacy_guideline_enforce(JsonRpcRequest::new_with_id(
+                    request.id.clone(),
+                    "vibe/guideline/enforce",
+                    Some(serde_json::to_value(guideline_params)?),
+                ))
+                .await
             }
             "learning_capture" => {
-                let learning_params: LearningCaptureParams = serde_json::from_value(params.params).map_err(|e| Error::InvalidParams {
-                    message: format!("Invalid learning capture parameters: {}", e),
-                })?;
-                self.handle_legacy_learning_capture(JsonRpcRequest::new_with_id(request.id.clone(), "vibe/learning/capture", Some(serde_json::to_value(learning_params)?)))
-                    .await
+                let learning_params: LearningCaptureParams = serde_json::from_value(params.params)
+                    .map_err(|e| Error::InvalidParams {
+                        message: format!("Invalid learning capture parameters: {}", e),
+                    })?;
+                self.handle_legacy_learning_capture(JsonRpcRequest::new_with_id(
+                    request.id.clone(),
+                    "vibe/learning/capture",
+                    Some(serde_json::to_value(learning_params)?),
+                ))
+                .await
             }
-            _ => {
-                Ok(Some(JsonRpcResponse::error(
-                    request.id,
-                    JsonRpcError {
-                        code: error_codes::INVALID_PARAMS,
-                        message: format!("Unknown knowledge operation: {}", params.operation),
-                        data: None,
-                    },
-                )))
-            }
+            _ => Ok(Some(JsonRpcResponse::error(
+                request.id,
+                JsonRpcError {
+                    code: error_codes::INVALID_PARAMS,
+                    message: format!("Unknown knowledge operation: {}", params.operation),
+                    data: None,
+                },
+            ))),
         }
     }
 
     /// Handle consolidated resource operations
     #[allow(dead_code)]
-    async fn handle_vibe_resource(&self, request: JsonRpcRequest) -> Result<Option<JsonRpcResponse>> {
+    async fn handle_vibe_resource(
+        &self,
+        request: JsonRpcRequest,
+    ) -> Result<Option<JsonRpcResponse>> {
         let params: VibeOperationParams = if let Some(params) = request.params {
             serde_json::from_value(params).map_err(|e| Error::InvalidParams {
                 message: format!("Invalid vibe/resource parameters: {}", e),
@@ -5531,116 +5733,177 @@ impl McpServer {
 
         match params.operation.as_str() {
             "reserve" => {
-                let reserve_params: ResourceReserveParams = serde_json::from_value(params.params).map_err(|e| Error::InvalidParams {
+                let reserve_params: ResourceReserveParams = serde_json::from_value(params.params)
+                    .map_err(|e| Error::InvalidParams {
                     message: format!("Invalid resource reserve parameters: {}", e),
                 })?;
-                self.handle_legacy_resource_reserve(JsonRpcRequest::new_with_id(request.id.clone(), "vibe/resource/reserve", Some(serde_json::to_value(reserve_params)?)))
-                    .await
+                self.handle_legacy_resource_reserve(JsonRpcRequest::new_with_id(
+                    request.id.clone(),
+                    "vibe/resource/reserve",
+                    Some(serde_json::to_value(reserve_params)?),
+                ))
+                .await
             }
             "project_lock" => {
-                let lock_params: ProjectLockParams = serde_json::from_value(params.params).map_err(|e| Error::InvalidParams {
-                    message: format!("Invalid project lock parameters: {}", e),
-                })?;
-                self.handle_legacy_project_lock(JsonRpcRequest::new_with_id(request.id.clone(), "vibe/project/lock", Some(serde_json::to_value(lock_params)?)))
-                    .await
+                let lock_params: ProjectLockParams = serde_json::from_value(params.params)
+                    .map_err(|e| Error::InvalidParams {
+                        message: format!("Invalid project lock parameters: {}", e),
+                    })?;
+                self.handle_legacy_project_lock(JsonRpcRequest::new_with_id(
+                    request.id.clone(),
+                    "vibe/project/lock",
+                    Some(serde_json::to_value(lock_params)?),
+                ))
+                .await
             }
-            _ => {
-                Ok(Some(JsonRpcResponse::error(
-                    request.id,
-                    JsonRpcError {
-                        code: error_codes::INVALID_PARAMS,
-                        message: format!("Unknown resource operation: {}", params.operation),
-                        data: None,
-                    },
-                )))
-            }
+            _ => Ok(Some(JsonRpcResponse::error(
+                request.id,
+                JsonRpcError {
+                    code: error_codes::INVALID_PARAMS,
+                    message: format!("Unknown resource operation: {}", params.operation),
+                    data: None,
+                },
+            ))),
         }
     }
 
     // Legacy method handlers for backward compatibility
-    
-    async fn handle_legacy_worker_message(&self, request: JsonRpcRequest) -> Result<Option<JsonRpcResponse>> {
+
+    async fn handle_legacy_worker_message(
+        &self,
+        request: JsonRpcRequest,
+    ) -> Result<Option<JsonRpcResponse>> {
         self.handle_worker_message(request).await
     }
 
-    async fn handle_legacy_worker_request(&self, request: JsonRpcRequest) -> Result<Option<JsonRpcResponse>> {
+    async fn handle_legacy_worker_request(
+        &self,
+        request: JsonRpcRequest,
+    ) -> Result<Option<JsonRpcResponse>> {
         self.handle_worker_request(request).await
     }
 
-    async fn handle_legacy_worker_coordinate(&self, request: JsonRpcRequest) -> Result<Option<JsonRpcResponse>> {
+    async fn handle_legacy_worker_coordinate(
+        &self,
+        request: JsonRpcRequest,
+    ) -> Result<Option<JsonRpcResponse>> {
         self.handle_worker_coordinate(request).await
     }
 
-    async fn handle_legacy_project_lock(&self, request: JsonRpcRequest) -> Result<Option<JsonRpcResponse>> {
+    async fn handle_legacy_project_lock(
+        &self,
+        request: JsonRpcRequest,
+    ) -> Result<Option<JsonRpcResponse>> {
         self.handle_project_lock(request).await
     }
 
-    async fn handle_legacy_dependency_declare(&self, request: JsonRpcRequest) -> Result<Option<JsonRpcResponse>> {
+    async fn handle_legacy_dependency_declare(
+        &self,
+        request: JsonRpcRequest,
+    ) -> Result<Option<JsonRpcResponse>> {
         self.handle_dependency_declare(request).await
     }
 
-    async fn handle_legacy_coordinator_request_worker(&self, request: JsonRpcRequest) -> Result<Option<JsonRpcResponse>> {
+    async fn handle_legacy_coordinator_request_worker(
+        &self,
+        request: JsonRpcRequest,
+    ) -> Result<Option<JsonRpcResponse>> {
         self.handle_coordinator_request_worker(request).await
     }
 
-    async fn handle_legacy_work_coordinate(&self, request: JsonRpcRequest) -> Result<Option<JsonRpcResponse>> {
+    async fn handle_legacy_work_coordinate(
+        &self,
+        request: JsonRpcRequest,
+    ) -> Result<Option<JsonRpcResponse>> {
         self.handle_work_coordinate(request).await
     }
 
-    async fn handle_legacy_conflict_resolve(&self, request: JsonRpcRequest) -> Result<Option<JsonRpcResponse>> {
+    async fn handle_legacy_conflict_resolve(
+        &self,
+        request: JsonRpcRequest,
+    ) -> Result<Option<JsonRpcResponse>> {
         self.handle_conflict_resolve(request).await
     }
 
-    async fn handle_legacy_schedule_coordinate(&self, request: JsonRpcRequest) -> Result<Option<JsonRpcResponse>> {
+    async fn handle_legacy_schedule_coordinate(
+        &self,
+        request: JsonRpcRequest,
+    ) -> Result<Option<JsonRpcResponse>> {
         self.handle_schedule_coordinate(request).await
     }
 
-    async fn handle_legacy_conflict_predict(&self, request: JsonRpcRequest) -> Result<Option<JsonRpcResponse>> {
+    async fn handle_legacy_conflict_predict(
+        &self,
+        request: JsonRpcRequest,
+    ) -> Result<Option<JsonRpcResponse>> {
         self.handle_conflict_predict(request).await
     }
 
-    async fn handle_legacy_resource_reserve(&self, request: JsonRpcRequest) -> Result<Option<JsonRpcResponse>> {
+    async fn handle_legacy_resource_reserve(
+        &self,
+        request: JsonRpcRequest,
+    ) -> Result<Option<JsonRpcResponse>> {
         self.handle_resource_reserve(request).await
     }
 
-    async fn handle_legacy_merge_coordinate(&self, request: JsonRpcRequest) -> Result<Option<JsonRpcResponse>> {
+    async fn handle_legacy_merge_coordinate(
+        &self,
+        request: JsonRpcRequest,
+    ) -> Result<Option<JsonRpcResponse>> {
         self.handle_merge_coordinate(request).await
     }
 
-    async fn handle_legacy_knowledge_query_coordination(&self, request: JsonRpcRequest) -> Result<Option<JsonRpcResponse>> {
+    async fn handle_legacy_knowledge_query_coordination(
+        &self,
+        request: JsonRpcRequest,
+    ) -> Result<Option<JsonRpcResponse>> {
         self.handle_knowledge_query_coordination(request).await
     }
 
-    async fn handle_legacy_pattern_suggest(&self, request: JsonRpcRequest) -> Result<Option<JsonRpcResponse>> {
+    async fn handle_legacy_pattern_suggest(
+        &self,
+        request: JsonRpcRequest,
+    ) -> Result<Option<JsonRpcResponse>> {
         self.handle_pattern_suggest(request).await
     }
 
-    async fn handle_legacy_guideline_enforce(&self, request: JsonRpcRequest) -> Result<Option<JsonRpcResponse>> {
+    async fn handle_legacy_guideline_enforce(
+        &self,
+        request: JsonRpcRequest,
+    ) -> Result<Option<JsonRpcResponse>> {
         self.handle_guideline_enforce(request).await
     }
 
-    async fn handle_legacy_learning_capture(&self, request: JsonRpcRequest) -> Result<Option<JsonRpcResponse>> {
+    async fn handle_legacy_learning_capture(
+        &self,
+        request: JsonRpcRequest,
+    ) -> Result<Option<JsonRpcResponse>> {
         self.handle_learning_capture(request).await
     }
 
     // Legacy adapter methods for backward compatibility
-    
+
     /// Route legacy agent methods to consolidated vibe/agent handler
-    async fn handle_vibe_agent_legacy(&self, request: JsonRpcRequest) -> Result<Option<JsonRpcResponse>> {
+    async fn handle_vibe_agent_legacy(
+        &self,
+        request: JsonRpcRequest,
+    ) -> Result<Option<JsonRpcResponse>> {
         let operation = match request.method.as_str() {
             "vibe/agent/register" => "register",
-            "vibe/agent/status" => "status", 
+            "vibe/agent/status" => "status",
             "vibe/agent/list" => "list",
             "vibe/agent/deregister" => "deregister",
             "vibe/agent/capabilities" => "capabilities",
-            _ => return Ok(Some(JsonRpcResponse::error(
-                request.id,
-                JsonRpcError {
-                    code: error_codes::METHOD_NOT_FOUND,
-                    message: format!("Unknown legacy agent method: {}", request.method),
-                    data: None,
-                },
-            ))),
+            _ => {
+                return Ok(Some(JsonRpcResponse::error(
+                    request.id,
+                    JsonRpcError {
+                        code: error_codes::METHOD_NOT_FOUND,
+                        message: format!("Unknown legacy agent method: {}", request.method),
+                        data: None,
+                    },
+                )))
+            }
         };
 
         // For backward compatibility, directly call the old handlers to preserve exact behavior
@@ -5653,7 +5916,9 @@ impl McpServer {
                 // Fallback to consolidated handler for unknown operations
                 let vibe_params = VibeOperationParams {
                     operation: operation.to_string(),
-                    params: request.params.unwrap_or(serde_json::Value::Object(serde_json::Map::new())),
+                    params: request
+                        .params
+                        .unwrap_or(serde_json::Value::Object(serde_json::Map::new())),
                 };
 
                 let vibe_request = JsonRpcRequest::new_with_id(
@@ -5668,7 +5933,10 @@ impl McpServer {
     }
 
     /// Route legacy issue methods to consolidated vibe/issue handler
-    async fn handle_vibe_issue_legacy(&self, request: JsonRpcRequest) -> Result<Option<JsonRpcResponse>> {
+    async fn handle_vibe_issue_legacy(
+        &self,
+        request: JsonRpcRequest,
+    ) -> Result<Option<JsonRpcResponse>> {
         // For backward compatibility, directly call the old handlers to preserve exact behavior
         match request.method.as_str() {
             "vibe/issue/create" => self.handle_issue_create_new(request).await,
@@ -5688,40 +5956,48 @@ impl McpServer {
     }
 
     /// Route legacy coordination methods to consolidated vibe/coordination handler
-    async fn handle_vibe_coordination_legacy(&self, request: JsonRpcRequest) -> Result<Option<JsonRpcResponse>> {
+    async fn handle_vibe_coordination_legacy(
+        &self,
+        request: JsonRpcRequest,
+    ) -> Result<Option<JsonRpcResponse>> {
         // For backward compatibility, directly call the existing legacy handlers to preserve exact behavior
         match request.method.as_str() {
             // Messaging operations
             "vibe/message/send" => self.handle_message_send(request).await,
             "vibe/message/broadcast" => self.handle_message_broadcast(request).await,
             "vibe/worker/message" => self.handle_legacy_worker_message(request).await,
-            
+
             // Worker coordination operations
             "vibe/worker/request" => self.handle_legacy_worker_request(request).await,
             "vibe/worker/coordinate" => self.handle_legacy_worker_coordinate(request).await,
-            
+
             // Resource operations
             "vibe/project/lock" => self.handle_legacy_project_lock(request).await,
             "vibe/resource/reserve" => self.handle_legacy_resource_reserve(request).await,
-            
+
             // Cross-project dependency operations
             "vibe/dependency/declare" => self.handle_legacy_dependency_declare(request).await,
-            "vibe/coordinator/request_worker" => self.handle_legacy_coordinator_request_worker(request).await,
+            "vibe/coordinator/request_worker" => {
+                self.handle_legacy_coordinator_request_worker(request).await
+            }
             "vibe/work/coordinate" => self.handle_legacy_work_coordinate(request).await,
             "vibe/conflict/resolve" => self.handle_legacy_conflict_resolve(request).await,
-            
+
             // Workflow orchestration operations
             "vibe/schedule/coordinate" => self.handle_legacy_schedule_coordinate(request).await,
             "vibe/conflict/predict" => self.handle_legacy_conflict_predict(request).await,
             "vibe/merge/coordinate" => self.handle_legacy_merge_coordinate(request).await,
-            
+
             // Knowledge operations
             "vibe/knowledge/query" => self.handle_knowledge_query(request).await,
-            "vibe/knowledge/query/coordination" => self.handle_legacy_knowledge_query_coordination(request).await,
+            "vibe/knowledge/query/coordination" => {
+                self.handle_legacy_knowledge_query_coordination(request)
+                    .await
+            }
             "vibe/pattern/suggest" => self.handle_legacy_pattern_suggest(request).await,
             "vibe/guideline/enforce" => self.handle_legacy_guideline_enforce(request).await,
             "vibe/learning/capture" => self.handle_legacy_learning_capture(request).await,
-            
+
             _ => Ok(Some(JsonRpcResponse::error(
                 request.id,
                 JsonRpcError {
