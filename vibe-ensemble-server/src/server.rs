@@ -23,11 +23,13 @@ use vibe_ensemble_mcp::server::McpServer;
 use vibe_ensemble_storage::StorageManager;
 use vibe_ensemble_web::WebServer;
 
+/// Channel capacity for SSE broadcast channels
+const SSE_CHANNEL_CAPACITY: usize = 1024;
+
 /// SSE session for MCP communication
 #[derive(Clone)]
-pub struct SseSession {
-    pub session_id: String,
-    pub sender: broadcast::Sender<String>,
+pub(crate) struct SseSession {
+    sender: broadcast::Sender<String>,
 }
 
 /// Shared application state for API handlers
@@ -553,7 +555,7 @@ async fn mcp_sse_handler(
     info!("Creating new MCP SSE session: {}", session_id);
 
     // Create broadcast channel for this session
-    let (sender, mut receiver) = broadcast::channel(1024);
+    let (sender, mut receiver) = broadcast::channel(SSE_CHANNEL_CAPACITY);
 
     // Store the session
     {
@@ -561,7 +563,6 @@ async fn mcp_sse_handler(
         sessions.insert(
             session_id.clone(),
             SseSession {
-                session_id: session_id.clone(),
                 sender: sender.clone(),
             },
         );
@@ -575,16 +576,14 @@ async fn mcp_sse_handler(
         "message": "MCP SSE session established. Use POST /mcp/sse/{session_id} to send messages."
     });
 
-    if let Err(e) = sender.send(serde_json::to_string(&init_message).unwrap_or_default()) {
-        warn!("Failed to send session init message: {}", e);
-    }
-
     let sessions_for_cleanup = state.sse_sessions.clone();
     let session_id_for_cleanup = session_id.clone();
 
     let stream = async_stream::stream! {
         // Send the session initialization event
         let init_event = Event::default()
+            .event("session_init")
+            .id(&session_id)
             .json_data(init_message)
             .map_err(axum::BoxError::from);
         yield init_event;
@@ -609,6 +608,7 @@ async fn mcp_sse_handler(
                     };
 
                     let event = Event::default()
+                        .event("jsonrpc")
                         .json_data(json_message)
                         .map_err(axum::BoxError::from);
 
@@ -631,7 +631,9 @@ async fn mcp_sse_handler(
         info!("Cleaned up MCP SSE session: {}", session_id_for_cleanup);
     };
 
-    Sse::new(stream).keep_alive(KeepAlive::default())
+    Sse::new(stream).keep_alive(
+        KeepAlive::new().interval(std::time::Duration::from_secs(15))
+    )
 }
 
 /// MCP SSE POST handler for client-to-server messages
@@ -718,11 +720,15 @@ async fn mcp_sse_post_handler(
             });
 
             // Send error through SSE channel as well
-            if let Err(e) = session
-                .sender
-                .send(serde_json::to_string(&error_response).unwrap_or_default())
-            {
-                warn!("Failed to send error to SSE session {}: {}", session_id, e);
+            match serde_json::to_string(&error_response) {
+                Ok(s) => {
+                    if let Err(broadcast::error::SendError(_)) = session.sender.send(s) {
+                        debug!("No SSE receivers for session {}; skipped error broadcast", session_id);
+                    }
+                }
+                Err(se) => {
+                    warn!("Failed to serialize error response for SSE session {}: {}", session_id, se);
+                }
             }
 
             Ok(Json(error_response))

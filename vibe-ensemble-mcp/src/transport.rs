@@ -405,10 +405,35 @@ impl Transport for SseTransport {
             .map_err(|e| Error::Transport(format!("HTTP POST failed: {}", e)))?;
 
         if !response.status().is_success() {
-            return Err(Error::Transport(format!(
-                "HTTP POST failed with status: {}",
-                response.status()
-            )));
+            // Retry once on 404 to self-heal lost sessions
+            if response.status() == 404 && self.session_id.is_some() {
+                warn!("Session {} lost, attempting to reconnect", session_id);
+                self.session_id = None;
+                self.connect().await?;
+                
+                // Retry with new session
+                let new_session_id = self.session_id.as_ref().unwrap();
+                let retry_url = format!("{}/mcp/sse/{}", self.base_url, new_session_id);
+                let retry_response = self
+                    .client
+                    .post(&retry_url)
+                    .json(&json_payload)
+                    .send()
+                    .await
+                    .map_err(|e| Error::Transport(format!("Retry HTTP POST failed: {}", e)))?;
+                
+                if !retry_response.status().is_success() {
+                    return Err(Error::Transport(format!(
+                        "Retry HTTP POST failed with status: {}",
+                        retry_response.status()
+                    )));
+                }
+            } else {
+                return Err(Error::Transport(format!(
+                    "HTTP POST failed with status: {}",
+                    response.status()
+                )));
+            }
         }
 
         debug!("SSE POST message sent successfully");
