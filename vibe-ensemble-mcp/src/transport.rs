@@ -335,6 +335,152 @@ impl Transport for StdioTransport {
     }
 }
 
+/// SSE transport implementation for MCP protocol communication over Server-Sent Events + HTTP POST
+///
+/// This transport enables bidirectional MCP communication using:
+/// - Server-Sent Events (SSE) for server-to-client messaging
+/// - HTTP POST requests for client-to-server messaging
+///
+/// The transport automatically manages session IDs and provides session recovery
+/// capabilities for robust communication in network-unstable environments.
+pub struct SseTransport {
+    base_url: String,
+    session_id: Option<String>,
+    client: reqwest::Client,
+    is_closed: bool,
+}
+
+impl SseTransport {
+    /// Create a new SSE transport
+    ///
+    /// # Arguments
+    /// * `base_url` - The base URL of the server to connect to (e.g., "http://localhost:8080")
+    pub fn new(base_url: &str) -> Self {
+        Self {
+            base_url: base_url.to_string(),
+            session_id: None,
+            client: reqwest::Client::new(),
+            is_closed: false,
+        }
+    }
+
+    /// Initialize connection by generating a unique session ID for communication
+    ///
+    /// # Returns
+    /// The generated session ID that will be used for all subsequent communications
+    ///
+    /// # Errors
+    /// Returns an error if the transport is already closed
+    pub async fn connect(&mut self) -> Result<String> {
+        if self.is_closed {
+            return Err(Error::Transport("SSE transport is closed".to_string()));
+        }
+
+        // For now, we will generate a session ID that will be sent in the initial message
+        // In a real implementation, this would come from the SSE session_init event
+        use uuid::Uuid;
+        let session_id = format!("sse-{}", Uuid::new_v4());
+
+        self.session_id = Some(session_id.clone());
+        info!("SSE transport initialized with session ID: {}", session_id);
+
+        Ok(session_id)
+    }
+
+    /// Helper method to send POST requests, reducing code duplication
+    async fn send_post(
+        &self,
+        session_id: &str,
+        json_payload: &serde_json::Value,
+    ) -> Result<reqwest::Response> {
+        let post_url = format!("{}/mcp/sse/{}", self.base_url, session_id);
+        debug!("Sending SSE POST message to: {}", post_url);
+
+        self.client
+            .post(&post_url)
+            .json(json_payload)
+            .send()
+            .await
+            .map_err(|e| Error::Transport(format!("HTTP POST failed: {}", e)))
+    }
+}
+
+#[async_trait::async_trait]
+impl Transport for SseTransport {
+    async fn send(&mut self, message: &str) -> Result<()> {
+        if self.is_closed {
+            return Err(Error::Transport("SSE transport is closed".to_string()));
+        }
+
+        // For the simplified version, we will connect on first send if needed
+        if self.session_id.is_none() {
+            self.connect().await?;
+        }
+
+        let session_id = self
+            .session_id
+            .as_ref()
+            .ok_or_else(|| Error::Transport("Session ID not set".to_string()))?;
+
+        // Parse message as JSON to send as structured data
+        let json_payload: serde_json::Value = serde_json::from_str(message)
+            .map_err(|e| Error::Transport(format!("Invalid JSON message: {}", e)))?;
+
+        let response = self.send_post(session_id, &json_payload).await?;
+
+        if !response.status().is_success() {
+            // Retry once on 404/410 to self-heal lost sessions
+            if (response.status() == reqwest::StatusCode::NOT_FOUND
+                || response.status() == reqwest::StatusCode::GONE)
+                && self.session_id.is_some()
+            {
+                warn!("Session {} lost, attempting to reconnect", session_id);
+                self.session_id = None;
+                self.connect().await?;
+
+                // Retry with new session
+                let new_session_id = self
+                    .session_id
+                    .as_ref()
+                    .ok_or_else(|| Error::Transport("Failed to get new session ID".to_string()))?;
+                let retry_response = self.send_post(new_session_id, &json_payload).await?;
+
+                if !retry_response.status().is_success() {
+                    return Err(Error::Transport(format!(
+                        "Retry HTTP POST failed with status: {}",
+                        retry_response.status()
+                    )));
+                }
+            } else {
+                return Err(Error::Transport(format!(
+                    "HTTP POST failed with status: {}",
+                    response.status()
+                )));
+            }
+        }
+
+        debug!("SSE POST message sent successfully");
+        Ok(())
+    }
+
+    async fn receive(&mut self) -> Result<String> {
+        // In SSE transport, messages from server are received via the SSE event stream
+        // established separately, not through this polling-based receive method.
+        // The actual SSE events should be handled by an event listener on the SSE connection.
+        Err(Error::Transport(
+            "SSE transport does not support synchronous receive - server messages are delivered via SSE event stream".to_string(),
+        ))
+    }
+
+    async fn close(&mut self) -> Result<()> {
+        if !self.is_closed {
+            info!("Closing SSE transport");
+            self.is_closed = true;
+        }
+        Ok(())
+    }
+}
+
 /// Transport factory for creating different transport types
 pub struct TransportFactory;
 
@@ -346,6 +492,15 @@ impl TransportFactory {
         >::connect(url)
         .await?;
         Ok(Box::new(transport))
+    }
+
+    /// Create an SSE client transport.
+    ///
+    /// Note: Connection/session is established lazily on first `send()`. You may
+    /// call `connect()` if you need the session_id eagerly, but it's not required.
+    /// Call `connect()` on the transport to establish the SSE connection if needed.
+    pub fn sse_client(base_url: &str) -> Box<dyn Transport> {
+        Box::new(SseTransport::new(base_url))
     }
 
     /// Create a stdio transport
