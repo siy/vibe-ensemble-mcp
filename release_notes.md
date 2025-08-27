@@ -32,10 +32,10 @@ iwr https://vibeensemble.dev/install.ps1 -UseBasicParsing | iex
 ```
 
 **Binary Downloads:**
-- Download platform-specific binaries from [GitHub Releases](https://github.com/siy/vibe-ensemble-mcp/releases/v0.2.3)
+- Download platform-specific binaries from [GitHub Releases](https://github.com/siy/vibe-ensemble-mcp/releases/v0.2.4)
 - Extract and install according to your platform's conventions
 
-**Full Changelog:** [v0.2.3 commits](https://github.com/siy/vibe-ensemble-mcp/commits/v0.2.3)
+**Full Changelog:** [v0.2.4 commits](https://github.com/siy/vibe-ensemble-mcp/commits/v0.2.4)
 
 ---
 
