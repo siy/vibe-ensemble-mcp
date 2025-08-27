@@ -5175,6 +5175,10 @@ impl McpServer {
                 );
                 self.handle_agent_deregister(deregister_request).await
             }
+            "capabilities" => Ok(Some(JsonRpcResponse::success(
+                request.id,
+                serde_json::to_value(self.capabilities.clone())?,
+            ))),
             _ => Ok(Some(JsonRpcResponse::error(
                 request.id,
                 JsonRpcError {
@@ -5912,6 +5916,10 @@ impl McpServer {
             "vibe/agent/status" => self.handle_agent_status(request).await,
             "vibe/agent/list" => self.handle_agent_list(request).await,
             "vibe/agent/deregister" => self.handle_agent_deregister(request).await,
+            "vibe/agent/capabilities" => Ok(Some(JsonRpcResponse::success(
+                request.id,
+                serde_json::to_value(self.capabilities.clone())?,
+            ))),
             _ => {
                 // Fallback to consolidated handler for unknown operations
                 let vibe_params = VibeOperationParams {
