@@ -157,7 +157,7 @@ impl Server {
     }
 
     /// Create the main coordination API router
-    fn create_api_router(&self) -> (Router, SessionManager) {
+    fn create_api_router(&self) -> Router {
         let state = AppState {
             storage: self.storage.clone(),
             mcp_server: self.mcp_server.clone(),
@@ -205,15 +205,13 @@ impl Server {
             }
         }
 
-        let app = router
+        router
             .layer(
                 ServiceBuilder::new()
                     .layer(TraceLayer::new_for_http())
                     .layer(CorsLayer::permissive()),
             )
-            .with_state(state);
-
-        (app, self.sse_sessions.clone())
+            .with_state(state)
     }
 
     /// Run the server
@@ -233,12 +231,12 @@ impl Server {
             }
         }
 
-        // Create API router and get sessions for cleanup task
-        let (app, sse_sessions) = self.create_api_router();
+        // Create API router
+        let app = self.create_api_router();
 
         // Start SSE session cleanup task if SSE is enabled
         if matches!(self.transport, McpTransport::Sse | McpTransport::Both) {
-            let session_cleanup = sse_sessions;
+            let session_cleanup = self.sse_sessions.clone();
             let session_timeout = self.config.mcp.session_timeout;
             tokio::spawn(async move {
                 let mut cleanup_interval = interval(Duration::from_secs(30));
@@ -628,7 +626,7 @@ async fn mcp_sse_handler(
     Query(params): Query<SseQuery>,
 ) -> Sse<impl Stream<Item = std::result::Result<Event, axum::BoxError>>> {
     // Generate session ID and check for duplicates
-    let session_id = params
+    let mut session_id = params
         .session_id
         .unwrap_or_else(|| format!("sse_{}", Uuid::new_v4()));
 
@@ -638,12 +636,13 @@ async fn mcp_sse_handler(
     // Register session, handling reconnects gracefully
     {
         let mut sessions = state.sse_sessions.write().await;
-        if sessions.contains_key(&session_id) {
+        // Check for duplicate session_id and generate a new one if needed
+        while sessions.contains_key(&session_id) {
             warn!(
-                "SSE session {} already exists; replacing for reconnect",
+                "Session {} already exists; generating a new session id",
                 session_id
             );
-            sessions.remove(&session_id);
+            session_id = format!("sse_{}", Uuid::new_v4());
         }
         sessions.insert(
             session_id.clone(),
@@ -664,7 +663,7 @@ async fn mcp_sse_handler(
     // Claude Code expects this to happen automatically when connecting to /mcp/events
     let init_response = {
         use vibe_ensemble_mcp::protocol::{InitializeResult, ServerInfo, MCP_VERSION};
-        
+
         let result = InitializeResult {
             protocol_version: MCP_VERSION.to_string(),
             server_info: ServerInfo {
@@ -673,10 +672,11 @@ async fn mcp_sse_handler(
             },
             capabilities: state.mcp_server.capabilities().clone(),
             instructions: Some(
-                "Vibe Ensemble MCP Server - Coordinating multiple Claude Code instances via SSE".to_string(),
+                "Vibe Ensemble MCP Server - Coordinating multiple Claude Code instances via SSE"
+                    .to_string(),
             ),
         };
-        
+
         // Create proper MCP JSON-RPC response
         let mcp_response = vibe_ensemble_mcp::protocol::JsonRpcResponse {
             jsonrpc: "2.0".to_string(),
@@ -684,14 +684,17 @@ async fn mcp_sse_handler(
             result: Some(serde_json::to_value(result).unwrap()),
             error: None,
         };
-        
+
         serde_json::to_string(&mcp_response).unwrap()
     };
 
     if let Err(e) = sender.try_send(init_response) {
         error!("Failed to send MCP initialization response: {}", e);
     } else {
-        debug!("Sent MCP initialization response for session: {}", session_id);
+        debug!(
+            "Sent MCP initialization response for session: {}",
+            session_id
+        );
         // Mark session as initialized
         let mut sessions = state.sse_sessions.write().await;
         if let Some(s) = sessions.get_mut(&session_id) {
@@ -784,7 +787,7 @@ async fn mcp_sse_post_handler(
     Path(session_id): Path<String>,
     Json(payload): Json<Value>,
 ) -> std::result::Result<Json<Value>, StatusCode> {
-    // Extract method and id for logging, avoid logging full payload to prevent PII leakage
+    // Extract method and id for logging to avoid logging full payloads
     let method = payload
         .get("method")
         .and_then(|m| m.as_str())
