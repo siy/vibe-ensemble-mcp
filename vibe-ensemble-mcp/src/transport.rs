@@ -378,17 +378,26 @@ impl SseTransport {
 
         // For now, we will generate a session ID that will be sent in the initial message
         // In a real implementation, this would come from the SSE session_init event
-        use std::collections::hash_map::DefaultHasher;
-        use std::hash::{Hash, Hasher};
-
-        let mut hasher = DefaultHasher::new();
-        std::time::SystemTime::now().hash(&mut hasher);
-        let session_id = format!("sse-{}", hasher.finish());
+        use uuid::Uuid;
+        let session_id = format!("sse-{}", Uuid::new_v4());
 
         self.session_id = Some(session_id.clone());
         info!("SSE transport initialized with session ID: {}", session_id);
 
         Ok(session_id)
+    }
+
+    /// Helper method to send POST requests, reducing code duplication
+    async fn send_post(&self, session_id: &str, json_payload: &serde_json::Value) -> Result<reqwest::Response> {
+        let post_url = format!("{}/mcp/sse/{}", self.base_url, session_id);
+        debug!("Sending SSE POST message to: {}", post_url);
+        
+        self.client
+            .post(&post_url)
+            .json(json_payload)
+            .send()
+            .await
+            .map_err(|e| Error::Transport(format!("HTTP POST failed: {}", e)))
     }
 }
 
@@ -404,21 +413,14 @@ impl Transport for SseTransport {
             self.connect().await?;
         }
 
-        let session_id = self.session_id.as_ref().unwrap();
-        let post_url = format!("{}/mcp/sse/{}", self.base_url, session_id);
-        debug!("Sending SSE POST message to: {}", post_url);
+        let session_id = self.session_id.as_ref()
+            .ok_or_else(|| Error::Transport("Session ID not set".to_string()))?;
 
         // Parse message as JSON to send as structured data
         let json_payload: serde_json::Value = serde_json::from_str(message)
             .map_err(|e| Error::Transport(format!("Invalid JSON message: {}", e)))?;
 
-        let response = self
-            .client
-            .post(&post_url)
-            .json(&json_payload)
-            .send()
-            .await
-            .map_err(|e| Error::Transport(format!("HTTP POST failed: {}", e)))?;
+        let response = self.send_post(session_id, &json_payload).await?;
 
         if !response.status().is_success() {
             // Retry once on 404 to self-heal lost sessions
@@ -428,15 +430,9 @@ impl Transport for SseTransport {
                 self.connect().await?;
 
                 // Retry with new session
-                let new_session_id = self.session_id.as_ref().unwrap();
-                let retry_url = format!("{}/mcp/sse/{}", self.base_url, new_session_id);
-                let retry_response = self
-                    .client
-                    .post(&retry_url)
-                    .json(&json_payload)
-                    .send()
-                    .await
-                    .map_err(|e| Error::Transport(format!("Retry HTTP POST failed: {}", e)))?;
+                let new_session_id = self.session_id.as_ref()
+                    .ok_or_else(|| Error::Transport("Failed to get new session ID".to_string()))?;
+                let retry_response = self.send_post(new_session_id, &json_payload).await?;
 
                 if !retry_response.status().is_success() {
                     return Err(Error::Transport(format!(
@@ -457,12 +453,11 @@ impl Transport for SseTransport {
     }
 
     async fn receive(&mut self) -> Result<String> {
-        // SSE is primarily server-to-client, so for a client transport,
-        // receiving would require establishing an SSE connection.
-        // For the current implementation, we will return an error
-        // since the server-side SSE handler manages the responses.
+        // In SSE transport, messages from server are received via the SSE event stream
+        // established separately, not through this polling-based receive method.
+        // The actual SSE events should be handled by an event listener on the SSE connection.
         Err(Error::Transport(
-            "SSE transport receive not implemented - responses come via SSE stream".to_string(),
+            "SSE transport does not support synchronous receive - server messages are delivered via SSE event stream".to_string(),
         ))
     }
 
@@ -489,6 +484,8 @@ impl TransportFactory {
     }
 
     /// Create an SSE client transport
+    /// 
+    /// Note: Call `connect()` on the transport to establish the SSE connection.
     pub fn sse_client(base_url: &str) -> Box<dyn Transport> {
         Box::new(SseTransport::new(base_url))
     }

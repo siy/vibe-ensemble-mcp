@@ -153,22 +153,15 @@ impl Server {
     }
 
     /// Create the main coordination API router
-    fn create_api_router(&self) -> Router {
+    fn create_api_router(&self) -> (Router, SessionManager) {
+        let sse_sessions = Arc::new(RwLock::new(HashMap::new()));
         let state = AppState {
             storage: self.storage.clone(),
             mcp_server: self.mcp_server.clone(),
-            sse_sessions: Arc::new(RwLock::new(HashMap::new())),
+            sse_sessions: sse_sessions.clone(),
         };
 
-        // Start session cleanup task
-        let session_cleanup = state.sse_sessions.clone();
-        tokio::spawn(async move {
-            let mut cleanup_interval = interval(Duration::from_secs(30));
-            loop {
-                cleanup_interval.tick().await;
-                Self::cleanup_expired_sessions(&session_cleanup).await;
-            }
-        });
+        // Note: Session cleanup task will be started in the run() method
 
         let mut router = Router::new()
             // Health and status endpoints
@@ -209,13 +202,15 @@ impl Server {
             }
         }
 
-        router
+        let app = router
             .layer(
                 ServiceBuilder::new()
                     .layer(TraceLayer::new_for_http())
                     .layer(CorsLayer::permissive()),
             )
-            .with_state(state)
+            .with_state(state);
+            
+        (app, sse_sessions)
     }
 
     /// Run the server
@@ -235,8 +230,23 @@ impl Server {
             }
         }
 
-        // Create API router
-        let app = self.create_api_router();
+        // Create API router and get sessions for cleanup task
+        let (app, sse_sessions) = self.create_api_router();
+
+        // Start SSE session cleanup task if SSE is enabled
+        if matches!(
+            self.transport, 
+            McpTransport::Sse | McpTransport::Both
+        ) {
+            let session_cleanup = sse_sessions;
+            tokio::spawn(async move {
+                let mut cleanup_interval = interval(Duration::from_secs(30));
+                loop {
+                    cleanup_interval.tick().await;
+                    Self::cleanup_expired_sessions(&session_cleanup).await;
+                }
+            });
+        }
 
         // Start main API server
         let listener = tokio::net::TcpListener::bind(self.config.server_addr()).await?;
@@ -602,7 +612,7 @@ async fn mcp_sse_handler(
     // Generate session ID
     let session_id = params
         .session_id
-        .unwrap_or_else(|| format!("sse_{}", &Uuid::new_v4().to_string()[..8]));
+        .unwrap_or_else(|| format!("sse_{}", Uuid::new_v4()));
 
     info!(
         "New SSE connection established with session_id: {}",
@@ -665,7 +675,9 @@ async fn mcp_sse_handler(
                                 Ok(e) => yield Ok(e),
                                 Err(err) => {
                                     error!("Failed to create SSE event: {}", err);
-                                    yield Err(axum::BoxError::from(err));
+                                    // Continue stream instead of yielding error
+                                    // to prevent stream termination
+                                    continue;
                                 }
                             }
                         }
@@ -736,8 +748,10 @@ async fn mcp_sse_post_handler(
                         "Failed to send response via SSE channel for session {}: {}",
                         session_id, e
                     );
-                    // SSE channel is closed, remove session but continue with HTTP response
+                    // SSE channel is closed, mark session as disconnected
                     sessions.remove(&session_id);
+                    // Return error to indicate SSE channel failure
+                    return Err(StatusCode::GONE); // 410 Gone - session expired
                 } else {
                     debug!("Response sent via SSE channel for session: {}", session_id);
                 }
