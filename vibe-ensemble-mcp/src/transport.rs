@@ -335,6 +335,104 @@ impl Transport for StdioTransport {
     }
 }
 
+/// SSE transport implementation for MCP protocol communication over Server-Sent Events + HTTP POST
+pub struct SseTransport {
+    base_url: String,
+    session_id: Option<String>,
+    client: reqwest::Client,
+    is_closed: bool,
+}
+
+impl SseTransport {
+    /// Create a new SSE transport
+    pub fn new(base_url: &str) -> Self {
+        Self {
+            base_url: base_url.to_string(),
+            session_id: None,
+            client: reqwest::Client::new(),
+            is_closed: false,
+        }
+    }
+
+    /// Initialize connection by making initial SSE request to get session ID
+    pub async fn connect(&mut self) -> Result<String> {
+        if self.is_closed {
+            return Err(Error::Transport("SSE transport is closed".to_string()));
+        }
+
+        // For now, we will generate a session ID that will be sent in the initial message
+        // In a real implementation, this would come from the SSE session_init event
+        use std::collections::hash_map::DefaultHasher;
+        use std::hash::{Hash, Hasher};
+        
+        let mut hasher = DefaultHasher::new();
+        std::time::SystemTime::now().hash(&mut hasher);
+        let session_id = format!("sse-{}", hasher.finish());
+        
+        self.session_id = Some(session_id.clone());
+        info!("SSE transport initialized with session ID: {}", session_id);
+        
+        Ok(session_id)
+    }
+}
+
+#[async_trait::async_trait]
+impl Transport for SseTransport {
+    async fn send(&mut self, message: &str) -> Result<()> {
+        if self.is_closed {
+            return Err(Error::Transport("SSE transport is closed".to_string()));
+        }
+
+        // For the simplified version, we will connect on first send if needed
+        if self.session_id.is_none() {
+            self.connect().await?;
+        }
+
+        let session_id = self.session_id.as_ref().unwrap();
+        let post_url = format!("{}/mcp/sse/{}", self.base_url, session_id);
+        debug!("Sending SSE POST message to: {}", post_url);
+
+        // Parse message as JSON to send as structured data
+        let json_payload: serde_json::Value = serde_json::from_str(message)
+            .map_err(|e| Error::Transport(format!("Invalid JSON message: {}", e)))?;
+
+        let response = self.client
+            .post(&post_url)
+            .json(&json_payload)
+            .send()
+            .await
+            .map_err(|e| Error::Transport(format!("HTTP POST failed: {}", e)))?;
+
+        if !response.status().is_success() {
+            return Err(Error::Transport(format!(
+                "HTTP POST failed with status: {}", 
+                response.status()
+            )));
+        }
+
+        debug!("SSE POST message sent successfully");
+        Ok(())
+    }
+
+    async fn receive(&mut self) -> Result<String> {
+        // SSE is primarily server-to-client, so for a client transport,
+        // receiving would require establishing an SSE connection.
+        // For the current implementation, we will return an error
+        // since the server-side SSE handler manages the responses.
+        Err(Error::Transport(
+            "SSE transport receive not implemented - responses come via SSE stream".to_string()
+        ))
+    }
+
+    async fn close(&mut self) -> Result<()> {
+        if !self.is_closed {
+            info!("Closing SSE transport");
+            self.is_closed = true;
+        }
+        Ok(())
+    }
+}
+
 /// Transport factory for creating different transport types
 pub struct TransportFactory;
 
@@ -346,6 +444,11 @@ impl TransportFactory {
         >::connect(url)
         .await?;
         Ok(Box::new(transport))
+    }
+
+    /// Create an SSE client transport
+    pub fn sse_client(base_url: &str) -> Box<dyn Transport> {
+        Box::new(SseTransport::new(base_url))
     }
 
     /// Create a stdio transport
