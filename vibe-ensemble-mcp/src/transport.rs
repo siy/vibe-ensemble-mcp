@@ -410,7 +410,7 @@ impl Transport for SseTransport {
                 warn!("Session {} lost, attempting to reconnect", session_id);
                 self.session_id = None;
                 self.connect().await?;
-                
+
                 // Retry with new session
                 let new_session_id = self.session_id.as_ref().unwrap();
                 let retry_url = format!("{}/mcp/sse/{}", self.base_url, new_session_id);
@@ -421,7 +421,7 @@ impl Transport for SseTransport {
                     .send()
                     .await
                     .map_err(|e| Error::Transport(format!("Retry HTTP POST failed: {}", e)))?;
-                
+
                 if !retry_response.status().is_success() {
                     return Err(Error::Transport(format!(
                         "Retry HTTP POST failed with status: {}",

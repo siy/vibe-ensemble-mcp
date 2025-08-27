@@ -631,9 +631,7 @@ async fn mcp_sse_handler(
         info!("Cleaned up MCP SSE session: {}", session_id_for_cleanup);
     };
 
-    Sse::new(stream).keep_alive(
-        KeepAlive::new().interval(std::time::Duration::from_secs(15))
-    )
+    Sse::new(stream).keep_alive(KeepAlive::new().interval(std::time::Duration::from_secs(15)))
 }
 
 /// MCP SSE POST handler for client-to-server messages
@@ -723,11 +721,17 @@ async fn mcp_sse_post_handler(
             match serde_json::to_string(&error_response) {
                 Ok(s) => {
                     if let Err(broadcast::error::SendError(_)) = session.sender.send(s) {
-                        debug!("No SSE receivers for session {}; skipped error broadcast", session_id);
+                        debug!(
+                            "No SSE receivers for session {}; skipped error broadcast",
+                            session_id
+                        );
                     }
                 }
                 Err(se) => {
-                    warn!("Failed to serialize error response for SSE session {}: {}", session_id, se);
+                    warn!(
+                        "Failed to serialize error response for SSE session {}: {}",
+                        session_id, se
+                    );
                 }
             }
 
