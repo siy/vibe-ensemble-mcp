@@ -27,7 +27,9 @@ pub enum McpTransport {
     Stdio,
     /// Use WebSocket transport
     Websocket,
-    /// Support both transports
+    /// Use Server-Sent Events transport (HTTP streaming)
+    Sse,
+    /// Support both stdio and websocket transports
     Both,
 }
 

@@ -300,6 +300,7 @@ impl McpServer {
             methods::INITIALIZE => self.handle_initialize(request).await,
             methods::PING => self.handle_ping(request).await,
             methods::LIST_TOOLS => self.handle_list_tools(request).await,
+            methods::CALL_TOOL => self.handle_call_tool(request).await,
             methods::LIST_RESOURCES => self.handle_list_resources(request).await,
             methods::LIST_PROMPTS => self.handle_list_prompts(request).await,
 
@@ -844,6 +845,102 @@ impl McpServer {
         });
 
         Ok(Some(JsonRpcResponse::success(request.id, result)))
+    }
+
+    /// Handle tool call request
+    async fn handle_call_tool(&self, request: JsonRpcRequest) -> Result<Option<JsonRpcResponse>> {
+        debug!("Handling tool call request");
+
+        let params: serde_json::Value = request.params.ok_or_else(|| Error::InvalidParams {
+            message: "Missing tool call parameters".to_string(),
+        })?;
+
+        let tool_name = params["name"]
+            .as_str()
+            .ok_or_else(|| Error::InvalidParams {
+                message: "Missing tool name".to_string(),
+            })?;
+
+        let arguments = params
+            .get("arguments")
+            .cloned()
+            .unwrap_or(serde_json::Value::Object(serde_json::Map::new()));
+
+        debug!("Tool call: {} with arguments: {}", tool_name, arguments);
+
+        // Generic mapping: "vibe_agent_register" -> "vibe/agent/register", etc.
+        let method = if let Some(stripped) = tool_name.strip_prefix("vibe_") {
+            format!("vibe/{}", stripped.replace('_', "/"))
+        } else {
+            // Keep legacy names working if already slash-formatted
+            tool_name.replace('_', "/")
+        };
+
+        let subreq = JsonRpcRequest {
+            jsonrpc: request.jsonrpc.clone(),
+            id: request.id.clone(),
+            method: method.clone(),
+            params: Some(arguments),
+        };
+
+        // Direct dispatch to specific handlers to avoid recursion
+        let result = match method.as_str() {
+            methods::AGENT_REGISTER => self.handle_agent_register(subreq).await,
+            methods::AGENT_STATUS => self.handle_agent_status(subreq).await,
+            methods::AGENT_LIST => self.handle_agent_list(subreq).await,
+            methods::AGENT_DEREGISTER => self.handle_agent_deregister(subreq).await,
+            methods::ISSUE_CREATE => self.handle_issue_create_new(subreq).await,
+            methods::ISSUE_LIST => self.handle_issue_list_new(subreq).await,
+            methods::ISSUE_ASSIGN => self.handle_issue_assign(subreq).await,
+            methods::ISSUE_UPDATE => self.handle_issue_update_new(subreq).await,
+            methods::ISSUE_CLOSE => self.handle_issue_close(subreq).await,
+            methods::MESSAGE_SEND => self.handle_message_send(subreq).await,
+            methods::MESSAGE_BROADCAST => self.handle_message_broadcast(subreq).await,
+            methods::KNOWLEDGE_QUERY => self.handle_knowledge_query(subreq).await,
+            methods::WORKER_MESSAGE => self.handle_worker_message(subreq).await,
+            methods::WORKER_REQUEST => self.handle_worker_request(subreq).await,
+            methods::WORKER_COORDINATE => self.handle_worker_coordinate(subreq).await,
+            methods::PROJECT_LOCK => self.handle_project_lock(subreq).await,
+            methods::DEPENDENCY_DECLARE => self.handle_dependency_declare(subreq).await,
+            methods::COORDINATOR_REQUEST_WORKER => {
+                self.handle_coordinator_request_worker(subreq).await
+            }
+            methods::WORK_COORDINATE => self.handle_work_coordinate(subreq).await,
+            methods::CONFLICT_RESOLVE => self.handle_conflict_resolve(subreq).await,
+            methods::SCHEDULE_COORDINATE => self.handle_schedule_coordinate(subreq).await,
+            methods::CONFLICT_PREDICT => self.handle_conflict_predict(subreq).await,
+            methods::RESOURCE_RESERVE => self.handle_resource_reserve(subreq).await,
+            methods::MERGE_COORDINATE => self.handle_merge_coordinate(subreq).await,
+            methods::KNOWLEDGE_QUERY_COORDINATION => {
+                self.handle_knowledge_query_coordination(subreq).await
+            }
+            methods::PATTERN_SUGGEST => self.handle_pattern_suggest(subreq).await,
+            methods::GUIDELINE_ENFORCE => self.handle_guideline_enforce(subreq).await,
+            methods::LEARNING_CAPTURE => self.handle_learning_capture(subreq).await,
+            _ => {
+                return Err(Error::InvalidParams {
+                    message: format!("Unknown tool: {}", tool_name),
+                });
+            }
+        };
+
+        let response_result = match result? {
+            Some(response) => response.result.unwrap_or(serde_json::Value::Null),
+            None => serde_json::Value::Null,
+        };
+
+        Ok(Some(JsonRpcResponse::success(
+            request.id,
+            serde_json::json!({
+                "content": [
+                    {
+                        "type": "text",
+                        "text": serde_json::to_string_pretty(&response_result)
+                            .unwrap_or_else(|_| "Tool executed successfully".to_string())
+                    }
+                ]
+            }),
+        )))
     }
 
     /// Handle resources list request

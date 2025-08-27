@@ -158,18 +158,32 @@
                             <code>
 # Local scope (current project)
 <br/>
-claude mcp add vibe-ensemble "vibe-ensemble --mcp-only --transport=stdio" --transport=stdio
+claude mcp add vibe-ensemble -- vibe-ensemble --mcp-only --transport=stdio
 <br/>
 <br/>
 # User scope (all projects)
 <br/>
-claude mcp add vibe-ensemble "vibe-ensemble --mcp-only --transport=stdio" --transport=stdio -s user
+claude mcp add -s user vibe-ensemble -- vibe-ensemble --mcp-only --transport=stdio
 <br/>
 <br/>
 # Project scope (shared with team)
 <br/>
-claude mcp add vibe-ensemble "vibe-ensemble --mcp-only --transport=stdio" --transport=stdio -s project</code>
-                            <button class="copy-btn" onclick="copyToClipboard('claude mcp add vibe-ensemble &quot;vibe-ensemble --mcp-only --transport=stdio&quot; --transport=stdio -s project')">Copy Local</button>
+claude mcp add -s project vibe-ensemble -- vibe-ensemble --mcp-only --transport=stdio
+<br/>
+<br/>
+# HTTP transport (server already running)
+<br/>
+claude mcp add --transport http vibe-ensemble http://localhost:8080/mcp
+<br/>
+<br/>
+# SSE transport (event stream monitoring)
+<br/>
+claude mcp add --transport sse vibe-ensemble http://localhost:8080/mcp/events</code>
+                            <button class="copy-btn" onclick="copyToClipboard('claude mcp add vibe-ensemble -- vibe-ensemble --mcp-only --transport=stdio')">Copy Local</button>
+                            <button class="copy-btn" onclick="copyToClipboard('claude mcp add -s user vibe-ensemble -- vibe-ensemble --mcp-only --transport=stdio')">Copy User</button>
+                            <button class="copy-btn" onclick="copyToClipboard('claude mcp add -s project vibe-ensemble -- vibe-ensemble --mcp-only --transport=stdio')">Copy Project</button>
+                            <button class="copy-btn" onclick="copyToClipboard('claude mcp add --transport http vibe-ensemble http://localhost:8080/mcp')">Copy HTTP</button>
+                            <button class="copy-btn" onclick="copyToClipboard('claude mcp add --transport sse vibe-ensemble http://localhost:8080/mcp/events')">Copy SSE</button>
                         </div>
                     </div>
                 </div>

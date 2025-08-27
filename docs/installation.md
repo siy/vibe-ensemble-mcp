@@ -19,19 +19,17 @@ vibe-ensemble
 
 ```bash
 # Ubuntu/Debian
-curl -fsSL https://get.vibe-ensemble.dev/install.sh | sudo bash
-sudo apt update && sudo apt install vibe-ensemble-mcp
+curl -fsSL https://vibeensemble.dev/install.sh | sudo bash
 
 # CentOS/RHEL/Fedora
-curl -fsSL https://get.vibe-ensemble.dev/install.sh | sudo bash
-sudo yum install vibe-ensemble-mcp  # or dnf for newer systems
+curl -fsSL https://vibeensemble.dev/install.sh | sudo bash
 ```
 
 ### Windows (PowerShell)
 
 ```powershell
 # Install via PowerShell
-iex "& { irm https://get.vibe-ensemble.dev/install.ps1 }"
+iex (irm 'https://vibeensemble.dev/install.ps1')
 
 # Or download MSI installer
 # https://github.com/siy/vibe-ensemble-mcp/releases/latest
@@ -281,15 +279,21 @@ curl http://localhost:8080/api/health
 
 ### Web Interface
 Open your browser and navigate to:
-- **Dashboard**: <http://localhost:8080>
-- **Metrics**: <http://localhost:9090/metrics>
+- **Dashboard**: <http://localhost:8081> _(or your configured `VIBE_ENSEMBLE_WEB__PORT`)_
 - **API Health**: <http://localhost:8080/api/health>
+> Note: Metrics are optional in some deployments.
+- **Metrics**: <http://localhost:9090/metrics>
 
 ### MCP Tools
 Test MCP server integration:
 ```bash
-# Using the MCP client
-echo '{"jsonrpc": "2.0", "id": 1, "method": "vibe/agent/list", "params": {}}' | vibe-ensemble-mcp
+# Using stdio transport
+echo '{"jsonrpc":"2.0","id":1,"method":"vibe/agent/list","params":{}}' | vibe-ensemble --mcp-only --transport=stdio
+
+# Or via HTTP:
+curl -sS -H 'Content-Type: application/json' \
+  -d '{"jsonrpc":"2.0","id":1,"method":"vibe/agent/list","params":{}}' \
+  http://localhost:8080/mcp | jq .
 ```
 
 ## Updating
@@ -379,13 +383,21 @@ Use the Claude Code CLI to add the MCP server. Choose the appropriate scope for 
 
 ```bash
 # Local scope (current project only)
-claude mcp add vibe-ensemble "vibe-ensemble --mcp-only --transport=stdio" --transport=stdio
+claude mcp add vibe-ensemble -- vibe-ensemble --mcp-only --transport=stdio
 
 # User scope (available across all projects)
-claude mcp add vibe-ensemble "vibe-ensemble --mcp-only --transport=stdio" --transport=stdio -s user
+claude mcp add -s user vibe-ensemble -- vibe-ensemble --mcp-only --transport=stdio
 
 # Project scope (shared with team)
-claude mcp add vibe-ensemble "vibe-ensemble --mcp-only --transport=stdio" --transport=stdio -s project
+claude mcp add -s project vibe-ensemble -- vibe-ensemble --mcp-only --transport=stdio
+
+# HTTP transport (server already running on 8080)
+# Connect Claude Code to the HTTP JSON-RPC endpoint:
+claude mcp add --transport http vibe-ensemble http://localhost:8080/mcp
+
+# SSE transport (event stream monitoring)
+# Connect Claude Code to the SSE endpoint for real-time events:
+claude mcp add --transport sse vibe-ensemble http://localhost:8080/mcp/events
 ```
 
 #### Option 2: Manual JSON Configuration
@@ -415,7 +427,7 @@ claude mcp add vibe-ensemble "vibe-ensemble --mcp-only --transport=stdio" --tran
 ## Support
 
 ### Getting Help
-- **Documentation**: <https://vibe-ensemble.dev/docs>
+- **Documentation**: <https://vibeensemble.dev/docs>
 - **GitHub Issues**: <https://github.com/siy/vibe-ensemble-mcp/issues>
 - **Discussions**: <https://github.com/siy/vibe-ensemble-mcp/discussions>
 

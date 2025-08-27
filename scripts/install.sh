@@ -1,6 +1,6 @@
 #!/bin/bash
 # Vibe Ensemble MCP Installation Script
-# Usage: curl -fsSL https://get.vibe-ensemble.dev/install.sh | bash
+# Usage: curl -fsSL https://vibeensemble.dev/install.sh | bash
 
 set -Euo pipefail
 
@@ -251,13 +251,19 @@ show_instructions() {
     echo
     echo "4. Add to Claude Code (choose one):"
     echo "   # Local scope (current project only)"
-    echo '   claude mcp add vibe-ensemble "vibe-ensemble --mcp-only --transport=stdio" --transport=stdio'
+    echo '   claude mcp add vibe-ensemble -- vibe-ensemble --mcp-only --transport=stdio'
     echo
     echo "   # User scope (all projects)"
-    echo '   claude mcp add vibe-ensemble "vibe-ensemble --mcp-only --transport=stdio" --transport=stdio -s user'
+    echo '   claude mcp add -s user vibe-ensemble -- vibe-ensemble --mcp-only --transport=stdio'
     echo
     echo "   # Project scope (shared with team)"
-    echo '   claude mcp add vibe-ensemble "vibe-ensemble --mcp-only --transport=stdio" --transport=stdio -s project'
+    echo '   claude mcp add -s project vibe-ensemble -- vibe-ensemble --mcp-only --transport=stdio'
+    echo
+    echo "   # HTTP transport (server already running on 8080)"
+    echo '   claude mcp add --transport http vibe-ensemble http://localhost:8080/mcp'
+    echo
+    echo "   # SSE transport (event stream monitoring)"
+    echo '   claude mcp add --transport sse vibe-ensemble http://localhost:8080/mcp/events'
     echo
     echo "5. Check the API:"
     echo "   curl http://localhost:8080/api/health"

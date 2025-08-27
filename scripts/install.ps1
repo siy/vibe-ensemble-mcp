@@ -1,5 +1,5 @@
 # Vibe Ensemble MCP Installation Script for Windows PowerShell
-# Usage: iex "& { irm https://get.vibe-ensemble.dev/install.ps1 }"
+# Usage: iex "& { irm https://vibeensemble.dev/install.ps1 }"
 
 param(
     [string]$Version = "latest",
@@ -234,13 +234,19 @@ function Show-PostInstallInstructions {
     Write-Host ""
     Write-Host "4. Add to Claude Code (choose one):"
     Write-Host "   # Local scope (current project only)" -ForegroundColor Green
-    Write-Host "   claude mcp add vibe-ensemble `"vibe-ensemble --mcp-only --transport=stdio`" --transport=stdio" -ForegroundColor Cyan
+    Write-Host "   claude mcp add vibe-ensemble -- vibe-ensemble --mcp-only --transport=stdio" -ForegroundColor Cyan
     Write-Host ""
     Write-Host "   # User scope (all projects)" -ForegroundColor Green
-    Write-Host "   claude mcp add vibe-ensemble `"vibe-ensemble --mcp-only --transport=stdio`" --transport=stdio -s user" -ForegroundColor Cyan
+    Write-Host "   claude mcp add -s user vibe-ensemble -- vibe-ensemble --mcp-only --transport=stdio" -ForegroundColor Cyan
     Write-Host ""
     Write-Host "   # Project scope (shared with team)" -ForegroundColor Green
-    Write-Host "   claude mcp add vibe-ensemble `"vibe-ensemble --mcp-only --transport=stdio`" --transport=stdio -s project" -ForegroundColor Cyan
+    Write-Host "   claude mcp add -s project vibe-ensemble -- vibe-ensemble --mcp-only --transport=stdio" -ForegroundColor Cyan
+    Write-Host ""
+    Write-Host "   # HTTP transport (server already running on 8080)" -ForegroundColor Green
+    Write-Host "   claude mcp add --transport http vibe-ensemble http://localhost:8080/mcp" -ForegroundColor Cyan
+    Write-Host ""
+    Write-Host "   # SSE transport (event stream monitoring)" -ForegroundColor Green
+    Write-Host "   claude mcp add --transport sse vibe-ensemble http://localhost:8080/mcp/events" -ForegroundColor Cyan
     Write-Host ""
     Write-Host "5. Check the API:"
     Write-Host "   Invoke-RestMethod http://localhost:8080/api/health" -ForegroundColor Cyan

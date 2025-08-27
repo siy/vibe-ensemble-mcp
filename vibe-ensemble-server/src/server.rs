@@ -1,15 +1,18 @@
 //! Main server implementation
 
 use crate::{config::Config, McpTransport, OperationMode, Result};
+use axum::response::sse::{Event, KeepAlive};
 use axum::{
     extract::{ws::WebSocket, State, WebSocketUpgrade},
     http::StatusCode,
-    response::{Json, Response},
-    routing::{any, get},
+    response::{Json, Response, Sse},
+    routing::{get, post},
     Router,
 };
+use futures_util::Stream;
 use serde_json::{json, Value};
 use std::sync::Arc;
+use tokio::time::{interval, Duration};
 use tower::ServiceBuilder;
 use tower_http::{cors::CorsLayer, trace::TraceLayer};
 use tracing::{error, info, warn};
@@ -96,8 +99,10 @@ impl Server {
 
         // Initialize web server if enabled
         let web_server = if config.web.enabled
-            && matches!(operation_mode, OperationMode::Full | OperationMode::WebOnly)
-        {
+            && matches!(
+                operation_mode,
+                OperationMode::Full | OperationMode::WebOnly | OperationMode::McpOnly
+            ) {
             let web_config = vibe_ensemble_web::server::WebConfig {
                 enabled: config.web.enabled,
                 host: config.web.host.clone(),
@@ -130,14 +135,33 @@ impl Server {
             .route("/health", get(health_check))
             .route("/status", get(server_status));
 
-        // Add MCP WebSocket endpoint if MCP is enabled and WebSocket transport is supported
+        // Add MCP endpoints if MCP is enabled
         if matches!(
             self.operation_mode,
             OperationMode::Full | OperationMode::McpOnly
-        ) && matches!(self.transport, McpTransport::Websocket | McpTransport::Both)
-        {
-            router = router.route("/mcp", any(mcp_websocket_handler));
-            info!("MCP WebSocket endpoint enabled at /mcp");
+        ) {
+            match self.transport {
+                McpTransport::Websocket => {
+                    router = router.route("/mcp", get(mcp_websocket_handler));
+                    info!("MCP WebSocket endpoint enabled at /mcp (GET)");
+                }
+                McpTransport::Stdio => {
+                    // Stdio transport doesn't need HTTP endpoints - it's handled separately in main.rs
+                }
+                McpTransport::Sse => {
+                    router = router.route("/mcp/events", get(mcp_sse_handler));
+                    info!("MCP SSE endpoint enabled at /mcp/events (GET)");
+                }
+                McpTransport::Both => {
+                    router = router
+                        .route("/mcp", get(mcp_websocket_handler))
+                        .route("/mcp", post(mcp_http_handler))
+                        .route("/mcp/events", get(mcp_sse_handler));
+                    info!("MCP WebSocket endpoint enabled at /mcp (GET)");
+                    info!("MCP HTTP endpoint enabled at /mcp (POST)");
+                    info!("MCP SSE endpoint enabled at /mcp/events (GET)");
+                }
+            }
         }
 
         router
@@ -181,13 +205,54 @@ impl Server {
             })
         });
 
-        // MCP server is available for protocol handling via handle_message
-        if matches!(
+        // Start MCP stdio handler in the background if needed
+        let mcp_stdio_handle = if matches!(
             self.operation_mode,
             OperationMode::Full | OperationMode::McpOnly
-        ) {
+        ) && matches!(self.transport, McpTransport::Stdio)
+        {
+            let mcp_server = self.mcp_server.clone();
+            Some(tokio::spawn(async move {
+                info!("Starting MCP stdio handler");
+                let mut transport = vibe_ensemble_mcp::transport::TransportFactory::stdio();
+
+                loop {
+                    match transport.receive().await {
+                        Ok(message) => {
+                            tracing::debug!("Received MCP message: {}", message);
+
+                            match mcp_server.handle_message(&message).await {
+                                Ok(Some(response)) => {
+                                    tracing::debug!("Sending MCP response: {}", response);
+                                    if let Err(e) = transport.send(&response).await {
+                                        error!("Failed to send MCP response: {}", e);
+                                        break;
+                                    }
+                                }
+                                Ok(None) => {
+                                    tracing::debug!("No MCP response required");
+                                }
+                                Err(e) => {
+                                    error!("Error processing MCP message: {}", e);
+                                }
+                            }
+                        }
+                        Err(e) => {
+                            tracing::debug!("MCP transport error: {}", e);
+                            break;
+                        }
+                    }
+                }
+
+                if let Err(e) = transport.close().await {
+                    warn!("Error closing MCP transport: {}", e);
+                }
+                info!("MCP stdio handler stopped");
+            }))
+        } else {
             info!("MCP server ready for protocol handling");
-        }
+            None
+        };
 
         // Use axum's graceful shutdown for better connection draining
         let shutdown = async {
@@ -224,6 +289,10 @@ impl Server {
         info!("Shutting down server...");
 
         if let Some(handle) = web_handle {
+            handle.abort();
+        }
+
+        if let Some(handle) = mcp_stdio_handle {
             handle.abort();
         }
 
@@ -347,6 +416,54 @@ async fn mcp_websocket_handler(ws: WebSocketUpgrade, State(state): State<AppStat
     ws.on_upgrade(move |socket| handle_mcp_websocket(socket, state))
 }
 
+/// MCP HTTP handler for POST requests (Claude Code JSON-RPC 2.0)
+async fn mcp_http_handler(
+    State(state): State<AppState>,
+    Json(payload): Json<Value>,
+) -> std::result::Result<Json<Value>, StatusCode> {
+    tracing::debug!("Received MCP HTTP request: {}", payload);
+
+    // Convert JSON to string for MCP server processing
+    let message = serde_json::to_string(&payload).map_err(|e| {
+        error!("Failed to serialize JSON payload: {}", e);
+        StatusCode::BAD_REQUEST
+    })?;
+
+    // Process through MCP server
+    match state.mcp_server.handle_message(&message).await {
+        Ok(Some(response)) => {
+            tracing::debug!("Sending MCP HTTP response: {}", response);
+            // Parse response back to JSON
+            match serde_json::from_str::<Value>(&response) {
+                Ok(json_response) => Ok(Json(json_response)),
+                Err(e) => {
+                    error!("Failed to parse MCP response as JSON: {}", e);
+                    Err(StatusCode::INTERNAL_SERVER_ERROR)
+                }
+            }
+        }
+        Ok(None) => {
+            tracing::debug!("No response required for MCP message");
+            // For notifications (no response expected), return 204 No Content
+            Err(StatusCode::NO_CONTENT)
+        }
+        Err(e) => {
+            error!("Error processing MCP message: {}", e);
+            // Return JSON-RPC error response
+            let error_response = json!({
+                "jsonrpc": "2.0",
+                "error": {
+                    "code": -32603,
+                    "message": "Internal error",
+                    "data": e.to_string()
+                },
+                "id": payload.get("id")
+            });
+            Ok(Json(error_response))
+        }
+    }
+}
+
 /// Handle MCP WebSocket connection
 async fn handle_mcp_websocket(mut socket: WebSocket, state: AppState) {
     info!("New MCP WebSocket connection established");
@@ -407,4 +524,44 @@ async fn handle_mcp_websocket(mut socket: WebSocket, state: AppState) {
             }
         }
     }
+}
+
+/// MCP SSE handler for real-time monitoring (read-only)
+/// Note: SSE is unidirectional, so this provides system status updates rather than full MCP protocol
+async fn mcp_sse_handler(
+    State(state): State<AppState>,
+) -> Sse<impl Stream<Item = std::result::Result<Event, axum::BoxError>>> {
+    let stream = async_stream::stream! {
+        let mut interval = interval(Duration::from_secs(10));
+
+        loop {
+            interval.tick().await;
+
+            // Get current system status
+            let agent_count = state.storage.agent_service().list_agents().await.unwrap_or_default().len();
+            let issue_count = state.storage.issue_service().list_issues().await.unwrap_or_default().len();
+
+            let status = json!({
+                "timestamp": chrono::Utc::now().to_rfc3339(),
+                "agents": {
+                    "count": agent_count,
+                },
+                "issues": {
+                    "count": issue_count,
+                },
+                "server": {
+                    "status": "running",
+                    "uptime": "unknown"
+                }
+            });
+
+            let event = Event::default()
+                .json_data(status)
+                .map_err(axum::BoxError::from);
+
+            yield event;
+        }
+    };
+
+    Sse::new(stream).keep_alive(KeepAlive::default())
 }
