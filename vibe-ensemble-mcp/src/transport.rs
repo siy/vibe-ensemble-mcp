@@ -336,6 +336,13 @@ impl Transport for StdioTransport {
 }
 
 /// SSE transport implementation for MCP protocol communication over Server-Sent Events + HTTP POST
+///
+/// This transport enables bidirectional MCP communication using:
+/// - Server-Sent Events (SSE) for server-to-client messaging
+/// - HTTP POST requests for client-to-server messaging
+///
+/// The transport automatically manages session IDs and provides session recovery
+/// capabilities for robust communication in network-unstable environments.
 pub struct SseTransport {
     base_url: String,
     session_id: Option<String>,
@@ -345,6 +352,9 @@ pub struct SseTransport {
 
 impl SseTransport {
     /// Create a new SSE transport
+    /// 
+    /// # Arguments
+    /// * `base_url` - The base URL of the server to connect to (e.g., "http://localhost:8080")
     pub fn new(base_url: &str) -> Self {
         Self {
             base_url: base_url.to_string(),
@@ -354,7 +364,13 @@ impl SseTransport {
         }
     }
 
-    /// Initialize connection by making initial SSE request to get session ID
+    /// Initialize connection by generating a unique session ID for communication
+    /// 
+    /// # Returns
+    /// The generated session ID that will be used for all subsequent communications
+    /// 
+    /// # Errors
+    /// Returns an error if the transport is already closed
     pub async fn connect(&mut self) -> Result<String> {
         if self.is_closed {
             return Err(Error::Transport("SSE transport is closed".to_string()));

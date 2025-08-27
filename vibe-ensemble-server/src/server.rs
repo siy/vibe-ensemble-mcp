@@ -23,7 +23,12 @@ use vibe_ensemble_mcp::server::McpServer;
 use vibe_ensemble_storage::StorageManager;
 use vibe_ensemble_web::WebServer;
 
-/// SSE session information
+/// SSE session information for managing Claude Code connections
+/// 
+/// Each session represents an active SSE connection and maintains:
+/// - A message channel for server-to-client communication
+/// - Activity tracking for automatic cleanup of stale connections
+/// - Initialization state to track session lifecycle
 #[derive(Debug)]
 struct SseSession {
     /// Channel to send messages to SSE client
@@ -259,18 +264,18 @@ impl Server {
                 loop {
                     match transport.receive().await {
                         Ok(message) => {
-                            tracing::debug!("Received MCP message: {}", message);
+                            debug!("Received MCP message: {}", message);
 
                             match mcp_server.handle_message(&message).await {
                                 Ok(Some(response)) => {
-                                    tracing::debug!("Sending MCP response: {}", response);
+                                    debug!("Sending MCP response: {}", response);
                                     if let Err(e) = transport.send(&response).await {
                                         error!("Failed to send MCP response: {}", e);
                                         break;
                                     }
                                 }
                                 Ok(None) => {
-                                    tracing::debug!("No MCP response required");
+                                    debug!("No MCP response required");
                                 }
                                 Err(e) => {
                                     error!("Error processing MCP message: {}", e);
@@ -278,7 +283,7 @@ impl Server {
                             }
                         }
                         Err(e) => {
-                            tracing::debug!("MCP transport error: {}", e);
+                            debug!("MCP transport error: {}", e);
                             break;
                         }
                     }
@@ -484,7 +489,7 @@ async fn mcp_http_handler(
     State(state): State<AppState>,
     Json(payload): Json<Value>,
 ) -> std::result::Result<Json<Value>, StatusCode> {
-    tracing::debug!("Received MCP HTTP request: {}", payload);
+    debug!("Received MCP HTTP request: {}", payload);
 
     // Convert JSON to string for MCP server processing
     let message = serde_json::to_string(&payload).map_err(|e| {
@@ -495,7 +500,7 @@ async fn mcp_http_handler(
     // Process through MCP server
     match state.mcp_server.handle_message(&message).await {
         Ok(Some(response)) => {
-            tracing::debug!("Sending MCP HTTP response: {}", response);
+            debug!("Sending MCP HTTP response: {}", response);
             // Parse response back to JSON
             match serde_json::from_str::<Value>(&response) {
                 Ok(json_response) => Ok(Json(json_response)),
@@ -506,7 +511,7 @@ async fn mcp_http_handler(
             }
         }
         Ok(None) => {
-            tracing::debug!("No response required for MCP message");
+            debug!("No response required for MCP message");
             // For notifications (no response expected), return 204 No Content
             Err(StatusCode::NO_CONTENT)
         }
@@ -536,12 +541,12 @@ async fn handle_mcp_websocket(mut socket: WebSocket, state: AppState) {
         match socket.recv().await {
             Some(Ok(msg)) => {
                 if let Ok(text) = msg.to_text() {
-                    tracing::debug!("Received MCP WebSocket message: {}", text);
+                    debug!("Received MCP WebSocket message: {}", text);
 
                     // Process the message through MCP server
                     match state.mcp_server.handle_message(text).await {
                         Ok(Some(response)) => {
-                            tracing::debug!("Sending MCP WebSocket response: {}", response);
+                            debug!("Sending MCP WebSocket response: {}", response);
                             if let Err(e) = socket
                                 .send(axum::extract::ws::Message::Text(response))
                                 .await
@@ -551,12 +556,12 @@ async fn handle_mcp_websocket(mut socket: WebSocket, state: AppState) {
                             }
                         }
                         Ok(None) => {
-                            tracing::debug!("No response required for MCP message");
+                            debug!("No response required for MCP message");
                         }
                         Err(e) => {
                             error!("Error processing MCP message: {}", e);
                             // Send error response
-                            let error_response = serde_json::json!({
+                            let error_response = json!({
                                 "jsonrpc": "2.0",
                                 "error": {
                                     "code": -32603,
