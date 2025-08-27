@@ -3,6 +3,7 @@
 //! This module provides an MCP client that can connect to MCP servers
 //! using JSON-RPC 2.0 protocol over various transports.
 
+#![allow(deprecated)] // Allow deprecated method constants for backward compatibility
 use crate::{protocol::*, transport::Transport, Error, Result};
 use tracing::{debug, info};
 

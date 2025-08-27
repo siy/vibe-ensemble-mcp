@@ -6,6 +6,8 @@
 //! - vibe/worker/coordinate - Multi-worker coordination
 //! - vibe/project/lock - Resource locking
 
+#![allow(deprecated)] // Allow deprecated method constants for backward compatibility
+
 #[cfg(test)]
 mod tests {
     use crate::protocol::*;

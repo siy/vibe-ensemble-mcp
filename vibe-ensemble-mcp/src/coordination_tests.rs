@@ -5,6 +5,8 @@
 //! - Knowledge-Driven Coordination (Issue #53)
 //! - Integration testing for coordination workflows
 
+#![allow(deprecated)] // Allow deprecated method constants for backward compatibility
+
 #[cfg(test)]
 mod tests {
     use crate::protocol::*;
