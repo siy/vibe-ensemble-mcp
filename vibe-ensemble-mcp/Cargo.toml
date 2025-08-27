@@ -26,6 +26,7 @@ futures-util = { workspace = true }
 async-trait = "0.1"
 chrono = { workspace = true }
 tracing-subscriber = "0.3"
+reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls"] }
 
 [dev-dependencies]
 sqlx = { workspace = true }
