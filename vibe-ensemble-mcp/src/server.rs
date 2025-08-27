@@ -5492,17 +5492,14 @@ impl McpServer {
                 .await
             }
             "knowledge_submit" => {
-                // For now, route to knowledge query since submit functionality isn't implemented yet
-                let submit_params =
-                    serde_json::from_value(params.params).map_err(|e| Error::InvalidParams {
-                        message: format!("Invalid knowledge submit parameters: {}", e),
-                    })?;
-                self.handle_knowledge_query(JsonRpcRequest::new_with_id(
+                Ok(Some(JsonRpcResponse::error(
                     request.id,
-                    "vibe/knowledge/query",
-                    Some(submit_params),
-                ))
-                .await
+                    JsonRpcError {
+                        code: error_codes::METHOD_NOT_FOUND,
+                        message: "knowledge_submit is not implemented yet".to_string(),
+                        data: None,
+                    },
+                )))
             }
             "knowledge_query_coordination" => {
                 let coord_query_params =
