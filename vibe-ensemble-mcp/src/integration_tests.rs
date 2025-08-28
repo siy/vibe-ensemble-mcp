@@ -727,7 +727,7 @@ mod tests {
         let agent_service = Arc::new(AgentService::new(agent_repo.clone()));
         let issue_service = Arc::new(IssueService::new(issue_repo.clone()));
         let message_service = Arc::new(MessageService::new(message_repo.clone()));
-        let knowledge_service = Arc::new(KnowledgeService::new(knowledge_repo.clone()));
+        let knowledge_service = Arc::new(KnowledgeService::new((*knowledge_repo).clone()));
         let coordination_service = Arc::new(CoordinationService::new(
             agent_repo,
             issue_repo,
