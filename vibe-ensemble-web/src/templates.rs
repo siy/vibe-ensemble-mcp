@@ -141,3 +141,9 @@ impl DashboardTemplate {
         !self.recent_activity.is_empty()
     }
 }
+
+impl Default for DashboardTemplate {
+    fn default() -> Self {
+        Self::new(0, 0, None)
+    }
+}
