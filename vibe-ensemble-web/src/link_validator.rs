@@ -550,8 +550,10 @@ impl LinkValidator {
 
     /// Simple Levenshtein distance calculation
     pub fn calculate_string_distance(&self, s1: &str, s2: &str) -> f64 {
-        let len1 = s1.len();
-        let len2 = s2.len();
+        let c1: Vec<char> = s1.chars().collect();
+        let c2: Vec<char> = s2.chars().collect();
+        let len1 = c1.len();
+        let len2 = c2.len();
 
         if len1 == 0 {
             return len2 as f64 / len2.max(1) as f64;
@@ -571,11 +573,7 @@ impl LinkValidator {
 
         for i in 1..=len1 {
             for j in 1..=len2 {
-                let cost = if s1.chars().nth(i - 1) == s2.chars().nth(j - 1) {
-                    0
-                } else {
-                    1
-                };
+                let cost = if c1[i - 1] == c2[j - 1] { 0 } else { 1 };
                 matrix[i][j] = (matrix[i - 1][j] + 1)
                     .min(matrix[i][j - 1] + 1)
                     .min(matrix[i - 1][j - 1] + cost);

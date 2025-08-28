@@ -498,9 +498,11 @@ pub async fn messages_conversations(
     Query(query): Query<MessageQuery>,
 ) -> Result<impl IntoResponse> {
     let limit = query.limit.unwrap_or(100).clamp(1, 500);
+    let offset = query.offset.unwrap_or(0).max(0);
+    let fetch = (limit + offset).clamp(1, 2000); // temp until storage supports pagination
     let messages = storage
         .messages()
-        .list_recent(limit as i64)
+        .list_recent(fetch as i64)
         .await
         .map_err(crate::Error::Storage)?;
 
@@ -575,9 +577,15 @@ pub async fn messages_conversations(
         b_time.cmp(a_time)
     });
 
+    let total = conversation_list.len();
+    let conversations = conversation_list
+        .into_iter()
+        .skip(offset as usize)
+        .take(limit as usize)
+        .collect::<Vec<_>>();
     Ok(Json(json!({
-        "conversations": conversation_list,
-        "total": conversation_list.len(),
+        "conversations": conversations,
+        "total": total,
         "timestamp": chrono::Utc::now().to_rfc3339()
     })))
 }
@@ -752,11 +760,14 @@ pub async fn messages_by_correlation(
         .collect();
 
     if thread_messages.is_empty() {
-        return Ok(Json(json!({
-            "error": "No messages found for correlation ID",
-            "correlation_id": correlation_id,
-            "timestamp": chrono::Utc::now().to_rfc3339()
-        })));
+        return Ok((
+            StatusCode::NOT_FOUND,
+            Json(json!({
+                "error": "No messages found for correlation ID",
+                "correlation_id": correlation_id,
+                "timestamp": chrono::Utc::now().to_rfc3339()
+            })),
+        ));
     }
 
     // Sort by creation time

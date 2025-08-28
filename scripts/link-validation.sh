@@ -124,10 +124,7 @@ run_link_validation() {
     log_info "Running automated link validation..."
     
     # Trigger validation
-    local validation_response
-    validation_response=$(curl -s --max-time $TIMEOUT "$BASE_URL/api/links/validate" 2>/dev/null)
-    
-    if [ $? -eq 0 ]; then
+    if curl -f -s --max-time "$TIMEOUT" "$BASE_URL/api/links/validate" >/dev/null 2>&1; then
         log_success "Link validation triggered successfully"
     else
         log_warning "Could not trigger link validation (API might not be available)"
@@ -135,7 +132,7 @@ run_link_validation() {
     
     # Get health summary
     local health_response
-    health_response=$(curl -s --max-time $TIMEOUT "$BASE_URL/api/links/health" 2>/dev/null)
+    health_response=$(curl -f -s --max-time "$TIMEOUT" -H "Accept: application/json" "$BASE_URL/api/links/health" 2>/dev/null)
     
     if [ $? -eq 0 ] && [ -n "$health_response" ]; then
         # Parse health score (requires jq for JSON parsing)
@@ -157,18 +154,20 @@ run_link_validation() {
                     return 1
                 fi
             else
-                log_warning "Could not parse health score from response"
+                log_error "Could not parse health score from response"
+                return 1
             fi
         else
-            log_warning "jq not available - skipping health score validation"
-            log_info "Health response: $health_response"
+            log_error "jq not available - cannot enforce HEALTH_THRESHOLD (${HEALTH_THRESHOLD}%)"
+            return 1
         fi
     else
         log_warning "Could not get health summary from link validation API"
         return 1
     fi
-    
-    return 0
+
+    # Should never reach here
+    return 1
 }
 
 # Generate validation report

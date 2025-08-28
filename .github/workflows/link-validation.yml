@@ -32,13 +32,15 @@ jobs:
     name: Validate Navigation Links
     runs-on: ubuntu-latest
     timeout-minutes: 10
-    
+
     steps:
     - name: Checkout code
       uses: actions/checkout@v4
 
     - name: Setup Rust toolchain
       uses: dtolnay/rust-toolchain@stable
+      with:
+        components: rustfmt, clippy
 
     - name: Cache Cargo registry
       uses: actions/cache@v4
@@ -53,26 +55,29 @@ jobs:
 
     - name: Build and start server
       run: |
+        set -euo pipefail
+        # Ensure dependencies
+        sudo apt-get update && sudo apt-get install -y bc jq
         # Build only the server binary we need
         cargo build --bin vibe-ensemble --release
-        
+
         # Start server with SQLite (default) in background
         ./target/release/vibe-ensemble --port=8081 &
         SERVER_PID=$!
         echo "SERVER_PID=$SERVER_PID" >> "$GITHUB_ENV"
-        
+
         # Wait for server to be ready (max 30 seconds)
         for i in {1..30}; do
-          if curl -f http://127.0.0.1:8081/api/health >/dev/null 2>&1; then
+          if curl -fsS "http://127.0.0.1:8081/api/health" >/dev/null 2>&1; then
             echo "✅ Server is ready"
             break
           fi
           echo "⏳ Waiting for server... ($i/30)"
           sleep 1
         done
-        
+
         # Verify server is running
-        curl -f http://127.0.0.1:8081/api/health || (echo "❌ Server failed to start" && exit 1)
+        curl -fsS "http://127.0.0.1:8081/api/health" || (echo "❌ Server failed to start" && exit 1)
 
     - name: Run link validation tests
       env:
@@ -109,15 +114,15 @@ jobs:
         echo "🔍 Running automated link validation..."
         
         # Trigger full link validation
-        response=$(curl -s "$BASE_URL"/api/links/validate)
+        response="$(curl -s "$BASE_URL"/api/links/validate)"
         echo "Validation response: $response"
-        
+
         # Check validation results
-        health_response=$(curl -s "$BASE_URL"/api/links/health)
+        health_response="$(curl -s "$BASE_URL"/api/links/health)"
         echo "Health summary: $health_response"
-        
+
         # Extract health score and validate it's above threshold
-        health_score=$(echo "$health_response" | jq -r '.health_score // 0')
+        health_score="$(echo "$health_response" | jq -r '.health_score // 0')"
         echo "📊 Current health score: $health_score%"
         
         # Fail if health score is below 80%
@@ -216,6 +221,6 @@ jobs:
       if: always()
       run: |
         # Kill the background server if it's still running
-        if [ ! -z "$SERVER_PID" ]; then
-          kill $SERVER_PID || true
+        if [ -n "${SERVER_PID:-}" ]; then
+          kill "$SERVER_PID" || true
         fi
