@@ -3,7 +3,7 @@
 //! This binary provides the main entry point for the MCP server, handling
 //! database connections, service initialization, and stdio transport.
 
-use std::env;
+use std::{env, sync::Arc};
 use tracing::{debug, error, info, warn};
 
 /// Helper function to get database scheme type for safe logging
@@ -78,12 +78,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let knowledge_service = storage_manager.knowledge_service();
 
     // Create coordination service manually from repositories
-    let coordination_service =
-        std::sync::Arc::new(vibe_ensemble_storage::services::CoordinationService::new(
-            storage_manager.agents(),
-            storage_manager.issues(),
-            storage_manager.messages(),
-        ));
+    let coordination_service = Arc::new(vibe_ensemble_storage::services::CoordinationService::new(
+        storage_manager.agents(),
+        storage_manager.issues(),
+        storage_manager.messages(),
+    ));
 
     info!("Services initialized");
 

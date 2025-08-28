@@ -35,7 +35,7 @@ use vibe_ensemble_storage::services::{
 };
 
 /// Bundle of all coordination services for production deployments
-#[derive(Clone)]
+#[derive(Debug, Clone)]
 pub struct CoordinationServices {
     pub agent_service: Arc<AgentService>,
     pub issue_service: Arc<IssueService>,
@@ -132,6 +132,23 @@ impl McpServer {
             message_service: None,
             coordination_service: None,
             knowledge_service: None,
+        }
+    }
+
+    /// Create a full coordination server with all services and custom capabilities.
+    /// Combines coordination services with custom server capabilities.
+    pub fn with_coordination_and_capabilities(
+        services: CoordinationServices,
+        capabilities: ServerCapabilities,
+    ) -> Self {
+        Self {
+            clients: Arc::new(RwLock::new(HashMap::new())),
+            capabilities,
+            agent_service: Some(services.agent_service),
+            issue_service: Some(services.issue_service),
+            message_service: Some(services.message_service),
+            coordination_service: Some(services.coordination_service),
+            knowledge_service: Some(services.knowledge_service),
         }
     }
 
