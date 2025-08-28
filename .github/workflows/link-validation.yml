@@ -26,6 +26,8 @@ on:
 env:
   CARGO_TERM_COLOR: always
   RUST_BACKTRACE: 1
+  DATABASE_URL: postgres://vibe_ensemble:test_password@localhost:5432/vibe_ensemble_test
+  SQLX_OFFLINE: true
 
 jobs:
   link-validation:
@@ -77,26 +79,20 @@ jobs:
         sudo apt-get install -y libpq-dev
 
     - name: Setup test database
-      env:
-        DATABASE_URL: postgres://vibe_ensemble:test_password@localhost:5432/vibe_ensemble_test
       run: |
-        # Build vibe-ensemble without sqlx compile-time checks first
-        SQLX_OFFLINE=true cargo build --bin vibe-ensemble --release
+        # Build vibe-ensemble without sqlx compile-time checks
+        cargo build --bin vibe-ensemble --release
         
-        # Run migrations to set up database schema
-        ./target/release/vibe-ensemble --database-url="$DATABASE_URL" migrate
+        # Database migrations will run automatically on server startup
+        # when migrate_on_startup is enabled in the configuration
 
     - name: Build project with database ready
-      env:
-        DATABASE_URL: postgres://vibe_ensemble:test_password@localhost:5432/vibe_ensemble_test
       run: cargo build --workspace --release
 
     - name: Start server in background
-      env:
-        DATABASE_URL: postgres://vibe_ensemble:test_password@localhost:5432/vibe_ensemble_test
       run: |
-        # Start the server in background
-        cargo run --bin vibe-ensemble -- --port=8081 --database-url="$DATABASE_URL" &
+        # Start the server in background - database migrations will run automatically
+        cargo run --bin vibe-ensemble -- --port=8081 &
         SERVER_PID=$!
         echo "SERVER_PID=$SERVER_PID" >> "$GITHUB_ENV"
         
