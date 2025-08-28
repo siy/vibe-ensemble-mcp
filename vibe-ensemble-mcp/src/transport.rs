@@ -260,7 +260,8 @@ pub struct StdioTransport {
     is_closed: bool,
     read_timeout: Duration,
     write_timeout: Duration,
-    #[cfg_attr(not(test), allow(dead_code))] // Used for configuration tracking and potential future features
+    #[cfg_attr(not(test), allow(dead_code))]
+    // Used for configuration tracking and potential future features
     buffer_size: usize,
 }
 
@@ -294,7 +295,6 @@ impl StdioTransport {
     ) -> Self {
         // Ensure minimum buffer size of 4KB for reasonable performance
         let clamped_buffer_size = buffer_size.max(4096);
-        
         Self {
             stdin_reader: BufReader::with_capacity(clamped_buffer_size, tokio::io::stdin()),
             stdout_writer: BufWriter::with_capacity(clamped_buffer_size, tokio::io::stdout()),
