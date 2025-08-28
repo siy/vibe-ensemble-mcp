@@ -166,6 +166,8 @@ impl Config {
             .set_default("server.host", "127.0.0.1")?
             .set_default("server.port", 8080)?
             .set_default("database.url", get_default_database_url())?
+            // Override with DATABASE_URL if present (higher priority than default)
+            .set_override_option("database.url", std::env::var("DATABASE_URL").ok())?
             .set_default("database.migrate_on_startup", true)?
             .set_default("mcp.protocol_version", "1.0.0")?
             .set_default("mcp.heartbeat_interval", 30)?
@@ -201,6 +203,8 @@ impl Config {
             .set_default("server.host", "127.0.0.1")?
             .set_default("server.port", 8080)?
             .set_default("database.url", get_default_database_url())?
+            // Override with DATABASE_URL if present (higher priority than default)
+            .set_override_option("database.url", std::env::var("DATABASE_URL").ok())?
             .set_default("database.migrate_on_startup", true)?
             .set_default("mcp.protocol_version", "1.0.0")?
             .set_default("mcp.heartbeat_interval", 30)?
