@@ -23,28 +23,24 @@ pub async fn index(State(storage): State<Arc<StorageManager>>) -> Result<Html<St
         Some(issues.into_iter().take(5).collect())
     };
 
-    // Get recent message activity
-    let recent_activity = if messages.is_empty() {
-        Vec::new()
-    } else {
-        messages
-            .into_iter()
-            .take(5)
-            .map(|msg| crate::templates::ActivityEntry {
-                timestamp: msg.created_at.format("%H:%M:%S").to_string(),
-                message: format!(
-                    "Message from {} ({:?})",
-                    msg.sender_id
-                        .to_string()
-                        .chars()
-                        .take(8)
-                        .collect::<String>(),
-                    msg.message_type
-                ),
-                activity_type: "message".to_string(),
-            })
-            .collect()
-    };
+    // Build recent message activity (limit 5)
+    let recent_activity = messages
+        .into_iter()
+        .take(5)
+        .map(|msg| crate::templates::ActivityEntry {
+            timestamp: msg.created_at.format("%H:%M").to_string(),
+            message: format!(
+                "Message from {} ({})",
+                msg.sender_id
+                    .to_string()
+                    .chars()
+                    .take(8)
+                    .collect::<String>(),
+                format!("{:?}", msg.message_type).to_lowercase(),
+            ),
+            activity_type: "message".to_string(),
+        })
+        .collect::<Vec<_>>();
 
     // Collect system and storage metrics
     let metrics_collector = MetricsCollector::new(storage.clone());

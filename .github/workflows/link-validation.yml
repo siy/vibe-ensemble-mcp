@@ -76,24 +76,29 @@ jobs:
         sudo apt-get update
         sudo apt-get install -y libpq-dev
 
-    - name: Build project
-      run: cargo build --workspace --release
-
     - name: Setup test database
       env:
         DATABASE_URL: postgres://vibe_ensemble:test_password@localhost:5432/vibe_ensemble_test
       run: |
-        # Run migrations
-        cargo run --bin vibe-ensemble -- --database-url=$DATABASE_URL migrate || true
+        # Build vibe-ensemble without sqlx compile-time checks first
+        SQLX_OFFLINE=true cargo build --bin vibe-ensemble --release
+        
+        # Run migrations to set up database schema
+        ./target/release/vibe-ensemble --database-url="$DATABASE_URL" migrate
+
+    - name: Build project with database ready
+      env:
+        DATABASE_URL: postgres://vibe_ensemble:test_password@localhost:5432/vibe_ensemble_test
+      run: cargo build --workspace --release
 
     - name: Start server in background
       env:
         DATABASE_URL: postgres://vibe_ensemble:test_password@localhost:5432/vibe_ensemble_test
       run: |
         # Start the server in background
-        cargo run --bin vibe-ensemble -- --port=8081 --database-url=$DATABASE_URL &
+        cargo run --bin vibe-ensemble -- --port=8081 --database-url="$DATABASE_URL" &
         SERVER_PID=$!
-        echo "SERVER_PID=$SERVER_PID" >> $GITHUB_ENV
+        echo "SERVER_PID=$SERVER_PID" >> "$GITHUB_ENV"
         
         # Wait for server to be ready (max 60 seconds)
         for i in {1..60}; do
@@ -116,22 +121,22 @@ jobs:
         echo "Testing basic navigation endpoints..."
         
         # Dashboard
-        curl -f $BASE_URL/ || echo "FAIL: Root dashboard"
-        curl -f $BASE_URL/dashboard || echo "FAIL: Dashboard page"
-        curl -f $BASE_URL/link-health || echo "FAIL: Link health page"
+        curl -f "$BASE_URL"/ || echo "FAIL: Root dashboard"
+        curl -f "$BASE_URL"/dashboard || echo "FAIL: Dashboard page"
+        curl -f "$BASE_URL"/link-health || echo "FAIL: Link health page"
         
         # API endpoints
         echo "Testing API endpoints..."
-        curl -f $BASE_URL/api/health || echo "FAIL: Health API"
-        curl -f $BASE_URL/api/stats || echo "FAIL: Stats API"
-        curl -f $BASE_URL/api/agents || echo "FAIL: Agents API"
-        curl -f $BASE_URL/api/issues || echo "FAIL: Issues API"
+        curl -f "$BASE_URL"/api/health || echo "FAIL: Health API"
+        curl -f "$BASE_URL"/api/stats || echo "FAIL: Stats API"
+        curl -f "$BASE_URL"/api/agents || echo "FAIL: Agents API"
+        curl -f "$BASE_URL"/api/issues || echo "FAIL: Issues API"
         
         # Link validation API endpoints
         echo "Testing link validation APIs..."
-        curl -f $BASE_URL/api/links/health || echo "FAIL: Link health API"
-        curl -f $BASE_URL/api/links/status || echo "FAIL: Link status API"
-        curl -f $BASE_URL/api/links/analytics || echo "FAIL: Link analytics API"
+        curl -f "$BASE_URL"/api/links/health || echo "FAIL: Link health API"
+        curl -f "$BASE_URL"/api/links/status || echo "FAIL: Link status API"
+        curl -f "$BASE_URL"/api/links/analytics || echo "FAIL: Link analytics API"
         
         echo "Link validation tests completed"
 
@@ -142,15 +147,15 @@ jobs:
         echo "Running automated link validation..."
         
         # Trigger full link validation
-        response=$(curl -s $BASE_URL/api/links/validate)
+        response=$(curl -s "$BASE_URL"/api/links/validate)
         echo "Validation response: $response"
         
         # Check validation results
-        health_response=$(curl -s $BASE_URL/api/links/health)
+        health_response=$(curl -s "$BASE_URL"/api/links/health)
         echo "Health summary: $health_response"
         
         # Extract health score and validate it's above threshold
-        health_score=$(echo $health_response | jq -r '.health_score // 0')
+        health_score=$(echo "$health_response" | jq -r '.health_score // 0')
         echo "Current health score: $health_score%"
         
         # Fail if health score is below 80%
@@ -170,13 +175,13 @@ jobs:
         echo "Generating link validation report..."
         
         # Get detailed link status
-        curl -s $BASE_URL/api/links/status | jq '.' > link-status-report.json
+        curl -s "$BASE_URL"/api/links/status | jq '.' > "link-status-report.json"
         
         # Get health summary
-        curl -s $BASE_URL/api/links/health | jq '.' > link-health-summary.json
+        curl -s "$BASE_URL"/api/links/health | jq '.' > "link-health-summary.json"
         
         # Get analytics data
-        curl -s $BASE_URL/api/links/analytics | jq '.' > link-analytics-report.json
+        curl -s "$BASE_URL"/api/links/analytics | jq '.' > "link-analytics-report.json"
         
         echo "Link validation reports generated:"
         echo "- link-status-report.json"
@@ -185,11 +190,11 @@ jobs:
         
         # Display summary
         echo "=== LINK VALIDATION SUMMARY ==="
-        echo "Health Score: $(jq -r '.health_score // 0' link-health-summary.json)%"
-        echo "Total Links: $(jq -r '.total_links // 0' link-health-summary.json)"
-        echo "Healthy Links: $(jq -r '.healthy_links // 0' link-health-summary.json)"
-        echo "Broken Links: $(jq -r '.broken_links // 0' link-health-summary.json)"
-        echo "Warning Links: $(jq -r '.warning_links // 0' link-health-summary.json)"
+        echo "Health Score: $(jq -r '.health_score // 0' "link-health-summary.json")%"
+        echo "Total Links: $(jq -r '.total_links // 0' "link-health-summary.json")"
+        echo "Healthy Links: $(jq -r '.healthy_links // 0' "link-health-summary.json")"
+        echo "Broken Links: $(jq -r '.broken_links // 0' "link-health-summary.json")"
+        echo "Warning Links: $(jq -r '.warning_links // 0' "link-health-summary.json")"
 
     - name: Upload link validation reports
       if: always()

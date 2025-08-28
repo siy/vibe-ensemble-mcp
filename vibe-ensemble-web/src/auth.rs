@@ -345,7 +345,16 @@ pub async fn login_handler(
 ) -> impl IntoResponse {
     match auth_service.authenticate(&form.username, &form.password) {
         Ok(Some(session)) => {
-            let cookie = format!("session_id={}; Path=/; HttpOnly; Max-Age=86400", session.id);
+            // SameSite=Lax prevents CSRF on cross-site POSTs; Secure recommended when served over HTTPS
+            let cookie = format!(
+                "session_id={}; Path=/; HttpOnly; SameSite=Lax; Max-Age=86400{}",
+                session.id,
+                if cfg!(feature = "secure_cookies") {
+                    "; Secure"
+                } else {
+                    ""
+                }
+            );
             let mut response = Redirect::to("/dashboard").into_response();
             response
                 .headers_mut()
@@ -392,7 +401,9 @@ pub async fn logout_handler(
     let mut response = Redirect::to("/login").into_response();
     response.headers_mut().insert(
         axum::http::header::SET_COOKIE,
-        "session_id=; Path=/; HttpOnly; Max-Age=0".parse().unwrap(),
+        "session_id=; Path=/; HttpOnly; SameSite=Lax; Max-Age=0"
+            .parse()
+            .unwrap(),
     );
     response
 }

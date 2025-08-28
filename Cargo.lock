@@ -3664,7 +3664,6 @@ dependencies = [
  "thiserror 1.0.69",
  "tokio",
  "tokio-test",
- "tokio-tungstenite 0.21.0",
  "tower 0.4.13",
  "tower-http 0.5.2",
  "tracing",

@@ -225,6 +225,8 @@ impl LinkValidator {
         // Template-based navigation links found in base.html
         let template_links = vec![
             ("/dashboard", LinkType::Navigation),
+            ("/messages", LinkType::Navigation),
+            ("/link-health", LinkType::Navigation),
             ("/agents", LinkType::Navigation),
             ("/issues", LinkType::Navigation),
             ("/knowledge", LinkType::Navigation),

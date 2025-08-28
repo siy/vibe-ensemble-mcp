@@ -73,7 +73,7 @@ impl WebServer {
             while let Ok(message_event) = message_receiver.recv().await {
                 match message_event.event_type {
                     vibe_ensemble_storage::services::message::MessageEventType::Sent => {
-                        let _ = ws_manager.broadcast_message_sent(
+                        if let Err(e) = ws_manager.broadcast_message_sent(
                             message_event.message.id,
                             message_event.message.sender_id,
                             message_event.message.recipient_id,
@@ -81,10 +81,12 @@ impl WebServer {
                             format!("{:?}", message_event.message.metadata.priority),
                             message_event.message.content.clone(),
                             message_event.message.metadata.correlation_id,
-                        );
+                        ) {
+                            tracing::warn!("WS broadcast sent failed: {e}");
+                        }
                     }
                     vibe_ensemble_storage::services::message::MessageEventType::Delivered => {
-                        let _ = ws_manager.broadcast_message_delivered(
+                        if let Err(e) = ws_manager.broadcast_message_delivered(
                             message_event.message.id,
                             message_event.message.sender_id,
                             message_event.message.recipient_id,
@@ -92,16 +94,21 @@ impl WebServer {
                                 .message
                                 .delivered_at
                                 .unwrap_or(chrono::Utc::now()),
-                        );
+                        ) {
+                            tracing::warn!("WS broadcast delivered failed: {e}");
+                        }
                     }
                     vibe_ensemble_storage::services::message::MessageEventType::Failed => {
-                        let _ = ws_manager.broadcast_message_failed(
+                        if let Err(e) = ws_manager.broadcast_message_failed(
                             message_event.message.id,
                             "Message delivery failed".to_string(),
-                        );
+                        ) {
+                            tracing::warn!("WS broadcast failed failed: {e}");
+                        }
                     }
                 }
             }
+            tracing::info!("Message event bridge stopped (subscribe channel closed)");
         });
 
         Ok(())
@@ -173,7 +180,7 @@ impl WebServer {
 
     /// Run the web server
     pub async fn run(self) -> Result<()> {
-        let app = self.build_router_internal();
+        let app = self.build_router();
         let addr = format!("{}:{}", self.config.host, self.config.port);
 
         tracing::info!("Web dashboard starting on http://{}", addr);

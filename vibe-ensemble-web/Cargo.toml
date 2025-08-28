@@ -11,6 +11,9 @@ rust-version.workspace = true
 # Binary removed - functionality consolidated into vibe-ensemble
 # Use: vibe-ensemble --web-only
 
+[features]
+secure_cookies = []  # For enabling Secure cookie attribute in production
+
 [dependencies]
 vibe-ensemble-core = { path = "../vibe-ensemble-core" }
 vibe-ensemble-storage = { path = "../vibe-ensemble-storage" }
@@ -30,7 +33,6 @@ tracing = { workspace = true }
 tracing-subscriber = { workspace = true, features = ["env-filter"] }
 reqwest = { workspace = true }
 futures-util = { workspace = true }
-tokio-tungstenite = { workspace = true }
 rand = { workspace = true }
 
 [dev-dependencies]

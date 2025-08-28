@@ -3,7 +3,7 @@
 # Link Validation Script for Vibe Ensemble
 # This script validates navigation links and can be used in CI/CD pipelines or as a pre-commit hook
 
-set -e
+set -Eeuo pipefail
 
 # Configuration
 BASE_URL=${BASE_URL:-"http://127.0.0.1:8081"}
