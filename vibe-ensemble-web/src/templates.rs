@@ -3,6 +3,7 @@
 use askama::Template;
 use serde::Serialize;
 use vibe_ensemble_core::issue::Issue;
+use crate::handlers::links::LinkHealthSummary;
 
 /// Activity entry for the dashboard
 #[derive(Debug, Serialize)]
@@ -139,5 +140,26 @@ impl DashboardTemplate {
 
     pub fn has_recent_activity(&self) -> bool {
         !self.recent_activity.is_empty()
+    }
+}
+
+/// Link Health template
+#[derive(Template)]
+#[template(path = "link-health.html")]
+pub struct LinkHealthTemplate {
+    pub title: String,
+    pub current_page: String,
+    pub summary: LinkHealthSummary,
+    pub discovered_links: Vec<String>,
+}
+
+impl LinkHealthTemplate {
+    pub fn new(summary: LinkHealthSummary, discovered_links: Vec<String>) -> Self {
+        Self {
+            title: "Link Health - Vibe Ensemble".to_string(),
+            current_page: "link-health".to_string(),
+            summary,
+            discovered_links,
+        }
     }
 }

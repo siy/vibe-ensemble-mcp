@@ -1,6 +1,7 @@
 //! Web handlers for the Vibe Ensemble dashboard
 
 pub mod dashboard;
+pub mod links;
 
 use axum::{
     extract::{Path, Query, State},

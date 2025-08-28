@@ -47,6 +47,7 @@ impl WebServer {
             // Dashboard routes
             .route("/", get(handlers::dashboard))
             .route("/dashboard", get(handlers::dashboard))
+            .route("/link-health", get(handlers::links::link_health_page))
             // API routes
             .route("/api/health", get(handlers::health))
             .route("/api/stats", get(handlers::system_stats))
@@ -59,6 +60,11 @@ impl WebServer {
             .route("/api/issues/:id", get(handlers::issue_get))
             .route("/api/issues/:id", put(handlers::issue_update))
             .route("/api/issues/:id", delete(handlers::issue_delete))
+            // Link validation API routes
+            .route("/api/links/health", get(handlers::links::link_health_summary))
+            .route("/api/links/status", get(handlers::links::link_status_details))
+            .route("/api/links/validate", get(handlers::links::validate_links))
+            .route("/api/links/analytics", get(handlers::links::link_analytics))
             // Add shared state
             .with_state(self.storage.clone())
             // Add middleware layers
