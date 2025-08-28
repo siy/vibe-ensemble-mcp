@@ -41,6 +41,14 @@ async fn create_test_app() -> Router {
     server.build_router()
 }
 
+/// Test helper for making GET requests to reduce boilerplate
+async fn get(app: &Router, uri: &str) -> axum::response::Response {
+    app.clone()
+        .oneshot(Request::builder().uri(uri).body(Body::empty()).unwrap())
+        .await
+        .unwrap()
+}
+
 #[tokio::test]
 async fn test_link_health_dashboard_loads() {
     let app = create_test_app().await;
