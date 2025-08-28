@@ -89,7 +89,8 @@ jobs:
     - name: Start server in background
       run: |
         # Start the server in background - database migrations will run automatically
-        cargo run --bin vibe-ensemble -- --port=8081 &
+        # Explicitly pass DATABASE_URL to ensure proper database connection
+        DATABASE_URL="$DATABASE_URL" cargo run --bin vibe-ensemble -- --port=8081 &
         SERVER_PID=$!
         echo "SERVER_PID=$SERVER_PID" >> "$GITHUB_ENV"
 
