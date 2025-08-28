@@ -28,5 +28,11 @@ thiserror = { workspace = true }
 anyhow = { workspace = true }
 tracing = { workspace = true }
 tracing-subscriber = { workspace = true, features = ["env-filter"] }
+reqwest = { workspace = true }
 futures-util = { workspace = true }
+tokio-tungstenite = { workspace = true }
 rand = { workspace = true }
+
+[dev-dependencies]
+tokio-test = "0.4"
+urlencoding = "2.1"

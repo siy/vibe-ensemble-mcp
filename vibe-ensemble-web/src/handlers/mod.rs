@@ -2,6 +2,7 @@
 
 pub mod dashboard;
 
+use crate::templates::LinkHealthTemplate;
 use askama::Template;
 use axum::{
     extract::{Path, Query, State},
@@ -1033,4 +1034,13 @@ mod tests {
 
         assert!(response.is_ok());
     }
+}
+
+/// Link health dashboard page handler
+pub async fn link_health() -> Result<Html<String>> {
+    let template = LinkHealthTemplate::new();
+    let rendered = template
+        .render()
+        .map_err(|e| crate::Error::Internal(anyhow::anyhow!("{}", e)))?;
+    Ok(Html(rendered))
 }
