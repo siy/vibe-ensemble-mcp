@@ -26,38 +26,19 @@ on:
 env:
   CARGO_TERM_COLOR: always
   RUST_BACKTRACE: 1
-  DATABASE_URL: postgres://vibe_ensemble:test_password@localhost:5432/vibe_ensemble_test
-  SQLX_OFFLINE: true
 
 jobs:
   link-validation:
     name: Validate Navigation Links
     runs-on: ubuntu-latest
-    timeout-minutes: 15
-
-    services:
-      postgres:
-        image: postgres:15
-        env:
-          POSTGRES_USER: vibe_ensemble
-          POSTGRES_PASSWORD: test_password
-          POSTGRES_DB: vibe_ensemble_test
-        options: >-
-          --health-cmd pg_isready
-          --health-interval 10s
-          --health-timeout 5s
-          --health-retries 5
-        ports:
-          - 5432:5432
-
+    timeout-minutes: 10
+    
     steps:
     - name: Checkout code
       uses: actions/checkout@v4
 
     - name: Setup Rust toolchain
       uses: dtolnay/rust-toolchain@stable
-      with:
-        components: rustfmt, clippy
 
     - name: Cache Cargo registry
       uses: actions/cache@v4
@@ -70,95 +51,82 @@ jobs:
         restore-keys: |
           ${{ runner.os }}-cargo-
 
-    - name: Install system dependencies
+    - name: Build and start server
       run: |
-        sudo apt-get update
-        sudo apt-get install -y libpq-dev
-
-    - name: Setup test database
-      run: |
-        # Build vibe-ensemble without sqlx compile-time checks
+        # Build only the server binary we need
         cargo build --bin vibe-ensemble --release
-
-        # Database migrations will run automatically on server startup
-        # when migrate_on_startup is enabled in the configuration
-
-    - name: Build project with database ready
-      run: cargo build --workspace --release
-
-    - name: Start server in background
-      run: |
-        # Start the server in background - database migrations will run automatically
-        # Explicitly pass DATABASE_URL to ensure proper database connection
-        DATABASE_URL="$DATABASE_URL" cargo run --bin vibe-ensemble -- --port=8081 &
+        
+        # Start server with SQLite (default) in background
+        ./target/release/vibe-ensemble --port=8081 &
         SERVER_PID=$!
         echo "SERVER_PID=$SERVER_PID" >> "$GITHUB_ENV"
-
-        # Wait for server to be ready (max 60 seconds)
-        for i in {1..60}; do
+        
+        # Wait for server to be ready (max 30 seconds)
+        for i in {1..30}; do
           if curl -f http://127.0.0.1:8081/api/health >/dev/null 2>&1; then
-            echo "Server is ready"
+            echo "✅ Server is ready"
             break
           fi
-          echo "Waiting for server... ($i/60)"
+          echo "⏳ Waiting for server... ($i/30)"
           sleep 1
         done
-
-        # Final health check
-        curl -f http://127.0.0.1:8081/api/health || (echo "Server failed to start" && exit 1)
+        
+        # Verify server is running
+        curl -f http://127.0.0.1:8081/api/health || (echo "❌ Server failed to start" && exit 1)
 
     - name: Run link validation tests
       env:
         BASE_URL: ${{ github.event.inputs.base_url || 'http://127.0.0.1:8081' }}
       run: |
-        # Test basic navigation endpoints
-        echo "Testing basic navigation endpoints..."
-
-        # Dashboard
-        curl -f "$BASE_URL"/ || echo "FAIL: Root dashboard"
-        curl -f "$BASE_URL"/dashboard || echo "FAIL: Dashboard page"
-        curl -f "$BASE_URL"/link-health || echo "FAIL: Link health page"
-
+        echo "🔍 Testing navigation endpoints..."
+        
+        # Dashboard pages
+        curl -f "$BASE_URL"/ || echo "❌ FAIL: Root dashboard"
+        curl -f "$BASE_URL"/dashboard || echo "❌ FAIL: Dashboard page"
+        curl -f "$BASE_URL"/link-health || echo "❌ FAIL: Link health page"
+        curl -f "$BASE_URL"/messages || echo "❌ FAIL: Messages page"
+        
         # API endpoints
-        echo "Testing API endpoints..."
-        curl -f "$BASE_URL"/api/health || echo "FAIL: Health API"
-        curl -f "$BASE_URL"/api/stats || echo "FAIL: Stats API"
-        curl -f "$BASE_URL"/api/agents || echo "FAIL: Agents API"
-        curl -f "$BASE_URL"/api/issues || echo "FAIL: Issues API"
-
+        echo "🔍 Testing API endpoints..."
+        curl -f "$BASE_URL"/api/health || echo "❌ FAIL: Health API"
+        curl -f "$BASE_URL"/api/stats || echo "❌ FAIL: Stats API"
+        curl -f "$BASE_URL"/api/agents || echo "❌ FAIL: Agents API"
+        curl -f "$BASE_URL"/api/issues || echo "❌ FAIL: Issues API"
+        curl -f "$BASE_URL"/api/messages || echo "❌ FAIL: Messages API"
+        
         # Link validation API endpoints
-        echo "Testing link validation APIs..."
-        curl -f "$BASE_URL"/api/links/health || echo "FAIL: Link health API"
-        curl -f "$BASE_URL"/api/links/status || echo "FAIL: Link status API"
-        curl -f "$BASE_URL"/api/links/analytics || echo "FAIL: Link analytics API"
-
-        echo "Link validation tests completed"
+        echo "🔍 Testing link validation APIs..."
+        curl -f "$BASE_URL"/api/links/health || echo "❌ FAIL: Link health API"
+        curl -f "$BASE_URL"/api/links/status || echo "❌ FAIL: Link status API"
+        curl -f "$BASE_URL"/api/links/analytics || echo "❌ FAIL: Link analytics API"
+        
+        echo "✅ Navigation tests completed"
 
     - name: Run automated link validation
       env:
         BASE_URL: ${{ github.event.inputs.base_url || 'http://127.0.0.1:8081' }}
       run: |
-        echo "Running automated link validation..."
-
+        echo "🔍 Running automated link validation..."
+        
         # Trigger full link validation
         response=$(curl -s "$BASE_URL"/api/links/validate)
         echo "Validation response: $response"
-
+        
         # Check validation results
         health_response=$(curl -s "$BASE_URL"/api/links/health)
         echo "Health summary: $health_response"
-
+        
         # Extract health score and validate it's above threshold
         health_score=$(echo "$health_response" | jq -r '.health_score // 0')
-        echo "Current health score: $health_score%"
-
+        echo "📊 Current health score: $health_score%"
+        
         # Fail if health score is below 80%
         if (( $(echo "$health_score < 80" | bc -l) )); then
-          echo "ERROR: Link health score ($health_score%) is below threshold (80%)"
-          echo "Broken links detected - check link validation report"
+          echo "❌ ERROR: Link health score ($health_score%) is below threshold (80%)"
+          echo "🔧 Broken links detected - check link validation report"
           exit 1
         else
-          echo "SUCCESS: Link health score ($health_score%) meets threshold"
+          echo "✅ SUCCESS: Link health score ($health_score%) meets threshold"
         fi
 
     - name: Generate link validation report
@@ -166,24 +134,15 @@ jobs:
       env:
         BASE_URL: ${{ github.event.inputs.base_url || 'http://127.0.0.1:8081' }}
       run: |
-        echo "Generating link validation report..."
-
-        # Get detailed link status
-        curl -s "$BASE_URL"/api/links/status | jq '.' > "link-status-report.json"
-
-        # Get health summary
-        curl -s "$BASE_URL"/api/links/health | jq '.' > "link-health-summary.json"
-
-        # Get analytics data
-        curl -s "$BASE_URL"/api/links/analytics | jq '.' > "link-analytics-report.json"
-
-        echo "Link validation reports generated:"
-        echo "- link-status-report.json"
-        echo "- link-health-summary.json"
-        echo "- link-analytics-report.json"
-
+        echo "📋 Generating link validation report..."
+        
+        # Get detailed reports
+        curl -s "$BASE_URL"/api/links/status | jq '.' > "link-status-report.json" || echo "{}" > "link-status-report.json"
+        curl -s "$BASE_URL"/api/links/health | jq '.' > "link-health-summary.json" || echo "{}" > "link-health-summary.json"
+        curl -s "$BASE_URL"/api/links/analytics | jq '.' > "link-analytics-report.json" || echo "{}" > "link-analytics-report.json"
+        
         # Display summary
-        echo "=== LINK VALIDATION SUMMARY ==="
+        echo "=== 📊 LINK VALIDATION SUMMARY ==="
         echo "Health Score: $(jq -r '.health_score // 0' "link-health-summary.json")%"
         echo "Total Links: $(jq -r '.total_links // 0' "link-health-summary.json")"
         echo "Healthy Links: $(jq -r '.healthy_links // 0' "link-health-summary.json")"
@@ -207,7 +166,7 @@ jobs:
       with:
         script: |
           const fs = require('fs');
-
+          
           // Read health summary
           let healthSummary = {};
           try {
@@ -215,45 +174,37 @@ jobs:
           } catch (e) {
             console.log('Could not read health summary');
           }
-
-          // Read link status
-          let linkStatus = {};
-          try {
-            linkStatus = JSON.parse(fs.readFileSync('link-status-report.json', 'utf8'));
-          } catch (e) {
-            console.log('Could not read link status');
-          }
-
+          
           const healthScore = healthSummary.health_score || 0;
           const totalLinks = healthSummary.total_links || 0;
           const brokenLinks = healthSummary.broken_links || 0;
           const healthyLinks = healthSummary.healthy_links || 0;
           const warningLinks = healthSummary.warning_links || 0;
-
-          const status = healthScore >= 95 ? '🟢' :
+          
+          const status = healthScore >= 95 ? '🟢' : 
                         healthScore >= 80 ? '🟡' : '🔴';
-
+          
           const comment = `## Link Validation Results ${status}
-
+          
           **Health Score: ${healthScore.toFixed(1)}%**
-
+          
           | Metric | Count |
           |--------|-------|
           | Total Links | ${totalLinks} |
           | 🟢 Healthy | ${healthyLinks} |
           | 🟡 Warnings | ${warningLinks} |
           | 🔴 Broken | ${brokenLinks} |
-
-          ${brokenLinks > 0 ?
-            '⚠️ **Action Required**: Some links are broken and need attention.' :
+          
+          ${brokenLinks > 0 ? 
+            '⚠️ **Action Required**: Some links are broken and need attention.' : 
             '✅ All navigation links are healthy!'}
-
+          
           <details>
           <summary>View detailed results</summary>
-
+          
           Check the [link validation reports](https://github.com/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}) for full details.
           </details>`;
-
+          
           github.rest.issues.createComment({
             issue_number: context.issue.number,
             owner: context.repo.owner,
