@@ -793,7 +793,7 @@ pub async fn messages_by_correlation(
             "first_message_at": sorted_messages.first().map(|m| m.created_at),
             "last_message_at": sorted_messages.last().map(|m| m.created_at),
             "timestamp": chrono::Utc::now().to_rfc3339()
-        }))
+        })),
     ))
 }
 
