@@ -17,7 +17,6 @@ use serde::{Deserialize, Serialize};
 use std::{
     collections::HashMap,
     sync::{Arc, RwLock},
-    time::Duration,
 };
 use uuid::Uuid;
 
@@ -129,6 +128,12 @@ pub struct AuthService {
     pub session_store: SessionStore,
     // In a real system, this would be a proper user store/database
     pub users: Arc<RwLock<HashMap<String, UserCredentials>>>,
+}
+
+impl Default for AuthService {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl AuthService {

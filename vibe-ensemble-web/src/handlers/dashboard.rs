@@ -11,6 +11,8 @@ pub async fn index(State(storage): State<Arc<StorageManager>>) -> Result<Html<St
     // Get basic counts from storage
     let agents = storage.agents().list().await.unwrap_or_default();
     let issues = storage.issues().list().await.unwrap_or_default();
+    let messages = storage.messages().list_recent(50).await.unwrap_or_default();
+
     let active_agents = agents.len();
     let open_issues = issues.len();
 
@@ -21,12 +23,36 @@ pub async fn index(State(storage): State<Arc<StorageManager>>) -> Result<Html<St
         Some(issues.into_iter().take(5).collect())
     };
 
+    // Get recent message activity
+    let recent_activity = if messages.is_empty() {
+        Vec::new()
+    } else {
+        messages
+            .into_iter()
+            .take(5)
+            .map(|msg| crate::templates::ActivityEntry {
+                timestamp: msg.created_at.format("%H:%M:%S").to_string(),
+                message: format!(
+                    "Message from {} ({:?})",
+                    msg.sender_id
+                        .to_string()
+                        .chars()
+                        .take(8)
+                        .collect::<String>(),
+                    msg.message_type
+                ),
+                activity_type: "message".to_string(),
+            })
+            .collect()
+    };
+
     // Collect system and storage metrics
     let metrics_collector = MetricsCollector::new(storage.clone());
     let system_metrics = metrics_collector.collect_system_metrics().await;
     let storage_metrics = metrics_collector.collect_storage_metrics().await;
 
     let template = DashboardTemplate::new(active_agents, open_issues, recent_issues)
+        .with_recent_activity(recent_activity)
         .with_system_metrics(system_metrics)
         .with_storage_metrics(storage_metrics);
 
