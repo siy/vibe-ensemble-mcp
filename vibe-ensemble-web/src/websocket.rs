@@ -244,18 +244,27 @@ async fn handle_websocket(socket: WebSocket, ws_manager: Arc<WebSocketManager>, 
 
     // Spawn task to forward broadcast messages to this client
     let client_id_clone = client_id;
+    let client_id_copy = client_id;
     let forward_task = tokio::spawn(async move {
-        while let Ok(message) = message_receiver.recv().await {
-            let json_message = match serde_json::to_string(&message) {
-                Ok(json) => json,
-                Err(e) => {
-                    tracing::error!("Failed to serialize WebSocket message: {}", e);
+        loop {
+            match message_receiver.recv().await {
+                Ok(message) => {
+                    let json_message = match serde_json::to_string(&message) {
+                        Ok(json) => json,
+                        Err(e) => {
+                            tracing::error!("Failed to serialize WebSocket message: {}", e);
+                            continue;
+                        }
+                    };
+                    if ws_sender.send(Message::Text(json_message)).await.is_err() {
+                        break;
+                    }
+                }
+                Err(tokio::sync::broadcast::error::RecvError::Lagged(n)) => {
+                    tracing::warn!("WebSocket client {} lagged by {} messages; skipping.", client_id_copy, n);
                     continue;
                 }
-            };
-
-            if ws_sender.send(Message::Text(json_message)).await.is_err() {
-                break;
+                Err(tokio::sync::broadcast::error::RecvError::Closed) => break,
             }
         }
     });
