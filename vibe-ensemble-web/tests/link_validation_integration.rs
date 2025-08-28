@@ -42,6 +42,7 @@ async fn create_test_app() -> Router {
 }
 
 /// Test helper for making GET requests to reduce boilerplate
+#[allow(dead_code)]
 async fn get(app: &Router, uri: &str) -> axum::response::Response {
     app.clone()
         .oneshot(Request::builder().uri(uri).body(Body::empty()).unwrap())
