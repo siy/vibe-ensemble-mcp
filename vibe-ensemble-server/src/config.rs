@@ -112,9 +112,19 @@ impl Default for Config {
     }
 }
 
-/// Get platform-appropriate default database URL for SQLx (simple absolute path)
-fn get_default_database_path() -> String {
-    // Windows: use roaming AppData (%APPDATA%) to align with docs; others: local data dir.
+/// Get database URL with environment variable support and platform-appropriate defaults
+fn get_default_database_url() -> String {
+    // First check for standard DATABASE_URL environment variable
+    if let Ok(database_url) = std::env::var("DATABASE_URL") {
+        return database_url;
+    }
+
+    // Then check VIBE_ENSEMBLE prefixed variable
+    if let Ok(database_url) = std::env::var("VIBE_ENSEMBLE_DATABASE_URL") {
+        return database_url;
+    }
+
+    // Fall back to platform-appropriate default SQLite path
     #[cfg(target_os = "windows")]
     let base_dir = dirs::data_dir();
     #[cfg(not(target_os = "windows"))]
@@ -155,7 +165,7 @@ impl Config {
             .add_source(config::Environment::with_prefix("VIBE_ENSEMBLE"))
             .set_default("server.host", "127.0.0.1")?
             .set_default("server.port", 8080)?
-            .set_default("database.url", get_default_database_path())?
+            .set_default("database.url", get_default_database_url())?
             .set_default("database.migrate_on_startup", true)?
             .set_default("mcp.protocol_version", "1.0.0")?
             .set_default("mcp.heartbeat_interval", 30)?
@@ -190,7 +200,7 @@ impl Config {
             .add_source(config::Environment::with_prefix("VIBE_ENSEMBLE"))
             .set_default("server.host", "127.0.0.1")?
             .set_default("server.port", 8080)?
-            .set_default("database.url", get_default_database_path())?
+            .set_default("database.url", get_default_database_url())?
             .set_default("database.migrate_on_startup", true)?
             .set_default("mcp.protocol_version", "1.0.0")?
             .set_default("mcp.heartbeat_interval", 30)?
