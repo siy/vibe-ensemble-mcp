@@ -5,8 +5,11 @@
 
 use crate::{Error, Result};
 use futures_util::{SinkExt, StreamExt};
-use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader, Stdin, Stdout};
+use serde_json::Value;
+use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader, BufWriter, Stdin, Stdout};
+use tokio::signal;
 use tokio::sync::mpsc;
+use tokio::time::{timeout, Duration};
 use tokio_tungstenite::tungstenite::protocol::Message;
 use tokio_tungstenite::{accept_async, connect_async, WebSocketStream};
 use tracing::{debug, error, info, warn};
@@ -115,9 +118,9 @@ where
                                     return Ok(text);
                                 }
                                 Err(e) => {
-                                    warn!("Received binary message that couldn't be converted to UTF-8: {}", e);
+                                    warn!("Received binary message that couldn't be converted to Unicode: {}", e);
                                     return Err(Error::Transport(
-                                        "Received non-UTF-8 binary message".to_string(),
+                                        "Received non-Unicode binary message".to_string(),
                                     ));
                                 }
                             }
@@ -243,20 +246,145 @@ impl Transport for InMemoryTransport {
 }
 
 /// Stdio transport implementation for MCP protocol communication over stdin/stdout
+///
+/// This implementation is optimized for Claude Code compatibility and includes:
+/// - JSON-RPC 2.0 message validation
+/// - Newline-delimited message framing
+/// - Unicode string handling (all Rust strings are UTF-8)
+/// - Signal handling for graceful shutdown
+/// - Performance-optimized buffering
+/// - Robust error handling and recovery
 pub struct StdioTransport {
     stdin_reader: BufReader<Stdin>,
-    stdout: Stdout,
+    stdout_writer: BufWriter<Stdout>,
     is_closed: bool,
+    read_timeout: Duration,
+    write_timeout: Duration,
+    #[cfg_attr(not(test), allow(dead_code))]
+    // Used for configuration tracking and potential future features
+    buffer_size: usize,
 }
 
 impl StdioTransport {
-    /// Create a new stdio transport
+    /// Default read timeout for stdio operations (30 seconds)
+    pub const DEFAULT_READ_TIMEOUT: Duration = Duration::from_secs(30);
+
+    /// Default write timeout for stdio operations (10 seconds)
+    pub const DEFAULT_WRITE_TIMEOUT: Duration = Duration::from_secs(10);
+
+    /// Default buffer size for stdio operations (64KB)
+    pub const DEFAULT_BUFFER_SIZE: usize = 64 * 1024;
+
+    /// Create a new stdio transport with default settings
     pub fn new() -> Self {
         Self {
-            stdin_reader: BufReader::new(tokio::io::stdin()),
-            stdout: tokio::io::stdout(),
+            stdin_reader: BufReader::with_capacity(Self::DEFAULT_BUFFER_SIZE, tokio::io::stdin()),
+            stdout_writer: BufWriter::with_capacity(Self::DEFAULT_BUFFER_SIZE, tokio::io::stdout()),
             is_closed: false,
+            read_timeout: Self::DEFAULT_READ_TIMEOUT,
+            write_timeout: Self::DEFAULT_WRITE_TIMEOUT,
+            buffer_size: Self::DEFAULT_BUFFER_SIZE,
         }
+    }
+
+    /// Create a new stdio transport with custom settings
+    pub fn with_config(
+        read_timeout: Duration,
+        write_timeout: Duration,
+        buffer_size: usize,
+    ) -> Self {
+        // Ensure minimum buffer size of 4KB for reasonable performance
+        let clamped_buffer_size = buffer_size.max(4096);
+        Self {
+            stdin_reader: BufReader::with_capacity(clamped_buffer_size, tokio::io::stdin()),
+            stdout_writer: BufWriter::with_capacity(clamped_buffer_size, tokio::io::stdout()),
+            is_closed: false,
+            read_timeout,
+            write_timeout,
+            buffer_size: clamped_buffer_size,
+        }
+    }
+
+    /// Validate that a message is proper JSON-RPC and doesn't contain embedded newlines
+    /// Strict per JSON-RPC 2.0: root must be Object or Array; every object must have "jsonrpc":"2.0".
+    #[doc(hidden)]
+    pub fn validate_message(message: &str) -> Result<()> {
+        // Check for embedded newlines (MCP requirement)
+        if message.contains('\n') || message.contains('\r') {
+            return Err(Error::Transport(
+                "Message contains embedded newlines, which violates MCP stdio transport requirements".to_string()
+            ));
+        }
+
+        // Validate JSON structure
+        let parsed: Value = serde_json::from_str(message)
+            .map_err(|e| Error::Transport(format!("Invalid JSON in message: {}", e)))?;
+
+        // Strict JSON-RPC 2.0 validation
+        fn ensure_v2(obj: &serde_json::Map<String, Value>) -> Result<()> {
+            match obj.get("jsonrpc").and_then(|v| v.as_str()) {
+                Some("2.0") => Ok(()),
+                _ => Err(Error::Transport(
+                    "Message must use JSON-RPC 2.0 protocol".to_string(),
+                )),
+            }
+        }
+
+        match &parsed {
+            Value::Object(obj) => ensure_v2(obj)?,
+            Value::Array(items) => {
+                if items.is_empty() {
+                    return Err(Error::Transport("Batch must not be empty".to_string()));
+                }
+                for item in items {
+                    if let Value::Object(obj) = item {
+                        ensure_v2(obj)?
+                    } else {
+                        return Err(Error::Transport(
+                            "Batch items must be JSON objects".to_string(),
+                        ));
+                    }
+                }
+            }
+            _ => {
+                return Err(Error::Transport(
+                    "JSON-RPC message must be an object or non-empty array".to_string(),
+                ));
+            }
+        }
+
+        debug!("Message validation passed: JSON-RPC 2.0, no embedded newlines, valid Unicode");
+        Ok(())
+    }
+
+    /// Wait until a shutdown signal is received (SIGINT/SIGTERM)
+    async fn check_shutdown_signal() {
+        tokio::select! {
+            _ = signal::ctrl_c() => {
+                info!("Received SIGINT (Ctrl+C), initiating graceful shutdown");
+            }
+            _ = Self::wait_for_sigterm() => {
+                info!("Received SIGTERM, initiating graceful shutdown");
+            }
+        }
+    }
+
+    /// Wait for SIGTERM signal (Unix-like systems)
+    #[cfg(any(unix, test))]
+    #[doc(hidden)]
+    pub async fn wait_for_sigterm() {
+        use tokio::signal::unix::{signal, SignalKind};
+        if let Ok(mut sigterm) = signal(SignalKind::terminate()) {
+            sigterm.recv().await;
+        }
+    }
+
+    /// Wait for SIGTERM signal (Windows - no-op as SIGTERM doesn't exist)
+    #[cfg(all(not(unix), not(test)))]
+    #[doc(hidden)]
+    pub async fn wait_for_sigterm() {
+        // On Windows, we only handle Ctrl+C
+        std::future::pending::<()>().await;
     }
 }
 
@@ -273,26 +401,47 @@ impl Transport for StdioTransport {
             return Err(Error::Transport("Stdio transport is closed".to_string()));
         }
 
-        // Write message followed by newline
-        self.stdout
-            .write_all(message.as_bytes())
-            .await
-            .map_err(|e| {
-                error!("Failed to write to stdout: {}", e);
-                Error::Transport(format!("Failed to write to stdout: {}", e))
+        // Validate message before sending (Claude Code compatibility)
+        Self::validate_message(message)?;
+
+        // Create write operation with timeout
+        let write_operation = async {
+            // Write message as UTF-8 bytes
+            self.stdout_writer
+                .write_all(message.as_bytes())
+                .await
+                .map_err(|e| {
+                    error!("Failed to write message to stdout: {}", e);
+                    Error::Transport(format!("Failed to write to stdout: {}", e))
+                })?;
+
+            // Add newline delimiter (MCP requirement)
+            self.stdout_writer.write_all(b"\n").await.map_err(|e| {
+                error!("Failed to write newline delimiter to stdout: {}", e);
+                Error::Transport(format!("Failed to write newline to stdout: {}", e))
             })?;
 
-        self.stdout.write_all(b"\n").await.map_err(|e| {
-            error!("Failed to write newline to stdout: {}", e);
-            Error::Transport(format!("Failed to write newline to stdout: {}", e))
-        })?;
+            // Ensure data is written to the underlying stream
+            self.stdout_writer.flush().await.map_err(|e| {
+                error!("Failed to flush stdout buffer: {}", e);
+                Error::Transport(format!("Failed to flush stdout: {}", e))
+            })?;
 
-        self.stdout.flush().await.map_err(|e| {
-            error!("Failed to flush stdout: {}", e);
-            Error::Transport(format!("Failed to flush stdout: {}", e))
-        })?;
+            Ok::<(), Error>(())
+        };
 
-        debug!("Sent message via stdio: {}", message);
+        // Apply write timeout
+        timeout(self.write_timeout, write_operation)
+            .await
+            .map_err(|_| {
+                error!("Write operation timed out after {:?}", self.write_timeout);
+                Error::Transport(format!("Write timeout after {:?}", self.write_timeout))
+            })??;
+
+        debug!(
+            "Successfully sent message via stdio: {} bytes",
+            message.len()
+        );
         Ok(())
     }
 
@@ -301,36 +450,104 @@ impl Transport for StdioTransport {
             return Err(Error::Transport("Stdio transport is closed".to_string()));
         }
 
-        let mut line = String::new();
-        match self.stdin_reader.read_line(&mut line).await {
-            Ok(0) => {
-                debug!("Stdin reached EOF");
-                Err(Error::Connection("Stdin reached EOF".to_string()))
-            }
-            Ok(_) => {
-                // Remove trailing newline
-                if line.ends_with('\n') {
-                    line.pop();
-                    if line.ends_with('\r') {
-                        line.pop();
+        let read_timeout = self.read_timeout;
+
+        // Create read operation with signal handling
+        let mut line = String::new(); // Reuse buffer across iterations for better performance
+        let read_operation = async move {
+            loop {
+                line.clear(); // Clear but keep allocated capacity
+
+                tokio::select! {
+                    result = self.stdin_reader.read_line(&mut line) => {
+                        match result {
+                            Ok(0) => {
+                                debug!("Stdin reached EOF - client disconnected");
+                                self.is_closed = true;
+                                return Err(Error::Connection("Stdin reached EOF".to_string()));
+                            }
+                            Ok(bytes_read) => {
+                                debug!("Read {} bytes from stdin", bytes_read);
+
+                                // Remove newline delimiter (MCP requirement)
+                                if line.ends_with('\n') {
+                                    line.pop();
+                                    if line.ends_with('\r') {
+                                        line.pop(); // Handle Windows CRLF
+                                    }
+                                }
+
+                                // Skip empty lines (keep-alive or malformed)
+                                if line.trim().is_empty() {
+                                    debug!("Received empty line, continuing to read");
+                                    continue;
+                                }
+
+                                // Validate received message
+                                if let Err(e) = Self::validate_message(&line) {
+                                    warn!("Received invalid message: {}, continuing to read", e);
+                                    // Don't fail hard on invalid messages, just log and continue
+                                    // This provides better resilience against malformed input
+                                    continue;
+                                }
+
+                                debug!("Successfully received valid message: {} bytes", line.len());
+                                return Ok(line);
+                            }
+                            Err(e) => {
+                                error!("Failed to read from stdin: {}", e);
+
+                                // Check if it's a recoverable error
+                                match e.kind() {
+                                    std::io::ErrorKind::Interrupted => {
+                                        debug!("Read interrupted, retrying");
+                                        continue;
+                                    }
+                                    std::io::ErrorKind::UnexpectedEof => {
+                                        info!("Unexpected EOF on stdin");
+                                        self.is_closed = true;
+                                        return Err(Error::Connection("Unexpected EOF".to_string()));
+                                    }
+                                    _ => {
+                                        return Err(Error::Transport(format!("Failed to read from stdin: {}", e)));
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    _ = Self::check_shutdown_signal() => {
+                        info!("Graceful shutdown initiated via signal");
+                        self.is_closed = true;
+                        return Err(Error::Connection("Shutdown signal received".to_string()));
                     }
                 }
-                debug!("Received message via stdio: {}", line);
-                Ok(line)
             }
-            Err(e) => {
-                error!("Failed to read from stdin: {}", e);
-                Err(Error::Transport(format!(
-                    "Failed to read from stdin: {}",
-                    e
-                )))
-            }
-        }
+        };
+
+        // Apply read timeout
+        timeout(read_timeout, read_operation).await.map_err(|_| {
+            debug!("Read operation timed out after {:?}", read_timeout);
+            Error::Transport(format!("Read timeout after {:?}", read_timeout))
+        })?
     }
 
     async fn close(&mut self) -> Result<()> {
-        self.is_closed = true;
-        debug!("Stdio transport closed");
+        if !self.is_closed {
+            info!("Closing stdio transport - flushing buffers");
+
+            // Ensure all buffered data is written before closing
+            if let Err(e) = self.stdout_writer.flush().await {
+                warn!("Error flushing stdout buffer during close: {}", e);
+            }
+
+            // Shutdown stdout to signal end of communication
+            if let Err(e) = self.stdout_writer.shutdown().await {
+                warn!("Error shutting down stdout during close: {}", e);
+            }
+
+            self.is_closed = true;
+            info!("Stdio transport closed gracefully");
+        }
         Ok(())
     }
 }
@@ -503,9 +720,22 @@ impl TransportFactory {
         Box::new(SseTransport::new(base_url))
     }
 
-    /// Create a stdio transport
+    /// Create a stdio transport with default settings
     pub fn stdio() -> Box<dyn Transport> {
         Box::new(StdioTransport::new())
+    }
+
+    /// Create a stdio transport with custom configuration for performance tuning
+    pub fn stdio_with_config(
+        read_timeout: Duration,
+        write_timeout: Duration,
+        buffer_size: usize,
+    ) -> Box<dyn Transport> {
+        Box::new(StdioTransport::with_config(
+            read_timeout,
+            write_timeout,
+            buffer_size,
+        ))
     }
 
     /// Create an in-memory transport pair for testing
@@ -545,5 +775,170 @@ mod tests {
         transport1.send("Factory test").await.unwrap();
         let received = transport2.receive().await.unwrap();
         assert_eq!(received, "Factory test");
+    }
+
+    #[tokio::test]
+    async fn test_stdio_transport_message_validation() {
+        // Test message validation function directly
+
+        // Valid JSON-RPC 2.0 message
+        let valid_message = r#"{"jsonrpc":"2.0","id":1,"method":"test","params":{}}"#;
+        assert!(StdioTransport::validate_message(valid_message).is_ok());
+
+        // Invalid JSON
+        let invalid_json = "not json";
+        assert!(StdioTransport::validate_message(invalid_json).is_err());
+
+        // Message with embedded newline
+        let newline_message = "{\"jsonrpc\":\"2.0\",\n\"id\":1}";
+        assert!(StdioTransport::validate_message(newline_message).is_err());
+
+        // Message with carriage return
+        let cr_message = "{\"jsonrpc\":\"2.0\",\r\"id\":1}";
+        assert!(StdioTransport::validate_message(cr_message).is_err());
+
+        // Wrong JSON-RPC version
+        let wrong_version = r#"{"jsonrpc":"1.0","id":1,"method":"test"}"#;
+        assert!(StdioTransport::validate_message(wrong_version).is_err());
+
+        // Message without explicit JSON-RPC version (should fail with strict validation)
+        let no_version = r#"{"id":1,"method":"test","params":{}}"#;
+        assert!(StdioTransport::validate_message(no_version).is_err());
+
+        // Valid batch request
+        let valid_batch = r#"[{"jsonrpc":"2.0","id":1,"method":"test1"},{"jsonrpc":"2.0","id":2,"method":"test2"}]"#;
+        assert!(StdioTransport::validate_message(valid_batch).is_ok());
+
+        // Empty batch (should fail)
+        let empty_batch = "[]";
+        assert!(StdioTransport::validate_message(empty_batch).is_err());
+
+        // Batch with invalid item (should fail)
+        let invalid_batch = r#"[{"jsonrpc":"2.0","id":1},"not an object"]"#;
+        assert!(StdioTransport::validate_message(invalid_batch).is_err());
+
+        // Non-object/array root (should fail)
+        let primitive_root = "\"just a string\"";
+        assert!(StdioTransport::validate_message(primitive_root).is_err());
+    }
+
+    #[tokio::test]
+    async fn test_stdio_transport_custom_config() {
+        use tokio::time::Duration;
+
+        let custom_transport = StdioTransport::with_config(
+            Duration::from_secs(60), // 60s read timeout
+            Duration::from_secs(20), // 20s write timeout
+            128 * 1024,              // 128KB buffer
+        );
+
+        assert_eq!(custom_transport.read_timeout, Duration::from_secs(60));
+        assert_eq!(custom_transport.write_timeout, Duration::from_secs(20));
+        assert_eq!(custom_transport.buffer_size, 128 * 1024);
+    }
+
+    #[tokio::test]
+    async fn test_stdio_transport_constants() {
+        // Verify default constants are reasonable
+        assert_eq!(
+            StdioTransport::DEFAULT_READ_TIMEOUT,
+            Duration::from_secs(30)
+        );
+        assert_eq!(
+            StdioTransport::DEFAULT_WRITE_TIMEOUT,
+            Duration::from_secs(10)
+        );
+        assert_eq!(StdioTransport::DEFAULT_BUFFER_SIZE, 64 * 1024);
+    }
+
+    #[tokio::test]
+    async fn test_transport_factory_stdio_variants() {
+        use tokio::time::Duration;
+
+        // Test default stdio transport factory
+        let _default_transport = TransportFactory::stdio();
+
+        // Test custom stdio transport factory
+        let _custom_transport = TransportFactory::stdio_with_config(
+            Duration::from_secs(45),
+            Duration::from_secs(15),
+            32 * 1024,
+        );
+    }
+
+    #[tokio::test]
+    async fn test_stdio_transport_closed_state() {
+        let mut transport = StdioTransport::new();
+
+        // Transport should start as open
+        assert!(!transport.is_closed);
+
+        // Close the transport
+        transport.close().await.unwrap();
+        assert!(transport.is_closed);
+
+        // Operations on closed transport should fail
+        let send_result = transport.send(r#"{"jsonrpc":"2.0","id":1}"#).await;
+        assert!(send_result.is_err());
+        assert!(matches!(send_result.unwrap_err(), Error::Transport(_)));
+
+        let receive_result = transport.receive().await;
+        assert!(receive_result.is_err());
+        assert!(matches!(receive_result.unwrap_err(), Error::Transport(_)));
+    }
+
+    #[test]
+    fn test_stdio_transport_default_implementation() {
+        let transport1 = StdioTransport::new();
+        let transport2 = StdioTransport::default();
+
+        // Both should have the same configuration
+        assert_eq!(transport1.read_timeout, transport2.read_timeout);
+        assert_eq!(transport1.write_timeout, transport2.write_timeout);
+        assert_eq!(transport1.buffer_size, transport2.buffer_size);
+        assert_eq!(transport1.is_closed, transport2.is_closed);
+    }
+
+    #[tokio::test]
+    async fn test_stdio_transport_utf8_validation() {
+        // Test with valid Unicode content including non-ASCII characters
+        let utf8_message =
+            r#"{"jsonrpc":"2.0","id":1,"method":"test","params":{"message":"Hello 世界 🌍"}}"#;
+        assert!(StdioTransport::validate_message(utf8_message).is_ok());
+
+        // Test with ASCII-only content
+        let ascii_message =
+            r#"{"jsonrpc":"2.0","id":1,"method":"test","params":{"message":"Hello World"}}"#;
+        assert!(StdioTransport::validate_message(ascii_message).is_ok());
+    }
+
+    #[tokio::test]
+    async fn test_stdio_transport_json_rpc_compliance() {
+        // Test various JSON-RPC 2.0 message formats
+
+        // Request with positional parameters
+        let request_positional = r#"{"jsonrpc":"2.0","method":"subtract","params":[42,23],"id":1}"#;
+        assert!(StdioTransport::validate_message(request_positional).is_ok());
+
+        // Request with named parameters
+        let request_named = r#"{"jsonrpc":"2.0","method":"subtract","params":{"subtrahend":23,"minuend":42},"id":2}"#;
+        assert!(StdioTransport::validate_message(request_named).is_ok());
+
+        // Notification (no id)
+        let notification = r#"{"jsonrpc":"2.0","method":"update","params":[1,2,3,4,5]}"#;
+        assert!(StdioTransport::validate_message(notification).is_ok());
+
+        // Response with result
+        let response_result = r#"{"jsonrpc":"2.0","result":19,"id":1}"#;
+        assert!(StdioTransport::validate_message(response_result).is_ok());
+
+        // Response with error
+        let response_error =
+            r#"{"jsonrpc":"2.0","error":{"code":-32601,"message":"Method not found"},"id":1}"#;
+        assert!(StdioTransport::validate_message(response_error).is_ok());
+
+        // Batch request
+        let batch = r#"[{"jsonrpc":"2.0","method":"sum","params":[1,2,4],"id":"1"},{"jsonrpc":"2.0","method":"notify_hello","params":[7]}]"#;
+        assert!(StdioTransport::validate_message(batch).is_ok());
     }
 }
