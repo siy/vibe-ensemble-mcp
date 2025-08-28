@@ -700,10 +700,15 @@ mod tests {
     /// Test comprehensive issue tracking MCP tools
     #[tokio::test]
     async fn test_issue_tracking_tools() {
+        use crate::server::CoordinationServices;
         use std::sync::Arc;
         use vibe_ensemble_storage::{
-            repositories::{AgentRepository, IssueRepository},
-            services::{AgentService, IssueService},
+            repositories::{
+                AgentRepository, IssueRepository, KnowledgeRepository, MessageRepository,
+            },
+            services::{
+                AgentService, CoordinationService, IssueService, KnowledgeService, MessageService,
+            },
         };
 
         // Create in-memory database for testing
@@ -715,12 +720,30 @@ mod tests {
             .unwrap();
 
         let agent_repo = Arc::new(AgentRepository::new(pool.clone()));
-        let issue_repo = Arc::new(IssueRepository::new(pool));
-        let agent_service = Arc::new(AgentService::new(agent_repo));
-        let issue_service = Arc::new(IssueService::new(issue_repo));
+        let issue_repo = Arc::new(IssueRepository::new(pool.clone()));
+        let message_repo = Arc::new(MessageRepository::new(pool.clone()));
+        let knowledge_repo = Arc::new(KnowledgeRepository::new(pool));
 
-        let server =
-            McpServer::with_services(Some(agent_service), Some(issue_service), None, None, None);
+        let agent_service = Arc::new(AgentService::new(agent_repo.clone()));
+        let issue_service = Arc::new(IssueService::new(issue_repo.clone()));
+        let message_service = Arc::new(MessageService::new(message_repo.clone()));
+        let knowledge_service = Arc::new(KnowledgeService::new((*knowledge_repo).clone()));
+        let coordination_service = Arc::new(CoordinationService::new(
+            agent_repo,
+            issue_repo,
+            message_repo,
+        ));
+
+        // Use new coordination API
+        let coordination_services = CoordinationServices::new(
+            agent_service,
+            issue_service,
+            message_service,
+            coordination_service,
+            knowledge_service,
+        );
+
+        let server = McpServer::with_coordination(coordination_services);
 
         // Create test agent for issue operations
         let register_params = json!({

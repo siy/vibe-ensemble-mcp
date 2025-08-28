@@ -77,33 +77,27 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let message_service = storage_manager.message_service();
     let knowledge_service = storage_manager.knowledge_service();
 
+    // Create coordination service manually from repositories
+    let coordination_service =
+        std::sync::Arc::new(vibe_ensemble_storage::services::CoordinationService::new(
+            storage_manager.agents(),
+            storage_manager.issues(),
+            storage_manager.messages(),
+        ));
+
     info!("Services initialized");
 
-    // Create MCP server with all services using builder pattern
-    let server = McpServer::builder()
-        .with_capabilities(vibe_ensemble_mcp::protocol::ServerCapabilities {
-            experimental: None,
-            logging: None,
-            prompts: Some(vibe_ensemble_mcp::protocol::PromptsCapability {
-                list_changed: Some(true),
-            }),
-            resources: Some(vibe_ensemble_mcp::protocol::ResourcesCapability {
-                subscribe: Some(true),
-                list_changed: Some(true),
-            }),
-            tools: Some(vibe_ensemble_mcp::protocol::ToolsCapability {
-                list_changed: Some(true),
-            }),
-            vibe_agent_management: Some(true),
-            vibe_issue_tracking: Some(true),
-            vibe_messaging: Some(true),
-            vibe_knowledge_management: Some(true),
-        })
-        .with_agent_service(agent_service)
-        .with_issue_service(issue_service)
-        .with_message_service(message_service)
-        .with_knowledge_service(knowledge_service)
-        .build();
+    // Create coordination services bundle
+    let coordination_services = vibe_ensemble_mcp::server::CoordinationServices::new(
+        agent_service,
+        issue_service,
+        message_service,
+        coordination_service,
+        knowledge_service,
+    );
+
+    // Create MCP server with all coordination services
+    let server = McpServer::with_coordination(coordination_services);
 
     info!("MCP server initialized successfully");
 
