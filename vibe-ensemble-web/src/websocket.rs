@@ -7,9 +7,8 @@ use crate::{auth::Session, Error, Result};
 use axum::{
     extract::{
         ws::{Message, WebSocket},
-        State, WebSocketUpgrade,
+        Request, State, WebSocketUpgrade,
     },
-    http::Request,
     response::Response,
 };
 use futures_util::{stream::StreamExt, SinkExt};
@@ -305,7 +304,6 @@ async fn handle_websocket(socket: WebSocket, ws_manager: Arc<WebSocketManager>, 
 
     // Handle incoming messages from client
     let client_id_clone2 = client_id;
-    let ws_manager_clone = ws_manager.clone();
     let receive_task = tokio::spawn(async move {
         while let Some(msg) = ws_receiver.next().await {
             match msg {
@@ -360,7 +358,6 @@ async fn handle_websocket(socket: WebSocket, ws_manager: Arc<WebSocketManager>, 
 }
 
 /// Helper functions for broadcasting specific events
-
 impl WebSocketManager {
     /// Broadcast agent status update
     pub fn broadcast_agent_status(
@@ -454,6 +451,7 @@ impl WebSocketManager {
     }
 
     /// Broadcast message sent event
+    #[allow(clippy::too_many_arguments)]
     pub fn broadcast_message_sent(
         &self,
         message_id: Uuid,

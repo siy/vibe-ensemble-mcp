@@ -17,7 +17,6 @@ use serde::{Deserialize, Serialize};
 use std::{
     collections::HashMap,
     sync::{Arc, RwLock},
-    time::Duration,
 };
 use uuid::Uuid;
 
@@ -220,7 +219,7 @@ fn generate_session_id() -> String {
 /// Extract session ID from cookie header
 fn extract_session_id_from_cookie(cookie_header: &str) -> Option<String> {
     cookie::Cookie::split_parse(cookie_header)
-        .filter_map(Result::ok)
+        .filter_map(|cookie_result| cookie_result.ok())
         .find(|c| c.name() == "session_id")
         .map(|c| c.value().to_string())
 }
