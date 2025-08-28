@@ -98,7 +98,7 @@ impl Server {
             let issue_service = storage.issue_service();
             let message_service = storage.message_service();
             let knowledge_service = storage.knowledge_service();
-            
+
             // Create coordination service manually from repositories
             let coordination_service =
                 Arc::new(vibe_ensemble_storage::services::CoordinationService::new(
