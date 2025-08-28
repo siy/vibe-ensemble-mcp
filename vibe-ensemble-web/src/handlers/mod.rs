@@ -1,8 +1,8 @@
 //! Web handlers for the Vibe Ensemble dashboard
 
 pub mod dashboard;
+pub mod links;
 
-use crate::templates::LinkHealthTemplate;
 use askama::Template;
 use axum::{
     extract::{Path, Query, State},
@@ -797,14 +797,6 @@ pub async fn messages_by_correlation(
     ))
 }
 
-/// Link health dashboard page handler
-pub async fn link_health() -> Result<Html<String>> {
-    let template = LinkHealthTemplate::new();
-    let rendered = template
-        .render()
-        .map_err(|e| crate::Error::Internal(anyhow::anyhow!("{}", e)))?;
-    Ok(Html(rendered))
-}
 
 #[cfg(test)]
 mod tests {

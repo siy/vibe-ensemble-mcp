@@ -1,6 +1,6 @@
 //! Web server for the Vibe Ensemble dashboard
 
-use crate::{handlers, link_validator, middleware, websocket, Result};
+use crate::{handlers, middleware, websocket, Result};
 use axum::{
     middleware as axum_middleware,
     routing::{delete, get, post, put},
@@ -126,7 +126,7 @@ impl WebServer {
             .route("/", get(handlers::dashboard))
             .route("/dashboard", get(handlers::dashboard))
             .route("/messages", get(handlers::messages_page))
-            .route("/link-health", get(handlers::link_health))
+            .route("/link-health", get(handlers::links::link_health_page))
             // API routes
             .route("/api/health", get(handlers::health))
             .route("/api/stats", get(handlers::system_stats))
@@ -152,8 +152,11 @@ impl WebServer {
                 "/api/messages/thread/:correlation_id",
                 get(handlers::messages_by_correlation),
             )
-            // Link validation routes
-            .merge(link_validator::create_router())
+            // Link validation API routes
+            .route("/api/links/health", get(handlers::links::link_health_summary))
+            .route("/api/links/status", get(handlers::links::link_status_details))
+            .route("/api/links/validate", get(handlers::links::validate_links))
+            .route("/api/links/analytics", get(handlers::links::link_analytics))
             // Add shared state
             .with_state(self.storage.clone())
             // WebSocket route needs separate router with different state

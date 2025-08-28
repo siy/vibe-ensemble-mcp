@@ -1,0 +1,302 @@
+{% extends "base.html" %}
+
+{% block title %}{{ title }}{% endblock %}
+
+{% block page_title %}Link Health Dashboard{% endblock %}
+{% block page_description %}Monitor navigation integrity and link validation across the application{% endblock %}
+
+{% block content %}
+<div class="grid grid-4">
+    <div class="card stat-card">
+        <div class="stat-number" id="total-links">{{ summary.total_links }}</div>
+        <div class="stat-label">Total Links</div>
+    </div>
+    <div class="card stat-card">
+        <div class="stat-number" id="healthy-links" style="color: var(--success-color);">{{ summary.healthy_links }}</div>
+        <div class="stat-label">Healthy Links</div>
+    </div>
+    <div class="card stat-card">
+        <div class="stat-number" id="broken-links" style="color: var(--danger-color);">{{ summary.broken_links }}</div>
+        <div class="stat-label">Broken Links</div>
+    </div>
+    <div class="card stat-card">
+        <div class="stat-number" id="warning-links" style="color: var(--warning-color);">{{ summary.warning_links }}</div>
+        <div class="stat-label">Warning Links</div>
+    </div>
+</div>
+
+<div class="grid grid-2">
+    <div class="card">
+        <h3>Link Validation Controls</h3>
+        <div style="margin-top: 15px;">
+            <button id="validate-all" class="btn btn-primary" style="margin-right: 10px; margin-bottom: 10px;">
+                <span class="spinner" id="validate-spinner" style="display: none;"></span>
+                Validate All Links
+            </button>
+            <button id="refresh-data" class="btn btn-secondary" style="margin-right: 10px; margin-bottom: 10px;">
+                Refresh Data
+            </button>
+            <a href="/api/links/analytics" class="btn btn-primary" style="margin-right: 10px; margin-bottom: 10px;">View Analytics</a>
+            <a href="/api/links/status" class="btn btn-secondary" style="margin-bottom: 10px;">Raw Status JSON</a>
+        </div>
+        <div style="margin-top: 15px;">
+            <label for="validation-timeout">Validation Timeout (seconds):</label>
+            <input type="number" id="validation-timeout" value="5" min="1" max="30" class="form-control" style="width: 100px; display: inline-block; margin-left: 10px;">
+        </div>
+    </div>
+
+    <div class="card">
+        <h3>Validation Results</h3>
+        <div id="validation-results">
+            {% match summary.last_validation %}
+            {% when Some with (timestamp) %}
+                <p>Last validation: {{ timestamp.format("%Y-%m-%d %H:%M:%S") }} UTC</p>
+            {% when None %}
+                <p>No validation has been performed yet. Click "Validate All Links" to start.</p>
+            {% endmatch %}
+            
+            <div id="validation-status" style="margin-top: 10px;"></div>
+        </div>
+    </div>
+</div>
+
+<div class="card">
+    <h3>Discovered Links ({{ discovered_links.len() }})</h3>
+    <div style="margin-bottom: 15px;">
+        <input type="text" id="link-filter" placeholder="Filter links..." class="form-control" style="max-width: 300px;">
+    </div>
+    
+    <div class="table-container" style="max-height: 600px; overflow-y: auto;">
+        <table class="table" id="links-table">
+            <thead>
+                <tr>
+                    <th>URL</th>
+                    <th>Type</th>
+                    <th>Status</th>
+                    <th>Response Time</th>
+                    <th>Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for link in discovered_links %}
+                <tr data-url="{{ link }}">
+                    <td>
+                        <a href="{{ link }}" target="_blank" style="color: var(--primary-color); text-decoration: none;">
+                            {{ link }}
+                        </a>
+                    </td>
+                    <td>
+                        {% if link.starts_with("/api/") %}
+                            <span class="status" style="background-color: var(--info-color); color: white;">API</span>
+                        {% else if link.starts_with("ws://") %}
+                            <span class="status" style="background-color: var(--secondary-color); color: white;">WebSocket</span>
+                        {% else %}
+                            <span class="status" style="background-color: var(--primary-color); color: white;">Page</span>
+                        {% endif %}
+                    </td>
+                    <td class="link-status">
+                        <span class="status status-offline">Not Validated</span>
+                    </td>
+                    <td class="response-time">-</td>
+                    <td>
+                        <button class="btn btn-sm btn-secondary validate-single" data-url="{{ link }}">
+                            Validate
+                        </button>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<div class="card">
+    <h3>Link Health Information</h3>
+    <div class="alert alert-info">
+        <strong>About Link Validation</strong><br>
+        This dashboard monitors the health of all discovered links in the Vibe Ensemble application, including:<br>
+        • Page routes (/, /dashboard, /agents, etc.)<br>
+        • API endpoints (/api/health, /api/stats, etc.)<br>
+        • WebSocket connections (/ws)<br>
+        • Authentication pages (/login, /logout)
+        <br><br>
+        <strong>Status Meanings:</strong><br>
+        <span class="status" style="background-color: var(--success-color); color: white;">Healthy</span> - Link responds with 2xx status<br>
+        <span class="status" style="background-color: var(--warning-color); color: white;">Warning</span> - Link redirects (3xx) or special handling needed<br>
+        <span class="status" style="background-color: var(--danger-color); color: white;">Broken</span> - Link returns error or times out
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_script %}
+let validationInProgress = false;
+
+// Link filtering functionality
+document.getElementById('link-filter').addEventListener('input', function(e) {
+    const filter = e.target.value.toLowerCase();
+    const rows = document.querySelectorAll('#links-table tbody tr');
+    
+    rows.forEach(row => {
+        const url = row.getAttribute('data-url').toLowerCase();
+        if (url.includes(filter)) {
+            row.style.display = '';
+        } else {
+            row.style.display = 'none';
+        }
+    });
+});
+
+// Validate all links
+document.getElementById('validate-all').addEventListener('click', async function() {
+    if (validationInProgress) return;
+    
+    validationInProgress = true;
+    const button = this;
+    const spinner = document.getElementById('validate-spinner');
+    const timeout = document.getElementById('validation-timeout').value;
+    
+    button.disabled = true;
+    spinner.style.display = 'inline-block';
+    button.querySelector('span:not(.spinner)') ? 
+        button.querySelector('span:not(.spinner)').textContent = 'Validating...' :
+        button.innerHTML = '<span class="spinner"></span> Validating...';
+    
+    try {
+        const response = await fetch(`/api/links/validate?timeout=${timeout}`);
+        const data = await response.json();
+        
+        updateValidationResults(data);
+        updateStatistics(data.summary);
+        
+        document.getElementById('validation-status').innerHTML = 
+            `<div class="alert alert-success">Validation completed successfully!</div>`;
+            
+    } catch (error) {
+        document.getElementById('validation-status').innerHTML = 
+            `<div class="alert alert-danger">Validation failed: ${error.message}</div>`;
+    } finally {
+        validationInProgress = false;
+        button.disabled = false;
+        spinner.style.display = 'none';
+        button.innerHTML = 'Validate All Links';
+    }
+});
+
+// Validate single link
+document.querySelectorAll('.validate-single').forEach(button => {
+    button.addEventListener('click', async function() {
+        const url = this.getAttribute('data-url');
+        const timeout = document.getElementById('validation-timeout').value;
+        const row = this.closest('tr');
+        
+        this.disabled = true;
+        this.textContent = 'Validating...';
+        
+        try {
+            // For single link validation, we'll make a direct request
+            const startTime = Date.now();
+            let status, responseTime, statusCode;
+            
+            if (url.startsWith('ws://')) {
+                status = 'warning';
+                responseTime = Date.now() - startTime;
+                updateLinkRow(row, status, responseTime, null, 'WebSocket validation not implemented');
+            } else {
+                try {
+                    const response = await fetch(url, { 
+                        method: 'HEAD',
+                        timeout: parseInt(timeout) * 1000 
+                    });
+                    responseTime = Date.now() - startTime;
+                    statusCode = response.status;
+                    
+                    if (statusCode >= 200 && statusCode < 300) {
+                        status = 'healthy';
+                    } else if (statusCode >= 300 && statusCode < 400) {
+                        status = 'warning';
+                    } else {
+                        status = 'broken';
+                    }
+                    
+                    updateLinkRow(row, status, responseTime, statusCode, null);
+                } catch (error) {
+                    responseTime = Date.now() - startTime;
+                    updateLinkRow(row, 'broken', responseTime, null, error.message);
+                }
+            }
+        } finally {
+            this.disabled = false;
+            this.textContent = 'Validate';
+        }
+    });
+});
+
+// Refresh data
+document.getElementById('refresh-data').addEventListener('click', function() {
+    window.location.reload();
+});
+
+function updateValidationResults(data) {
+    Object.entries(data.validation_results).forEach(([url, result]) => {
+        const row = document.querySelector(`tr[data-url="${url}"]`);
+        if (row) {
+            updateLinkRow(row, result.status, result.response_time_ms, result.status_code, result.error_message);
+        }
+    });
+}
+
+function updateLinkRow(row, status, responseTime, statusCode, errorMessage) {
+    const statusCell = row.querySelector('.link-status');
+    const responseTimeCell = row.querySelector('.response-time');
+    
+    let statusClass = 'status-offline';
+    let statusText = status;
+    
+    switch (status) {
+        case 'healthy':
+            statusClass = 'status-online';
+            statusText = 'Healthy';
+            break;
+        case 'warning':
+            statusClass = 'status-busy';
+            statusText = 'Warning';
+            break;
+        case 'broken':
+            statusClass = 'status-offline';
+            statusText = 'Broken';
+            break;
+    }
+    
+    statusCell.innerHTML = `<span class="status ${statusClass}">${statusText}</span>`;
+    
+    if (statusCode) {
+        statusCell.innerHTML += ` <small>(${statusCode})</small>`;
+    }
+    
+    if (errorMessage) {
+        statusCell.title = errorMessage;
+    }
+    
+    responseTimeCell.textContent = responseTime ? `${responseTime}ms` : '-';
+}
+
+function updateStatistics(summary) {
+    document.getElementById('total-links').textContent = summary.total;
+    document.getElementById('healthy-links').textContent = summary.healthy;
+    document.getElementById('broken-links').textContent = summary.broken;
+    document.getElementById('warning-links').textContent = summary.warning;
+}
+
+// Auto-refresh statistics every 30 seconds
+setInterval(async () => {
+    try {
+        const response = await fetch('/api/links/health');
+        const data = await response.json();
+        if (data.summary) {
+            updateStatistics(data.summary);
+        }
+    } catch (error) {
+        console.log('Failed to refresh link health stats:', error);
+    }
+}, 30000);
+{% endblock %}
