@@ -34,6 +34,35 @@ use vibe_ensemble_storage::services::{
     AgentService, CoordinationService, IssueService, KnowledgeService, MessageService,
 };
 
+/// Bundle of all coordination services for production deployments
+#[derive(Clone)]
+pub struct CoordinationServices {
+    pub agent_service: Arc<AgentService>,
+    pub issue_service: Arc<IssueService>,
+    pub message_service: Arc<MessageService>,
+    pub coordination_service: Arc<CoordinationService>,
+    pub knowledge_service: Arc<KnowledgeService>,
+}
+
+impl CoordinationServices {
+    /// Create a new coordination services bundle
+    pub fn new(
+        agent_service: Arc<AgentService>,
+        issue_service: Arc<IssueService>,
+        message_service: Arc<MessageService>,
+        coordination_service: Arc<CoordinationService>,
+        knowledge_service: Arc<KnowledgeService>,
+    ) -> Self {
+        Self {
+            agent_service,
+            issue_service,
+            message_service,
+            coordination_service,
+            knowledge_service,
+        }
+    }
+}
+
 /// MCP server state and connection manager
 #[derive(Clone)]
 pub struct McpServer {
@@ -64,7 +93,8 @@ pub struct ClientSession {
 }
 
 impl McpServer {
-    /// Create a new MCP server with default capabilities and no services
+    /// Create a basic MCP server with default capabilities and no coordination services.
+    /// Suitable for MCP protocol testing and minimal deployments.
     pub fn new() -> Self {
         Self {
             clients: Arc::new(RwLock::new(HashMap::new())),
@@ -77,12 +107,62 @@ impl McpServer {
         }
     }
 
-    /// Create a builder for configuring an MCP server
+    /// Create a full coordination server with all services for production deployments.
+    /// This is the recommended constructor for most use cases.
+    pub fn with_coordination(services: CoordinationServices) -> Self {
+        Self {
+            clients: Arc::new(RwLock::new(HashMap::new())),
+            capabilities: ServerCapabilities::default(),
+            agent_service: Some(services.agent_service),
+            issue_service: Some(services.issue_service),
+            message_service: Some(services.message_service),
+            coordination_service: Some(services.coordination_service),
+            knowledge_service: Some(services.knowledge_service),
+        }
+    }
+
+    /// Create an MCP server with custom capabilities.
+    /// Useful for testing and specialized configurations.
+    pub fn with_capabilities(capabilities: ServerCapabilities) -> Self {
+        Self {
+            clients: Arc::new(RwLock::new(HashMap::new())),
+            capabilities,
+            agent_service: None,
+            issue_service: None,
+            message_service: None,
+            coordination_service: None,
+            knowledge_service: None,
+        }
+    }
+
+    /// Create a full coordination server with all services and custom capabilities.
+    /// Combines coordination services with custom server capabilities.
+    pub fn with_coordination_and_capabilities(
+        services: CoordinationServices,
+        capabilities: ServerCapabilities,
+    ) -> Self {
+        Self {
+            clients: Arc::new(RwLock::new(HashMap::new())),
+            capabilities,
+            agent_service: Some(services.agent_service),
+            issue_service: Some(services.issue_service),
+            message_service: Some(services.message_service),
+            coordination_service: Some(services.coordination_service),
+            knowledge_service: Some(services.knowledge_service),
+        }
+    }
+
+    /// Legacy builder method for backward compatibility. Use `with_coordination` instead.
+    #[deprecated(
+        since = "0.2.2",
+        note = "Use McpServer::with_coordination() or McpServer::new() instead"
+    )]
     pub fn builder() -> McpServerBuilder {
         McpServerBuilder::new()
     }
 
-    /// Create a new MCP server with services directly (for testing and simple cases)
+    /// Legacy constructor for backward compatibility. Use `with_coordination` instead.
+    #[deprecated(since = "0.2.2", note = "Use `with_coordination` or `new` instead")]
     pub fn with_services(
         agent_service: Option<Arc<AgentService>>,
         issue_service: Option<Arc<IssueService>>,
@@ -6013,7 +6093,12 @@ impl McpServer {
     }
 }
 
-/// Builder pattern for configuring MCP server instances
+/// Legacy builder for configuring MCP server instances.
+/// Deprecated: Use `McpServer::with_coordination()` or `McpServer::new()` instead.
+#[deprecated(
+    since = "0.2.2",
+    note = "Use McpServer::with_coordination() or McpServer::new() instead"
+)]
 #[derive(Default)]
 pub struct McpServerBuilder {
     capabilities: Option<ServerCapabilities>,
@@ -6024,49 +6109,61 @@ pub struct McpServerBuilder {
     knowledge_service: Option<Arc<KnowledgeService>>,
 }
 
+#[allow(deprecated)]
 impl McpServerBuilder {
     /// Create a new builder
+    #[deprecated(
+        since = "0.2.2",
+        note = "Use McpServer::with_coordination() or McpServer::new() instead"
+    )]
     pub fn new() -> Self {
         Self::default()
     }
 
     /// Set custom server capabilities
+    #[deprecated(since = "0.2.2", note = "Use McpServer::with_capabilities() instead")]
     pub fn with_capabilities(mut self, capabilities: ServerCapabilities) -> Self {
         self.capabilities = Some(capabilities);
         self
     }
 
     /// Add agent service
+    #[deprecated(since = "0.2.2", note = "Use McpServer::with_coordination() instead")]
     pub fn with_agent_service(mut self, service: Arc<AgentService>) -> Self {
         self.agent_service = Some(service);
         self
     }
 
     /// Add issue service
+    #[deprecated(since = "0.2.2", note = "Use McpServer::with_coordination() instead")]
     pub fn with_issue_service(mut self, service: Arc<IssueService>) -> Self {
         self.issue_service = Some(service);
         self
     }
 
     /// Add message service
+    #[deprecated(since = "0.2.2", note = "Use McpServer::with_coordination() instead")]
     pub fn with_message_service(mut self, service: Arc<MessageService>) -> Self {
         self.message_service = Some(service);
         self
     }
 
     /// Add coordination service
+    #[deprecated(since = "0.2.2", note = "Use McpServer::with_coordination() instead")]
     pub fn with_coordination_service(mut self, service: Arc<CoordinationService>) -> Self {
         self.coordination_service = Some(service);
         self
     }
 
     /// Add knowledge service
+    #[deprecated(since = "0.2.2", note = "Use McpServer::with_coordination() instead")]
     pub fn with_knowledge_service(mut self, service: Arc<KnowledgeService>) -> Self {
         self.knowledge_service = Some(service);
         self
     }
 
     /// Add all services at once
+    #[deprecated(since = "0.2.2", note = "Use McpServer::with_coordination() instead")]
     pub fn with_all_services(
         mut self,
         agent_service: Arc<AgentService>,
@@ -6084,6 +6181,7 @@ impl McpServerBuilder {
     }
 
     /// Build the MCP server instance
+    #[deprecated(since = "0.2.2", note = "Use McpServer::with_coordination() instead")]
     pub fn build(self) -> McpServer {
         McpServer {
             clients: Arc::new(RwLock::new(HashMap::new())),
