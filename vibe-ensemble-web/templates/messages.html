@@ -1,0 +1,787 @@
+{% extends "base.html" %}
+
+{% block title %}Messages - {{ title }}{% endblock %}
+
+{% block content %}
+<div class="grid grid-4">
+    <div class="card stat-card">
+        <div class="stat-number" id="total-messages-count">{{ message_stats["total_messages"] }}</div>
+        <div class="stat-label">Total Messages</div>
+    </div>
+    <div class="card stat-card">
+        <div class="stat-number" id="recent-messages-count">{{ message_stats["recent_messages_24h"] }}</div>
+        <div class="stat-label">Last 24 Hours</div>
+    </div>
+    <div class="card stat-card">
+        <div class="stat-number" id="delivery-rate">{{ message_stats["delivery_stats"]["delivery_rate_percent"] }}%</div>
+        <div class="stat-label">Delivery Rate</div>
+    </div>
+    <div class="card stat-card">
+        <div class="stat-number" id="active-conversations">{{ conversation_count }}</div>
+        <div class="stat-label">Active Conversations</div>
+    </div>
+</div>
+
+<!-- Message Filter Controls -->
+<div class="card">
+    <h3>Message Filters</h3>
+    <div class="grid grid-4">
+        <div class="form-group">
+            <label for="messageType">Message Type</label>
+            <select id="messageType" class="form-control">
+                <option value="">All Types</option>
+                <option value="Direct">Direct</option>
+                <option value="Broadcast">Broadcast</option>
+                <option value="StatusUpdate">Status Update</option>
+                <option value="IssueNotification">Issue Notification</option>
+                <option value="KnowledgeShare">Knowledge Share</option>
+            </select>
+        </div>
+        <div class="form-group">
+            <label for="messagePriority">Priority</label>
+            <select id="messagePriority" class="form-control">
+                <option value="">All Priorities</option>
+                <option value="Low">Low</option>
+                <option value="Normal">Normal</option>
+                <option value="High">High</option>
+                <option value="Urgent">Urgent</option>
+            </select>
+        </div>
+        <div class="form-group">
+            <label for="messageSearch">Search</label>
+            <input type="text" id="messageSearch" class="form-control" placeholder="Search message content...">
+        </div>
+        <div class="form-group">
+            <label for="viewMode">View Mode</label>
+            <select id="viewMode" class="form-control">
+                <option value="messages">All Messages</option>
+                <option value="conversations">Conversations</option>
+            </select>
+        </div>
+    </div>
+    <div style="margin-top: 15px;">
+        <button id="applyFilters" class="btn btn-primary">Apply Filters</button>
+        <button id="clearFilters" class="btn btn-secondary">Clear All</button>
+        <button id="refreshMessages" class="btn btn-secondary">Refresh</button>
+        <span class="live-indicator" id="liveIndicator">
+            <span class="status-indicator"></span>
+            Live Updates: <span id="liveStatus">Connected</span>
+        </span>
+    </div>
+</div>
+
+<!-- Message Feed -->
+<div class="card">
+    <h3 id="messageFeedTitle">Recent Messages</h3>
+    <div class="message-controls">
+        <div class="message-stats" id="messageStats">
+            Showing <span id="currentCount">0</span> of <span id="totalCount">0</span> messages
+        </div>
+        <div class="auto-refresh-toggle">
+            <label>
+                <input type="checkbox" id="autoRefresh" checked> Auto-refresh
+            </label>
+        </div>
+    </div>
+    
+    <!-- Live Message Feed -->
+    <div class="message-feed" id="messageFeed">
+        <div class="loading-spinner" id="loadingSpinner" style="display: none;">
+            <div class="spinner"></div>
+            Loading messages...
+        </div>
+        
+        <div class="message-list" id="messageList">
+            <!-- Messages will be populated here -->
+        </div>
+        
+        <div class="no-messages" id="noMessages" style="display: none;">
+            <div class="alert alert-info">
+                <strong>No messages found</strong><br>
+                No messages match your current filters. Try adjusting your search criteria.
+            </div>
+        </div>
+    </div>
+    
+    <!-- Pagination -->
+    <div class="pagination-controls" id="paginationControls">
+        <button id="loadMore" class="btn btn-secondary">Load More Messages</button>
+        <span id="paginationInfo"></span>
+    </div>
+</div>
+
+<!-- Conversation Thread Modal -->
+<div class="modal" id="conversationModal" style="display: none;">
+    <div class="modal-content">
+        <div class="modal-header">
+            <h3 id="conversationTitle">Conversation Thread</h3>
+            <button class="modal-close" id="closeConversation">&times;</button>
+        </div>
+        <div class="modal-body">
+            <div class="conversation-info" id="conversationInfo">
+                <!-- Conversation metadata -->
+            </div>
+            <div class="conversation-messages" id="conversationMessages">
+                <!-- Threaded messages -->
+            </div>
+        </div>
+    </div>
+</div>
+
+{% endblock %}
+
+{% block extra_script %}
+// Message monitoring functionality
+let currentOffset = 0;
+let currentFilters = {};
+let autoRefreshEnabled = true;
+let refreshInterval = null;
+
+// Initialize message monitoring
+document.addEventListener('DOMContentLoaded', function() {
+    loadMessages();
+    setupEventListeners();
+    setupWebSocketMessageHandling();
+    startAutoRefresh();
+});
+
+function setupEventListeners() {
+    // Filter controls
+    document.getElementById('applyFilters').addEventListener('click', applyFilters);
+    document.getElementById('clearFilters').addEventListener('click', clearFilters);
+    document.getElementById('refreshMessages').addEventListener('click', () => loadMessages());
+    document.getElementById('loadMore').addEventListener('click', loadMoreMessages);
+    
+    // Auto-refresh toggle
+    document.getElementById('autoRefresh').addEventListener('change', function() {
+        autoRefreshEnabled = this.checked;
+        if (autoRefreshEnabled) {
+            startAutoRefresh();
+        } else {
+            stopAutoRefresh();
+        }
+    });
+    
+    // Search input with debouncing
+    let searchTimeout;
+    document.getElementById('messageSearch').addEventListener('input', function() {
+        clearTimeout(searchTimeout);
+        searchTimeout = setTimeout(() => {
+            applyFilters();
+        }, 500);
+    });
+    
+    // View mode change
+    document.getElementById('viewMode').addEventListener('change', function() {
+        const mode = this.value;
+        if (mode === 'conversations') {
+            loadConversations();
+        } else {
+            loadMessages();
+        }
+    });
+    
+    // Modal controls
+    document.getElementById('closeConversation').addEventListener('click', closeConversationModal);
+}
+
+function setupWebSocketMessageHandling() {
+    // Extend the existing WebSocket message handler to handle message events
+    const originalHandler = window.handleWebSocketMessage;
+    window.handleWebSocketMessage = function(message) {
+        // Call original handler
+        if (originalHandler) {
+            originalHandler(message);
+        }
+        
+        // Handle message-specific events
+        switch (message.type) {
+            case 'MessageReceived':
+                handleNewMessage(message.data);
+                break;
+            case 'StatsUpdate':
+                updateMessageStats(message.data);
+                break;
+        }
+    };
+}
+
+function handleNewMessage(messageData) {
+    // Add new message to the feed if auto-refresh is enabled
+    if (autoRefreshEnabled) {
+        addMessageToFeed(messageData);
+        updateCounts();
+    }
+    
+    // Show notification if page is not visible
+    if (document.hidden) {
+        showNotification('New message received', messageData.content);
+    }
+}
+
+function applyFilters() {
+    currentFilters = {
+        message_type: document.getElementById('messageType').value,
+        priority: document.getElementById('messagePriority').value,
+        search: document.getElementById('messageSearch').value,
+    };
+    currentOffset = 0;
+    loadMessages();
+}
+
+function clearFilters() {
+    document.getElementById('messageType').value = '';
+    document.getElementById('messagePriority').value = '';
+    document.getElementById('messageSearch').value = '';
+    currentFilters = {};
+    currentOffset = 0;
+    loadMessages();
+}
+
+function buildApiUrl(endpoint, params = {}) {
+    const url = new URL(`/api/messages${endpoint}`, window.location.origin);
+    Object.entries(params).forEach(([key, value]) => {
+        if (value !== null && value !== undefined && value !== '') {
+            url.searchParams.append(key, value);
+        }
+    });
+    return url.toString();
+}
+
+async function loadMessages(append = false) {
+    const spinner = document.getElementById('loadingSpinner');
+    const messageList = document.getElementById('messageList');
+    const noMessages = document.getElementById('noMessages');
+    
+    if (!append) {
+        spinner.style.display = 'block';
+        messageList.innerHTML = '';
+        noMessages.style.display = 'none';
+    }
+    
+    try {
+        const params = {
+            ...currentFilters,
+            limit: 50,
+            offset: currentOffset
+        };
+        
+        const response = await fetch(buildApiUrl('', params));
+        const data = await response.json();
+        
+        if (data.messages && data.messages.length > 0) {
+            if (append) {
+                data.messages.forEach(message => addMessageToFeed(message));
+            } else {
+                messageList.innerHTML = '';
+                data.messages.forEach(message => addMessageToFeed(message));
+            }
+            noMessages.style.display = 'none';
+        } else if (!append) {
+            noMessages.style.display = 'block';
+        }
+        
+        updateMessageCounts(data.total, data.messages ? data.messages.length : 0);
+        updatePagination(data.total, data.messages ? data.messages.length : 0);
+        
+    } catch (error) {
+        console.error('Failed to load messages:', error);
+        showError('Failed to load messages');
+    } finally {
+        spinner.style.display = 'none';
+    }
+}
+
+async function loadConversations() {
+    // Implementation for loading conversation threads
+    document.getElementById('messageFeedTitle').textContent = 'Active Conversations';
+    
+    try {
+        const response = await fetch('/api/messages/conversations');
+        const data = await response.json();
+        
+        const messageList = document.getElementById('messageList');
+        messageList.innerHTML = '';
+        
+        if (data.conversations && data.conversations.length > 0) {
+            data.conversations.forEach(conversation => addConversationToFeed(conversation));
+        } else {
+            document.getElementById('noMessages').style.display = 'block';
+        }
+        
+    } catch (error) {
+        console.error('Failed to load conversations:', error);
+        showError('Failed to load conversations');
+    }
+}
+
+function addMessageToFeed(message) {
+    const messageList = document.getElementById('messageList');
+    const messageElement = createMessageElement(message);
+    
+    // Add to top for real-time messages, or append for loaded messages
+    if (messageList.children.length === 0) {
+        messageList.appendChild(messageElement);
+    } else {
+        messageList.insertBefore(messageElement, messageList.firstChild);
+    }
+    
+    // Animate the new message
+    messageElement.style.opacity = '0';
+    messageElement.style.transform = 'translateY(-10px)';
+    requestAnimationFrame(() => {
+        messageElement.style.transition = 'all 0.3s ease';
+        messageElement.style.opacity = '1';
+        messageElement.style.transform = 'translateY(0)';
+    });
+}
+
+function createMessageElement(message) {
+    const div = document.createElement('div');
+    div.className = 'message-item';
+    div.dataset.messageId = message.id;
+    
+    const timeAgo = getTimeAgo(new Date(message.created_at));
+    const priorityClass = `priority-${message.metadata.priority.toLowerCase()}`;
+    const typeClass = `type-${message.message_type.toLowerCase()}`;
+    
+    div.innerHTML = `
+        <div class="message-header">
+            <div class="message-meta">
+                <span class="message-type ${typeClass}">${message.message_type}</span>
+                <span class="message-priority ${priorityClass}">${message.metadata.priority}</span>
+                <span class="message-time">${timeAgo}</span>
+            </div>
+            <div class="message-participants">
+                <span class="sender">From: Agent ${message.sender_id.substring(0, 8)}</span>
+                ${message.recipient_id ? 
+                    `<span class="recipient">To: Agent ${message.recipient_id.substring(0, 8)}</span>` : 
+                    '<span class="broadcast">Broadcast</span>'
+                }
+            </div>
+        </div>
+        <div class="message-content">
+            ${escapeHtml(message.content)}
+        </div>
+        ${message.metadata.issue_id ? 
+            `<div class="message-context">
+                <span class="context-label">Related Issue:</span>
+                <a href="/api/issues/${message.metadata.issue_id}" class="context-link">
+                    ${message.metadata.issue_id.substring(0, 8)}
+                </a>
+            </div>` : ''
+        }
+        ${message.metadata.correlation_id ? 
+            `<div class="message-actions">
+                <button class="btn btn-sm btn-secondary" onclick="loadConversationThread('${message.metadata.correlation_id}')">
+                    View Thread
+                </button>
+            </div>` : ''
+        }
+    `;
+    
+    return div;
+}
+
+function addConversationToFeed(conversation) {
+    const messageList = document.getElementById('messageList');
+    const div = document.createElement('div');
+    div.className = 'conversation-item';
+    
+    const lastMessageTime = getTimeAgo(new Date(conversation.last_message_at));
+    
+    div.innerHTML = `
+        <div class="conversation-header">
+            <h4>Conversation Thread</h4>
+            <span class="conversation-time">${lastMessageTime}</span>
+        </div>
+        <div class="conversation-info">
+            <span class="message-count">${conversation.message_count} messages</span>
+            <span class="participant-count">${conversation.participants.length} participants</span>
+        </div>
+        <div class="conversation-preview">
+            ${conversation.messages.slice(-1)[0].content.substring(0, 100)}...
+        </div>
+        <div class="conversation-actions">
+            <button class="btn btn-primary" onclick="openConversationModal('${conversation.correlation_id}')">
+                View Full Thread
+            </button>
+        </div>
+    `;
+    
+    messageList.appendChild(div);
+}
+
+function loadMoreMessages() {
+    currentOffset += 50;
+    loadMessages(true);
+}
+
+function updateMessageCounts(total, current) {
+    document.getElementById('currentCount').textContent = current;
+    document.getElementById('totalCount').textContent = total;
+}
+
+function updatePagination(total, current) {
+    const loadMoreBtn = document.getElementById('loadMore');
+    const paginationInfo = document.getElementById('paginationInfo');
+    
+    if (currentOffset + current >= total) {
+        loadMoreBtn.style.display = 'none';
+        paginationInfo.textContent = 'All messages loaded';
+    } else {
+        loadMoreBtn.style.display = 'block';
+        paginationInfo.textContent = `${total - currentOffset - current} more messages available`;
+    }
+}
+
+function startAutoRefresh() {
+    if (refreshInterval) {
+        clearInterval(refreshInterval);
+    }
+    refreshInterval = setInterval(() => {
+        if (autoRefreshEnabled && !document.hidden) {
+            loadMessages();
+        }
+    }, 30000); // Refresh every 30 seconds
+}
+
+function stopAutoRefresh() {
+    if (refreshInterval) {
+        clearInterval(refreshInterval);
+        refreshInterval = null;
+    }
+}
+
+async function loadConversationThread(correlationId) {
+    try {
+        const response = await fetch(`/api/messages?correlation_id=${correlationId}`);
+        const data = await response.json();
+        
+        if (data.messages && data.messages.length > 0) {
+            showConversationModal(data.messages);
+        }
+    } catch (error) {
+        console.error('Failed to load conversation thread:', error);
+        showError('Failed to load conversation thread');
+    }
+}
+
+function showConversationModal(messages) {
+    const modal = document.getElementById('conversationModal');
+    const messagesContainer = document.getElementById('conversationMessages');
+    
+    messagesContainer.innerHTML = '';
+    messages.forEach(message => {
+        const messageElement = createMessageElement(message);
+        messagesContainer.appendChild(messageElement);
+    });
+    
+    modal.style.display = 'block';
+}
+
+function closeConversationModal() {
+    document.getElementById('conversationModal').style.display = 'none';
+}
+
+function updateMessageStats(stats) {
+    // Update statistics from WebSocket
+    if (stats.messages_count !== undefined) {
+        document.getElementById('total-messages-count').textContent = stats.messages_count;
+    }
+}
+
+// Utility functions
+function getTimeAgo(date) {
+    const now = new Date();
+    const seconds = Math.floor((now - date) / 1000);
+    
+    if (seconds < 60) return `${seconds}s ago`;
+    if (seconds < 3600) return `${Math.floor(seconds / 60)}m ago`;
+    if (seconds < 86400) return `${Math.floor(seconds / 3600)}h ago`;
+    return `${Math.floor(seconds / 86400)}d ago`;
+}
+
+function escapeHtml(text) {
+    const div = document.createElement('div');
+    div.textContent = text;
+    return div.innerHTML;
+}
+
+function showError(message) {
+    // Simple error notification
+    const alert = document.createElement('div');
+    alert.className = 'alert alert-danger';
+    alert.textContent = message;
+    alert.style.position = 'fixed';
+    alert.style.top = '20px';
+    alert.style.right = '20px';
+    alert.style.zIndex = '1000';
+    
+    document.body.appendChild(alert);
+    setTimeout(() => alert.remove(), 5000);
+}
+
+function showNotification(title, body) {
+    if ('Notification' in window && Notification.permission === 'granted') {
+        new Notification(title, { body: body.substring(0, 100) });
+    }
+}
+
+// Request notification permission
+if ('Notification' in window && Notification.permission === 'default') {
+    Notification.requestPermission();
+}
+{% endblock %}
+
+{% block extra_head %}
+<style>
+/* Message-specific styles */
+.message-feed {
+    max-height: 800px;
+    overflow-y: auto;
+    border: 1px solid var(--gray-300);
+    border-radius: var(--border-radius);
+    background: var(--white);
+}
+
+.message-item {
+    padding: 15px;
+    border-bottom: 1px solid var(--gray-200);
+    transition: background-color 0.2s ease;
+}
+
+.message-item:hover {
+    background-color: var(--gray-50);
+}
+
+.message-item:last-child {
+    border-bottom: none;
+}
+
+.message-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 8px;
+    font-size: 0.875rem;
+}
+
+.message-meta {
+    display: flex;
+    gap: 10px;
+    align-items: center;
+}
+
+.message-type {
+    padding: 2px 6px;
+    border-radius: 3px;
+    font-size: 0.75rem;
+    font-weight: 600;
+    text-transform: uppercase;
+}
+
+.type-direct { background-color: #e3f2fd; color: #1976d2; }
+.type-broadcast { background-color: #fff3e0; color: #f57c00; }
+.type-statusupdate { background-color: #e8f5e8; color: #388e3c; }
+.type-issuenotification { background-color: #fce4ec; color: #c2185b; }
+.type-knowledgeshare { background-color: #f3e5f5; color: #7b1fa2; }
+
+.message-priority {
+    font-weight: 600;
+    font-size: 0.75rem;
+}
+
+.message-time {
+    color: var(--gray-600);
+    font-size: 0.75rem;
+}
+
+.message-participants {
+    display: flex;
+    gap: 10px;
+    font-size: 0.75rem;
+    color: var(--gray-600);
+}
+
+.sender, .recipient {
+    font-weight: 500;
+}
+
+.broadcast {
+    color: var(--warning-color);
+    font-weight: 600;
+}
+
+.message-content {
+    color: var(--gray-800);
+    line-height: 1.5;
+    white-space: pre-wrap;
+    word-wrap: break-word;
+    margin-bottom: 8px;
+}
+
+.message-context {
+    font-size: 0.75rem;
+    color: var(--gray-600);
+    margin-bottom: 8px;
+}
+
+.context-label {
+    font-weight: 600;
+    margin-right: 5px;
+}
+
+.context-link {
+    color: var(--primary-color);
+    text-decoration: none;
+}
+
+.context-link:hover {
+    text-decoration: underline;
+}
+
+.message-actions {
+    display: flex;
+    gap: 8px;
+}
+
+.message-controls {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 15px;
+    padding: 10px 0;
+    border-bottom: 1px solid var(--gray-200);
+}
+
+.message-stats {
+    font-size: 0.875rem;
+    color: var(--gray-600);
+}
+
+.auto-refresh-toggle label {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    font-size: 0.875rem;
+    cursor: pointer;
+}
+
+.live-indicator {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    font-size: 0.875rem;
+    margin-left: 20px;
+}
+
+.status-indicator {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background-color: var(--success-color);
+    animation: pulse 2s infinite;
+}
+
+@keyframes pulse {
+    0% { opacity: 1; }
+    50% { opacity: 0.5; }
+    100% { opacity: 1; }
+}
+
+.conversation-item {
+    padding: 15px;
+    border: 1px solid var(--gray-300);
+    border-radius: var(--border-radius);
+    margin-bottom: 10px;
+    background: var(--white);
+}
+
+.conversation-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 10px;
+}
+
+.conversation-info {
+    display: flex;
+    gap: 15px;
+    margin-bottom: 10px;
+    font-size: 0.875rem;
+    color: var(--gray-600);
+}
+
+.conversation-preview {
+    color: var(--gray-700);
+    font-style: italic;
+    margin-bottom: 10px;
+}
+
+.pagination-controls {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-top: 15px;
+    padding-top: 15px;
+    border-top: 1px solid var(--gray-200);
+}
+
+.modal {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background-color: rgba(0, 0, 0, 0.5);
+    z-index: 2000;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.modal-content {
+    background: var(--white);
+    border-radius: var(--border-radius);
+    max-width: 800px;
+    max-height: 80vh;
+    width: 90%;
+    overflow: hidden;
+}
+
+.modal-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 20px;
+    border-bottom: 1px solid var(--gray-300);
+}
+
+.modal-close {
+    background: none;
+    border: none;
+    font-size: 24px;
+    cursor: pointer;
+    color: var(--gray-600);
+}
+
+.modal-body {
+    padding: 20px;
+    overflow-y: auto;
+    max-height: 60vh;
+}
+
+.conversation-messages .message-item {
+    border: 1px solid var(--gray-200);
+    border-radius: var(--border-radius);
+    margin-bottom: 10px;
+}
+
+.loading-spinner {
+    text-align: center;
+    padding: 40px;
+    color: var(--gray-600);
+}
+</style>
+{% endblock %}
