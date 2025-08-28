@@ -162,7 +162,7 @@ impl Server {
 
         let mut router = Router::new()
             // Health and status endpoints
-            .route("/health", get(health_check))
+            .route("/api/health", get(health_check))
             .route("/status", get(server_status));
 
         // Add MCP endpoints if MCP is enabled
@@ -453,7 +453,7 @@ async fn server_status(
             "mcp_server": if mcp_available { "available" } else { "unavailable" }
         },
         "endpoints": {
-            "health": "/health",
+            "health": "/api/health",
             "status": "/status",
             "web_dashboard": "http://127.0.0.1:8081/dashboard" // TODO: Make this configurable
         }

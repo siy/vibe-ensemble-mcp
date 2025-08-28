@@ -375,7 +375,7 @@ impl Config {
             self.server.host, self.server.port
         );
         println!(
-            "   • Health check: http://{}:{}/health",
+            "   • Health check: http://{}:{}/api/health",
             self.server.host, self.server.port
         );
         println!(
@@ -442,7 +442,7 @@ impl Config {
         println!();
         println!("✨ Quick Start:");
         println!(
-            "   • Health check: curl http://{}:{}/health",
+            "   • Health check: curl http://{}:{}/api/health",
             self.server.host, self.server.port
         );
         if self.web.enabled {
