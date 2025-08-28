@@ -7,8 +7,9 @@ use crate::{auth::Session, Error, Result};
 use axum::{
     extract::{
         ws::{Message, WebSocket},
-        Request, State, WebSocketUpgrade,
+        State, WebSocketUpgrade,
     },
+    http::Request,
     response::Response,
 };
 use futures_util::{stream::StreamExt, SinkExt};
@@ -54,32 +55,7 @@ pub enum WebSocketMessage {
         status: String,
         timestamp: chrono::DateTime<chrono::Utc>,
     },
-    /// New message sent
-    MessageSent {
-        message_id: Uuid,
-        sender_id: Uuid,
-        recipient_id: Option<Uuid>,
-        message_type: String,
-        priority: String,
-        content: String,
-        correlation_id: Option<Uuid>,
-        timestamp: chrono::DateTime<chrono::Utc>,
-    },
-    /// Message delivered
-    MessageDelivered {
-        message_id: Uuid,
-        sender_id: Uuid,
-        recipient_id: Option<Uuid>,
-        delivered_at: chrono::DateTime<chrono::Utc>,
-        timestamp: chrono::DateTime<chrono::Utc>,
-    },
-    /// Message delivery failed
-    MessageFailed {
-        message_id: Uuid,
-        error: String,
-        timestamp: chrono::DateTime<chrono::Utc>,
-    },
-    /// New message received (legacy compatibility)
+    /// New message received
     MessageReceived {
         message_id: Uuid,
         from_agent: String,
@@ -107,6 +83,31 @@ pub enum WebSocketMessage {
     Pong {
         timestamp: chrono::DateTime<chrono::Utc>,
     },
+    /// Message sent event
+    MessageSent {
+        message_id: Uuid,
+        sender_id: Uuid,
+        recipient_id: Option<Uuid>,
+        message_type: String,
+        priority: String,
+        content: String,
+        correlation_id: Option<Uuid>,
+        timestamp: chrono::DateTime<chrono::Utc>,
+    },
+    /// Message delivered event
+    MessageDelivered {
+        message_id: Uuid,
+        sender_id: Uuid,
+        recipient_id: Option<Uuid>,
+        delivered_at: chrono::DateTime<chrono::Utc>,
+        timestamp: chrono::DateTime<chrono::Utc>,
+    },
+    /// Message failed event
+    MessageFailed {
+        message_id: Uuid,
+        error_message: String,
+        timestamp: chrono::DateTime<chrono::Utc>,
+    },
 }
 
 /// WebSocket client connection info
@@ -124,12 +125,6 @@ pub struct WebSocketManager {
     sender: broadcast::Sender<WebSocketMessage>,
     /// Connected clients
     clients: Arc<RwLock<HashMap<Uuid, WebSocketClient>>>,
-}
-
-impl Default for WebSocketManager {
-    fn default() -> Self {
-        Self::new()
-    }
 }
 
 impl WebSocketManager {
@@ -229,11 +224,17 @@ impl WebSocketManager {
     }
 }
 
+impl Default for WebSocketManager {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 /// WebSocket connection handler
 pub async fn websocket_handler(
     ws: WebSocketUpgrade,
     State(ws_manager): State<Arc<WebSocketManager>>,
-    request: Request<axum::body::Body>,
+    request: Request,
 ) -> Response {
     // Extract session from request extensions (added by auth middleware)
     let session = request
@@ -304,6 +305,7 @@ async fn handle_websocket(socket: WebSocket, ws_manager: Arc<WebSocketManager>, 
 
     // Handle incoming messages from client
     let client_id_clone2 = client_id;
+    let ws_manager_clone = ws_manager.clone();
     let receive_task = tokio::spawn(async move {
         while let Some(msg) = ws_receiver.next().await {
             match msg {
@@ -358,6 +360,7 @@ async fn handle_websocket(socket: WebSocket, ws_manager: Arc<WebSocketManager>, 
 }
 
 /// Helper functions for broadcasting specific events
+
 impl WebSocketManager {
     /// Broadcast agent status update
     pub fn broadcast_agent_status(
@@ -451,7 +454,6 @@ impl WebSocketManager {
     }
 
     /// Broadcast message sent event
-    #[allow(clippy::too_many_arguments)]
     pub fn broadcast_message_sent(
         &self,
         message_id: Uuid,
@@ -503,11 +505,11 @@ impl WebSocketManager {
     pub fn broadcast_message_failed(
         &self,
         message_id: Uuid,
-        error: impl Into<String>,
+        error_message: impl Into<String>,
     ) -> Result<()> {
         let message = WebSocketMessage::MessageFailed {
             message_id,
-            error: error.into(),
+            error_message: error_message.into(),
             timestamp: chrono::Utc::now(),
         };
         self.broadcast(message)?;

@@ -17,6 +17,7 @@ use serde::{Deserialize, Serialize};
 use std::{
     collections::HashMap,
     sync::{Arc, RwLock},
+    time::Duration,
 };
 use uuid::Uuid;
 
@@ -130,12 +131,6 @@ pub struct AuthService {
     pub users: Arc<RwLock<HashMap<String, UserCredentials>>>,
 }
 
-impl Default for AuthService {
-    fn default() -> Self {
-        Self::new()
-    }
-}
-
 impl AuthService {
     /// Create a new auth service with default admin user
     pub fn new() -> Self {
@@ -201,6 +196,12 @@ impl AuthService {
     }
 }
 
+impl Default for AuthService {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 /// Generate a random session ID
 fn generate_session_id() -> String {
     let mut rng = rand::thread_rng();
@@ -218,12 +219,10 @@ fn generate_session_id() -> String {
 
 /// Extract session ID from cookie header
 fn extract_session_id_from_cookie(cookie_header: &str) -> Option<String> {
-    cookie_header
-        .split(';')
-        .map(|cookie| cookie.trim())
-        .find(|cookie| cookie.starts_with("session_id="))
-        .and_then(|cookie| cookie.split('=').nth(1))
-        .map(|s| s.to_string())
+    cookie::Cookie::split_parse(cookie_header)
+        .filter_map(Result::ok)
+        .find(|c| c.name() == "session_id")
+        .map(|c| c.value().to_string())
 }
 
 /// Middleware to require authentication

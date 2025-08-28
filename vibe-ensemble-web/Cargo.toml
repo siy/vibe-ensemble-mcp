@@ -34,6 +34,7 @@ tracing-subscriber = { workspace = true, features = ["env-filter"] }
 reqwest = { workspace = true }
 futures-util = { workspace = true }
 rand = { workspace = true }
+cookie = "0.18"
 
 [dev-dependencies]
 tokio-test = "0.4"

@@ -182,6 +182,12 @@ impl MessagesTemplate {
     }
 }
 
+impl Default for MessagesTemplate {
+    fn default() -> Self {
+        Self::new(serde_json::json!({}), 0)
+    }
+}
+
 /// Link Health Dashboard Template
 #[derive(Template)]
 #[template(path = "link_health.html")]
