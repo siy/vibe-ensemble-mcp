@@ -424,13 +424,13 @@
             <p>{% block page_description %}Coordination hub for multiple Claude Code instances{% endblock %}</p>
             
             <nav class="nav">
-                <a href="/dashboard" {% if current_page == "dashboard" %}class="active"{% endif %}>Dashboard</a>
-                <a href="/agents" {% if current_page == "agents" %}class="active"{% endif %}>Agents</a>
-                <a href="/issues" {% if current_page == "issues" %}class="active"{% endif %}>Issues</a>
+                <a href="/dashboard" {% if current_page == "dashboard" %}class="active" aria-current="page"{% endif %}>Dashboard</a>
+                <a href="/agents" {% if current_page == "agents" %}class="active" aria-current="page"{% endif %}>Agents</a>
+                <a href="/issues" {% if current_page == "issues" %}class="active" aria-current="page"{% endif %}>Issues</a>
                 <a href="/messages" {% if current_page == "messages" %}class="active" aria-current="page"{% endif %}>Messages</a>
                 <a href="/link-health" {% if current_page == "link_health" %}class="active" aria-current="page"{% endif %}>Link Health</a>
-                <a href="/knowledge" {% if current_page == "knowledge" %}class="active"{% endif %}>Knowledge</a>
-                <a href="/admin" {% if current_page == "admin" %}class="active"{% endif %}>Admin</a>
+                <a href="/knowledge" {% if current_page == "knowledge" %}class="active" aria-current="page"{% endif %}>Knowledge</a>
+                <a href="/admin" {% if current_page == "admin" %}class="active" aria-current="page"{% endif %}>Admin</a>
                 <a href="/api/health">API</a>
                 <a href="/logout">Logout</a>
             </nav>

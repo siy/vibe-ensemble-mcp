@@ -351,6 +351,7 @@ async function loadLinkStatus() {
     try {
         showLoading(true);
         const response = await fetch('/api/links/status');
+        if (!response.ok) throw new Error(`HTTP ${response.status}`);
         const data = await response.json();
         
         allLinks = data.links || [];
@@ -367,6 +368,7 @@ async function loadLinkStatus() {
 async function loadHealthSummary() {
     try {
         const response = await fetch('/api/links/health');
+        if (!response.ok) throw new Error(`HTTP ${response.status}`);
         const summary = await response.json();
         
         updateHealthOverview(summary);
@@ -379,6 +381,7 @@ async function loadHealthSummary() {
 async function loadNavigationAnalytics() {
     try {
         const response = await fetch('/api/links/analytics');
+        if (!response.ok) throw new Error(`HTTP ${response.status}`);
         const data = await response.json();
         
         displayNavigationAnalytics(data.analytics || []);
@@ -495,6 +498,7 @@ async function validateSingleLink(url) {
     try {
         const encodedUrl = encodeURIComponent(url);
         const response = await fetch(`/api/links/${encodedUrl}/validate`);
+        if (!response.ok) throw new Error(`HTTP ${response.status}`);
         const data = await response.json();
         
         if (data.result) {
