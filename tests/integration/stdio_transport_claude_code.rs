@@ -3,14 +3,9 @@
 //! These tests verify that the enhanced stdio transport meets all Claude Code
 //! requirements for MCP protocol communication over stdin/stdout.
 
-use std::process::{Command, Stdio};
-use std::time::Duration;
-use tokio::io::{AsyncReadExt, AsyncWriteExt};
-use tokio::process::{Child, ChildStdin, ChildStdout, Command as TokioCommand};
-use tokio::time::{timeout, sleep};
 use serde_json::{json, Value};
+use std::time::Duration;
 use tempfile::NamedTempFile;
-use std::io::Write;
 
 use vibe_ensemble_mcp::transport::{StdioTransport, Transport, TransportFactory};
 
@@ -129,10 +124,10 @@ async fn test_buffer_optimization() {
     }
 }
 
-/// Test UTF-8 encoding compliance
+/// Test Unicode encoding compliance 
 #[tokio::test]
-async fn test_utf8_encoding_compliance() {
-    let utf8_test_cases = vec![
+async fn test_unicode_encoding_compliance() {
+    let unicode_test_cases = vec![
         ("ASCII only", r#"{"jsonrpc":"2.0","id":1,"method":"test"}"#),
         ("Latin-1", r#"{"jsonrpc":"2.0","id":1,"method":"test","params":{"message":"Café"}}"#),
         ("Chinese", r#"{"jsonrpc":"2.0","id":1,"method":"test","params":{"message":"你好世界"}}"#),
@@ -141,12 +136,11 @@ async fn test_utf8_encoding_compliance() {
         ("Mixed", r#"{"jsonrpc":"2.0","id":1,"method":"test","params":{"message":"Hello 世界 🌍 Café"}}"#),
     ];
 
-    for (description, message) in utf8_test_cases {
+    for (description, message) in unicode_test_cases {
         assert!(StdioTransport::validate_message(message).is_ok(),
-                "UTF-8 message should be valid ({}): {}", description, message);
+                "Unicode message should be valid ({}): {}", description, message);
         
-        // Verify the message is valid UTF-8
-        assert!(message.is_utf8(), "Message should be valid UTF-8: {}", description);
+        // Note: All &str in Rust are guaranteed to be valid UTF-8
     }
 }
 
@@ -264,14 +258,3 @@ async fn test_signal_handling_setup() {
     }
 }
 
-/// Helper trait to check UTF-8 validity
-trait Utf8Check {
-    fn is_utf8(&self) -> bool;
-}
-
-impl Utf8Check for str {
-    fn is_utf8(&self) -> bool {
-        // All &str in Rust are guaranteed to be valid UTF-8
-        true
-    }
-}

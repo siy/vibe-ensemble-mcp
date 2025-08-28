@@ -118,9 +118,9 @@ where
                                     return Ok(text);
                                 }
                                 Err(e) => {
-                                    warn!("Received binary message that couldn't be converted to UTF-8: {}", e);
+                                    warn!("Received binary message that couldn't be converted to Unicode: {}", e);
                                     return Err(Error::Transport(
-                                        "Received non-UTF-8 binary message".to_string(),
+                                        "Received non-Unicode binary message".to_string(),
                                     ));
                                 }
                             }
@@ -250,7 +250,7 @@ impl Transport for InMemoryTransport {
 /// This implementation is optimized for Claude Code compatibility and includes:
 /// - JSON-RPC 2.0 message validation
 /// - Newline-delimited message framing
-/// - UTF-8 encoding validation
+/// - Unicode string handling (all Rust strings are UTF-8)
 /// - Signal handling for graceful shutdown
 /// - Performance-optimized buffering
 /// - Robust error handling and recovery
@@ -260,7 +260,7 @@ pub struct StdioTransport {
     is_closed: bool,
     read_timeout: Duration,
     write_timeout: Duration,
-    #[allow(dead_code)] // Used for configuration tracking and potential future features
+    #[cfg_attr(not(test), allow(dead_code))] // Used for configuration tracking and potential future features
     buffer_size: usize,
 }
 
@@ -292,13 +292,16 @@ impl StdioTransport {
         write_timeout: Duration,
         buffer_size: usize,
     ) -> Self {
+        // Ensure minimum buffer size of 4KB for reasonable performance
+        let clamped_buffer_size = buffer_size.max(4096);
+        
         Self {
-            stdin_reader: BufReader::with_capacity(buffer_size, tokio::io::stdin()),
-            stdout_writer: BufWriter::with_capacity(buffer_size, tokio::io::stdout()),
+            stdin_reader: BufReader::with_capacity(clamped_buffer_size, tokio::io::stdin()),
+            stdout_writer: BufWriter::with_capacity(clamped_buffer_size, tokio::io::stdout()),
             is_closed: false,
             read_timeout,
             write_timeout,
-            buffer_size,
+            buffer_size: clamped_buffer_size,
         }
     }
 
@@ -350,7 +353,7 @@ impl StdioTransport {
             }
         }
 
-        debug!("Message validation passed: JSON-RPC 2.0, no embedded newlines, valid UTF-8");
+        debug!("Message validation passed: JSON-RPC 2.0, no embedded newlines, valid Unicode");
         Ok(())
     }
 
@@ -450,9 +453,10 @@ impl Transport for StdioTransport {
         let read_timeout = self.read_timeout;
 
         // Create read operation with signal handling
+        let mut line = String::new(); // Reuse buffer across iterations for better performance
         let read_operation = async move {
             loop {
-                let mut line = String::new();
+                line.clear(); // Clear but keep allocated capacity
 
                 tokio::select! {
                     result = self.stdin_reader.read_line(&mut line) => {
@@ -897,7 +901,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_stdio_transport_utf8_validation() {
-        // Test with valid UTF-8 content including non-ASCII characters
+        // Test with valid Unicode content including non-ASCII characters
         let utf8_message =
             r#"{"jsonrpc":"2.0","id":1,"method":"test","params":{"message":"Hello 世界 🌍"}}"#;
         assert!(StdioTransport::validate_message(utf8_message).is_ok());
