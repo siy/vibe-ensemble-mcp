@@ -81,7 +81,7 @@ async fn record_navigation_analytics(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use axum::http::{HeaderValue, Method};
+    use axum::http::HeaderValue;
 
     #[test]
     fn test_extract_user_agent() {

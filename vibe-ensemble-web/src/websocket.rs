@@ -273,7 +273,6 @@ async fn handle_websocket(socket: WebSocket, ws_manager: Arc<WebSocketManager>, 
     let mut message_receiver = ws_manager.subscribe();
 
     // Spawn task to forward broadcast messages to this client
-    let _client_id_clone = client_id;
     let forward_task = tokio::spawn(async move {
         while let Ok(message) = message_receiver.recv().await {
             let json_message = match serde_json::to_string(&message) {
@@ -292,7 +291,6 @@ async fn handle_websocket(socket: WebSocket, ws_manager: Arc<WebSocketManager>, 
 
     // Handle incoming messages from client
     let client_id_clone2 = client_id;
-    let _ws_manager_clone = ws_manager.clone();
     let receive_task = tokio::spawn(async move {
         while let Some(msg) = ws_receiver.next().await {
             match msg {
@@ -446,18 +444,18 @@ impl WebSocketManager {
         message_id: Uuid,
         sender_id: Uuid,
         recipient_id: Option<Uuid>,
-        message_type: String,
-        priority: String,
-        content: String,
+        message_type: impl Into<String>,
+        priority: impl Into<String>,
+        content: impl Into<String>,
         correlation_id: Option<Uuid>,
     ) -> Result<()> {
         let message = WebSocketMessage::MessageSent {
             message_id,
             sender_id,
             recipient_id,
-            message_type,
-            priority,
-            content,
+            message_type: message_type.into(),
+            priority: priority.into(),
+            content: content.into(),
             correlation_id,
             timestamp: chrono::Utc::now(),
         };
@@ -485,10 +483,14 @@ impl WebSocketManager {
     }
 
     /// Broadcast message failed event
-    pub fn broadcast_message_failed(&self, message_id: Uuid, error: String) -> Result<()> {
+    pub fn broadcast_message_failed(
+        &self,
+        message_id: Uuid,
+        error: impl Into<String>,
+    ) -> Result<()> {
         let message = WebSocketMessage::MessageFailed {
             message_id,
-            error,
+            error: error.into(),
             timestamp: chrono::Utc::now(),
         };
         self.broadcast(message)?;

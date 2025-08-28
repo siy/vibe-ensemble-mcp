@@ -7,7 +7,6 @@
 use crate::Result;
 use axum::{
     extract::{Path, Query, State},
-    http::StatusCode,
     response::IntoResponse,
     routing::get,
     Json, Router,
@@ -161,6 +160,7 @@ pub struct LinkValidator {
     /// HTTP client
     client: reqwest::Client,
     /// Storage manager for persistence
+    #[allow(dead_code)]
     storage: Option<Arc<StorageManager>>,
 }
 
@@ -293,12 +293,7 @@ impl LinkValidator {
                 } else {
                     None
                 };
-                result.update_result(
-                    status,
-                    None,
-                    None,
-                    error_msg,
-                );
+                result.update_result(status, None, None, error_msg);
             }
             LinkType::WebSocket => {
                 // WebSocket validation would require more complex testing
@@ -323,13 +318,13 @@ impl LinkValidator {
     }
 
     /// Check if a route is registered in the application
-    fn is_route_registered(&self, route: &str) -> bool {
+    pub fn is_route_registered(&self, route: &str) -> bool {
         let app_routes = self.app_routes.read().expect("Failed to acquire read lock");
         app_routes.contains(route)
     }
 
     /// Determine link type based on URL pattern
-    fn determine_link_type(&self, url: &str) -> LinkType {
+    pub fn determine_link_type(&self, url: &str) -> LinkType {
         if url.starts_with("/api/") {
             LinkType::Api
         } else if url == "/ws" {
@@ -548,11 +543,11 @@ impl LinkValidator {
     /// Calculate similarity confidence based on string distance
     fn calculate_similarity_confidence(&self, url1: &str, url2: &str) -> f64 {
         let distance = self.calculate_string_distance(url1, url2);
-        (1.0 - distance).max(0.0).min(1.0)
+        (1.0 - distance).clamp(0.0, 1.0)
     }
 
     /// Simple Levenshtein distance calculation
-    fn calculate_string_distance(&self, s1: &str, s2: &str) -> f64 {
+    pub fn calculate_string_distance(&self, s1: &str, s2: &str) -> f64 {
         let len1 = s1.len();
         let len2 = s2.len();
 
@@ -565,8 +560,8 @@ impl LinkValidator {
 
         let mut matrix = vec![vec![0; len2 + 1]; len1 + 1];
 
-        for i in 0..=len1 {
-            matrix[i][0] = i;
+        for (i, row) in matrix.iter_mut().enumerate().take(len1 + 1) {
+            row[0] = i;
         }
         for j in 0..=len2 {
             matrix[0][j] = j;

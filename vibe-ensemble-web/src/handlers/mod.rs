@@ -135,8 +135,8 @@ pub async fn agents_list(
     Query(query): Query<AgentQuery>,
 ) -> Result<impl IntoResponse> {
     // Enforce maximum limit to prevent excessive memory usage
-    let limit = query.limit.unwrap_or(100).min(1000);
-    let offset = query.offset.unwrap_or(0);
+    let limit = query.limit.unwrap_or(100).clamp(1, 1000);
+    let offset = query.offset.unwrap_or(0).max(0);
 
     let agents = storage
         .agents()
@@ -188,8 +188,8 @@ pub async fn issues_list(
     Query(query): Query<IssueQuery>,
 ) -> Result<impl IntoResponse> {
     // Enforce maximum limit to prevent excessive memory usage
-    let limit = query.limit.unwrap_or(100).min(1000);
-    let offset = query.offset.unwrap_or(0);
+    let limit = query.limit.unwrap_or(100).clamp(1, 1000);
+    let offset = query.offset.unwrap_or(0).max(0);
 
     let issues = storage
         .issues()
@@ -413,8 +413,8 @@ pub async fn messages_list(
     Query(query): Query<MessageQuery>,
 ) -> Result<impl IntoResponse> {
     // Enforce maximum limit to prevent excessive memory usage
-    let limit = query.limit.unwrap_or(50).min(500);
-    let offset = query.offset.unwrap_or(0);
+    let limit = query.limit.unwrap_or(50).clamp(1, 500);
+    let offset = query.offset.unwrap_or(0).max(0);
 
     let messages = storage
         .messages()
@@ -497,7 +497,7 @@ pub async fn messages_conversations(
     State(storage): State<Arc<StorageManager>>,
     Query(query): Query<MessageQuery>,
 ) -> Result<impl IntoResponse> {
-    let limit = query.limit.unwrap_or(100).min(500);
+    let limit = query.limit.unwrap_or(100).clamp(1, 500);
     let messages = storage
         .messages()
         .list_recent(limit as i64)
@@ -627,8 +627,8 @@ pub async fn messages_search(
     matching_messages.sort_by(|a, b| b.created_at.cmp(&a.created_at));
 
     // Apply pagination
-    let limit = query.limit.unwrap_or(50).min(200);
-    let offset = query.offset.unwrap_or(0);
+    let limit = query.limit.unwrap_or(50).clamp(1, 200);
+    let offset = query.offset.unwrap_or(0).max(0);
     let total_count = matching_messages.len();
 
     let paginated_messages: Vec<_> = matching_messages
@@ -783,6 +783,15 @@ pub async fn messages_by_correlation(
     })))
 }
 
+/// Link health dashboard page handler
+pub async fn link_health() -> Result<Html<String>> {
+    let template = LinkHealthTemplate::new();
+    let rendered = template
+        .render()
+        .map_err(|e| crate::Error::Internal(anyhow::anyhow!("{}", e)))?;
+    Ok(Html(rendered))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -811,27 +820,29 @@ mod tests {
             protocol_version: "1.0".to_string(),
             session_id: None,
         };
-        
+
         let sender_agent = vibe_ensemble_core::agent::Agent::new(
             "test-sender".to_string(),
             vibe_ensemble_core::agent::AgentType::Worker,
             vec!["test".to_string()],
             conn_metadata.clone(),
-        ).unwrap();
-        
+        )
+        .unwrap();
+
         let recipient_agent = vibe_ensemble_core::agent::Agent::new(
             "test-recipient".to_string(),
             vibe_ensemble_core::agent::AgentType::Worker,
             vec!["test".to_string()],
             conn_metadata,
-        ).unwrap();
-        
+        )
+        .unwrap();
+
         let sender_id = sender_agent.id;
         let recipient_id = recipient_agent.id;
-            
+
         storage.agents().create(&sender_agent).await.unwrap();
         storage.agents().create(&recipient_agent).await.unwrap();
-        
+
         let mut message = Message::new_direct(
             sender_id,
             recipient_id,
@@ -910,27 +921,29 @@ mod tests {
             protocol_version: "1.0".to_string(),
             session_id: None,
         };
-        
+
         let sender_agent = vibe_ensemble_core::agent::Agent::new(
             "search-sender".to_string(),
             vibe_ensemble_core::agent::AgentType::Worker,
             vec!["test".to_string()],
             conn_metadata.clone(),
-        ).unwrap();
-        
+        )
+        .unwrap();
+
         let recipient_agent = vibe_ensemble_core::agent::Agent::new(
             "search-recipient".to_string(),
             vibe_ensemble_core::agent::AgentType::Worker,
             vec!["test".to_string()],
             conn_metadata,
-        ).unwrap();
-        
+        )
+        .unwrap();
+
         let sender_id = sender_agent.id;
         let recipient_id = recipient_agent.id;
-            
+
         storage.agents().create(&sender_agent).await.unwrap();
         storage.agents().create(&recipient_agent).await.unwrap();
-        
+
         let message = Message::new_direct(
             sender_id,
             recipient_id,
@@ -968,24 +981,26 @@ mod tests {
             protocol_version: "1.0".to_string(),
             session_id: None,
         };
-        
+
         let sender_agent = vibe_ensemble_core::agent::Agent::new(
             "analytics-sender".to_string(),
             vibe_ensemble_core::agent::AgentType::Worker,
             vec!["test".to_string()],
             conn_metadata.clone(),
-        ).unwrap();
-        
+        )
+        .unwrap();
+
         let recipient_agent = vibe_ensemble_core::agent::Agent::new(
             "analytics-recipient".to_string(),
             vibe_ensemble_core::agent::AgentType::Worker,
             vec!["test".to_string()],
             conn_metadata,
-        ).unwrap();
-        
+        )
+        .unwrap();
+
         let sender_id = sender_agent.id;
         let recipient_id = recipient_agent.id;
-            
+
         storage.agents().create(&sender_agent).await.unwrap();
         storage.agents().create(&recipient_agent).await.unwrap();
 
@@ -1034,13 +1049,4 @@ mod tests {
 
         assert!(response.is_ok());
     }
-}
-
-/// Link health dashboard page handler
-pub async fn link_health() -> Result<Html<String>> {
-    let template = LinkHealthTemplate::new();
-    let rendered = template
-        .render()
-        .map_err(|e| crate::Error::Internal(anyhow::anyhow!("{}", e)))?;
-    Ok(Html(rendered))
 }

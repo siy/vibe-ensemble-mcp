@@ -10,16 +10,22 @@ use axum::{
 };
 use serde_json::Value;
 use std::sync::Arc;
-use tower::ServiceExt;
-use vibe_ensemble_storage::StorageManager;
+use tower::util::ServiceExt;
+use vibe_ensemble_storage::{manager::DatabaseConfig, StorageManager};
 use vibe_ensemble_web::{
-    link_validator::{AutoRepairConfig, LinkStatus, LinkValidator, ValidationConfig},
+    link_validator::{AutoRepairConfig, LinkValidator, ValidationConfig},
     server::WebServer,
 };
 
 /// Test helper to create a storage manager for testing
 async fn create_test_storage() -> Arc<StorageManager> {
-    let storage = StorageManager::new_in_memory()
+    let config = DatabaseConfig {
+        url: ":memory:".to_string(),
+        max_connections: Some(1),
+        migrate_on_startup: true,
+        performance_config: None,
+    };
+    let storage = StorageManager::new(&config)
         .await
         .expect("Failed to create in-memory storage");
     Arc::new(storage)
@@ -338,10 +344,10 @@ async fn test_auto_repair_application() {
         suggest_alternatives: true,
     };
 
-    let repairs = validator.apply_auto_repairs(&config).await.unwrap();
+    let _repairs = validator.apply_auto_repairs(&config).await.unwrap();
 
     // Should complete without errors (even if no repairs needed)
-    assert!(!repairs.is_empty() || repairs.len() == 0);
+    // repairs can be empty or non-empty, both are valid outcomes
 }
 
 #[tokio::test]
