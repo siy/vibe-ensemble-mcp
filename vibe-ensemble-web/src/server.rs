@@ -1,6 +1,6 @@
 //! Web server for the Vibe Ensemble dashboard
 
-use crate::{handlers, middleware, Result};
+use crate::{handlers, link_validator, middleware, Result};
 use axum::{
     middleware as axum_middleware,
     routing::{delete, get, post, put},
@@ -41,12 +41,18 @@ impl WebServer {
         Ok(Self { config, storage })
     }
 
-    /// Build the application router
-    fn build_router(&self) -> Router {
+    /// Build the application router (public for testing)
+    pub fn build_router(&self) -> Router {
+        self.build_router_internal()
+    }
+
+    /// Build the application router (internal)
+    fn build_router_internal(&self) -> Router {
         Router::new()
             // Dashboard routes
             .route("/", get(handlers::dashboard))
             .route("/dashboard", get(handlers::dashboard))
+            .route("/link-health", get(handlers::link_health))
             // API routes
             .route("/api/health", get(handlers::health))
             .route("/api/stats", get(handlers::system_stats))
@@ -59,11 +65,17 @@ impl WebServer {
             .route("/api/issues/:id", get(handlers::issue_get))
             .route("/api/issues/:id", put(handlers::issue_update))
             .route("/api/issues/:id", delete(handlers::issue_delete))
+            // Link validation routes
+            .merge(link_validator::create_router())
             // Add shared state
             .with_state(self.storage.clone())
             // Add middleware layers
             .layer(
                 ServiceBuilder::new()
+                    .layer(axum_middleware::from_fn_with_state(
+                        self.storage.clone(),
+                        middleware::navigation_analytics_middleware,
+                    ))
                     .layer(axum_middleware::from_fn(middleware::logging_middleware))
                     .layer(axum_middleware::from_fn(
                         middleware::security_headers_middleware,
@@ -75,7 +87,7 @@ impl WebServer {
 
     /// Run the web server
     pub async fn run(self) -> Result<()> {
-        let app = self.build_router();
+        let app = self.build_router_internal();
         let addr = format!("{}:{}", self.config.host, self.config.port);
 
         tracing::info!("Web dashboard starting on http://{}", addr);

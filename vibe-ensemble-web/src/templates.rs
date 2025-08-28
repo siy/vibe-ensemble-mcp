@@ -141,3 +141,24 @@ impl DashboardTemplate {
         !self.recent_activity.is_empty()
     }
 }
+
+/// Link Health Dashboard Template
+#[derive(Template)]
+#[template(path = "link_health.html")]
+pub struct LinkHealthTemplate {
+    pub current_page: String,
+}
+
+impl LinkHealthTemplate {
+    pub fn new() -> Self {
+        Self {
+            current_page: "link_health".to_string(),
+        }
+    }
+}
+
+impl Default for LinkHealthTemplate {
+    fn default() -> Self {
+        Self::new()
+    }
+}

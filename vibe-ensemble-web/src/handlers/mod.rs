@@ -2,9 +2,12 @@
 
 pub mod dashboard;
 
+use crate::templates::LinkHealthTemplate;
+use askama::Template;
 use axum::{
     extract::{Path, Query, State},
     http::StatusCode,
+    response::Html,
     response::IntoResponse,
     Json,
 };
@@ -310,4 +313,13 @@ pub async fn issue_delete(
         .map_err(crate::Error::Storage)?;
 
     Ok(StatusCode::NO_CONTENT)
+}
+
+/// Link health dashboard page handler
+pub async fn link_health() -> Result<Html<String>> {
+    let template = LinkHealthTemplate::new();
+    let rendered = template
+        .render()
+        .map_err(|e| crate::Error::Internal(anyhow::anyhow!("{}", e)))?;
+    Ok(Html(rendered))
 }

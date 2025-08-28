@@ -1,5 +1,7 @@
 //! Middleware for request logging and performance monitoring
 
+pub mod analytics;
+
 use axum::{
     extract::{MatchedPath, Request},
     middleware::Next,
@@ -7,6 +9,8 @@ use axum::{
 };
 use std::time::Instant;
 use tracing::{info_span, Instrument};
+
+pub use analytics::navigation_analytics_middleware;
 
 /// Threshold for slow request warnings in milliseconds
 const SLOW_REQUEST_THRESHOLD_MS: u128 = 1000;

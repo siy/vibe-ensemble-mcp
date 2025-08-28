@@ -203,7 +203,7 @@ impl WebSocketManager {
 pub async fn websocket_handler(
     ws: WebSocketUpgrade,
     State(ws_manager): State<Arc<WebSocketManager>>,
-    request: Request,
+    request: Request<axum::body::Body>,
 ) -> Response {
     // Extract session from request extensions (added by auth middleware)
     let session = request
@@ -243,7 +243,7 @@ async fn handle_websocket(socket: WebSocket, ws_manager: Arc<WebSocketManager>, 
     let mut message_receiver = ws_manager.subscribe();
 
     // Spawn task to forward broadcast messages to this client
-    let client_id_clone = client_id;
+    let _client_id_clone = client_id;
     let forward_task = tokio::spawn(async move {
         while let Ok(message) = message_receiver.recv().await {
             let json_message = match serde_json::to_string(&message) {
@@ -262,7 +262,7 @@ async fn handle_websocket(socket: WebSocket, ws_manager: Arc<WebSocketManager>, 
 
     // Handle incoming messages from client
     let client_id_clone2 = client_id;
-    let ws_manager_clone = ws_manager.clone();
+    let _ws_manager_clone = ws_manager.clone();
     let receive_task = tokio::spawn(async move {
         while let Some(msg) = ws_receiver.next().await {
             match msg {
@@ -317,7 +317,6 @@ async fn handle_websocket(socket: WebSocket, ws_manager: Arc<WebSocketManager>, 
 }
 
 /// Helper functions for broadcasting specific events
-
 impl WebSocketManager {
     /// Broadcast agent status update
     pub fn broadcast_agent_status(

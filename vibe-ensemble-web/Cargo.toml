@@ -15,7 +15,7 @@ rust-version.workspace = true
 vibe-ensemble-core = { path = "../vibe-ensemble-core" }
 vibe-ensemble-storage = { path = "../vibe-ensemble-storage" }
 tokio = { workspace = true }
-axum = { workspace = true, features = ["matched-path"] }
+axum = { workspace = true, features = ["matched-path", "form"] }
 tower = { workspace = true }
 tower-http = { workspace = true }
 askama = { workspace = true }
@@ -28,3 +28,11 @@ thiserror = { workspace = true }
 anyhow = { workspace = true }
 tracing = { workspace = true }
 tracing-subscriber = { workspace = true, features = ["env-filter"] }
+reqwest = { workspace = true }
+futures-util = { workspace = true }
+tokio-tungstenite = { workspace = true }
+rand = { workspace = true }
+
+[dev-dependencies]
+tokio-test = "0.4"
+urlencoding = "2.1"
