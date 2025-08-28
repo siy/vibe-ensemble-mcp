@@ -35,7 +35,7 @@ use vibe_ensemble_storage::services::{
 };
 
 /// Bundle of all coordination services for production deployments
-#[derive(Debug, Clone)]
+#[derive(Clone)]
 pub struct CoordinationServices {
     pub agent_service: Arc<AgentService>,
     pub issue_service: Arc<IssueService>,
