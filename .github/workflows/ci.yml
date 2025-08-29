@@ -56,10 +56,10 @@ jobs:
       - name: Test web application links
         run: |
           # Build the server first
-          cargo build --release --bin vibe-ensemble-server
+          cargo build --release --bin vibe-ensemble
           
           # Start the server in background
-          ./target/release/vibe-ensemble-server --web-only --port 8081 &
+          ./target/release/vibe-ensemble --web-only --port 8081 &
           SERVER_PID=$!
           
           # Give server time to start
