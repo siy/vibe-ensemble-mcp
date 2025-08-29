@@ -22,6 +22,7 @@ use crate::{
     },
     Error, Result,
 };
+use parse_duration;
 use std::collections::HashMap;
 use std::sync::Arc;
 use tokio::sync::RwLock;
@@ -3088,34 +3089,13 @@ impl McpServer {
             _ => vibe_ensemble_core::coordination::SpawnPriority::Medium,
         };
 
-        // Parse estimated duration
-        let estimated_duration = params.estimated_duration.and_then(|s| {
-            let s = s.trim().to_ascii_lowercase();
-            let mut hours = 0i64;
-            let mut minutes = 0i64;
-            let mut rest = s.as_str();
-            if let Some(h_pos) = rest.find('h') {
-                if let Ok(h) = rest[..h_pos].trim().parse() {
-                    hours = h;
-                }
-                rest = &rest[h_pos + 1..];
-            }
-            if let Some(m_pos) = rest.find('m') {
-                if let Ok(m) = rest[..m_pos].trim().parse() {
-                    minutes = m;
-                }
-            } else if hours == 0 {
-                // plain minutes like "30m" or plain number "30"
-                if let Ok(m) = rest.trim_end_matches('m').parse() {
-                    minutes = m;
-                }
-            }
-            if hours == 0 && minutes == 0 {
-                None
-            } else {
-                Some(chrono::Duration::hours(hours) + chrono::Duration::minutes(minutes))
-            }
-        });
+        // Parse estimated duration using well-tested parse_duration crate
+        let estimated_duration = params
+            .estimated_duration
+            .as_ref()
+            .and_then(|s| parse_duration::parse(s).ok())
+            .and_then(|std_dur| chrono::Duration::from_std(std_dur).ok())
+            .filter(|d| *d > chrono::Duration::zero());
 
         // Parse context data
         let context_data = if let Some(context_value) = params.context_data {

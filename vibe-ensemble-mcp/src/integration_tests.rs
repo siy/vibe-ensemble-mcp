@@ -1503,4 +1503,46 @@ mod tests {
             true
         );
     }
+
+    /// Test snake_case agent_id alias support in agent status updates
+    #[tokio::test]
+    async fn test_agent_status_snake_case_alias() {
+        let (server, _agent_repo) = setup_coordination_server().await;
+
+        // Generate a test agent ID
+        let agent_id = uuid::Uuid::new_v4().to_string();
+
+        // Test with snake_case agent_id (should be treated as status update)
+        let status_request = JsonRpcRequest::new(
+            methods::AGENT_STATUS,
+            Some(json!({
+                "agent_id": agent_id,  // Using snake_case instead of camelCase
+                "status": "online",
+                "capabilities": ["coordination", "task_execution"],
+                "metadata": {
+                    "version": "1.0.0",
+                    "transport": "stdio"
+                }
+            })),
+        );
+
+        let request_json = serde_json::to_string(&status_request).unwrap();
+        let response = server.handle_message(&request_json).await.unwrap().unwrap();
+        let parsed_response: JsonRpcResponse = serde_json::from_str(&response).unwrap();
+
+        // Should succeed and return acknowledgment (not system stats)
+        assert!(
+            parsed_response.error.is_none(),
+            "snake_case agent_id should be accepted"
+        );
+        let result = parsed_response.result.unwrap();
+        assert_eq!(result.get("status").unwrap(), "acknowledged");
+        assert_eq!(result.get("message").unwrap(), "Status update received");
+        assert!(result.get("agent_id").is_some());
+        assert!(result.get("timestamp").is_some());
+
+        // Verify it's not treated as system stats query (no total_agents field)
+        assert!(result.get("total_agents").is_none());
+        assert!(result.get("online_agents").is_none());
+    }
 }
