@@ -16,9 +16,9 @@ use crate::{
         KnowledgeQueryCoordinationResult, LearningCaptureParams, LearningCaptureResult,
         MergeCoordinateParams, MergeCoordinateResult, PatternSuggestParams, PatternSuggestResult,
         ProjectLockParams, ProjectLockResult, ResourceReserveParams, ResourceReserveResult,
-        ScheduleCoordinateParams, ScheduleCoordinateResult, WorkCoordinateParams,
-        WorkCoordinateResult, WorkerCoordinateParams, WorkerCoordinateResult, WorkerMessageParams,
-        WorkerMessageResult, WorkerRequestParams, WorkerRequestResult, *,
+        ScheduleCoordinateParams, ScheduleCoordinateResult, VibeOperationParams,
+        WorkCoordinateParams, WorkCoordinateResult, WorkerCoordinateParams, WorkerCoordinateResult,
+        WorkerMessageParams, WorkerMessageResult, WorkerRequestParams, WorkerRequestResult, *,
     },
     Error, Result,
 };
@@ -780,20 +780,36 @@ impl McpServer {
             tool_name.replace('_', "/")
         };
 
-        let subreq = JsonRpcRequest {
-            jsonrpc: request.jsonrpc.clone(),
-            id: request.id.clone(),
-            method: method.clone(),
-            params: Some(arguments),
-        };
+        // Route to streamlined handlers by converting to VibeOperationParams
+        let result = if let Some(rest) = method.strip_prefix("vibe/") {
+            let operation = rest.replace('/', "_");
+            let vibe_params = VibeOperationParams {
+                operation,
+                params: arguments,
+            };
 
-        // Route to streamlined handlers based on method prefix
-        let result = if method.starts_with("vibe/agent/") {
-            self.handle_vibe_agent(subreq).await
-        } else if method.starts_with("vibe/issue/") {
-            self.handle_vibe_issue(subreq).await
-        } else if method.starts_with("vibe/") {
-            self.handle_vibe_coordination(subreq).await
+            if rest.starts_with("agent/") {
+                let req = JsonRpcRequest::new_with_id(
+                    request.id.clone(),
+                    methods::VIBE_AGENT,
+                    Some(serde_json::to_value(vibe_params)?),
+                );
+                self.handle_vibe_agent(req).await
+            } else if rest.starts_with("issue/") {
+                let req = JsonRpcRequest::new_with_id(
+                    request.id.clone(),
+                    methods::VIBE_ISSUE,
+                    Some(serde_json::to_value(vibe_params)?),
+                );
+                self.handle_vibe_issue(req).await
+            } else {
+                let req = JsonRpcRequest::new_with_id(
+                    request.id.clone(),
+                    methods::VIBE_COORDINATION,
+                    Some(serde_json::to_value(vibe_params)?),
+                );
+                self.handle_vibe_coordination(req).await
+            }
         } else {
             return Err(Error::InvalidParams {
                 message: format!("Unknown tool: {}", tool_name),
@@ -808,13 +824,12 @@ impl McpServer {
         Ok(Some(JsonRpcResponse::success(
             request.id,
             serde_json::json!({
-                "content": [
-                    {
-                        "type": "text",
-                        "text": serde_json::to_string_pretty(&response_result)
-                            .unwrap_or_else(|_| "Tool executed successfully".to_string())
-                    }
-                ]
+                "content": [{
+                    "type": "text",
+                    "text": serde_json::to_string_pretty(&response_result)
+                        .unwrap_or_else(|_| "Tool executed successfully".to_string())
+                }],
+                "data": response_result
             }),
         )))
     }
@@ -3033,14 +3048,31 @@ impl McpServer {
         };
 
         // Parse estimated duration
-        let estimated_duration = params.estimated_duration.and_then(|duration_str| {
-            // Try to parse duration string like "2h", "30m", "1h30m"
-            if let Ok(minutes) = duration_str.trim_end_matches("m").parse::<i64>() {
-                Some(chrono::Duration::minutes(minutes))
-            } else if let Ok(hours) = duration_str.trim_end_matches("h").parse::<i64>() {
-                Some(chrono::Duration::hours(hours))
-            } else {
+        let estimated_duration = params.estimated_duration.and_then(|s| {
+            let s = s.trim().to_ascii_lowercase();
+            let mut hours = 0i64;
+            let mut minutes = 0i64;
+            let mut rest = s.as_str();
+            if let Some(h_pos) = rest.find('h') {
+                if let Ok(h) = rest[..h_pos].trim().parse() {
+                    hours = h;
+                }
+                rest = &rest[h_pos + 1..];
+            }
+            if let Some(m_pos) = rest.find('m') {
+                if let Ok(m) = rest[..m_pos].trim().parse() {
+                    minutes = m;
+                }
+            } else if hours == 0 {
+                // plain minutes like "30m" or plain number "30"
+                if let Ok(m) = rest.trim_end_matches('m').parse() {
+                    minutes = m;
+                }
+            }
+            if hours == 0 && minutes == 0 {
                 None
+            } else {
+                Some(chrono::Duration::hours(hours) + chrono::Duration::minutes(minutes))
             }
         });
 
@@ -3370,16 +3402,14 @@ impl McpServer {
         let coordinator_id = match Uuid::parse_str(&params.coordinator_agent_id) {
             Ok(id) => id,
             Err(e) => {
-                return Ok(Some(JsonRpcResponse {
-                    jsonrpc: "2.0".to_string(),
-                    id: request.id.clone(),
-                    result: None,
-                    error: Some(JsonRpcError {
-                        code: -32602,
+                return Ok(Some(JsonRpcResponse::error(
+                    request.id,
+                    JsonRpcError {
+                        code: error_codes::INVALID_PARAMS,
                         message: format!("Invalid coordinator agent ID: {}", e),
                         data: None,
-                    }),
-                }));
+                    },
+                )));
             }
         };
 

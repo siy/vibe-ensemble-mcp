@@ -27,7 +27,11 @@ mod tests {
 
     async fn setup_test_server() -> (McpServer, Arc<AgentService>, Arc<MessageService>) {
         // Create in-memory database
-        let pool = sqlx::SqlitePool::connect(":memory:").await.unwrap();
+        let pool = sqlx::sqlite::SqlitePoolOptions::new()
+            .max_connections(1)
+            .connect("sqlite::memory:")
+            .await
+            .unwrap();
         vibe_ensemble_storage::migrations::run_migrations(&pool)
             .await
             .unwrap();
