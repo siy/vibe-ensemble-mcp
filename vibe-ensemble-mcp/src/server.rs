@@ -7,18 +7,18 @@
 use crate::{
     protocol::{
         error_codes, AgentDeregisterParams, AgentDeregisterResult, AgentListParams,
-        AgentStatusParams, ConflictPredictParams, ConflictPredictResult, ConflictResolveParams,
-        ConflictResolveResult, CoordinatorRequestWorkerParams, CoordinatorRequestWorkerResult,
-        DependencyDeclareParams, DependencyDeclareResult, GuidelineEnforceParams,
-        GuidelineEnforceResult, IssueAssignParams, IssueAssignResult, IssueCloseParams,
-        IssueCloseResult, IssueCreateParams, IssueCreateResult, IssueInfo, IssueListParams,
-        IssueListResult, IssueUpdateParams, IssueUpdateResult, KnowledgeQueryCoordinationParams,
-        KnowledgeQueryCoordinationResult, LearningCaptureParams, LearningCaptureResult,
-        MergeCoordinateParams, MergeCoordinateResult, PatternSuggestParams, PatternSuggestResult,
-        ProjectLockParams, ProjectLockResult, ResourceReserveParams, ResourceReserveResult,
-        ScheduleCoordinateParams, ScheduleCoordinateResult, WorkCoordinateParams,
-        WorkCoordinateResult, WorkerCoordinateParams, WorkerCoordinateResult, WorkerMessageParams,
-        WorkerMessageResult, WorkerRequestParams, WorkerRequestResult, *,
+        ConflictPredictParams, ConflictPredictResult, ConflictResolveParams, ConflictResolveResult,
+        CoordinatorRequestWorkerParams, CoordinatorRequestWorkerResult, DependencyDeclareParams,
+        DependencyDeclareResult, GuidelineEnforceParams, GuidelineEnforceResult, IssueAssignParams,
+        IssueAssignResult, IssueCloseParams, IssueCloseResult, IssueCreateParams,
+        IssueCreateResult, IssueInfo, IssueListParams, IssueListResult, IssueUpdateParams,
+        IssueUpdateResult, KnowledgeQueryCoordinationParams, KnowledgeQueryCoordinationResult,
+        LearningCaptureParams, LearningCaptureResult, MergeCoordinateParams, MergeCoordinateResult,
+        PatternSuggestParams, PatternSuggestResult, ProjectLockParams, ProjectLockResult,
+        ResourceReserveParams, ResourceReserveResult, ScheduleCoordinateParams,
+        ScheduleCoordinateResult, VibeOperationParams, WorkCoordinateParams, WorkCoordinateResult,
+        WorkerCoordinateParams, WorkerCoordinateResult, WorkerMessageParams, WorkerMessageResult,
+        WorkerRequestParams, WorkerRequestResult, *,
     },
     Error, Result,
 };
@@ -121,23 +121,9 @@ impl McpServer {
         }
     }
 
-    /// Create an MCP server with custom capabilities.
-    /// Useful for testing and specialized configurations.
-    pub fn with_capabilities(capabilities: ServerCapabilities) -> Self {
-        Self {
-            clients: Arc::new(RwLock::new(HashMap::new())),
-            capabilities,
-            agent_service: None,
-            issue_service: None,
-            message_service: None,
-            coordination_service: None,
-            knowledge_service: None,
-        }
-    }
-
-    /// Create a full coordination server with all services and custom capabilities.
-    /// Combines coordination services with custom server capabilities.
-    pub fn with_coordination_and_capabilities(
+    /// Create a full coordination server with custom capabilities.
+    /// Combines all coordination services with custom server capabilities.
+    pub fn with_custom_capabilities(
         services: CoordinationServices,
         capabilities: ServerCapabilities,
     ) -> Self {
@@ -149,35 +135,6 @@ impl McpServer {
             message_service: Some(services.message_service),
             coordination_service: Some(services.coordination_service),
             knowledge_service: Some(services.knowledge_service),
-        }
-    }
-
-    /// Legacy builder method for backward compatibility. Use `with_coordination` instead.
-    #[deprecated(
-        since = "0.2.2",
-        note = "Use McpServer::with_coordination() or McpServer::new() instead"
-    )]
-    pub fn builder() -> McpServerBuilder {
-        McpServerBuilder::new()
-    }
-
-    /// Legacy constructor for backward compatibility. Use `with_coordination` instead.
-    #[deprecated(since = "0.2.2", note = "Use `with_coordination` or `new` instead")]
-    pub fn with_services(
-        agent_service: Option<Arc<AgentService>>,
-        issue_service: Option<Arc<IssueService>>,
-        message_service: Option<Arc<MessageService>>,
-        coordination_service: Option<Arc<CoordinationService>>,
-        knowledge_service: Option<Arc<KnowledgeService>>,
-    ) -> Self {
-        Self {
-            clients: Arc::new(RwLock::new(HashMap::new())),
-            capabilities: ServerCapabilities::default(),
-            agent_service,
-            issue_service,
-            message_service,
-            coordination_service,
-            knowledge_service,
         }
     }
 
@@ -823,83 +780,86 @@ impl McpServer {
             tool_name.replace('_', "/")
         };
 
-        let subreq = JsonRpcRequest {
-            jsonrpc: request.jsonrpc.clone(),
-            id: request.id.clone(),
-            method: method.clone(),
-            params: Some(arguments),
-        };
-
-        // Direct dispatch to specific handlers to avoid recursion
-        let result = match method.as_str() {
-            #[allow(deprecated)]
-            "vibe/agent/register" => self.handle_agent_register(subreq).await,
-            #[allow(deprecated)]
-            "vibe/agent/status" => self.handle_agent_status(subreq).await,
-            #[allow(deprecated)]
-            "vibe/agent/list" => self.handle_agent_list(subreq).await,
-            #[allow(deprecated)]
-            "vibe/agent/deregister" => self.handle_agent_deregister(subreq).await,
-            #[allow(deprecated)]
-            "vibe/issue/create" => self.handle_issue_create_new(subreq).await,
-            #[allow(deprecated)]
-            "vibe/issue/list" => self.handle_issue_list_new(subreq).await,
-            #[allow(deprecated)]
-            "vibe/issue/assign" => self.handle_issue_assign(subreq).await,
-            #[allow(deprecated)]
-            "vibe/issue/update" => self.handle_issue_update_new(subreq).await,
-            #[allow(deprecated)]
-            "vibe/issue/close" => self.handle_issue_close(subreq).await,
-            #[allow(deprecated)]
-            "vibe/message/send" => self.handle_message_send(subreq).await,
-            #[allow(deprecated)]
-            "vibe/message/broadcast" => self.handle_message_broadcast(subreq).await,
-            #[allow(deprecated)]
-            "vibe/knowledge/query" => self.handle_knowledge_query(subreq).await,
-            "vibe/worker/message" => self.handle_worker_message(subreq).await,
-            "vibe/worker/request" => self.handle_worker_request(subreq).await,
-            "vibe/worker/coordinate" => self.handle_worker_coordinate(subreq).await,
-            "vibe/project/lock" => self.handle_project_lock(subreq).await,
-            "vibe/dependency/declare" => self.handle_dependency_declare(subreq).await,
-            "vibe/coordinator/request_worker" => {
-                self.handle_coordinator_request_worker(subreq).await
-            }
-            "vibe/work/coordinate" => self.handle_work_coordinate(subreq).await,
-            "vibe/conflict/resolve" => self.handle_conflict_resolve(subreq).await,
-            "vibe/schedule/coordinate" => self.handle_schedule_coordinate(subreq).await,
-            "vibe/conflict/predict" => self.handle_conflict_predict(subreq).await,
-            "vibe/resource/reserve" => self.handle_resource_reserve(subreq).await,
-            "vibe/merge/coordinate" => self.handle_merge_coordinate(subreq).await,
-            "vibe/knowledge/query/coordination" => {
-                self.handle_knowledge_query_coordination(subreq).await
-            }
-            "vibe/pattern/suggest" => self.handle_pattern_suggest(subreq).await,
-            "vibe/guideline/enforce" => self.handle_guideline_enforce(subreq).await,
-            "vibe/learning/capture" => self.handle_learning_capture(subreq).await,
-            _ => {
+        // Route to streamlined handlers by converting to VibeOperationParams
+        let result = if let Some(rest) = method.strip_prefix("vibe/") {
+            // agent/* and issue/* expect bare operation names ("status", "list", ...)
+            // other vibe/* use underscore-flattened operation names ("worker_message", etc.)
+            let operation = if rest.starts_with("agent/") || rest.starts_with("issue/") {
+                rest.split('/').nth(1).unwrap_or_default().to_string()
+            } else {
+                rest.replace('/', "_")
+            };
+            if (rest.starts_with("agent/") || rest.starts_with("issue/")) && operation.is_empty() {
                 return Err(Error::InvalidParams {
-                    message: format!("Unknown tool: {}", tool_name),
+                    message: format!(
+                        "Missing operation in tool name '{}'; expected vibe/agent/<op> or vibe/issue/<op>",
+                        tool_name
+                    ),
                 });
             }
+            let vibe_params = VibeOperationParams {
+                operation,
+                params: arguments,
+            };
+
+            if rest.starts_with("agent/") {
+                let req = JsonRpcRequest::new_with_id(
+                    request.id.clone(),
+                    methods::VIBE_AGENT,
+                    Some(serde_json::to_value(vibe_params)?),
+                );
+                self.handle_vibe_agent(req).await
+            } else if rest.starts_with("issue/") {
+                let req = JsonRpcRequest::new_with_id(
+                    request.id.clone(),
+                    methods::VIBE_ISSUE,
+                    Some(serde_json::to_value(vibe_params)?),
+                );
+                self.handle_vibe_issue(req).await
+            } else {
+                let req = JsonRpcRequest::new_with_id(
+                    request.id.clone(),
+                    methods::VIBE_COORDINATION,
+                    Some(serde_json::to_value(vibe_params)?),
+                );
+                self.handle_vibe_coordination(req).await
+            }
+        } else {
+            return Err(Error::InvalidParams {
+                message: format!("Unknown tool: {}", tool_name),
+            });
         };
 
-        let response_result = match result? {
-            Some(response) => response.result.unwrap_or(serde_json::Value::Null),
-            None => serde_json::Value::Null,
-        };
-
-        Ok(Some(JsonRpcResponse::success(
-            request.id,
-            serde_json::json!({
-                "content": [
-                    {
+        match result? {
+            Some(mut response) => {
+                if let Some(err) = response.error.take() {
+                    // Bubble up the actual tool error
+                    return Ok(Some(JsonRpcResponse::error(request.id, err)));
+                }
+                let response_result = response.result.unwrap_or(serde_json::Value::Null);
+                Ok(Some(JsonRpcResponse::success(
+                    request.id,
+                    serde_json::json!({
+                        "content": [{
+                            "type": "text",
+                            "text": serde_json::to_string_pretty(&response_result)
+                                .unwrap_or_else(|_| "Tool executed successfully".to_string())
+                        }],
+                        "data": response_result
+                    }),
+                )))
+            }
+            None => Ok(Some(JsonRpcResponse::success(
+                request.id,
+                serde_json::json!({
+                    "content": [{
                         "type": "text",
-                        "text": serde_json::to_string_pretty(&response_result)
-                            .unwrap_or_else(|_| "Tool executed successfully".to_string())
-                    }
-                ]
-            }),
-        )))
+                        "text": "Tool executed successfully (no result)"
+                    }],
+                    "data": serde_json::Value::Null
+                }),
+            ))),
+        }
     }
 
     /// Handle resources list request
@@ -1139,67 +1099,99 @@ impl McpServer {
             return Ok(Some(JsonRpcResponse::success(request.id, result)));
         };
 
-        // Check if this is a status update (has parameters) or status query (no parameters)
-        if let Some(params) = request.params {
-            // Status update from an agent
-            let status_params: AgentStatusParams =
-                serde_json::from_value(params).map_err(|e| Error::Protocol {
-                    message: format!("Invalid agent status parameters: {}", e),
+        // Check if this is a status update (has agentId) or status query (no agentId)
+        if let Some(ref params) = request.params {
+            // Status update if either "agentId" (camelCase) or "agent_id" (snake_case) is present
+            let has_agent_id = params
+                .get("agentId")
+                .or_else(|| params.get("agent_id"))
+                .is_some();
+            if has_agent_id {
+                // Status update from an agent - extract agent ID directly
+                let agent_id_str = params
+                    .get("agentId")
+                    .or_else(|| params.get("agent_id"))
+                    .and_then(|v| v.as_str())
+                    .ok_or_else(|| Error::Protocol {
+                        message: "Missing or invalid agent ID".to_string(),
+                    })?;
+
+                let agent_id = Uuid::parse_str(agent_id_str).map_err(|e| Error::Protocol {
+                    message: format!("Invalid agent ID format: {}", e),
                 })?;
 
-            let agent_id =
-                Uuid::parse_str(&status_params.agent_id).map_err(|e| Error::Protocol {
-                    message: format!("Invalid agent ID: {}", e),
-                })?;
+                // Update heartbeat
+                if let Err(e) = agent_service.update_heartbeat(agent_id).await {
+                    warn!("Failed to update heartbeat for agent {}: {}", agent_id, e);
+                }
 
-            // Update heartbeat
-            if let Err(e) = agent_service.update_heartbeat(agent_id).await {
-                warn!("Failed to update heartbeat for agent {}: {}", agent_id, e);
-            }
+                // Parse and update status only if provided
+                if let Some(status_value) = params.get("status") {
+                    if let Some(status_str) = status_value.as_str() {
+                        if let Ok(agent_status) = self.parse_agent_status(status_str) {
+                            if let Err(e) = agent_service
+                                .update_agent_status(agent_id, agent_status)
+                                .await
+                            {
+                                warn!("Failed to update status for agent {}: {}", agent_id, e);
+                            }
+                        } else {
+                            warn!(
+                                "Invalid status string '{}' for agent {}",
+                                status_str, agent_id
+                            );
+                        }
+                    }
+                }
 
-            // Parse and update status if provided
-            if let Ok(agent_status) = self.parse_agent_status(&status_params.status) {
-                if let Err(e) = agent_service
-                    .update_agent_status(agent_id, agent_status)
+                // Return acknowledgment
+                let result = serde_json::json!({
+                    "agent_id": agent_id,
+                    "status": "acknowledged",
+                    "timestamp": chrono::Utc::now(),
+                    "message": "Status update received"
+                });
+                Ok(Some(JsonRpcResponse::success(request.id, result)))
+            } else {
+                // Params exist but no agentId - treat as status query
+                self.handle_system_status_query(&request, agent_service)
                     .await
-                {
-                    warn!("Failed to update status for agent {}: {}", agent_id, e);
-                }
             }
-
-            // Return acknowledgment
-            let result = serde_json::json!({
-                "agent_id": agent_id,
-                "status": "acknowledged",
-                "timestamp": chrono::Utc::now(),
-                "message": "Status update received"
-            });
-            Ok(Some(JsonRpcResponse::success(request.id, result)))
         } else {
-            // Status query - return system-wide statistics
-            match agent_service.get_statistics().await {
-                Ok(stats) => {
-                    let result = serde_json::json!({
-                        "total_agents": stats.total_agents,
-                        "online_agents": stats.online_agents,
-                        "busy_agents": stats.busy_agents,
-                        "offline_agents": stats.offline_agents,
-                        "coordinator_agents": stats.coordinator_agents,
-                        "worker_agents": stats.worker_agents,
-                        "active_sessions": stats.active_sessions,
-                        "mcp_connections": self.client_count().await
-                    });
-                    Ok(Some(JsonRpcResponse::success(request.id, result)))
-                }
-                Err(e) => {
-                    warn!("Failed to get agent statistics: {}", e);
-                    let result = serde_json::json!({
-                        "connected_agents": self.client_count().await,
-                        "active_sessions": self.clients.read().await.len(),
-                        "error": "Failed to retrieve agent statistics"
-                    });
-                    Ok(Some(JsonRpcResponse::success(request.id, result)))
-                }
+            // No params at all - also treat as status query
+            self.handle_system_status_query(&request, agent_service)
+                .await
+        }
+    }
+
+    /// Handle system status query (when no agentId is provided)
+    async fn handle_system_status_query(
+        &self,
+        request: &JsonRpcRequest,
+        agent_service: &Arc<AgentService>,
+    ) -> Result<Option<JsonRpcResponse>> {
+        match agent_service.get_statistics().await {
+            Ok(stats) => {
+                let result = serde_json::json!({
+                    "total_agents": stats.total_agents,
+                    "online_agents": stats.online_agents,
+                    "busy_agents": stats.busy_agents,
+                    "offline_agents": stats.offline_agents,
+                    "coordinator_agents": stats.coordinator_agents,
+                    "worker_agents": stats.worker_agents,
+                    "active_sessions": stats.active_sessions,
+                    "mcp_connections": self.client_count().await
+                });
+                Ok(Some(JsonRpcResponse::success(request.id.clone(), result)))
+            }
+            Err(e) => {
+                warn!("Failed to get agent statistics: {}", e);
+                let result = serde_json::json!({
+                    "connected_agents": self.client_count().await,
+                    "active_sessions": self.clients.read().await.len(),
+                    "error": "Failed to retrieve agent statistics"
+                });
+                Ok(Some(JsonRpcResponse::success(request.id.clone(), result)))
             }
         }
     }
@@ -3115,17 +3107,13 @@ impl McpServer {
             _ => vibe_ensemble_core::coordination::SpawnPriority::Medium,
         };
 
-        // Parse estimated duration
-        let estimated_duration = params.estimated_duration.and_then(|duration_str| {
-            // Try to parse duration string like "2h", "30m", "1h30m"
-            if let Ok(minutes) = duration_str.trim_end_matches("m").parse::<i64>() {
-                Some(chrono::Duration::minutes(minutes))
-            } else if let Ok(hours) = duration_str.trim_end_matches("h").parse::<i64>() {
-                Some(chrono::Duration::hours(hours))
-            } else {
-                None
-            }
-        });
+        // Parse estimated duration using humantime crate (secure alternative)
+        let estimated_duration = params
+            .estimated_duration
+            .as_ref()
+            .and_then(|s| humantime::parse_duration(s).ok())
+            .and_then(|std_dur| chrono::Duration::from_std(std_dur).ok())
+            .filter(|d| *d > chrono::Duration::zero());
 
         // Parse context data
         let context_data = if let Some(context_value) = params.context_data {
@@ -3453,16 +3441,14 @@ impl McpServer {
         let coordinator_id = match Uuid::parse_str(&params.coordinator_agent_id) {
             Ok(id) => id,
             Err(e) => {
-                return Ok(Some(JsonRpcResponse {
-                    jsonrpc: "2.0".to_string(),
-                    id: request.id.clone(),
-                    result: None,
-                    error: Some(JsonRpcError {
-                        code: -32602,
+                return Ok(Some(JsonRpcResponse::error(
+                    request.id,
+                    JsonRpcError {
+                        code: error_codes::INVALID_PARAMS,
                         message: format!("Invalid coordinator agent ID: {}", e),
                         data: None,
-                    }),
-                }));
+                    },
+                )));
             }
         };
 
@@ -5220,14 +5206,11 @@ impl McpServer {
                 self.handle_agent_register(register_request).await
             }
             "status" => {
-                let status_params: AgentStatusParams = serde_json::from_value(params.params)
-                    .map_err(|e| Error::InvalidParams {
-                        message: format!("Invalid status parameters: {}", e),
-                    })?;
+                // Agent status supports both reporting status (with agentId) and querying system statistics (without agentId)
                 let status_request = JsonRpcRequest::new_with_id(
                     request.id.clone(),
                     methods::AGENT_STATUS,
-                    Some(serde_json::to_value(status_params)?),
+                    Some(params.params),
                 );
                 self.handle_agent_status(status_request).await
             }
@@ -6089,108 +6072,6 @@ impl McpServer {
                     data: None,
                 },
             ))),
-        }
-    }
-}
-
-/// Legacy builder for configuring MCP server instances.
-/// Deprecated: Use `McpServer::with_coordination()` or `McpServer::new()` instead.
-#[deprecated(
-    since = "0.2.2",
-    note = "Use McpServer::with_coordination() or McpServer::new() instead"
-)]
-#[derive(Default)]
-pub struct McpServerBuilder {
-    capabilities: Option<ServerCapabilities>,
-    agent_service: Option<Arc<AgentService>>,
-    issue_service: Option<Arc<IssueService>>,
-    message_service: Option<Arc<MessageService>>,
-    coordination_service: Option<Arc<CoordinationService>>,
-    knowledge_service: Option<Arc<KnowledgeService>>,
-}
-
-#[allow(deprecated)]
-impl McpServerBuilder {
-    /// Create a new builder
-    #[deprecated(
-        since = "0.2.2",
-        note = "Use McpServer::with_coordination() or McpServer::new() instead"
-    )]
-    pub fn new() -> Self {
-        Self::default()
-    }
-
-    /// Set custom server capabilities
-    #[deprecated(since = "0.2.2", note = "Use McpServer::with_capabilities() instead")]
-    pub fn with_capabilities(mut self, capabilities: ServerCapabilities) -> Self {
-        self.capabilities = Some(capabilities);
-        self
-    }
-
-    /// Add agent service
-    #[deprecated(since = "0.2.2", note = "Use McpServer::with_coordination() instead")]
-    pub fn with_agent_service(mut self, service: Arc<AgentService>) -> Self {
-        self.agent_service = Some(service);
-        self
-    }
-
-    /// Add issue service
-    #[deprecated(since = "0.2.2", note = "Use McpServer::with_coordination() instead")]
-    pub fn with_issue_service(mut self, service: Arc<IssueService>) -> Self {
-        self.issue_service = Some(service);
-        self
-    }
-
-    /// Add message service
-    #[deprecated(since = "0.2.2", note = "Use McpServer::with_coordination() instead")]
-    pub fn with_message_service(mut self, service: Arc<MessageService>) -> Self {
-        self.message_service = Some(service);
-        self
-    }
-
-    /// Add coordination service
-    #[deprecated(since = "0.2.2", note = "Use McpServer::with_coordination() instead")]
-    pub fn with_coordination_service(mut self, service: Arc<CoordinationService>) -> Self {
-        self.coordination_service = Some(service);
-        self
-    }
-
-    /// Add knowledge service
-    #[deprecated(since = "0.2.2", note = "Use McpServer::with_coordination() instead")]
-    pub fn with_knowledge_service(mut self, service: Arc<KnowledgeService>) -> Self {
-        self.knowledge_service = Some(service);
-        self
-    }
-
-    /// Add all services at once
-    #[deprecated(since = "0.2.2", note = "Use McpServer::with_coordination() instead")]
-    pub fn with_all_services(
-        mut self,
-        agent_service: Arc<AgentService>,
-        issue_service: Arc<IssueService>,
-        message_service: Arc<MessageService>,
-        coordination_service: Arc<CoordinationService>,
-        knowledge_service: Arc<KnowledgeService>,
-    ) -> Self {
-        self.agent_service = Some(agent_service);
-        self.issue_service = Some(issue_service);
-        self.message_service = Some(message_service);
-        self.coordination_service = Some(coordination_service);
-        self.knowledge_service = Some(knowledge_service);
-        self
-    }
-
-    /// Build the MCP server instance
-    #[deprecated(since = "0.2.2", note = "Use McpServer::with_coordination() instead")]
-    pub fn build(self) -> McpServer {
-        McpServer {
-            clients: Arc::new(RwLock::new(HashMap::new())),
-            capabilities: self.capabilities.unwrap_or_default(),
-            agent_service: self.agent_service,
-            issue_service: self.issue_service,
-            message_service: self.message_service,
-            coordination_service: self.coordination_service,
-            knowledge_service: self.knowledge_service,
         }
     }
 }
