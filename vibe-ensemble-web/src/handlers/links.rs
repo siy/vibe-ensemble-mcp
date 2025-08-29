@@ -51,7 +51,7 @@ pub async fn link_health_page(
 ) -> Result<impl IntoResponse> {
     let link_validator = LinkValidator::new();
     let discovered_links = link_validator.discover_application_links().await;
-    
+
     // Create a simple summary for the template
     let summary = LinkHealthSummary {
         total_links: discovered_links.len(),
@@ -60,7 +60,7 @@ pub async fn link_health_page(
         warning_links: 0,
         last_validation: None,
     };
-    
+
     let template = LinkHealthTemplate::new(summary, discovered_links);
     let rendered = template
         .render()
@@ -74,7 +74,7 @@ pub async fn link_health_summary(
 ) -> Result<impl IntoResponse> {
     let link_validator = LinkValidator::new();
     let discovered_links = link_validator.discover_application_links().await;
-    
+
     // For now, return static data until we implement database storage
     let summary = LinkHealthSummary {
         total_links: discovered_links.len(),
@@ -98,10 +98,10 @@ pub async fn link_status_details(
 ) -> Result<impl IntoResponse> {
     let link_validator = LinkValidator::new();
     let timeout = Duration::from_secs(query.timeout.unwrap_or(5));
-    
+
     let discovered_links = link_validator.discover_application_links().await;
     let mut link_statuses = Vec::new();
-    
+
     // Validate each discovered link
     for url in discovered_links {
         let status = link_validator.validate_link(&url, timeout).await;
@@ -122,26 +122,26 @@ pub async fn validate_links(
 ) -> Result<impl IntoResponse> {
     let link_validator = LinkValidator::new();
     let timeout = Duration::from_secs(query.timeout.unwrap_or(5));
-    
+
     let discovered_links = link_validator.discover_application_links().await;
     let mut results = HashMap::new();
     let mut healthy_count = 0;
     let mut broken_count = 0;
     let mut warning_count = 0;
-    
+
     for url in discovered_links.iter() {
         let status = link_validator.validate_link(url, timeout).await;
-        
+
         match status.status.as_str() {
             "healthy" => healthy_count += 1,
             "broken" => broken_count += 1,
             "warning" => warning_count += 1,
             _ => {}
         }
-        
+
         results.insert(url.clone(), status);
     }
-    
+
     Ok(Json(json!({
         "validation_results": results,
         "summary": {
@@ -178,20 +178,26 @@ pub struct LinkValidator {
     client: Client,
 }
 
+impl Default for LinkValidator {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl LinkValidator {
     pub fn new() -> Self {
         Self {
             client: Client::new(),
         }
     }
-    
+
     /// Discover application links from routes and templates
     pub async fn discover_application_links(&self) -> Vec<String> {
         let mut links = Vec::new();
-        
+
         // Add known application routes
         let base_url = "http://127.0.0.1:8081"; // TODO: Make configurable
-        
+
         // Dashboard and page routes
         links.push(format!("{}/", base_url));
         links.push(format!("{}/dashboard", base_url));
@@ -201,7 +207,7 @@ impl LinkValidator {
         links.push(format!("{}/admin", base_url));
         links.push(format!("{}/link-health", base_url));
         links.push(format!("{}/messages", base_url));
-        
+
         // API endpoints
         links.push(format!("{}/api/health", base_url));
         links.push(format!("{}/api/stats", base_url));
@@ -211,21 +217,21 @@ impl LinkValidator {
         links.push(format!("{}/api/links/status", base_url));
         links.push(format!("{}/api/links/validate", base_url));
         links.push(format!("{}/api/links/analytics", base_url));
-        
+
         // Authentication routes
         links.push(format!("{}/login", base_url));
         links.push(format!("{}/logout", base_url));
-        
+
         // WebSocket endpoint
-        links.push(format!("ws://127.0.0.1:8081/ws"));
-        
+        links.push("ws://127.0.0.1:8081/ws".to_string());
+
         links
     }
-    
+
     /// Validate a single link
     pub async fn validate_link(&self, url: &str, timeout: Duration) -> LinkStatus {
         let start_time = std::time::Instant::now();
-        
+
         // Handle WebSocket URLs differently
         if url.starts_with("ws://") || url.starts_with("wss://") {
             return LinkStatus {
@@ -237,25 +243,20 @@ impl LinkValidator {
                 error_message: Some("WebSocket validation not implemented".to_string()),
             };
         }
-        
-        match self.client
-            .get(url)
-            .timeout(timeout)
-            .send()
-            .await
-        {
+
+        match self.client.get(url).timeout(timeout).send().await {
             Ok(response) => {
                 let status_code = response.status().as_u16();
                 let response_time = start_time.elapsed().as_millis() as u64;
-                
-                let status = if status_code >= 200 && status_code < 300 {
+
+                let status = if (200..300).contains(&status_code) {
                     "healthy"
-                } else if status_code >= 300 && status_code < 400 {
+                } else if (300..400).contains(&status_code) {
                     "warning" // Redirects
                 } else {
                     "broken"
                 };
-                
+
                 LinkStatus {
                     url: url.to_string(),
                     status: status.to_string(),
@@ -267,7 +268,7 @@ impl LinkValidator {
             }
             Err(error) => {
                 let response_time = start_time.elapsed().as_millis() as u64;
-                
+
                 LinkStatus {
                     url: url.to_string(),
                     status: "broken".to_string(),
