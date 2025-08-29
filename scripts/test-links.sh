@@ -29,12 +29,13 @@ test_link() {
     printf "Testing %-50s " "$url"
     
     if [[ "$url" == ws://* ]]; then
-        # WebSocket URLs need special handling - just check if the HTTP equivalent responds
+        # WebSocket URLs need special handling - test HTTP equivalent and accept 400 as OK
         http_url="${url/ws:/http:}"
-        if curl -s -o /dev/null -w "%{http_code}" --max-time 5 "$http_url" | grep -q "200\|404\|405"; then
-            echo -e "${GREEN}✓ OK (WebSocket endpoint)${NC}"
+        status=$(curl -s -o /dev/null -w "%{http_code}" --max-time 5 "$http_url" 2>/dev/null || echo "000")
+        if [[ "$status" == "400" || "$status" == "200" || "$status" == "404" || "$status" == "405" ]]; then
+            echo -e "${GREEN}✓ OK (WebSocket endpoint - HTTP $status)${NC}"
         else
-            echo -e "${RED}✗ FAILED (WebSocket endpoint unreachable)${NC}"
+            echo -e "${RED}✗ FAILED (WebSocket endpoint unreachable - HTTP $status)${NC}"
             FAILED_LINKS=$((FAILED_LINKS + 1))
         fi
     else

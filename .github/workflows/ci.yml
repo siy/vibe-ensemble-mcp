@@ -49,28 +49,27 @@ jobs:
           cargo audit
       
       - name: Run tests
-        run: cargo test --workspace --verbose
-        env:
-          RUST_BACKTRACE: 1
-      
-      - name: Test web application links
         run: |
-          # Build the server first
+          # Run unit and integration tests
+          cargo test --workspace --verbose
+          
+          # Build the server for link validation testing
           cargo build --release --bin vibe-ensemble
           
-          # Start the server in background
+          # Start the server in background for link validation
           ./target/release/vibe-ensemble --web-only --port 8081 &
           SERVER_PID=$!
           
           # Give server time to start
           sleep 10
           
-          # Run link validation script
+          # Run link validation script as part of testing
           ./scripts/test-links.sh http://127.0.0.1:8081
           
           # Clean up
           kill $SERVER_PID || true
         env:
+          RUST_BACKTRACE: 1
           DATABASE_URL: sqlite:./ci_test.db
 
   release:
