@@ -7,7 +7,7 @@
 use crate::{
     protocol::{
         error_codes, AgentDeregisterParams, AgentDeregisterResult, AgentListParams,
-        AgentStatusParams, ConflictPredictParams, ConflictPredictResult, ConflictResolveParams,
+        ConflictPredictParams, ConflictPredictResult, ConflictResolveParams,
         ConflictResolveResult, CoordinatorRequestWorkerParams, CoordinatorRequestWorkerResult,
         DependencyDeclareParams, DependencyDeclareResult, GuidelineEnforceParams,
         GuidelineEnforceResult, IssueAssignParams, IssueAssignResult, IssueCloseParams,
@@ -1107,29 +1107,40 @@ impl McpServer {
                 .or_else(|| params.get("agent_id"))
                 .is_some();
             if has_agent_id {
-                // Status update from an agent
-                let status_params: AgentStatusParams = serde_json::from_value(params.clone())
-                    .map_err(|e| Error::Protocol {
-                        message: format!("Invalid agent status parameters: {}", e),
+                // Status update from an agent - extract agent ID directly
+                let agent_id_str = params
+                    .get("agentId")
+                    .or_else(|| params.get("agent_id"))
+                    .and_then(|v| v.as_str())
+                    .ok_or_else(|| Error::Protocol {
+                        message: "Missing or invalid agent ID".to_string(),
                     })?;
 
-                let agent_id =
-                    Uuid::parse_str(&status_params.agent_id).map_err(|e| Error::Protocol {
-                        message: format!("Invalid agent ID: {}", e),
-                    })?;
+                let agent_id = Uuid::parse_str(agent_id_str).map_err(|e| Error::Protocol {
+                    message: format!("Invalid agent ID format: {}", e),
+                })?;
 
                 // Update heartbeat
                 if let Err(e) = agent_service.update_heartbeat(agent_id).await {
                     warn!("Failed to update heartbeat for agent {}: {}", agent_id, e);
                 }
 
-                // Parse and update status if provided
-                if let Ok(agent_status) = self.parse_agent_status(&status_params.status) {
-                    if let Err(e) = agent_service
-                        .update_agent_status(agent_id, agent_status)
-                        .await
-                    {
-                        warn!("Failed to update status for agent {}: {}", agent_id, e);
+                // Parse and update status only if provided
+                if let Some(status_value) = params.get("status") {
+                    if let Some(status_str) = status_value.as_str() {
+                        if let Ok(agent_status) = self.parse_agent_status(status_str) {
+                            if let Err(e) = agent_service
+                                .update_agent_status(agent_id, agent_status)
+                                .await
+                            {
+                                warn!("Failed to update status for agent {}: {}", agent_id, e);
+                            }
+                        } else {
+                            warn!(
+                                "Invalid status string '{}' for agent {}",
+                                status_str, agent_id
+                            );
+                        }
                     }
                 }
 
