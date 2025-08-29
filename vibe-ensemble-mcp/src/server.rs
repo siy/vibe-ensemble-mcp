@@ -22,7 +22,7 @@ use crate::{
     },
     Error, Result,
 };
-use parse_duration;
+use humantime;
 use std::collections::HashMap;
 use std::sync::Arc;
 use tokio::sync::RwLock;
@@ -3089,11 +3089,11 @@ impl McpServer {
             _ => vibe_ensemble_core::coordination::SpawnPriority::Medium,
         };
 
-        // Parse estimated duration using well-tested parse_duration crate
+        // Parse estimated duration using humantime crate (secure alternative)
         let estimated_duration = params
             .estimated_duration
             .as_ref()
-            .and_then(|s| parse_duration::parse(s).ok())
+            .and_then(|s| humantime::parse_duration(s).ok())
             .and_then(|std_dur| chrono::Duration::from_std(std_dur).ok())
             .filter(|d| *d > chrono::Duration::zero());
 
