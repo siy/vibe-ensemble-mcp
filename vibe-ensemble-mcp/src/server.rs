@@ -6406,16 +6406,14 @@ impl McpServer {
                     }
                 }
             }
-            _ => {
-                Ok(Some(JsonRpcResponse::error(
-                    request.id.clone(),
-                    JsonRpcError {
-                        code: error_codes::METHOD_NOT_FOUND,
-                        message: format!("Unknown workspace operation: {}", operation),
-                        data: None,
-                    },
-                )))
-            }
+            _ => Ok(Some(JsonRpcResponse::error(
+                request.id.clone(),
+                JsonRpcError {
+                    code: error_codes::METHOD_NOT_FOUND,
+                    message: format!("Unknown workspace operation: {}", operation),
+                    data: None,
+                },
+            ))),
         }
     }
 }
