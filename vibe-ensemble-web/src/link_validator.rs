@@ -21,6 +21,30 @@ use std::{
 use tokio::time::interval;
 use vibe_ensemble_storage::StorageManager;
 
+/// Serde helper for serializing Duration as milliseconds
+mod duration_ms {
+    use serde::{Deserialize, Deserializer, Serializer};
+    use std::time::Duration;
+
+    pub fn serialize<S>(duration: &Option<Duration>, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        match duration {
+            Some(d) => serializer.serialize_u64(d.as_millis() as u64),
+            None => serializer.serialize_none(),
+        }
+    }
+
+    pub fn deserialize<'de, D>(deserializer: D) -> Result<Option<Duration>, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        let millis = Option::<u64>::deserialize(deserializer)?;
+        Ok(millis.map(Duration::from_millis))
+    }
+}
+
 /// Link validation status
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub enum LinkStatus {
@@ -59,6 +83,7 @@ pub struct LinkValidationResult {
     pub url: String,
     pub link_type: LinkType,
     pub status: LinkStatus,
+    #[serde(with = "duration_ms", skip_serializing_if = "Option::is_none")]
     pub response_time: Option<Duration>,
     pub status_code: Option<u16>,
     pub error_message: Option<String>,
@@ -118,6 +143,7 @@ pub struct NavigationAnalytics {
     pub visit_count: u64,
     pub error_count: u64,
     pub last_visit: DateTime<Utc>,
+    #[serde(with = "duration_ms", skip_serializing_if = "Option::is_none")]
     pub average_response_time: Option<Duration>,
     pub user_agents: HashSet<String>,
 }
@@ -341,18 +367,60 @@ impl LinkValidator {
     /// Validate all discovered links
     pub async fn validate_all_links(&self, base_url: &str) -> Result<Vec<LinkValidationResult>> {
         let links = self.discover_links().await?;
-        let mut results = Vec::new();
+
+        // Use bounded concurrency to avoid overwhelming the server
+        let max_concurrent = self.config.max_concurrent_validations;
+        let semaphore = Arc::new(tokio::sync::Semaphore::new(max_concurrent));
+
+        let mut tasks = Vec::new();
 
         for (url, _) in links {
-            let result = self.validate_link(&url, base_url).await?;
+            let validator = self.clone();
+            let base_url = base_url.to_string();
+            let url_clone = url.clone();
+            let semaphore = semaphore.clone();
 
-            // Store result in cache
-            {
-                let mut cache = self.results.write().expect("Failed to acquire write lock");
-                cache.insert(url.clone(), result.clone());
+            let task = tokio::spawn(async move {
+                let _permit = semaphore
+                    .acquire()
+                    .await
+                    .expect("Failed to acquire semaphore");
+                validator.validate_link(&url_clone, &base_url).await
+            });
+
+            tasks.push((url, task));
+        }
+
+        let mut results = Vec::new();
+
+        for (url, task) in tasks {
+            match task.await {
+                Ok(Ok(result)) => {
+                    // Store result in cache
+                    {
+                        let mut cache = self.results.write().expect("Failed to acquire write lock");
+                        cache.insert(url, result.clone());
+                    }
+                    results.push(result);
+                }
+                Ok(Err(e)) => {
+                    tracing::warn!("Failed to validate link {}: {}", url, e);
+                    // Create a failed result
+                    let mut failed_result =
+                        LinkValidationResult::new(url.clone(), LinkType::Navigation);
+                    failed_result.status = LinkStatus::Broken;
+                    failed_result.error_message = Some(e.to_string());
+                    results.push(failed_result);
+                }
+                Err(e) => {
+                    tracing::error!("Validation task failed for {}: {}", url, e);
+                    let mut failed_result =
+                        LinkValidationResult::new(url.clone(), LinkType::Navigation);
+                    failed_result.status = LinkStatus::Broken;
+                    failed_result.error_message = Some(format!("Task failed: {}", e));
+                    results.push(failed_result);
+                }
             }
-
-            results.push(result);
         }
 
         Ok(results)
@@ -695,6 +763,7 @@ pub struct HealthSummary {
     pub pending_links: usize,
     pub unknown_links: usize,
     pub health_score: f64, // 0-100%
+    #[serde(with = "duration_ms", skip_serializing_if = "Option::is_none")]
     pub average_response_time: Option<Duration>,
     #[serde(skip)]
     pub total_response_time: Duration,
