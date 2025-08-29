@@ -782,7 +782,13 @@ impl McpServer {
 
         // Route to streamlined handlers by converting to VibeOperationParams
         let result = if let Some(rest) = method.strip_prefix("vibe/") {
-            let operation = rest.replace('/', "_");
+            // agent/* and issue/* expect bare operation names ("status", "list", ...)
+            // other vibe/* use underscore-flattened operation names ("worker_message", etc.)
+            let operation = if rest.starts_with("agent/") || rest.starts_with("issue/") {
+                rest.split('/').nth(1).unwrap_or_default().to_string()
+            } else {
+                rest.replace('/', "_")
+            };
             let vibe_params = VibeOperationParams {
                 operation,
                 params: arguments,
@@ -816,22 +822,36 @@ impl McpServer {
             });
         };
 
-        let response_result = match result? {
-            Some(response) => response.result.unwrap_or(serde_json::Value::Null),
-            None => serde_json::Value::Null,
-        };
-
-        Ok(Some(JsonRpcResponse::success(
-            request.id,
-            serde_json::json!({
-                "content": [{
-                    "type": "text",
-                    "text": serde_json::to_string_pretty(&response_result)
-                        .unwrap_or_else(|_| "Tool executed successfully".to_string())
-                }],
-                "data": response_result
-            }),
-        )))
+        match result? {
+            Some(mut response) => {
+                if let Some(err) = response.error.take() {
+                    // Bubble up the actual tool error
+                    return Ok(Some(JsonRpcResponse::error(request.id, err)));
+                }
+                let response_result = response.result.unwrap_or(serde_json::Value::Null);
+                Ok(Some(JsonRpcResponse::success(
+                    request.id,
+                    serde_json::json!({
+                        "content": [{
+                            "type": "text",
+                            "text": serde_json::to_string_pretty(&response_result)
+                                .unwrap_or_else(|_| "Tool executed successfully".to_string())
+                        }],
+                        "data": response_result
+                    }),
+                )))
+            }
+            None => Ok(Some(JsonRpcResponse::success(
+                request.id,
+                serde_json::json!({
+                    "content": [{
+                        "type": "text",
+                        "text": "Tool executed successfully (no result)"
+                    }],
+                    "data": serde_json::Value::Null
+                }),
+            ))),
+        }
     }
 
     /// Handle resources list request
@@ -1071,67 +1091,84 @@ impl McpServer {
             return Ok(Some(JsonRpcResponse::success(request.id, result)));
         };
 
-        // Check if this is a status update (has parameters) or status query (no parameters)
-        if let Some(params) = request.params {
-            // Status update from an agent
-            let status_params: AgentStatusParams =
-                serde_json::from_value(params).map_err(|e| Error::Protocol {
-                    message: format!("Invalid agent status parameters: {}", e),
-                })?;
+        // Check if this is a status update (has agentId) or status query (no agentId)
+        if let Some(ref params) = request.params {
+            // Check if params contains agentId - if so, it's a status update; if not, it's a status query
+            if params.get("agentId").is_some() {
+                // Status update from an agent
+                let status_params: AgentStatusParams = serde_json::from_value(params.clone())
+                    .map_err(|e| Error::Protocol {
+                        message: format!("Invalid agent status parameters: {}", e),
+                    })?;
 
-            let agent_id =
-                Uuid::parse_str(&status_params.agent_id).map_err(|e| Error::Protocol {
-                    message: format!("Invalid agent ID: {}", e),
-                })?;
+                let agent_id =
+                    Uuid::parse_str(&status_params.agent_id).map_err(|e| Error::Protocol {
+                        message: format!("Invalid agent ID: {}", e),
+                    })?;
 
-            // Update heartbeat
-            if let Err(e) = agent_service.update_heartbeat(agent_id).await {
-                warn!("Failed to update heartbeat for agent {}: {}", agent_id, e);
-            }
+                // Update heartbeat
+                if let Err(e) = agent_service.update_heartbeat(agent_id).await {
+                    warn!("Failed to update heartbeat for agent {}: {}", agent_id, e);
+                }
 
-            // Parse and update status if provided
-            if let Ok(agent_status) = self.parse_agent_status(&status_params.status) {
-                if let Err(e) = agent_service
-                    .update_agent_status(agent_id, agent_status)
+                // Parse and update status if provided
+                if let Ok(agent_status) = self.parse_agent_status(&status_params.status) {
+                    if let Err(e) = agent_service
+                        .update_agent_status(agent_id, agent_status)
+                        .await
+                    {
+                        warn!("Failed to update status for agent {}: {}", agent_id, e);
+                    }
+                }
+
+                // Return acknowledgment
+                let result = serde_json::json!({
+                    "agent_id": agent_id,
+                    "status": "acknowledged",
+                    "timestamp": chrono::Utc::now(),
+                    "message": "Status update received"
+                });
+                Ok(Some(JsonRpcResponse::success(request.id, result)))
+            } else {
+                // Params exist but no agentId - treat as status query
+                self.handle_system_status_query(&request, agent_service)
                     .await
-                {
-                    warn!("Failed to update status for agent {}: {}", agent_id, e);
-                }
             }
-
-            // Return acknowledgment
-            let result = serde_json::json!({
-                "agent_id": agent_id,
-                "status": "acknowledged",
-                "timestamp": chrono::Utc::now(),
-                "message": "Status update received"
-            });
-            Ok(Some(JsonRpcResponse::success(request.id, result)))
         } else {
-            // Status query - return system-wide statistics
-            match agent_service.get_statistics().await {
-                Ok(stats) => {
-                    let result = serde_json::json!({
-                        "total_agents": stats.total_agents,
-                        "online_agents": stats.online_agents,
-                        "busy_agents": stats.busy_agents,
-                        "offline_agents": stats.offline_agents,
-                        "coordinator_agents": stats.coordinator_agents,
-                        "worker_agents": stats.worker_agents,
-                        "active_sessions": stats.active_sessions,
-                        "mcp_connections": self.client_count().await
-                    });
-                    Ok(Some(JsonRpcResponse::success(request.id, result)))
-                }
-                Err(e) => {
-                    warn!("Failed to get agent statistics: {}", e);
-                    let result = serde_json::json!({
-                        "connected_agents": self.client_count().await,
-                        "active_sessions": self.clients.read().await.len(),
-                        "error": "Failed to retrieve agent statistics"
-                    });
-                    Ok(Some(JsonRpcResponse::success(request.id, result)))
-                }
+            // No params at all - also treat as status query
+            self.handle_system_status_query(&request, agent_service)
+                .await
+        }
+    }
+
+    /// Handle system status query (when no agentId is provided)
+    async fn handle_system_status_query(
+        &self,
+        request: &JsonRpcRequest,
+        agent_service: &Arc<AgentService>,
+    ) -> Result<Option<JsonRpcResponse>> {
+        match agent_service.get_statistics().await {
+            Ok(stats) => {
+                let result = serde_json::json!({
+                    "total_agents": stats.total_agents,
+                    "online_agents": stats.online_agents,
+                    "busy_agents": stats.busy_agents,
+                    "offline_agents": stats.offline_agents,
+                    "coordinator_agents": stats.coordinator_agents,
+                    "worker_agents": stats.worker_agents,
+                    "active_sessions": stats.active_sessions,
+                    "mcp_connections": self.client_count().await
+                });
+                Ok(Some(JsonRpcResponse::success(request.id.clone(), result)))
+            }
+            Err(e) => {
+                warn!("Failed to get agent statistics: {}", e);
+                let result = serde_json::json!({
+                    "connected_agents": self.client_count().await,
+                    "active_sessions": self.clients.read().await.len(),
+                    "error": "Failed to retrieve agent statistics"
+                });
+                Ok(Some(JsonRpcResponse::success(request.id.clone(), result)))
             }
         }
     }
@@ -5167,14 +5204,11 @@ impl McpServer {
                 self.handle_agent_register(register_request).await
             }
             "status" => {
-                let status_params: AgentStatusParams = serde_json::from_value(params.params)
-                    .map_err(|e| Error::InvalidParams {
-                        message: format!("Invalid status parameters: {}", e),
-                    })?;
+                // Agent status supports both reporting status (with agentId) and querying system statistics (without agentId)
                 let status_request = JsonRpcRequest::new_with_id(
                     request.id.clone(),
                     methods::AGENT_STATUS,
-                    Some(serde_json::to_value(status_params)?),
+                    Some(params.params),
                 );
                 self.handle_agent_status(status_request).await
             }

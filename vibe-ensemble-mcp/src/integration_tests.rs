@@ -231,11 +231,15 @@ mod tests {
         let parsed_response: JsonRpcResponse = serde_json::from_str(&response).unwrap();
 
         // Should succeed and return structured result
-        assert!(parsed_response.error.is_none());
-        assert!(parsed_response.result.is_some());
+        assert!(
+            parsed_response.error.is_none(),
+            "tool call should not return an error: {:?}",
+            parsed_response.error
+        );
         let result = parsed_response.result.unwrap();
         assert!(result.get("content").is_some());
-        assert!(result.get("data").is_some()); // Verify enhanced tool result wrapper
+        let data = result.get("data").expect("missing tool data");
+        assert!(data.is_object(), "tool data should be a JSON object");
 
         // Test vibe/issue/list routing
         let issue_list_request = JsonRpcRequest::new(
@@ -249,9 +253,14 @@ mod tests {
         let response = server.handle_message(&request_json).await.unwrap().unwrap();
         let parsed_response: JsonRpcResponse = serde_json::from_str(&response).unwrap();
 
-        // Should succeed
+        // Should succeed and include issues array
         assert!(parsed_response.error.is_none());
-        assert!(parsed_response.result.is_some());
+        let result = parsed_response.result.unwrap();
+        let data = result.get("data").expect("missing tool data");
+        assert!(
+            data.get("issues").is_some(),
+            "issue list should include 'issues'"
+        );
 
         // Test invalid tool name should return error
         let invalid_request = JsonRpcRequest::new(
