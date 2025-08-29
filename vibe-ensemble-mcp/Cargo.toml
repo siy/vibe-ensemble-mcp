@@ -31,6 +31,7 @@ chrono = { workspace = true }
 tracing-subscriber = "0.3"
 reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls", "stream"] }
 humantime = "2"
+clap = { workspace = true }
 
 [dev-dependencies]
 sqlx = { workspace = true }
