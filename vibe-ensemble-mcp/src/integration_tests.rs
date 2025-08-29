@@ -11,6 +11,46 @@ mod tests {
     use serde_json::json;
     use tokio::time::{timeout, Duration};
 
+    /// Helper function to create a coordination server for testing
+    async fn setup_coordination_server() -> (
+        McpServer,
+        std::sync::Arc<vibe_ensemble_storage::repositories::AgentRepository>,
+    ) {
+        use crate::server::CoordinationServices;
+        use std::sync::Arc;
+        use vibe_ensemble_storage::{
+            repositories::{
+                AgentRepository, IssueRepository, KnowledgeRepository, MessageRepository,
+            },
+            services::{
+                AgentService, CoordinationService, IssueService, KnowledgeService, MessageService,
+            },
+        };
+
+        let pool = sqlx::SqlitePool::connect("sqlite::memory:?cache=shared")
+            .await
+            .unwrap();
+        vibe_ensemble_storage::migrations::run_migrations(&pool)
+            .await
+            .unwrap();
+        let agent_repo = Arc::new(AgentRepository::new(pool.clone()));
+        let issue_repo = Arc::new(IssueRepository::new(pool.clone()));
+        let message_repo = Arc::new(MessageRepository::new(pool.clone()));
+        let knowledge_repo = Arc::new(KnowledgeRepository::new(pool));
+        let services = CoordinationServices::new(
+            Arc::new(AgentService::new(agent_repo.clone())),
+            Arc::new(IssueService::new(issue_repo.clone())),
+            Arc::new(MessageService::new(message_repo.clone())),
+            Arc::new(CoordinationService::new(
+                agent_repo.clone(),
+                issue_repo,
+                message_repo,
+            )),
+            Arc::new(KnowledgeService::new((*knowledge_repo).clone())),
+        );
+        (McpServer::with_coordination(services), agent_repo)
+    }
+
     /// Test complete MCP initialization handshake
     #[tokio::test]
     async fn test_mcp_initialization_handshake() {
@@ -171,6 +211,63 @@ mod tests {
         assert!(tool_names.contains(&"vibe_issue_create"));
 
         server_handle.await.unwrap();
+    }
+
+    /// Test end-to-end call_tool dispatch with new prefix-based routing
+    #[tokio::test]
+    async fn test_call_tool_dispatch_routing() {
+        let (server, _agent_repo) = setup_coordination_server().await;
+
+        // Test vibe/agent/status routing
+        let agent_status_request = JsonRpcRequest::new(
+            methods::CALL_TOOL,
+            Some(json!({
+                "name": "vibe_agent_status",
+                "arguments": {}
+            })),
+        );
+        let request_json = serde_json::to_string(&agent_status_request).unwrap();
+        let response = server.handle_message(&request_json).await.unwrap().unwrap();
+        let parsed_response: JsonRpcResponse = serde_json::from_str(&response).unwrap();
+
+        // Should succeed and return structured result
+        assert!(parsed_response.error.is_none());
+        assert!(parsed_response.result.is_some());
+        let result = parsed_response.result.unwrap();
+        assert!(result.get("content").is_some());
+        assert!(result.get("data").is_some()); // Verify enhanced tool result wrapper
+
+        // Test vibe/issue/list routing
+        let issue_list_request = JsonRpcRequest::new(
+            methods::CALL_TOOL,
+            Some(json!({
+                "name": "vibe_issue_list",
+                "arguments": {}
+            })),
+        );
+        let request_json = serde_json::to_string(&issue_list_request).unwrap();
+        let response = server.handle_message(&request_json).await.unwrap().unwrap();
+        let parsed_response: JsonRpcResponse = serde_json::from_str(&response).unwrap();
+
+        // Should succeed
+        assert!(parsed_response.error.is_none());
+        assert!(parsed_response.result.is_some());
+
+        // Test invalid tool name should return error
+        let invalid_request = JsonRpcRequest::new(
+            methods::CALL_TOOL,
+            Some(json!({
+                "name": "invalid_tool_name",
+                "arguments": {}
+            })),
+        );
+        let request_json = serde_json::to_string(&invalid_request).unwrap();
+        let response = server.handle_message(&request_json).await.unwrap().unwrap();
+        let parsed_response: JsonRpcResponse = serde_json::from_str(&response).unwrap();
+
+        // Should return error for unknown tool
+        assert!(parsed_response.error.is_some());
+        assert!(parsed_response.result.is_none());
     }
 
     /// Test agent registration (Vibe Ensemble extension)
