@@ -8,6 +8,7 @@ pub mod storage_integration;
 pub mod agent_coordination;
 pub mod stdio_transport_claude_code;
 pub mod web_interface;
+pub mod transport_testing_framework;
 
 use crate::common::TestContext;
 

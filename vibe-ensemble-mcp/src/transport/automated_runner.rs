@@ -1,0 +1,892 @@
+//! Automated test execution system for transport testing
+//!
+//! This module provides automated test execution capabilities that can run
+//! comprehensive transport validation across all available transport types
+//! with detailed reporting, comparison, and CI integration.
+
+use crate::transport::testing::{
+    PerformanceMetrics, TestScenario, TestSuiteResult, TransportTestBuilder, TransportTester,
+};
+use crate::{Error, Result};
+
+use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
+use std::time::{Duration, Instant};
+use tokio::fs;
+use tracing::{error, info, warn};
+
+/// Configuration for automated test execution
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct AutomatedTestConfig {
+    /// List of transport types to test
+    pub transport_types: Vec<TransportType>,
+    /// Maximum duration for the entire test suite
+    pub max_suite_duration: Duration,
+    /// Whether to run performance benchmarks
+    pub include_performance_tests: bool,
+    /// Whether to run stress tests
+    pub include_stress_tests: bool,
+    /// Whether to run error handling tests
+    pub include_error_tests: bool,
+    /// Minimum success rate required (0.0 to 100.0)
+    pub min_success_rate: f64,
+    /// Performance regression thresholds
+    pub performance_thresholds: PerformanceThresholds,
+    /// Output format for results
+    pub output_format: OutputFormat,
+    /// Whether to save detailed results to files
+    pub save_detailed_results: bool,
+    /// Directory to save results (if save_detailed_results is true)
+    pub results_directory: Option<String>,
+}
+
+/// Transport types available for testing
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
+pub enum TransportType {
+    InMemory,
+    Stdio,
+    #[allow(dead_code)]
+    WebSocket,
+    #[allow(dead_code)]
+    Sse,
+}
+
+impl TransportType {
+    /// Get human-readable name for the transport type
+    pub fn name(&self) -> &'static str {
+        match self {
+            TransportType::InMemory => "In-Memory Transport",
+            TransportType::Stdio => "Standard I/O Transport",
+            TransportType::WebSocket => "WebSocket Transport",
+            TransportType::Sse => "Server-Sent Events Transport",
+        }
+    }
+
+    /// Get short identifier for the transport type
+    pub fn id(&self) -> &'static str {
+        match self {
+            TransportType::InMemory => "inmemory",
+            TransportType::Stdio => "stdio",
+            TransportType::WebSocket => "websocket",
+            TransportType::Sse => "sse",
+        }
+    }
+}
+
+/// Performance regression detection thresholds
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct PerformanceThresholds {
+    /// Maximum acceptable throughput decrease (as percentage)
+    pub max_throughput_decrease: f64,
+    /// Maximum acceptable latency increase (as percentage)
+    pub max_latency_increase: f64,
+    /// Minimum acceptable success rate (as percentage)
+    pub min_success_rate: f64,
+    /// Maximum acceptable error rate increase (as percentage)
+    pub max_error_rate_increase: f64,
+}
+
+impl Default for PerformanceThresholds {
+    fn default() -> Self {
+        Self {
+            max_throughput_decrease: 20.0, // 20% decrease max
+            max_latency_increase: 50.0,    // 50% increase max
+            min_success_rate: 80.0,        // 80% minimum success rate
+            max_error_rate_increase: 5.0,  // 5% error rate increase max
+        }
+    }
+}
+
+/// Output format for test results
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
+pub enum OutputFormat {
+    /// Human-readable console output
+    Console,
+    /// JSON format for CI integration
+    Json,
+    /// Both console and JSON
+    Both,
+    /// JUnit XML format for CI systems
+    JunitXml,
+}
+
+impl Default for AutomatedTestConfig {
+    fn default() -> Self {
+        Self {
+            transport_types: vec![TransportType::InMemory],
+            max_suite_duration: Duration::from_secs(300), // 5 minutes
+            include_performance_tests: true,
+            include_stress_tests: true,
+            include_error_tests: true,
+            min_success_rate: 80.0,
+            performance_thresholds: PerformanceThresholds::default(),
+            output_format: OutputFormat::Console,
+            save_detailed_results: false,
+            results_directory: None,
+        }
+    }
+}
+
+/// Comprehensive test execution results
+#[derive(Clone, Debug, Serialize)]
+pub struct AutomatedTestResults {
+    /// Timestamp when tests were executed
+    pub timestamp: String,
+    /// Total duration of all tests
+    pub total_duration: Duration,
+    /// Results for each transport type tested
+    pub transport_results: HashMap<String, TestSuiteResult>,
+    /// Overall success status
+    pub overall_success: bool,
+    /// Summary statistics
+    pub summary: TestSummary,
+    /// Performance comparison results
+    pub performance_comparison: PerformanceComparison,
+    /// Any regressions detected
+    pub regressions_detected: Vec<RegressionAlert>,
+}
+
+/// Summary statistics across all transports
+#[derive(Clone, Debug, Serialize)]
+pub struct TestSummary {
+    /// Total scenarios executed across all transports
+    pub total_scenarios: usize,
+    /// Total scenarios passed across all transports
+    pub total_passed: usize,
+    /// Overall success rate
+    pub overall_success_rate: f64,
+    /// Transport with best performance
+    pub best_performing_transport: String,
+    /// Transport with worst performance
+    pub worst_performing_transport: String,
+    /// Average throughput across all transports
+    pub avg_throughput_msg_per_sec: f64,
+    /// Average latency across all transports
+    pub avg_latency_ms: f64,
+}
+
+/// Performance comparison across transport types
+#[derive(Clone, Debug, Serialize)]
+pub struct PerformanceComparison {
+    /// Throughput comparison (transport -> msg/sec)
+    pub throughput_comparison: HashMap<String, f64>,
+    /// Latency comparison (transport -> avg latency ms)
+    pub latency_comparison: HashMap<String, f64>,
+    /// Success rate comparison (transport -> success rate %)
+    pub success_rate_comparison: HashMap<String, f64>,
+    /// Relative performance rankings
+    pub performance_rankings: Vec<PerformanceRanking>,
+}
+
+/// Performance ranking for a transport
+#[derive(Clone, Debug, Serialize)]
+pub struct PerformanceRanking {
+    /// Transport name
+    pub transport: String,
+    /// Overall rank (1 = best)
+    pub rank: usize,
+    /// Performance score (0.0 to 100.0)
+    pub score: f64,
+    /// Key strengths
+    pub strengths: Vec<String>,
+    /// Key weaknesses
+    pub weaknesses: Vec<String>,
+}
+
+/// Regression alert for performance degradation
+#[derive(Clone, Debug, Serialize)]
+pub struct RegressionAlert {
+    /// Transport affected
+    pub transport: String,
+    /// Type of regression detected
+    pub regression_type: String,
+    /// Severity level
+    pub severity: Severity,
+    /// Description of the regression
+    pub description: String,
+    /// Current value vs baseline/threshold
+    pub current_value: f64,
+    /// Expected/baseline value
+    pub expected_value: f64,
+    /// Deviation percentage
+    pub deviation_percent: f64,
+}
+
+/// Severity levels for regressions
+#[derive(Clone, Debug, Serialize, PartialEq)]
+pub enum Severity {
+    Low,
+    Medium,
+    High,
+    Critical,
+}
+
+/// Automated test execution engine
+pub struct AutomatedTestRunner {
+    config: AutomatedTestConfig,
+    baseline_metrics: Option<HashMap<String, PerformanceMetrics>>,
+}
+
+impl AutomatedTestRunner {
+    /// Create a new automated test runner with configuration
+    pub fn new(config: AutomatedTestConfig) -> Self {
+        Self {
+            config,
+            baseline_metrics: None,
+        }
+    }
+
+
+    /// Set performance baselines for regression detection
+    pub fn with_baselines(mut self, baselines: HashMap<String, PerformanceMetrics>) -> Self {
+        self.baseline_metrics = Some(baselines);
+        self
+    }
+
+    /// Execute comprehensive transport testing
+    pub async fn run_comprehensive_tests(&self) -> Result<AutomatedTestResults> {
+        info!("🚀 Starting comprehensive transport testing");
+        let start_time = Instant::now();
+        let timestamp = chrono::Utc::now().to_rfc3339();
+
+        let mut transport_results = HashMap::new();
+        let mut regressions = Vec::new();
+
+        // Test each configured transport type
+        for transport_type in &self.config.transport_types {
+            info!("Testing transport: {}", transport_type.name());
+
+            match self.test_transport_type(transport_type).await {
+                Ok(result) => {
+                    // Check for regressions
+                    if let Some(baseline_map) = &self.baseline_metrics {
+                        if let Some(baseline) = baseline_map.get(transport_type.id()) {
+                            let transport_regressions = self.detect_regressions(
+                                transport_type,
+                                &result.aggregate_performance,
+                                baseline,
+                            );
+                            regressions.extend(transport_regressions);
+                        }
+                    }
+
+                    transport_results.insert(transport_type.id().to_string(), result);
+                }
+                Err(e) => {
+                    error!("Failed to test transport {}: {}", transport_type.name(), e);
+                    // Create a failed result
+                    let failed_result = self.create_failed_result(transport_type, e);
+                    transport_results.insert(transport_type.id().to_string(), failed_result);
+                }
+            }
+        }
+
+        let total_duration = start_time.elapsed();
+
+        // Generate summary and comparison
+        let summary = self.generate_summary(&transport_results);
+        let performance_comparison = self.generate_performance_comparison(&transport_results);
+        let overall_success = summary.overall_success_rate >= self.config.min_success_rate;
+
+        let results = AutomatedTestResults {
+            timestamp,
+            total_duration,
+            transport_results,
+            overall_success,
+            summary,
+            performance_comparison,
+            regressions_detected: regressions,
+        };
+
+        // Save results if configured
+        if self.config.save_detailed_results {
+            self.save_results(&results).await?;
+        }
+
+        // Output results in requested format
+        self.output_results(&results).await?;
+
+        info!(
+            "✅ Comprehensive transport testing completed in {:?}",
+            total_duration
+        );
+        Ok(results)
+    }
+
+    /// Test a specific transport type
+    async fn test_transport_type(&self, transport_type: &TransportType) -> Result<TestSuiteResult> {
+        let tester = self.build_tester_for_transport(transport_type);
+
+        match transport_type {
+            TransportType::InMemory => {
+                let (transport, _) = crate::transport::InMemoryTransport::pair();
+                Ok(tester
+                    .test_transport(transport, transport_type.name())
+                    .await)
+            }
+            TransportType::Stdio => {
+                // For Stdio, we can't easily test without stdin/stdout, so skip for now
+                Err(Error::Transport(
+                    "Stdio testing requires stdin/stdout setup".to_string(),
+                ))
+            }
+            TransportType::WebSocket => {
+                // For now, return a placeholder - would need actual WebSocket server setup
+                Err(Error::Transport(
+                    "WebSocket testing not yet implemented".to_string(),
+                ))
+            }
+            TransportType::Sse => {
+                // For now, return a placeholder - would need actual SSE server setup
+                Err(Error::Transport(
+                    "SSE testing not yet implemented".to_string(),
+                ))
+            }
+        }
+    }
+
+    /// Build appropriate tester configuration for transport type
+    fn build_tester_for_transport(&self, transport_type: &TransportType) -> TransportTester {
+        let mut builder = TransportTestBuilder::new();
+
+        // Always include standard scenarios
+        builder = builder.with_standard_scenarios();
+
+        // Add transport-specific scenarios based on configuration
+        if self.config.include_performance_tests {
+            builder = builder.add_scenario(
+                TestScenario::new(
+                    &format!("perf_throughput_{}", transport_type.id()),
+                    &format!("{} Throughput Test", transport_type.name()),
+                    &format!("Performance throughput test for {}", transport_type.name()),
+                    Duration::from_secs(30),
+                    true,
+                )
+                .with_tags(vec!["performance", "throughput", transport_type.id()]),
+            );
+        }
+
+        if self.config.include_stress_tests {
+            builder = builder.add_scenario(
+                TestScenario::new(
+                    &format!("stress_load_{}", transport_type.id()),
+                    &format!("{} Stress Test", transport_type.name()),
+                    &format!("Stress test for {}", transport_type.name()),
+                    Duration::from_secs(60),
+                    true,
+                )
+                .with_tags(vec!["stress", "load", transport_type.id()]),
+            );
+        }
+
+        if self.config.include_error_tests {
+            builder = builder.add_scenario(
+                TestScenario::new(
+                    &format!("error_handling_{}", transport_type.id()),
+                    &format!("{} Error Handling", transport_type.name()),
+                    &format!("Error handling test for {}", transport_type.name()),
+                    Duration::from_secs(10),
+                    false, // Expect errors
+                )
+                .with_tags(vec![
+                    "error_handling",
+                    "resilience",
+                    transport_type.id(),
+                ]),
+            );
+        }
+
+        // Set baseline if available
+        if let Some(baseline_map) = &self.baseline_metrics {
+            if let Some(baseline) = baseline_map.get(transport_type.id()) {
+                builder = builder.with_baseline(baseline.clone());
+            }
+        }
+
+        builder.build()
+    }
+
+    /// Create a failed test result for a transport that couldn't be tested
+    fn create_failed_result(
+        &self,
+        transport_type: &TransportType,
+        error: Error,
+    ) -> TestSuiteResult {
+        use crate::transport::testing::{TestResult, TestScenario};
+        use std::collections::HashMap;
+
+        let failed_scenario = TestScenario::new(
+            "transport_setup_failure",
+            "Transport Setup Failure",
+            "Failed to initialize transport for testing",
+            Duration::from_secs(1),
+            true,
+        );
+
+        let failed_result = TestResult::failure(
+            failed_scenario,
+            Duration::from_millis(1),
+            format!("Transport setup failed: {}", error),
+            PerformanceMetrics::default(),
+        );
+
+        TestSuiteResult {
+            transport_name: transport_type.name().to_string(),
+            total_scenarios: 1,
+            passed_scenarios: 0,
+            test_results: vec![failed_result],
+            total_duration: Duration::from_millis(1),
+            aggregate_performance: PerformanceMetrics::default(),
+            metadata: HashMap::new(),
+        }
+    }
+
+    /// Detect performance regressions
+    fn detect_regressions(
+        &self,
+        transport_type: &TransportType,
+        current: &PerformanceMetrics,
+        baseline: &PerformanceMetrics,
+    ) -> Vec<RegressionAlert> {
+        let mut regressions = Vec::new();
+        let thresholds = &self.config.performance_thresholds;
+
+        // Throughput regression check
+        if baseline.throughput_msg_per_sec > 0.0 {
+            let throughput_change = (baseline.throughput_msg_per_sec
+                - current.throughput_msg_per_sec)
+                / baseline.throughput_msg_per_sec
+                * 100.0;
+
+            if throughput_change > thresholds.max_throughput_decrease {
+                regressions.push(RegressionAlert {
+                    transport: transport_type.name().to_string(),
+                    regression_type: "Throughput Decrease".to_string(),
+                    severity: if throughput_change > 50.0 {
+                        Severity::Critical
+                    } else if throughput_change > 30.0 {
+                        Severity::High
+                    } else {
+                        Severity::Medium
+                    },
+                    description: format!("Throughput decreased by {:.2}%", throughput_change),
+                    current_value: current.throughput_msg_per_sec,
+                    expected_value: baseline.throughput_msg_per_sec,
+                    deviation_percent: throughput_change,
+                });
+            }
+        }
+
+        // Latency regression check
+        if baseline.avg_roundtrip_time > Duration::ZERO {
+            let latency_change = (current.avg_roundtrip_time.as_millis() as f64
+                - baseline.avg_roundtrip_time.as_millis() as f64)
+                / baseline.avg_roundtrip_time.as_millis() as f64
+                * 100.0;
+
+            if latency_change > thresholds.max_latency_increase {
+                regressions.push(RegressionAlert {
+                    transport: transport_type.name().to_string(),
+                    regression_type: "Latency Increase".to_string(),
+                    severity: if latency_change > 100.0 {
+                        Severity::Critical
+                    } else if latency_change > 75.0 {
+                        Severity::High
+                    } else {
+                        Severity::Medium
+                    },
+                    description: format!("Latency increased by {:.2}%", latency_change),
+                    current_value: current.avg_roundtrip_time.as_millis() as f64,
+                    expected_value: baseline.avg_roundtrip_time.as_millis() as f64,
+                    deviation_percent: latency_change,
+                });
+            }
+        }
+
+        // Success rate regression check
+        let success_rate_change = baseline.success_rate - current.success_rate;
+        if success_rate_change > thresholds.max_error_rate_increase {
+            regressions.push(RegressionAlert {
+                transport: transport_type.name().to_string(),
+                regression_type: "Success Rate Decrease".to_string(),
+                severity: if success_rate_change > 20.0 {
+                    Severity::Critical
+                } else if success_rate_change > 10.0 {
+                    Severity::High
+                } else {
+                    Severity::Medium
+                },
+                description: format!(
+                    "Success rate decreased by {:.2} percentage points",
+                    success_rate_change
+                ),
+                current_value: current.success_rate,
+                expected_value: baseline.success_rate,
+                deviation_percent: success_rate_change,
+            });
+        }
+
+        regressions
+    }
+
+    /// Generate summary statistics
+    fn generate_summary(&self, results: &HashMap<String, TestSuiteResult>) -> TestSummary {
+        let mut total_scenarios = 0;
+        let mut total_passed = 0;
+        let mut best_throughput = 0.0;
+        let mut worst_throughput = f64::INFINITY;
+        let mut best_transport = String::new();
+        let mut worst_transport = String::new();
+        let mut total_throughput = 0.0;
+        let mut total_latency_ms = 0.0;
+        let mut valid_results = 0;
+
+        for (transport_id, result) in results {
+            total_scenarios += result.total_scenarios;
+            total_passed += result.passed_scenarios;
+
+            let throughput = result.aggregate_performance.throughput_msg_per_sec;
+            if throughput > best_throughput {
+                best_throughput = throughput;
+                best_transport = transport_id.clone();
+            }
+            if throughput < worst_throughput && throughput > 0.0 {
+                worst_throughput = throughput;
+                worst_transport = transport_id.clone();
+            }
+
+            if throughput > 0.0 {
+                total_throughput += throughput;
+                total_latency_ms +=
+                    result.aggregate_performance.avg_roundtrip_time.as_millis() as f64;
+                valid_results += 1;
+            }
+        }
+
+        let overall_success_rate = if total_scenarios > 0 {
+            (total_passed as f64 / total_scenarios as f64) * 100.0
+        } else {
+            0.0
+        };
+
+        let avg_throughput = if valid_results > 0 {
+            total_throughput / valid_results as f64
+        } else {
+            0.0
+        };
+        let avg_latency = if valid_results > 0 {
+            total_latency_ms / valid_results as f64
+        } else {
+            0.0
+        };
+
+        TestSummary {
+            total_scenarios,
+            total_passed,
+            overall_success_rate,
+            best_performing_transport: best_transport,
+            worst_performing_transport: worst_transport,
+            avg_throughput_msg_per_sec: avg_throughput,
+            avg_latency_ms: avg_latency,
+        }
+    }
+
+    /// Generate performance comparison
+    fn generate_performance_comparison(
+        &self,
+        results: &HashMap<String, TestSuiteResult>,
+    ) -> PerformanceComparison {
+        let mut throughput_comparison = HashMap::new();
+        let mut latency_comparison = HashMap::new();
+        let mut success_rate_comparison = HashMap::new();
+        let mut transport_scores = Vec::new();
+
+        for (transport_id, result) in results {
+            let perf = &result.aggregate_performance;
+            throughput_comparison.insert(transport_id.clone(), perf.throughput_msg_per_sec);
+            latency_comparison.insert(
+                transport_id.clone(),
+                perf.avg_roundtrip_time.as_millis() as f64,
+            );
+            success_rate_comparison.insert(transport_id.clone(), result.success_rate());
+
+            // Calculate composite score (throughput * success_rate / latency)
+            let score = if perf.avg_roundtrip_time.as_millis() > 0 {
+                (perf.throughput_msg_per_sec * result.success_rate())
+                    / perf.avg_roundtrip_time.as_millis() as f64
+                    * 100.0
+            } else {
+                perf.throughput_msg_per_sec * result.success_rate()
+            };
+
+            transport_scores.push((transport_id.clone(), score, result));
+        }
+
+        // Sort by score (highest first)
+        transport_scores.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
+
+        let performance_rankings = transport_scores
+            .into_iter()
+            .enumerate()
+            .map(|(rank, (transport_id, score, result))| {
+                let strengths = self.identify_strengths(result);
+                let weaknesses = self.identify_weaknesses(result);
+
+                PerformanceRanking {
+                    transport: transport_id,
+                    rank: rank + 1,
+                    score,
+                    strengths,
+                    weaknesses,
+                }
+            })
+            .collect();
+
+        PerformanceComparison {
+            throughput_comparison,
+            latency_comparison,
+            success_rate_comparison,
+            performance_rankings,
+        }
+    }
+
+    /// Identify strengths of a transport based on its results
+    fn identify_strengths(&self, result: &TestSuiteResult) -> Vec<String> {
+        let mut strengths = Vec::new();
+        let perf = &result.aggregate_performance;
+
+        if perf.throughput_msg_per_sec > 20.0 {
+            strengths.push("High throughput".to_string());
+        }
+        if perf.avg_roundtrip_time < Duration::from_millis(50) {
+            strengths.push("Low latency".to_string());
+        }
+        if result.success_rate() > 95.0 {
+            strengths.push("High reliability".to_string());
+        }
+        if perf.error_count == 0 {
+            strengths.push("Zero errors".to_string());
+        }
+
+        if strengths.is_empty() {
+            strengths.push("Baseline functionality".to_string());
+        }
+
+        strengths
+    }
+
+    /// Identify weaknesses of a transport based on its results
+    fn identify_weaknesses(&self, result: &TestSuiteResult) -> Vec<String> {
+        let mut weaknesses = Vec::new();
+        let perf = &result.aggregate_performance;
+
+        if perf.throughput_msg_per_sec < 5.0 {
+            weaknesses.push("Low throughput".to_string());
+        }
+        if perf.avg_roundtrip_time > Duration::from_millis(200) {
+            weaknesses.push("High latency".to_string());
+        }
+        if result.success_rate() < 80.0 {
+            weaknesses.push("Low reliability".to_string());
+        }
+        if perf.error_count > perf.messages_sent / 10 {
+            weaknesses.push("High error rate".to_string());
+        }
+
+        weaknesses
+    }
+
+    /// Save detailed results to files
+    async fn save_results(&self, results: &AutomatedTestResults) -> Result<()> {
+        if let Some(dir) = &self.config.results_directory {
+            // Create directory if it doesn't exist
+            fs::create_dir_all(dir).await.map_err(|e| {
+                Error::Transport(format!("Failed to create results directory: {}", e))
+            })?;
+
+            // Save JSON results
+            let json_path = format!(
+                "{}/transport_test_results_{}.json",
+                dir,
+                chrono::Utc::now().format("%Y%m%d_%H%M%S")
+            );
+            let json_content = serde_json::to_string_pretty(results)
+                .map_err(|e| Error::Transport(format!("Failed to serialize results: {}", e)))?;
+            fs::write(&json_path, json_content)
+                .await
+                .map_err(|e| Error::Transport(format!("Failed to write results file: {}", e)))?;
+
+            info!("Detailed results saved to: {}", json_path);
+        }
+        Ok(())
+    }
+
+    /// Output results in the configured format
+    async fn output_results(&self, results: &AutomatedTestResults) -> Result<()> {
+        match self.config.output_format {
+            OutputFormat::Console | OutputFormat::Both => {
+                self.output_console_results(results).await?;
+            }
+            _ => {}
+        }
+
+        match self.config.output_format {
+            OutputFormat::Json | OutputFormat::Both => {
+                self.output_json_results(results).await?;
+            }
+            _ => {}
+        }
+
+        if self.config.output_format == OutputFormat::JunitXml {
+            self.output_junit_xml_results(results).await?;
+        }
+
+        Ok(())
+    }
+
+    /// Output console-friendly results
+    async fn output_console_results(&self, results: &AutomatedTestResults) -> Result<()> {
+        println!("\n🎯 COMPREHENSIVE TRANSPORT TEST RESULTS");
+        println!("========================================");
+        println!("Timestamp: {}", results.timestamp);
+        println!("Total Duration: {:?}", results.total_duration);
+        println!(
+            "Overall Success: {}",
+            if results.overall_success {
+                "✅ PASS"
+            } else {
+                "❌ FAIL"
+            }
+        );
+
+        println!("\n📊 SUMMARY");
+        println!("-----------");
+        println!("Total Scenarios: {}", results.summary.total_scenarios);
+        println!("Total Passed: {}", results.summary.total_passed);
+        println!(
+            "Overall Success Rate: {:.2}%",
+            results.summary.overall_success_rate
+        );
+        println!(
+            "Best Performing: {}",
+            results.summary.best_performing_transport
+        );
+        println!(
+            "Worst Performing: {}",
+            results.summary.worst_performing_transport
+        );
+        println!(
+            "Average Throughput: {:.2} msg/sec",
+            results.summary.avg_throughput_msg_per_sec
+        );
+        println!("Average Latency: {:.2} ms", results.summary.avg_latency_ms);
+
+        println!("\n🏆 PERFORMANCE RANKINGS");
+        println!("-----------------------");
+        for ranking in &results.performance_comparison.performance_rankings {
+            println!(
+                "{}. {} (Score: {:.2})",
+                ranking.rank, ranking.transport, ranking.score
+            );
+            println!("   Strengths: {}", ranking.strengths.join(", "));
+            if !ranking.weaknesses.is_empty() {
+                println!("   Weaknesses: {}", ranking.weaknesses.join(", "));
+            }
+        }
+
+        if !results.regressions_detected.is_empty() {
+            println!("\n⚠️ REGRESSIONS DETECTED");
+            println!("-----------------------");
+            for regression in &results.regressions_detected {
+                let severity_icon = match regression.severity {
+                    Severity::Critical => "🔴",
+                    Severity::High => "🟠",
+                    Severity::Medium => "🟡",
+                    Severity::Low => "🟢",
+                };
+                println!(
+                    "{} {} - {}: {}",
+                    severity_icon,
+                    regression.transport,
+                    regression.regression_type,
+                    regression.description
+                );
+            }
+        }
+
+        println!("\n📈 DETAILED TRANSPORT RESULTS");
+        println!("==============================");
+        for (transport_id, result) in &results.transport_results {
+            println!("\n{} ({})", result.transport_name, transport_id);
+            println!(
+                "{}",
+                "=".repeat(result.transport_name.len() + transport_id.len() + 3)
+            );
+            println!("{}", result);
+        }
+
+        Ok(())
+    }
+
+    /// Output JSON results for CI integration
+    async fn output_json_results(&self, results: &AutomatedTestResults) -> Result<()> {
+        let json_output = serde_json::to_string_pretty(results)
+            .map_err(|e| Error::Transport(format!("Failed to serialize JSON results: {}", e)))?;
+        println!("{}", json_output);
+        Ok(())
+    }
+
+    /// Output JUnit XML results for CI integration
+    async fn output_junit_xml_results(&self, _results: &AutomatedTestResults) -> Result<()> {
+        // TODO: Implement JUnit XML output format
+        warn!("JUnit XML output format not yet implemented");
+        Ok(())
+    }
+}
+
+impl Default for AutomatedTestRunner {
+    fn default() -> Self {
+        Self::new(AutomatedTestConfig::default())
+    }
+}
+
+/// Convenience function to run comprehensive transport testing with defaults
+pub async fn run_automated_transport_tests() -> Result<AutomatedTestResults> {
+    let runner = AutomatedTestRunner::default();
+    runner.run_comprehensive_tests().await
+}
+
+/// Convenience function to run transport tests with custom configuration
+pub async fn run_automated_transport_tests_with_config(
+    config: AutomatedTestConfig,
+) -> Result<AutomatedTestResults> {
+    let runner = AutomatedTestRunner::new(config);
+    runner.run_comprehensive_tests().await
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[tokio::test]
+    async fn test_automated_runner_creation() {
+        let runner = AutomatedTestRunner::default();
+        assert_eq!(runner.config.transport_types.len(), 1);
+        assert!(runner.config.include_performance_tests);
+    }
+
+    #[tokio::test]
+    async fn test_config_serialization() {
+        let config = AutomatedTestConfig::default();
+        let json = serde_json::to_string(&config).unwrap();
+        let _deserialized: AutomatedTestConfig = serde_json::from_str(&json).unwrap();
+    }
+
+    #[tokio::test]
+    async fn test_performance_thresholds() {
+        let thresholds = PerformanceThresholds::default();
+        assert_eq!(thresholds.max_throughput_decrease, 20.0);
+        assert_eq!(thresholds.max_latency_increase, 50.0);
+        assert_eq!(thresholds.min_success_rate, 80.0);
+    }
+}
