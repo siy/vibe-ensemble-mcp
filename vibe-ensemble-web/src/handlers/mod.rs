@@ -145,7 +145,7 @@ pub async fn agents_list(
         .map_err(crate::Error::Storage)?;
 
     // Apply basic filtering
-    let filtered_agents: Vec<_> = agents
+    let all_filtered: Vec<_> = agents
         .into_iter()
         .filter(|agent| {
             if let Some(status) = &query.status {
@@ -161,13 +161,18 @@ pub async fn agents_list(
                 true
             }
         })
+        .collect();
+
+    let total = all_filtered.len();
+    let filtered_agents: Vec<_> = all_filtered
+        .into_iter()
         .skip(offset as usize)
         .take(limit as usize)
         .collect();
 
     Ok(Json(json!({
         "agents": filtered_agents,
-        "total": filtered_agents.len(),
+        "total": total,
         "timestamp": chrono::Utc::now().to_rfc3339()
     })))
 }
@@ -198,7 +203,7 @@ pub async fn issues_list(
         .map_err(crate::Error::Storage)?;
 
     // Apply basic filtering
-    let filtered_issues: Vec<_> = issues
+    let all_filtered: Vec<_> = issues
         .into_iter()
         .filter(|issue| {
             if let Some(status) = &query.status {
@@ -221,13 +226,18 @@ pub async fn issues_list(
                 true
             }
         })
+        .collect();
+
+    let total = all_filtered.len();
+    let filtered_issues: Vec<_> = all_filtered
+        .into_iter()
         .skip(offset as usize)
         .take(limit as usize)
         .collect();
 
     Ok(Json(json!({
         "issues": filtered_issues,
-        "total": filtered_issues.len(),
+        "total": total,
         "timestamp": chrono::Utc::now().to_rfc3339()
     })))
 }

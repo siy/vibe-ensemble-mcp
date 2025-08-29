@@ -163,6 +163,11 @@ impl WebServer {
             )
             .route("/api/links/validate", get(handlers::links::validate_links))
             .route("/api/links/analytics", get(handlers::links::link_analytics))
+            .route("/api/links/auto-repair", get(handlers::links::auto_repair))
+            .route(
+                "/api/links/:url/repair-suggestions",
+                get(handlers::links::repair_suggestions),
+            )
             // Add shared state
             .with_state(self.storage.clone())
             // WebSocket route needs separate router with different state

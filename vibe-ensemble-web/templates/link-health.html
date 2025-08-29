@@ -6,7 +6,7 @@
 {% block page_description %}Monitor navigation integrity and link validation across the application{% endblock %}
 
 {% block content %}
-<div class="grid grid-4">
+<div id="health-overview" class="grid grid-4">
     <div class="card stat-card">
         <div class="stat-number" id="total-links">{{ summary.total_links }}</div>
         <div class="stat-label">Total Links</div>
@@ -111,7 +111,7 @@
 </div>
 
 <div class="card">
-    <h3>Link Health Information</h3>
+    <h3>Link Health Monitoring</h3>
     <div class="alert alert-info">
         <strong>About Link Validation</strong><br>
         This dashboard monitors the health of all discovered links in the Vibe Ensemble application, including:<br>
@@ -130,6 +130,14 @@
 
 {% block extra_script %}
 let validationInProgress = false;
+
+// Validate all links function 
+function validateAllLinks() {
+    const button = document.getElementById('validate-all');
+    if (button) {
+        button.click();
+    }
+}
 
 // Link filtering functionality
 document.getElementById('link-filter').addEventListener('input', function(e) {

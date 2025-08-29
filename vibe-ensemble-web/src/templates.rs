@@ -1,10 +1,18 @@
 //! Askama templates for the web dashboard
 
 use askama::Template;
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use vibe_ensemble_core::issue::Issue;
 
-use crate::handlers::links::LinkHealthSummary;
+/// Link health summary
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct LinkHealthSummary {
+    pub total_links: usize,
+    pub healthy_links: usize,
+    pub broken_links: usize,
+    pub warning_links: usize,
+    pub last_validation: Option<chrono::DateTime<chrono::Utc>>,
+}
 
 /// Activity entry for the dashboard
 #[derive(Debug, Serialize)]
@@ -37,7 +45,7 @@ impl SystemMetrics {
     }
 
     pub fn memory_usage_percent_int(&self) -> u64 {
-        self.memory_usage_percent() as u64
+        self.memory_usage_percent().round() as u64
     }
 
     pub fn disk_usage_percent(&self) -> f64 {
@@ -50,7 +58,7 @@ impl SystemMetrics {
     }
 
     pub fn disk_usage_percent_int(&self) -> u64 {
-        self.disk_usage_percent() as u64
+        self.disk_usage_percent().round() as u64
     }
 
     pub fn cpu_usage_percent_int(&self) -> u64 {
@@ -79,7 +87,8 @@ pub struct StorageMetrics {
 impl StorageMetrics {
     pub fn connection_usage_percent(&self) -> f64 {
         if self.max_connections > 0 {
-            (self.active_connections as f64 / self.max_connections as f64) * 100.0
+            ((self.active_connections as f64 / self.max_connections as f64) * 100.0)
+                .clamp(0.0, 100.0)
         } else {
             0.0
         }
