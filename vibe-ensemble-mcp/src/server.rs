@@ -6220,6 +6220,7 @@ impl McpServer {
     }
 
     /// Handle workspace operations for git worktree management
+    #[tracing::instrument(skip(self, arguments), fields(op = %operation_path))]
     async fn handle_workspace_operation(
         &self,
         request: &JsonRpcRequest,
@@ -6322,7 +6323,7 @@ impl McpServer {
                             return false;
                         }
                         if let Some(filter_agent) = agent_id {
-                            w.agent_id.as_ref().is_some_and(|id| id == filter_agent)
+                            matches!(w.agent_id.as_deref(), Some(id) if id == filter_agent)
                         } else {
                             true
                         }

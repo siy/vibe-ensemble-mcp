@@ -294,11 +294,14 @@ impl WorkspaceManager {
             message: format!("Failed to read directory entry: {}", e),
         })? {
             let path = entry.path();
-            if path.is_dir() && path.file_name().unwrap() != "registry.json" {
-                let config_path = path.join("workspace.json");
-                if config_path.exists() {
-                    if let Some(name) = path.file_name() {
-                        workspaces.push(name.to_string_lossy().to_string());
+            if !path.is_dir() {
+                continue;
+            }
+            if let Some(name_os) = path.file_name() {
+                if name_os != "registry.json" {
+                    let config_path = path.join("workspace.json");
+                    if config_path.exists() {
+                        workspaces.push(name_os.to_string_lossy().to_string());
                     }
                 }
             }
@@ -425,7 +428,22 @@ impl WorkspaceManager {
             if let Some(base_branch) = &config.base_branch {
                 cmd.arg(base_branch);
             } else {
-                cmd.arg("main"); // Default base branch
+                // Attempt to detect default branch: origin/HEAD -> refs/heads/<branch>
+                let mut detect = tokio::process::Command::new("git");
+                detect
+                    .arg("symbolic-ref")
+                    .arg("refs/remotes/origin/HEAD")
+                    .current_dir(&repo_path);
+                if let Ok(out) = detect.output().await {
+                    let head = String::from_utf8_lossy(&out.stdout);
+                    if let Some(b) = head.rsplit('/').next() {
+                        cmd.arg(b.trim());
+                    } else {
+                        cmd.arg("main");
+                    }
+                } else {
+                    cmd.arg("main");
+                }
             }
         } else {
             cmd.arg(&config.branch_name);
@@ -459,8 +477,7 @@ impl WorkspaceManager {
         };
 
         // Update registry
-        self.add_worktree_to_registry(&worktree_info, agent_id.as_deref())
-            .await?;
+        self.add_worktree_to_registry(&worktree_info).await?;
 
         Ok(worktree_info)
     }
@@ -594,11 +611,7 @@ impl WorkspaceManager {
     }
 
     /// Add worktree to registry
-    async fn add_worktree_to_registry(
-        &self,
-        worktree_info: &GitWorktreeInfo,
-        _agent_id: Option<&str>,
-    ) -> Result<()> {
+    async fn add_worktree_to_registry(&self, worktree_info: &GitWorktreeInfo) -> Result<()> {
         let mut registry = self.load_registry().await?;
         let canonical = tokio::fs::canonicalize(&worktree_info.path)
             .await
@@ -652,10 +665,17 @@ impl WorkspaceManager {
         let content = serde_json::to_string_pretty(registry)
             .map_err(|e| Error::Serialization(format!("Failed to serialize registry: {}", e)))?;
 
-        fs::write(&self.registry_path, content)
+        // Write to temporary file first, then atomically rename
+        let tmp_path = self.registry_path.with_extension("json.tmp");
+        fs::write(&tmp_path, &content)
             .await
             .map_err(|e| Error::Io {
-                message: format!("Failed to write registry: {}", e),
+                message: format!("Failed to write temp registry: {}", e),
+            })?;
+        fs::rename(&tmp_path, &self.registry_path)
+            .await
+            .map_err(|e| Error::Io {
+                message: format!("Failed to atomically replace registry: {}", e),
             })
     }
 
@@ -1375,7 +1395,7 @@ mod tests {
 
         // Test adding to registry
         manager
-            .add_worktree_to_registry(&worktree_info, worktree_info.agent_id.as_deref())
+            .add_worktree_to_registry(&worktree_info)
             .await
             .unwrap();
 
