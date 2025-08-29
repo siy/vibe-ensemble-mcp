@@ -60,6 +60,47 @@
             <a href="/api/health" class="btn btn-secondary" style="margin-bottom: 10px;">Health Check</a>
         </div>
     </div>
+    
+    <div class="card">
+        <h3>Link Validation</h3>
+        <div style="margin-bottom: 15px;">
+            <div class="grid grid-3" id="link-validation-stats">
+                <div class="stat-card" style="background: #d4edda; border-color: #c3e6cb;">
+                    <div class="stat-number" id="healthy-links">0</div>
+                    <div class="stat-label">Healthy</div>
+                </div>
+                <div class="stat-card" style="background: #fff3cd; border-color: #faeaa0;">
+                    <div class="stat-number" id="warning-links">0</div>
+                    <div class="stat-label">Warning</div>
+                </div>
+                <div class="stat-card" style="background: #f8d7da; border-color: #f1b0b7;">
+                    <div class="stat-number" id="broken-links">0</div>
+                    <div class="stat-label">Broken</div>
+                </div>
+            </div>
+        </div>
+        <div>
+            <button class="btn btn-primary" onclick="triggerLinkValidation()" id="validate-btn">Validate Links</button>
+            <div id="validation-status" style="margin-top: 10px; display: none;"></div>
+        </div>
+        <div id="link-results" style="margin-top: 15px; display: none;">
+            <h4>Validation Results</h4>
+            <div class="table-responsive">
+                <table class="table">
+                    <thead>
+                        <tr>
+                            <th>URL</th>
+                            <th>Status</th>
+                            <th>Code</th>
+                            <th>Response Time</th>
+                        </tr>
+                    </thead>
+                    <tbody id="link-results-body">
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
 </div>
 
 {% match system_metrics %}
@@ -175,4 +216,68 @@ setTimeout(() => {
         })
         .catch(err => console.log('Failed to update stats:', err));
 }, 30000);
+
+// Link validation functionality
+function triggerLinkValidation() {
+    const btn = document.getElementById('validate-btn');
+    const status = document.getElementById('validation-status');
+    const results = document.getElementById('link-results');
+    
+    // Update UI to show loading state
+    btn.textContent = 'Validating...';
+    btn.disabled = true;
+    status.style.display = 'block';
+    status.innerHTML = '<div class="alert alert-info">Validating links, please wait...</div>';
+    results.style.display = 'none';
+    
+    // Reset counters
+    document.getElementById('healthy-links').textContent = '0';
+    document.getElementById('warning-links').textContent = '0';
+    document.getElementById('broken-links').textContent = '0';
+    
+    fetch('/api/links/validate')
+        .then(response => {
+            if (!response.ok) {
+                throw new Error('Network response was not ok');
+            }
+            return response.json();
+        })
+        .then(data => {
+            // Update counters
+            document.getElementById('healthy-links').textContent = data.summary.healthy;
+            document.getElementById('warning-links').textContent = data.summary.warning;
+            document.getElementById('broken-links').textContent = data.summary.broken;
+            
+            // Update results table
+            const tbody = document.getElementById('link-results-body');
+            tbody.innerHTML = '';
+            
+            data.results.forEach(result => {
+                const row = document.createElement('tr');
+                const statusClass = result.status === 'healthy' ? 'success' : 
+                                  result.status === 'warning' ? 'warning' : 'danger';
+                
+                row.innerHTML = `
+                    <td><a href="${result.url}" target="_blank" rel="noopener">${result.url}</a></td>
+                    <td><span class="badge badge-${statusClass}">${result.status}</span></td>
+                    <td>${result.status_code || 'N/A'}</td>
+                    <td>${result.response_time_ms}ms</td>
+                `;
+                tbody.appendChild(row);
+            });
+            
+            // Show results
+            results.style.display = 'block';
+            status.innerHTML = '<div class="alert alert-success">Link validation completed successfully!</div>';
+        })
+        .catch(error => {
+            console.error('Link validation failed:', error);
+            status.innerHTML = '<div class="alert alert-danger">Link validation failed. Please try again.</div>';
+        })
+        .finally(() => {
+            // Reset button
+            btn.textContent = 'Validate Links';
+            btn.disabled = false;
+        });
+}
 {% endblock %}

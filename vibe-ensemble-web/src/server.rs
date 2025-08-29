@@ -59,6 +59,12 @@ impl WebServer {
             .route("/api/issues/:id", get(handlers::issue_get))
             .route("/api/issues/:id", put(handlers::issue_update))
             .route("/api/issues/:id", delete(handlers::issue_delete))
+            // Link validation routes
+            .route("/api/links/validate", post(handlers::links::validate_links))
+            .route(
+                "/api/links/validate",
+                get(handlers::links::trigger_link_validation),
+            )
             // Add shared state
             .with_state(self.storage.clone())
             // Add middleware layers
