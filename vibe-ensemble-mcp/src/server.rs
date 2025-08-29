@@ -30,6 +30,7 @@ use uuid::Uuid;
 use vibe_ensemble_core::agent::{AgentStatus, AgentType, ConnectionMetadata};
 use vibe_ensemble_core::issue::{IssuePriority, IssueStatus};
 use vibe_ensemble_core::message::{MessagePriority, MessageType};
+use vibe_ensemble_core::orchestration::workspace_manager::WorkspaceManager;
 use vibe_ensemble_storage::services::{
     AgentService, CoordinationService, IssueService, KnowledgeService, MessageService,
 };
@@ -80,6 +81,8 @@ pub struct McpServer {
     coordination_service: Option<Arc<CoordinationService>>,
     /// Knowledge service for managing organizational knowledge and learning
     knowledge_service: Option<Arc<KnowledgeService>>,
+    /// Workspace manager for git worktree management
+    workspace_manager: Option<Arc<WorkspaceManager>>,
 }
 
 /// Client session information
@@ -104,6 +107,7 @@ impl McpServer {
             message_service: None,
             coordination_service: None,
             knowledge_service: None,
+            workspace_manager: None,
         }
     }
 
@@ -118,6 +122,7 @@ impl McpServer {
             message_service: Some(services.message_service),
             coordination_service: Some(services.coordination_service),
             knowledge_service: Some(services.knowledge_service),
+            workspace_manager: None,
         }
     }
 
@@ -135,7 +140,14 @@ impl McpServer {
             message_service: Some(services.message_service),
             coordination_service: Some(services.coordination_service),
             knowledge_service: Some(services.knowledge_service),
+            workspace_manager: None,
         }
+    }
+
+    /// Set the workspace manager for git worktree management
+    pub fn with_workspace_manager(mut self, workspace_manager: Arc<WorkspaceManager>) -> Self {
+        self.workspace_manager = Some(workspace_manager);
+        self
     }
 
     /// Handle an incoming JSON-RPC message
@@ -744,6 +756,68 @@ impl McpServer {
                         },
                         "required": ["capturingAgentId", "coordinationSession", "outcomeData", "successMetrics", "lessonsLearned"]
                     }
+                },
+                {
+                    "name": "vibe_workspace_create",
+                    "description": "Create a git worktree for parallel agent development",
+                    "inputSchema": {
+                        "type": "object",
+                        "properties": {
+                            "name": {"type": "string", "description": "Name for the worktree (used in path)"},
+                            "mainRepoPath": {"type": "string", "description": "Path to the main repository"},
+                            "branchName": {"type": "string", "description": "Branch name for the worktree"},
+                            "createBranch": {"type": "boolean", "description": "Whether to create a new branch"},
+                            "baseBranch": {"type": "string", "description": "Base branch to create from (optional)"},
+                            "agentId": {"type": "string", "description": "Agent to assign to this worktree (optional)"}
+                        },
+                        "required": ["name", "mainRepoPath", "branchName", "createBranch"]
+                    }
+                },
+                {
+                    "name": "vibe_workspace_list",
+                    "description": "List all active git worktrees and their status",
+                    "inputSchema": {
+                        "type": "object",
+                        "properties": {
+                            "agentId": {"type": "string", "description": "Filter by agent ID (optional)"},
+                            "includeInactive": {"type": "boolean", "description": "Include inactive worktrees"}
+                        }
+                    }
+                },
+                {
+                    "name": "vibe_workspace_assign",
+                    "description": "Assign an agent to a specific worktree",
+                    "inputSchema": {
+                        "type": "object",
+                        "properties": {
+                            "agentId": {"type": "string", "description": "Agent ID to assign"},
+                            "worktreePath": {"type": "string", "description": "Path to the worktree"}
+                        },
+                        "required": ["agentId", "worktreePath"]
+                    }
+                },
+                {
+                    "name": "vibe_workspace_status",
+                    "description": "Get status and information about a worktree",
+                    "inputSchema": {
+                        "type": "object",
+                        "properties": {
+                            "worktreePath": {"type": "string", "description": "Path to the worktree"}
+                        },
+                        "required": ["worktreePath"]
+                    }
+                },
+                {
+                    "name": "vibe_workspace_cleanup",
+                    "description": "Remove inactive worktrees and clean up resources",
+                    "inputSchema": {
+                        "type": "object",
+                        "properties": {
+                            "inactiveThresholdHours": {"type": "number", "description": "Hours of inactivity before cleanup (default: 24)"},
+                            "forceCleanup": {"type": "boolean", "description": "Force cleanup even if recently used"},
+                            "specificPath": {"type": "string", "description": "Clean up specific worktree path (optional)"}
+                        }
+                    }
                 }
             ]
         });
@@ -755,9 +829,10 @@ impl McpServer {
     async fn handle_call_tool(&self, request: JsonRpcRequest) -> Result<Option<JsonRpcResponse>> {
         debug!("Handling tool call request");
 
-        let params: serde_json::Value = request.params.ok_or_else(|| Error::InvalidParams {
-            message: "Missing tool call parameters".to_string(),
-        })?;
+        let params: serde_json::Value =
+            request.params.clone().ok_or_else(|| Error::InvalidParams {
+                message: "Missing tool call parameters".to_string(),
+            })?;
 
         let tool_name = params["name"]
             .as_str()
@@ -799,7 +874,7 @@ impl McpServer {
             }
             let vibe_params = VibeOperationParams {
                 operation,
-                params: arguments,
+                params: arguments.clone(),
             };
 
             if rest.starts_with("agent/") {
@@ -816,6 +891,10 @@ impl McpServer {
                     Some(serde_json::to_value(vibe_params)?),
                 );
                 self.handle_vibe_issue(req).await
+            } else if rest.starts_with("workspace/") {
+                // Handle workspace operations directly
+                self.handle_workspace_operation(&request, rest, &arguments)
+                    .await
             } else {
                 let req = JsonRpcRequest::new_with_id(
                     request.id.clone(),
@@ -6072,6 +6151,271 @@ impl McpServer {
                     data: None,
                 },
             ))),
+        }
+    }
+
+    /// Handle workspace operations for git worktree management
+    async fn handle_workspace_operation(
+        &self,
+        request: &JsonRpcRequest,
+        operation_path: &str,
+        arguments: &serde_json::Value,
+    ) -> Result<Option<JsonRpcResponse>> {
+        let workspace_manager = match &self.workspace_manager {
+            Some(wm) => wm,
+            None => {
+                return Ok(Some(JsonRpcResponse::error(
+                    request.id.clone(),
+                    JsonRpcError {
+                        code: error_codes::INTERNAL_ERROR,
+                        message: "Workspace manager not configured".to_string(),
+                        data: None,
+                    },
+                )))
+            }
+        };
+
+        let operation = operation_path.strip_prefix("workspace/").unwrap_or("");
+
+        match operation {
+            "create" => {
+                let name = arguments["name"]
+                    .as_str()
+                    .ok_or_else(|| Error::InvalidParams {
+                        message: "Missing 'name' parameter".to_string(),
+                    })?;
+                let main_repo_path =
+                    arguments["mainRepoPath"]
+                        .as_str()
+                        .ok_or_else(|| Error::InvalidParams {
+                            message: "Missing 'mainRepoPath' parameter".to_string(),
+                        })?;
+                let branch_name =
+                    arguments["branchName"]
+                        .as_str()
+                        .ok_or_else(|| Error::InvalidParams {
+                            message: "Missing 'branchName' parameter".to_string(),
+                        })?;
+                let create_branch =
+                    arguments["createBranch"]
+                        .as_bool()
+                        .ok_or_else(|| Error::InvalidParams {
+                            message: "Missing 'createBranch' parameter".to_string(),
+                        })?;
+                let base_branch = arguments["baseBranch"].as_str().map(|s| s.to_string());
+                let agent_id = arguments["agentId"].as_str().map(|s| s.to_string());
+
+                let config =
+                    vibe_ensemble_core::orchestration::workspace_manager::GitWorktreeConfig {
+                        main_repo_path: std::path::PathBuf::from(main_repo_path),
+                        branch_name: branch_name.to_string(),
+                        create_branch,
+                        base_branch,
+                    };
+
+                match workspace_manager
+                    .create_worktree(name, &config, agent_id)
+                    .await
+                {
+                    Ok(worktree_info) => {
+                        let result = serde_json::json!({
+                            "success": true,
+                            "worktree": {
+                                "path": worktree_info.path.display().to_string(),
+                                "branch": worktree_info.branch,
+                                "agentId": worktree_info.agent_id,
+                                "createdAt": worktree_info.created_at.to_rfc3339(),
+                                "isActive": worktree_info.is_active
+                            }
+                        });
+                        Ok(Some(JsonRpcResponse::success(request.id.clone(), result)))
+                    }
+                    Err(e) => {
+                        let result = serde_json::json!({
+                            "success": false,
+                            "error": e.to_string()
+                        });
+                        Ok(Some(JsonRpcResponse::success(request.id.clone(), result)))
+                    }
+                }
+            }
+            "list" => {
+                let agent_id = arguments["agentId"].as_str();
+                let include_inactive = arguments["includeInactive"].as_bool().unwrap_or(false);
+
+                match workspace_manager.list_worktrees().await {
+                    Ok(worktrees) => {
+                        let filtered_worktrees: Vec<_> = worktrees
+                            .into_iter()
+                            .filter(|w| {
+                                if !include_inactive && !w.is_active {
+                                    return false;
+                                }
+                                if let Some(filter_agent) = agent_id {
+                                    w.agent_id.as_ref().is_some_and(|id| id == filter_agent)
+                                } else {
+                                    true
+                                }
+                            })
+                            .map(|w| {
+                                serde_json::json!({
+                                    "path": w.path.display().to_string(),
+                                    "branch": w.branch,
+                                    "agentId": w.agent_id,
+                                    "createdAt": w.created_at.to_rfc3339(),
+                                    "lastUsedAt": w.last_used_at.to_rfc3339(),
+                                    "isActive": w.is_active
+                                })
+                            })
+                            .collect();
+
+                        let result = serde_json::json!({
+                            "success": true,
+                            "worktrees": filtered_worktrees
+                        });
+                        Ok(Some(JsonRpcResponse::success(request.id.clone(), result)))
+                    }
+                    Err(e) => {
+                        let result = serde_json::json!({
+                            "success": false,
+                            "error": e.to_string()
+                        });
+                        Ok(Some(JsonRpcResponse::success(request.id.clone(), result)))
+                    }
+                }
+            }
+            "assign" => {
+                let agent_id =
+                    arguments["agentId"]
+                        .as_str()
+                        .ok_or_else(|| Error::InvalidParams {
+                            message: "Missing 'agentId' parameter".to_string(),
+                        })?;
+                let worktree_path =
+                    arguments["worktreePath"]
+                        .as_str()
+                        .ok_or_else(|| Error::InvalidParams {
+                            message: "Missing 'worktreePath' parameter".to_string(),
+                        })?;
+
+                match workspace_manager
+                    .assign_agent_to_worktree(agent_id, std::path::Path::new(worktree_path))
+                    .await
+                {
+                    Ok(()) => {
+                        let result = serde_json::json!({
+                            "success": true,
+                            "message": format!("Agent {} assigned to worktree {}", agent_id, worktree_path)
+                        });
+                        Ok(Some(JsonRpcResponse::success(request.id.clone(), result)))
+                    }
+                    Err(e) => {
+                        let result = serde_json::json!({
+                            "success": false,
+                            "error": e.to_string()
+                        });
+                        Ok(Some(JsonRpcResponse::success(request.id.clone(), result)))
+                    }
+                }
+            }
+            "status" => {
+                let worktree_path =
+                    arguments["worktreePath"]
+                        .as_str()
+                        .ok_or_else(|| Error::InvalidParams {
+                            message: "Missing 'worktreePath' parameter".to_string(),
+                        })?;
+
+                match workspace_manager
+                    .get_worktree(std::path::Path::new(worktree_path))
+                    .await
+                {
+                    Ok(worktree_info) => {
+                        let result = serde_json::json!({
+                            "success": true,
+                            "worktree": {
+                                "path": worktree_info.path.display().to_string(),
+                                "branch": worktree_info.branch,
+                                "agentId": worktree_info.agent_id,
+                                "createdAt": worktree_info.created_at.to_rfc3339(),
+                                "lastUsedAt": worktree_info.last_used_at.to_rfc3339(),
+                                "isActive": worktree_info.is_active
+                            }
+                        });
+                        Ok(Some(JsonRpcResponse::success(request.id.clone(), result)))
+                    }
+                    Err(e) => {
+                        let result = serde_json::json!({
+                            "success": false,
+                            "error": e.to_string()
+                        });
+                        Ok(Some(JsonRpcResponse::success(request.id.clone(), result)))
+                    }
+                }
+            }
+            "cleanup" => {
+                let inactive_threshold_hours =
+                    arguments["inactiveThresholdHours"].as_f64().unwrap_or(24.0);
+                let _force_cleanup = arguments["forceCleanup"].as_bool().unwrap_or(false);
+                let specific_path = arguments["specificPath"].as_str();
+
+                if let Some(path) = specific_path {
+                    // Clean up specific worktree
+                    match workspace_manager
+                        .remove_worktree(std::path::Path::new(path))
+                        .await
+                    {
+                        Ok(()) => {
+                            let result = serde_json::json!({
+                                "success": true,
+                                "message": format!("Worktree {} removed successfully", path),
+                                "cleanedPaths": [path]
+                            });
+                            Ok(Some(JsonRpcResponse::success(request.id.clone(), result)))
+                        }
+                        Err(e) => {
+                            let result = serde_json::json!({
+                                "success": false,
+                                "error": e.to_string()
+                            });
+                            Ok(Some(JsonRpcResponse::success(request.id.clone(), result)))
+                        }
+                    }
+                } else {
+                    // Clean up inactive worktrees
+                    let threshold = chrono::Duration::hours(inactive_threshold_hours as i64);
+                    match workspace_manager
+                        .cleanup_inactive_worktrees(threshold)
+                        .await
+                    {
+                        Ok(cleaned_paths) => {
+                            let result = serde_json::json!({
+                                "success": true,
+                                "message": format!("Cleaned up {} inactive worktrees", cleaned_paths.len()),
+                                "cleanedPaths": cleaned_paths
+                            });
+                            Ok(Some(JsonRpcResponse::success(request.id.clone(), result)))
+                        }
+                        Err(e) => {
+                            let result = serde_json::json!({
+                                "success": false,
+                                "error": e.to_string()
+                            });
+                            Ok(Some(JsonRpcResponse::success(request.id.clone(), result)))
+                        }
+                    }
+                }
+            }
+            _ => {
+                Ok(Some(JsonRpcResponse::error(
+                    request.id.clone(),
+                    JsonRpcError {
+                        code: error_codes::METHOD_NOT_FOUND,
+                        message: format!("Unknown workspace operation: {}", operation),
+                        data: None,
+                    },
+                )))
+            }
         }
     }
 }

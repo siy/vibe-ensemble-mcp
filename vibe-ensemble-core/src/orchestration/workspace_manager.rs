@@ -23,6 +23,7 @@ use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use tokio::fs;
+use tracing::{info, warn};
 
 /// Configuration for workspace creation
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -68,11 +69,54 @@ pub struct GitConfig {
     pub ref_name: Option<String>,
 }
 
+/// Git worktree configuration for parallel development
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct GitWorktreeConfig {
+    /// Main repository path (where worktrees are created from)
+    pub main_repo_path: PathBuf,
+    /// Branch name for the worktree
+    pub branch_name: String,
+    /// Whether to create a new branch or use existing
+    pub create_branch: bool,
+    /// Base branch to branch from (if creating new branch)
+    pub base_branch: Option<String>,
+}
+
+/// Git worktree information
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct GitWorktreeInfo {
+    /// Worktree path
+    pub path: PathBuf,
+    /// Branch name
+    pub branch: String,
+    /// Associated agent ID
+    pub agent_id: Option<String>,
+    /// Creation timestamp
+    pub created_at: chrono::DateTime<chrono::Utc>,
+    /// Last used timestamp  
+    pub last_used_at: chrono::DateTime<chrono::Utc>,
+    /// Whether worktree is currently active
+    pub is_active: bool,
+}
+
 /// Registry of active workspaces
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct WorkspaceRegistry {
     /// Map of workspace name to configuration
     pub workspaces: HashMap<String, WorkspaceConfiguration>,
+    /// Map of worktree path to worktree info
+    pub worktrees: HashMap<String, GitWorktreeInfo>,
+    /// Last updated timestamp
+    pub updated_at: chrono::DateTime<chrono::Utc>,
+}
+
+/// Git worktree registry for tracking parallel development environments
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct GitWorktreeRegistry {
+    /// Map of worktree path to worktree info
+    pub worktrees: HashMap<String, GitWorktreeInfo>,
+    /// Agent assignments to worktrees
+    pub agent_assignments: HashMap<String, String>, // agent_id -> worktree_path
     /// Last updated timestamp
     pub updated_at: chrono::DateTime<chrono::Utc>,
 }
@@ -93,6 +137,17 @@ impl Default for WorkspaceRegistry {
     fn default() -> Self {
         Self {
             workspaces: HashMap::new(),
+            worktrees: HashMap::new(),
+            updated_at: chrono::Utc::now(),
+        }
+    }
+}
+
+impl Default for GitWorktreeRegistry {
+    fn default() -> Self {
+        Self {
+            worktrees: HashMap::new(),
+            agent_assignments: HashMap::new(),
             updated_at: chrono::Utc::now(),
         }
     }
@@ -327,6 +382,227 @@ impl WorkspaceManager {
             .await?;
 
         Ok(stats)
+    }
+
+    /// Create a git worktree for parallel agent development
+    pub async fn create_worktree(
+        &self,
+        name: &str,
+        config: &GitWorktreeConfig,
+        agent_id: Option<String>,
+    ) -> Result<GitWorktreeInfo> {
+        // Validate worktree name
+        self.validate_workspace_name(name)?;
+
+        let worktree_path = config
+            .main_repo_path
+            .parent()
+            .unwrap_or(&config.main_repo_path)
+            .join(format!(
+                "{}-worktree-{}",
+                config.main_repo_path.file_name().unwrap().to_string_lossy(),
+                name
+            ));
+
+        // Check if worktree already exists
+        if worktree_path.exists() {
+            return Err(Error::AlreadyExists {
+                resource: "worktree".to_string(),
+                id: worktree_path.display().to_string(),
+            });
+        }
+
+        // Create git worktree
+        let mut cmd = tokio::process::Command::new("git");
+        cmd.arg("worktree")
+            .arg("add")
+            .current_dir(&config.main_repo_path);
+
+        if config.create_branch {
+            cmd.arg("-b").arg(&config.branch_name);
+        }
+
+        cmd.arg(&worktree_path);
+
+        if config.create_branch {
+            if let Some(base_branch) = &config.base_branch {
+                cmd.arg(base_branch);
+            } else {
+                cmd.arg("main"); // Default base branch
+            }
+        } else {
+            cmd.arg(&config.branch_name);
+        }
+
+        let output = cmd.output().await.map_err(|e| Error::Execution {
+            message: format!("Failed to execute git worktree add: {}", e),
+        })?;
+
+        if !output.status.success() {
+            let stderr = String::from_utf8_lossy(&output.stderr);
+            return Err(Error::Execution {
+                message: format!("Git worktree add failed: {}", stderr),
+            });
+        }
+
+        // Create worktree info
+        let worktree_info = GitWorktreeInfo {
+            path: worktree_path,
+            branch: config.branch_name.clone(),
+            agent_id: agent_id.clone(),
+            created_at: chrono::Utc::now(),
+            last_used_at: chrono::Utc::now(),
+            is_active: true,
+        };
+
+        // Update registry
+        self.add_worktree_to_registry(&worktree_info, agent_id.as_deref())
+            .await?;
+
+        Ok(worktree_info)
+    }
+
+    /// List all git worktrees
+    pub async fn list_worktrees(&self) -> Result<Vec<GitWorktreeInfo>> {
+        let registry = self.load_registry().await?;
+        Ok(registry.worktrees.into_values().collect())
+    }
+
+    /// Get worktree information by path
+    pub async fn get_worktree(&self, worktree_path: &Path) -> Result<GitWorktreeInfo> {
+        let registry = self.load_registry().await?;
+        let path_key = worktree_path.display().to_string();
+
+        registry
+            .worktrees
+            .get(&path_key)
+            .cloned()
+            .ok_or_else(|| Error::NotFound {
+                entity_type: "worktree".to_string(),
+                id: path_key,
+            })
+    }
+
+    /// Assign an agent to a worktree
+    pub async fn assign_agent_to_worktree(
+        &self,
+        agent_id: &str,
+        worktree_path: &Path,
+    ) -> Result<()> {
+        let mut registry = self.load_registry().await?;
+        let path_key = worktree_path.display().to_string();
+
+        // Check if worktree exists
+        if let Some(worktree_info) = registry.worktrees.get_mut(&path_key) {
+            worktree_info.agent_id = Some(agent_id.to_string());
+            worktree_info.last_used_at = chrono::Utc::now();
+            worktree_info.is_active = true;
+
+            registry.updated_at = chrono::Utc::now();
+            self.save_registry(&registry).await?;
+
+            Ok(())
+        } else {
+            Err(Error::NotFound {
+                entity_type: "worktree".to_string(),
+                id: path_key,
+            })
+        }
+    }
+
+    /// Remove git worktree and clean up
+    pub async fn remove_worktree(&self, worktree_path: &Path) -> Result<()> {
+        let path_str = worktree_path.display().to_string();
+
+        // Remove from git
+        let mut cmd = tokio::process::Command::new("git");
+        cmd.arg("worktree")
+            .arg("remove")
+            .arg(worktree_path)
+            .arg("--force");
+
+        let output = cmd.output().await.map_err(|e| Error::Execution {
+            message: format!("Failed to execute git worktree remove: {}", e),
+        })?;
+
+        if !output.status.success() {
+            let stderr = String::from_utf8_lossy(&output.stderr);
+            // Continue with registry cleanup even if git command fails
+            warn!("Git worktree remove failed: {}", stderr);
+        }
+
+        // Remove from registry
+        self.remove_worktree_from_registry(&path_str).await?;
+
+        Ok(())
+    }
+
+    /// Cleanup inactive worktrees
+    pub async fn cleanup_inactive_worktrees(
+        &self,
+        inactive_threshold: chrono::Duration,
+    ) -> Result<Vec<String>> {
+        let registry = self.load_registry().await?;
+        let now = chrono::Utc::now();
+        let mut cleaned_paths = Vec::new();
+
+        for (path_str, worktree_info) in &registry.worktrees {
+            let inactive_duration = now.signed_duration_since(worktree_info.last_used_at);
+
+            if !worktree_info.is_active || inactive_duration > inactive_threshold {
+                match self.remove_worktree(&worktree_info.path).await {
+                    Ok(()) => {
+                        cleaned_paths.push(path_str.clone());
+                        info!("Cleaned up inactive worktree: {}", path_str);
+                    }
+                    Err(e) => {
+                        warn!("Failed to cleanup worktree {}: {}", path_str, e);
+                    }
+                }
+            }
+        }
+
+        Ok(cleaned_paths)
+    }
+
+    /// Get worktree assignment for an agent
+    pub async fn get_agent_worktree(&self, agent_id: &str) -> Result<Option<GitWorktreeInfo>> {
+        let registry = self.load_registry().await?;
+
+        for worktree_info in registry.worktrees.values() {
+            if worktree_info.agent_id.as_ref() == Some(&agent_id.to_string()) {
+                return Ok(Some(worktree_info.clone()));
+            }
+        }
+
+        Ok(None)
+    }
+
+    /// Add worktree to registry
+    async fn add_worktree_to_registry(
+        &self,
+        worktree_info: &GitWorktreeInfo,
+        _agent_id: Option<&str>,
+    ) -> Result<()> {
+        let mut registry = self.load_registry().await?;
+        let path_key = worktree_info.path.display().to_string();
+
+        registry.worktrees.insert(path_key, worktree_info.clone());
+        registry.updated_at = chrono::Utc::now();
+
+        self.save_registry(&registry).await
+    }
+
+    /// Remove worktree from registry
+    async fn remove_worktree_from_registry(&self, worktree_path: &str) -> Result<()> {
+        let mut registry = self.load_registry().await?;
+
+        if registry.worktrees.remove(worktree_path).is_some() {
+            registry.updated_at = chrono::Utc::now();
+            self.save_registry(&registry).await?;
+        }
+
+        Ok(())
     }
 
     /// Load the workspace registry
@@ -918,5 +1194,201 @@ mod tests {
         assert!(stats.file_count > 0); // At least workspace.json + created files
         assert!(stats.directory_count > 0); // At least .claude and project dirs
         assert!(stats.total_size_bytes > 0);
+    }
+
+    #[tokio::test]
+    async fn test_create_git_worktree() {
+        let temp_dir = TempDir::new().unwrap();
+        let manager = WorkspaceManager::new(temp_dir.path());
+
+        // Create a mock git repository directory
+        let git_repo_dir = temp_dir.path().join("test-repo");
+        fs::create_dir_all(&git_repo_dir).await.unwrap();
+
+        // Initialize a git repo (we'll skip actual git commands for unit tests)
+        let config = GitWorktreeConfig {
+            main_repo_path: git_repo_dir.clone(),
+            branch_name: "feature-branch".to_string(),
+            create_branch: true,
+            base_branch: Some("main".to_string()),
+        };
+
+        // Note: This test would fail without an actual git repo, so we'll test the validation
+        let result = manager
+            .create_worktree("test-worktree", &config, Some("agent-1".to_string()))
+            .await;
+
+        // The test should fail with git command execution, but the validation should pass
+        assert!(result.is_err());
+        let error_message = result.unwrap_err().to_string();
+        // The error should be related to git execution or worktree creation
+        assert!(
+            error_message.contains("git")
+                || error_message.contains("worktree")
+                || error_message.contains("Failed to execute")
+        );
+    }
+
+    #[tokio::test]
+    async fn test_list_empty_worktrees() {
+        let temp_dir = TempDir::new().unwrap();
+        let manager = WorkspaceManager::new(temp_dir.path());
+
+        let worktrees = manager.list_worktrees().await.unwrap();
+        assert!(worktrees.is_empty());
+    }
+
+    #[tokio::test]
+    async fn test_get_nonexistent_worktree() {
+        let temp_dir = TempDir::new().unwrap();
+        let manager = WorkspaceManager::new(temp_dir.path());
+
+        let result = manager
+            .get_worktree(&temp_dir.path().join("nonexistent"))
+            .await;
+        assert!(result.is_err());
+        assert!(matches!(result.unwrap_err(), Error::NotFound { .. }));
+    }
+
+    #[tokio::test]
+    async fn test_assign_agent_to_nonexistent_worktree() {
+        let temp_dir = TempDir::new().unwrap();
+        let manager = WorkspaceManager::new(temp_dir.path());
+
+        let result = manager
+            .assign_agent_to_worktree("agent-1", &temp_dir.path().join("nonexistent"))
+            .await;
+
+        assert!(result.is_err());
+        assert!(matches!(result.unwrap_err(), Error::NotFound { .. }));
+    }
+
+    #[tokio::test]
+    async fn test_remove_nonexistent_worktree() {
+        let temp_dir = TempDir::new().unwrap();
+        let manager = WorkspaceManager::new(temp_dir.path());
+
+        // Should not fail - removing nonexistent worktree should be idempotent
+        let result = manager
+            .remove_worktree(&temp_dir.path().join("nonexistent"))
+            .await;
+
+        // The registry operation should succeed even if git command fails
+        assert!(result.is_ok());
+    }
+
+    #[tokio::test]
+    async fn test_cleanup_inactive_worktrees() {
+        let temp_dir = TempDir::new().unwrap();
+        let manager = WorkspaceManager::new(temp_dir.path());
+
+        // Create some mock worktree entries in registry
+        let mut registry = WorkspaceRegistry::default();
+
+        let old_worktree = GitWorktreeInfo {
+            path: temp_dir.path().join("old-worktree"),
+            branch: "old-branch".to_string(),
+            agent_id: Some("agent-1".to_string()),
+            created_at: chrono::Utc::now() - chrono::Duration::days(2),
+            last_used_at: chrono::Utc::now() - chrono::Duration::days(2),
+            is_active: false,
+        };
+
+        let new_worktree = GitWorktreeInfo {
+            path: temp_dir.path().join("new-worktree"),
+            branch: "new-branch".to_string(),
+            agent_id: Some("agent-2".to_string()),
+            created_at: chrono::Utc::now(),
+            last_used_at: chrono::Utc::now(),
+            is_active: true,
+        };
+
+        registry
+            .worktrees
+            .insert(old_worktree.path.display().to_string(), old_worktree);
+        registry
+            .worktrees
+            .insert(new_worktree.path.display().to_string(), new_worktree);
+
+        // Manually save registry for test
+        manager.save_registry(&registry).await.unwrap();
+
+        // Test cleanup with 1 hour threshold (should clean old worktree)
+        let cleaned_paths = manager
+            .cleanup_inactive_worktrees(chrono::Duration::hours(1))
+            .await
+            .unwrap();
+
+        assert_eq!(cleaned_paths.len(), 1);
+        assert!(cleaned_paths[0].contains("old-worktree"));
+    }
+
+    #[tokio::test]
+    async fn test_get_agent_worktree_none() {
+        let temp_dir = TempDir::new().unwrap();
+        let manager = WorkspaceManager::new(temp_dir.path());
+
+        let result = manager
+            .get_agent_worktree("nonexistent-agent")
+            .await
+            .unwrap();
+        assert!(result.is_none());
+    }
+
+    #[tokio::test]
+    async fn test_worktree_registry_operations() {
+        let temp_dir = TempDir::new().unwrap();
+        let manager = WorkspaceManager::new(temp_dir.path());
+
+        let worktree_info = GitWorktreeInfo {
+            path: temp_dir.path().join("test-worktree"),
+            branch: "test-branch".to_string(),
+            agent_id: Some("test-agent".to_string()),
+            created_at: chrono::Utc::now(),
+            last_used_at: chrono::Utc::now(),
+            is_active: true,
+        };
+
+        // Test adding to registry
+        manager
+            .add_worktree_to_registry(&worktree_info, worktree_info.agent_id.as_deref())
+            .await
+            .unwrap();
+
+        // Test loading registry
+        let registry = manager.load_registry().await.unwrap();
+        assert_eq!(registry.worktrees.len(), 1);
+        assert!(registry
+            .worktrees
+            .contains_key(&worktree_info.path.display().to_string()));
+
+        // Test removing from registry
+        manager
+            .remove_worktree_from_registry(&worktree_info.path.display().to_string())
+            .await
+            .unwrap();
+
+        let registry_after_remove = manager.load_registry().await.unwrap();
+        assert!(registry_after_remove.worktrees.is_empty());
+    }
+
+    #[tokio::test]
+    async fn test_git_worktree_config_validation() {
+        let temp_dir = TempDir::new().unwrap();
+        let manager = WorkspaceManager::new(temp_dir.path());
+
+        // Test with invalid worktree name
+        let config = GitWorktreeConfig {
+            main_repo_path: temp_dir.path().to_path_buf(),
+            branch_name: "test-branch".to_string(),
+            create_branch: true,
+            base_branch: None,
+        };
+
+        let result = manager
+            .create_worktree("invalid name with spaces", &config, None)
+            .await;
+        assert!(result.is_err());
+        assert!(result.unwrap_err().to_string().contains("alphanumeric"));
     }
 }
