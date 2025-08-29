@@ -826,9 +826,16 @@ impl WorkspaceManager {
                 .arg(ref_name)
                 .current_dir(project_path);
 
-            let checkout_output = checkout_cmd.output().await.map_err(|e| Error::Execution {
-                message: format!("Failed to execute git checkout: {}", e),
-            })?;
+            use std::time::Duration;
+            let checkout_output =
+                tokio::time::timeout(Duration::from_secs(15), checkout_cmd.output())
+                    .await
+                    .map_err(|_| Error::Execution {
+                        message: "Timed out executing git checkout".into(),
+                    })?
+                    .map_err(|e| Error::Execution {
+                        message: format!("Failed to execute git checkout: {}", e),
+                    })?;
 
             if !checkout_output.status.success() {
                 let stderr = String::from_utf8_lossy(&checkout_output.stderr);

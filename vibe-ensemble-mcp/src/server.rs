@@ -6399,21 +6399,34 @@ impl McpServer {
                 let inactive_threshold_hours = arguments["inactiveThresholdHours"]
                     .as_f64()
                     .unwrap_or(24.0)
-                    .max(0.0); // Clamp to non-negative
+                    .clamp(0.0, 168.0); // Align with schema max of 168h
 
                 let force_cleanup = arguments["forceCleanup"].as_bool().unwrap_or(false);
                 let specific_path = arguments["specificPath"].as_str();
 
                 if let Some(path) = specific_path {
-                    // Clean up specific worktree
+                    // Canonicalize and clean up specific worktree
+                    let canonical = match tokio::fs::canonicalize(path).await {
+                        Ok(p) => p,
+                        Err(e) => {
+                            return Ok(Some(JsonRpcResponse::error(
+                                request.id.clone(),
+                                JsonRpcError {
+                                    code: error_codes::INVALID_PARAMS,
+                                    message: format!("Invalid 'specificPath': {}", e),
+                                    data: None,
+                                },
+                            )));
+                        }
+                    };
                     workspace_manager
-                        .remove_worktree(std::path::Path::new(path))
+                        .remove_worktree(canonical.as_path())
                         .await?;
 
                     let result = serde_json::json!({
                         "success": true,
-                        "message": format!("Worktree {} removed successfully", path),
-                        "cleanedPaths": [path]
+                        "message": format!("Worktree {} removed successfully", canonical.display()),
+                        "cleanedPaths": [canonical.display().to_string()]
                     });
                     Ok(Some(JsonRpcResponse::success(request.id.clone(), result)))
                 } else {
