@@ -17,7 +17,6 @@ use serde::{Deserialize, Serialize};
 use std::{
     collections::HashMap,
     sync::{Arc, RwLock},
-    time::Duration,
 };
 use uuid::Uuid;
 
@@ -196,6 +195,12 @@ impl AuthService {
     }
 }
 
+impl Default for AuthService {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 /// Generate a random session ID
 fn generate_session_id() -> String {
     let mut rng = rand::thread_rng();
@@ -213,12 +218,10 @@ fn generate_session_id() -> String {
 
 /// Extract session ID from cookie header
 fn extract_session_id_from_cookie(cookie_header: &str) -> Option<String> {
-    cookie_header
-        .split(';')
-        .map(|cookie| cookie.trim())
-        .find(|cookie| cookie.starts_with("session_id="))
-        .and_then(|cookie| cookie.split('=').nth(1))
-        .map(|s| s.to_string())
+    cookie::Cookie::split_parse(cookie_header)
+        .filter_map(|cookie_result| cookie_result.ok())
+        .find(|c| c.name() == "session_id")
+        .map(|c| c.value().to_string())
 }
 
 /// Middleware to require authentication
@@ -340,7 +343,16 @@ pub async fn login_handler(
 ) -> impl IntoResponse {
     match auth_service.authenticate(&form.username, &form.password) {
         Ok(Some(session)) => {
-            let cookie = format!("session_id={}; Path=/; HttpOnly; Max-Age=86400", session.id);
+            // SameSite=Lax prevents CSRF on cross-site POSTs; Secure recommended when served over HTTPS
+            let cookie = format!(
+                "session_id={}; Path=/; HttpOnly; SameSite=Lax; Max-Age=86400{}",
+                session.id,
+                if cfg!(feature = "secure_cookies") {
+                    "; Secure"
+                } else {
+                    ""
+                }
+            );
             let mut response = Redirect::to("/dashboard").into_response();
             response
                 .headers_mut()
@@ -387,7 +399,9 @@ pub async fn logout_handler(
     let mut response = Redirect::to("/login").into_response();
     response.headers_mut().insert(
         axum::http::header::SET_COOKIE,
-        "session_id=; Path=/; HttpOnly; Max-Age=0".parse().unwrap(),
+        "session_id=; Path=/; HttpOnly; SameSite=Lax; Max-Age=0"
+            .parse()
+            .unwrap(),
     );
     response
 }

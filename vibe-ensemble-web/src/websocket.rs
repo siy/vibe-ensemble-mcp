@@ -7,9 +7,8 @@ use crate::{auth::Session, Error, Result};
 use axum::{
     extract::{
         ws::{Message, WebSocket},
-        State, WebSocketUpgrade,
+        Request, State, WebSocketUpgrade,
     },
-    http::Request,
     response::Response,
 };
 use futures_util::{stream::StreamExt, SinkExt};
@@ -81,6 +80,31 @@ pub enum WebSocketMessage {
     },
     /// Pong response
     Pong {
+        timestamp: chrono::DateTime<chrono::Utc>,
+    },
+    /// Message sent event
+    MessageSent {
+        message_id: Uuid,
+        sender_id: Uuid,
+        recipient_id: Option<Uuid>,
+        message_type: String,
+        priority: String,
+        content: String,
+        correlation_id: Option<Uuid>,
+        timestamp: chrono::DateTime<chrono::Utc>,
+    },
+    /// Message delivered event
+    MessageDelivered {
+        message_id: Uuid,
+        sender_id: Uuid,
+        recipient_id: Option<Uuid>,
+        delivered_at: chrono::DateTime<chrono::Utc>,
+        timestamp: chrono::DateTime<chrono::Utc>,
+    },
+    /// Message failed event
+    MessageFailed {
+        message_id: Uuid,
+        error_message: String,
         timestamp: chrono::DateTime<chrono::Utc>,
     },
 }
@@ -199,6 +223,12 @@ impl WebSocketManager {
     }
 }
 
+impl Default for WebSocketManager {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 /// WebSocket connection handler
 pub async fn websocket_handler(
     ws: WebSocketUpgrade,
@@ -243,26 +273,37 @@ async fn handle_websocket(socket: WebSocket, ws_manager: Arc<WebSocketManager>, 
     let mut message_receiver = ws_manager.subscribe();
 
     // Spawn task to forward broadcast messages to this client
-    let client_id_clone = client_id;
+    let client_id_copy = client_id;
     let forward_task = tokio::spawn(async move {
-        while let Ok(message) = message_receiver.recv().await {
-            let json_message = match serde_json::to_string(&message) {
-                Ok(json) => json,
-                Err(e) => {
-                    tracing::error!("Failed to serialize WebSocket message: {}", e);
+        loop {
+            match message_receiver.recv().await {
+                Ok(message) => {
+                    let json_message = match serde_json::to_string(&message) {
+                        Ok(json) => json,
+                        Err(e) => {
+                            tracing::error!("Failed to serialize WebSocket message: {}", e);
+                            continue;
+                        }
+                    };
+                    if ws_sender.send(Message::Text(json_message)).await.is_err() {
+                        break;
+                    }
+                }
+                Err(tokio::sync::broadcast::error::RecvError::Lagged(n)) => {
+                    tracing::warn!(
+                        "WebSocket client {} lagged by {} messages; skipping.",
+                        client_id_copy,
+                        n
+                    );
                     continue;
                 }
-            };
-
-            if ws_sender.send(Message::Text(json_message)).await.is_err() {
-                break;
+                Err(tokio::sync::broadcast::error::RecvError::Closed) => break,
             }
         }
     });
 
     // Handle incoming messages from client
     let client_id_clone2 = client_id;
-    let ws_manager_clone = ws_manager.clone();
     let receive_task = tokio::spawn(async move {
         while let Some(msg) = ws_receiver.next().await {
             match msg {
@@ -317,7 +358,6 @@ async fn handle_websocket(socket: WebSocket, ws_manager: Arc<WebSocketManager>, 
 }
 
 /// Helper functions for broadcasting specific events
-
 impl WebSocketManager {
     /// Broadcast agent status update
     pub fn broadcast_agent_status(
@@ -404,6 +444,70 @@ impl WebSocketManager {
     pub fn broadcast_health_update(&self, status: String) -> Result<()> {
         let message = WebSocketMessage::HealthUpdate {
             status,
+            timestamp: chrono::Utc::now(),
+        };
+        self.broadcast(message)?;
+        Ok(())
+    }
+
+    /// Broadcast message sent event
+    #[allow(clippy::too_many_arguments)]
+    pub fn broadcast_message_sent(
+        &self,
+        message_id: Uuid,
+        sender_id: Uuid,
+        recipient_id: Option<Uuid>,
+        message_type: impl Into<String>,
+        priority: impl Into<String>,
+        content: impl Into<String>,
+        correlation_id: Option<Uuid>,
+    ) -> Result<()> {
+        let mut content = content.into();
+        if content.len() > 4096 {
+            content.truncate(4096);
+        }
+        let message = WebSocketMessage::MessageSent {
+            message_id,
+            sender_id,
+            recipient_id,
+            message_type: message_type.into(),
+            priority: priority.into(),
+            content,
+            correlation_id,
+            timestamp: chrono::Utc::now(),
+        };
+        self.broadcast(message)?;
+        Ok(())
+    }
+
+    /// Broadcast message delivered event
+    pub fn broadcast_message_delivered(
+        &self,
+        message_id: Uuid,
+        sender_id: Uuid,
+        recipient_id: Option<Uuid>,
+        delivered_at: chrono::DateTime<chrono::Utc>,
+    ) -> Result<()> {
+        let message = WebSocketMessage::MessageDelivered {
+            message_id,
+            sender_id,
+            recipient_id,
+            delivered_at,
+            timestamp: chrono::Utc::now(),
+        };
+        self.broadcast(message)?;
+        Ok(())
+    }
+
+    /// Broadcast message failed event
+    pub fn broadcast_message_failed(
+        &self,
+        message_id: Uuid,
+        error_message: impl Into<String>,
+    ) -> Result<()> {
+        let message = WebSocketMessage::MessageFailed {
+            message_id,
+            error_message: error_message.into(),
             timestamp: chrono::Utc::now(),
         };
         self.broadcast(message)?;

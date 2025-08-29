@@ -1,8 +1,18 @@
 //! Askama templates for the web dashboard
 
 use askama::Template;
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use vibe_ensemble_core::issue::Issue;
+
+/// Link health summary
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct LinkHealthSummary {
+    pub total_links: usize,
+    pub healthy_links: usize,
+    pub broken_links: usize,
+    pub warning_links: usize,
+    pub last_validation: Option<chrono::DateTime<chrono::Utc>>,
+}
 
 /// Activity entry for the dashboard
 #[derive(Debug, Serialize)]
@@ -35,7 +45,7 @@ impl SystemMetrics {
     }
 
     pub fn memory_usage_percent_int(&self) -> u64 {
-        self.memory_usage_percent() as u64
+        self.memory_usage_percent().round() as u64
     }
 
     pub fn disk_usage_percent(&self) -> f64 {
@@ -48,7 +58,7 @@ impl SystemMetrics {
     }
 
     pub fn disk_usage_percent_int(&self) -> u64 {
-        self.disk_usage_percent() as u64
+        self.disk_usage_percent().round() as u64
     }
 
     pub fn cpu_usage_percent_int(&self) -> u64 {
@@ -77,7 +87,8 @@ pub struct StorageMetrics {
 impl StorageMetrics {
     pub fn connection_usage_percent(&self) -> f64 {
         if self.max_connections > 0 {
-            (self.active_connections as f64 / self.max_connections as f64) * 100.0
+            ((self.active_connections as f64 / self.max_connections as f64) * 100.0)
+                .clamp(0.0, 100.0)
         } else {
             0.0
         }
@@ -137,7 +148,74 @@ impl DashboardTemplate {
         self
     }
 
+    pub fn with_recent_activity(mut self, activity: Vec<ActivityEntry>) -> Self {
+        self.recent_activity = activity;
+        self
+    }
+
     pub fn has_recent_activity(&self) -> bool {
         !self.recent_activity.is_empty()
+    }
+}
+
+/// Messages template
+#[derive(Template)]
+#[template(path = "messages.html")]
+pub struct MessagesTemplate {
+    pub title: String,
+    pub message_stats: serde_json::Value,
+    pub conversation_count: usize,
+    pub current_page: String,
+    pub system_metrics: Option<SystemMetrics>,
+    pub storage_metrics: Option<StorageMetrics>,
+}
+
+impl MessagesTemplate {
+    pub fn new(message_stats: serde_json::Value, conversation_count: usize) -> Self {
+        Self {
+            title: "Messages Dashboard".to_string(),
+            message_stats,
+            conversation_count,
+            current_page: "messages".to_string(),
+            system_metrics: None,
+            storage_metrics: None,
+        }
+    }
+
+    pub fn with_system_metrics(mut self, metrics: SystemMetrics) -> Self {
+        self.system_metrics = Some(metrics);
+        self
+    }
+
+    pub fn with_storage_metrics(mut self, metrics: StorageMetrics) -> Self {
+        self.storage_metrics = Some(metrics);
+        self
+    }
+}
+
+impl Default for MessagesTemplate {
+    fn default() -> Self {
+        Self::new(serde_json::json!({}), 0)
+    }
+}
+
+/// Link Health template
+#[derive(Template)]
+#[template(path = "link-health.html")]
+pub struct LinkHealthTemplate {
+    pub title: String,
+    pub current_page: String,
+    pub summary: LinkHealthSummary,
+    pub discovered_links: Vec<String>,
+}
+
+impl LinkHealthTemplate {
+    pub fn new(summary: LinkHealthSummary, discovered_links: Vec<String>) -> Self {
+        Self {
+            title: "Link Health - Vibe Ensemble".to_string(),
+            current_page: "link-health".to_string(),
+            summary,
+            discovered_links,
+        }
     }
 }

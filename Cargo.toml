@@ -60,7 +60,7 @@ futures = "0.3"
 
 # Web framework for MCP protocol and dashboard  
 axum = { version = "0.7", default-features = false, features = ["macros", "json", "tokio", "http1", "query"] }
-tower = "0.4"
+tower = { version = "0.4", features = ["util"] }
 tower-http = { version = "0.5", features = ["cors", "trace"] }
 
 # Configuration management

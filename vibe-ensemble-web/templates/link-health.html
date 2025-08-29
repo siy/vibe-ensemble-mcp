@@ -1,0 +1,150 @@
+{% extends "base.html" %}
+
+{% block title %}{{ title }}{% endblock %}
+
+{% block page_title %}Link Health Dashboard{% endblock %}
+{% block page_description %}View application links for manual testing. Server-side validation has been moved to scripts/test-links.sh{% endblock %}
+
+{% block content %}
+<div id="health-overview" class="grid grid-4">
+    <div class="card stat-card">
+        <div class="stat-number" id="total-links">{{ summary.total_links }}</div>
+        <div class="stat-label">Total Links</div>
+    </div>
+    <div class="card stat-card">
+        <div class="stat-number" id="healthy-links" style="color: var(--success-color);">{{ summary.healthy_links }}</div>
+        <div class="stat-label">Healthy Links</div>
+    </div>
+    <div class="card stat-card">
+        <div class="stat-number" id="broken-links" style="color: var(--danger-color);">{{ summary.broken_links }}</div>
+        <div class="stat-label">Broken Links</div>
+    </div>
+    <div class="card stat-card">
+        <div class="stat-number" id="warning-links" style="color: var(--warning-color);">{{ summary.warning_links }}</div>
+        <div class="stat-label">Warning Links</div>
+    </div>
+</div>
+
+<div class="grid grid-2">
+    <div class="card">
+        <h3>Link Testing</h3>
+        <div style="margin-top: 15px;">
+            <p><strong>Server-side validation has been removed</strong> for security and performance reasons.</p>
+            <p>To test links locally or in CI, use:</p>
+            <code style="background: var(--bg-secondary); padding: 4px 8px; border-radius: 3px;">./scripts/test-links.sh</code>
+            <br><br>
+            <p>For manual testing, you can click the links in the table below.</p>
+        </div>
+    </div>
+
+    <div class="card">
+        <h3>Validation Results</h3>
+        <div id="validation-results">
+            {% match summary.last_validation %}
+            {% when Some with (timestamp) %}
+                <p>Last validation: {{ timestamp.format("%Y-%m-%d %H:%M:%S") }} UTC</p>
+            {% when None %}
+                <p>No validation has been performed yet. Click "Validate All Links" to start.</p>
+            {% endmatch %}
+            
+            <div id="validation-status" style="margin-top: 10px;"></div>
+        </div>
+    </div>
+</div>
+
+<div class="card">
+    <h3>Discovered Links ({{ discovered_links.len() }})</h3>
+    <div style="margin-bottom: 15px;">
+        <input type="text" id="link-filter" placeholder="Filter links..." class="form-control" style="max-width: 300px;">
+    </div>
+    
+    <div class="table-container" style="max-height: 600px; overflow-y: auto;">
+        <table class="table" id="links-table">
+            <thead>
+                <tr>
+                    <th>URL</th>
+                    <th>Type</th>
+                    <th>Notes</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for link in discovered_links %}
+                <tr data-url="{{ link }}">
+                    <td>
+                        <a href="{{ link }}" target="_blank" style="color: var(--primary-color); text-decoration: none;">
+                            {{ link }}
+                        </a>
+                    </td>
+                    <td>
+                        {% if link.starts_with("/api/") %}
+                            <span class="status" style="background-color: var(--info-color); color: white;">API</span>
+                        {% else if link.starts_with("ws://") %}
+                            <span class="status" style="background-color: var(--secondary-color); color: white;">WebSocket</span>
+                        {% else %}
+                            <span class="status" style="background-color: var(--primary-color); color: white;">Page</span>
+                        {% endif %}
+                    </td>
+                    <td>
+                        <small style="color: var(--text-muted);">Click to test manually</small>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<div class="card">
+    <h3>Link Testing Information</h3>
+    <div class="alert alert-info">
+        <strong>About This Dashboard</strong><br>
+        This page displays all discovered links in the Vibe Ensemble application for manual testing:<br>
+        • Page routes (/, /dashboard, /messages, etc.)<br>
+        • API endpoints (/api/health, /api/stats, etc.)<br>
+        • WebSocket connections (/ws)
+        <br><br>
+        <strong>Testing Links:</strong><br>
+        • <strong>Manual:</strong> Click any link above to test it in your browser<br>
+        • <strong>Automated:</strong> Use <code>./scripts/test-links.sh</code> for comprehensive testing<br>
+        • <strong>CI:</strong> The test script runs automatically in the CI pipeline
+        <br><br>
+        <strong>Why server-side validation was removed:</strong><br>
+        Server-side validation made HTTP requests from the server, which posed security and performance concerns.
+        External testing is more appropriate and allows for local development testing.
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_script %}
+// Simple link filtering functionality
+const linkFilter = document.getElementById('link-filter');
+if (linkFilter) {
+    linkFilter.addEventListener('input', function(e) {
+        const filter = e.target.value.toLowerCase();
+        const rows = document.querySelectorAll('#links-table tbody tr');
+        
+        rows.forEach(row => {
+            const url = row.getAttribute('data-url').toLowerCase();
+            if (url.includes(filter)) {
+                row.style.display = '';
+            } else {
+                row.style.display = 'none';
+            }
+        });
+    });
+}
+
+// Show instruction modal when validation buttons are clicked
+document.addEventListener('DOMContentLoaded', function() {
+    // Update validation-related elements to show instructions
+    const validationStatus = document.getElementById('validation-status');
+    if (validationStatus) {
+        validationStatus.innerHTML = `
+            <div class="alert alert-info">
+                <strong>Server-side validation is disabled.</strong><br>
+                Use <code>./scripts/test-links.sh</code> to test links locally or in CI.
+            </div>
+        `;
+    }
+});
+{% endblock %}
