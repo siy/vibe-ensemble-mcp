@@ -8,7 +8,7 @@
 
 use clap::Parser;
 use std::env;
-use tracing::{error, info};
+use tracing::{debug, error, info, warn};
 
 /// Helper function to get database scheme type for safe logging
 fn db_scheme(url: &str) -> &'static str {
@@ -254,42 +254,78 @@ async fn run_mcp_stdio_mode_unified(config: &Config) -> Result<()> {
 
     info!("MCP server initialized successfully");
 
-    // Create stdio transport
+    // Create stdio transport with enhanced features
     let mut transport = vibe_ensemble_mcp::transport::TransportFactory::stdio();
     info!("Server is ready to accept connections via stdio");
 
-    // Main server loop - handle messages from stdin and send responses to stdout
+    info!("Starting enhanced MCP stdio transport loop");
+
+    // Enhanced main server loop with connection state management and improved error handling
+    let mut loop_count = 0u64;
     loop {
+        loop_count += 1;
+
+        // Log progress periodically for monitoring
+        if loop_count % 100 == 0 {
+            info!("Processing loop iteration {} - connection active", loop_count);
+        }
+
         match transport.receive().await {
             Ok(message) => {
-                tracing::debug!("Received message: {}", message);
+                debug!(
+                    "Received message (loop {}): {} bytes",
+                    loop_count,
+                    message.len()
+                );
 
-                // Process the message
+                // Process the message through MCP server
                 match server.handle_message(&message).await {
                     Ok(Some(response)) => {
-                        tracing::debug!("Sending response: {}", response);
+                        debug!(
+                            "Sending response (loop {}): {} bytes",
+                            loop_count,
+                            response.len()
+                        );
                         if let Err(e) = transport.send(&response).await {
-                            error!("Failed to send response: {}", e);
+                            error!("Failed to send response: {} - closing connection", e);
                             break;
                         }
                     }
                     Ok(None) => {
-                        tracing::debug!("No response required");
+                        debug!("No response required for message (loop {})", loop_count);
                     }
                     Err(e) => {
-                        error!("Error processing message: {}", e);
-                        // Continue processing other messages
+                        error!("Error processing message (loop {}): {}", loop_count, e);
+
+                        // For critical MCP protocol errors, we might want to send error response
+                        // but continue processing other messages for resilience
+                        warn!("Continuing message processing despite error");
                     }
                 }
             }
-            Err(e) => {
-                tracing::debug!("Transport error: {}", e);
-                break;
-            }
+            Err(e) => match e {
+                vibe_ensemble_mcp::Error::Connection(msg) => {
+                    info!("Connection closed gracefully: {}", msg);
+                    break;
+                }
+                vibe_ensemble_mcp::Error::Transport(msg) => {
+                    error!("Transport error: {} - closing connection", msg);
+                    break;
+                }
+                _ => {
+                    error!(
+                        "Unexpected error in transport loop: {} - closing connection",
+                        e
+                    );
+                    break;
+                }
+            },
         }
     }
 
-    info!("Shutting down MCP server");
+    // Log shutdown
+    info!("Shutting down MCP server after {} loop iterations", loop_count);
+
     transport.close().await?;
 
     Ok(())

@@ -245,24 +245,44 @@ impl Transport for InMemoryTransport {
     }
 }
 
-/// Stdio transport implementation for MCP protocol communication over stdin/stdout
+/// Connection state for MCP stdio transport
+#[derive(Debug, Clone, PartialEq)]
+pub enum ConnectionState {
+    /// Transport is open but not yet initialized (no MCP initialize received)
+    Connected,
+    /// MCP initialization sequence has been completed successfully
+    Initialized,
+    /// Connection is closed or in error state
+    Closed,
+}
+
+/// Enhanced stdio transport implementation for MCP protocol with full Claude Code compatibility
 ///
 /// This implementation is optimized for Claude Code compatibility and includes:
-/// - JSON-RPC 2.0 message validation
-/// - Newline-delimited message framing
+/// - JSON-RPC 2.0 message validation with strict MCP compliance
+/// - Newline-delimited message framing per MCP specification
 /// - Unicode string handling (all Rust strings are UTF-8)
-/// - Signal handling for graceful shutdown
-/// - Performance-optimized buffering
-/// - Robust error handling and recovery
+/// - Signal handling for graceful shutdown (SIGINT/SIGTERM)
+/// - Performance-optimized buffering with configurable sizes
+/// - Robust error handling and connection recovery
+/// - MCP initialization sequence tracking and management
+/// - Connection state management and heartbeat support
+/// - Enhanced logging for debugging and monitoring
 pub struct StdioTransport {
     stdin_reader: BufReader<Stdin>,
     stdout_writer: BufWriter<Stdout>,
-    is_closed: bool,
+    connection_state: ConnectionState,
     read_timeout: Duration,
     write_timeout: Duration,
     #[cfg_attr(not(test), allow(dead_code))]
     // Used for configuration tracking and potential future features
     buffer_size: usize,
+    /// Keep track of message IDs for heartbeat/ping handling
+    last_ping_id: Option<String>,
+    /// Statistics for connection monitoring
+    messages_sent: u64,
+    messages_received: u64,
+    errors_encountered: u64,
 }
 
 impl StdioTransport {
@@ -277,13 +297,21 @@ impl StdioTransport {
 
     /// Create a new stdio transport with default settings
     pub fn new() -> Self {
+        info!("Creating stdio transport with default settings (buffer: {}KB, read timeout: {}s, write timeout: {}s)",
+               Self::DEFAULT_BUFFER_SIZE / 1024,
+               Self::DEFAULT_READ_TIMEOUT.as_secs(),
+               Self::DEFAULT_WRITE_TIMEOUT.as_secs());
         Self {
             stdin_reader: BufReader::with_capacity(Self::DEFAULT_BUFFER_SIZE, tokio::io::stdin()),
             stdout_writer: BufWriter::with_capacity(Self::DEFAULT_BUFFER_SIZE, tokio::io::stdout()),
-            is_closed: false,
+            connection_state: ConnectionState::Connected,
             read_timeout: Self::DEFAULT_READ_TIMEOUT,
             write_timeout: Self::DEFAULT_WRITE_TIMEOUT,
             buffer_size: Self::DEFAULT_BUFFER_SIZE,
+            last_ping_id: None,
+            messages_sent: 0,
+            messages_received: 0,
+            errors_encountered: 0,
         }
     }
 
@@ -295,14 +323,97 @@ impl StdioTransport {
     ) -> Self {
         // Ensure minimum buffer size of 4KB for reasonable performance
         let clamped_buffer_size = buffer_size.max(4096);
+        info!("Creating stdio transport with custom settings (buffer: {}KB, read timeout: {}s, write timeout: {}s)",
+               clamped_buffer_size / 1024,
+               read_timeout.as_secs(),
+               write_timeout.as_secs());
         Self {
             stdin_reader: BufReader::with_capacity(clamped_buffer_size, tokio::io::stdin()),
             stdout_writer: BufWriter::with_capacity(clamped_buffer_size, tokio::io::stdout()),
-            is_closed: false,
+            connection_state: ConnectionState::Connected,
             read_timeout,
             write_timeout,
             buffer_size: clamped_buffer_size,
+            last_ping_id: None,
+            messages_sent: 0,
+            messages_received: 0,
+            errors_encountered: 0,
         }
+    }
+
+    /// Get the current connection state
+    pub fn connection_state(&self) -> ConnectionState {
+        self.connection_state.clone()
+    }
+
+    /// Check if transport is ready for MCP protocol operations
+    pub fn is_initialized(&self) -> bool {
+        matches!(self.connection_state, ConnectionState::Initialized)
+    }
+
+    /// Check if transport is closed
+    pub fn is_closed(&self) -> bool {
+        matches!(self.connection_state, ConnectionState::Closed)
+    }
+
+    /// Get connection statistics for monitoring
+    pub fn get_stats(&self) -> (u64, u64, u64) {
+        (
+            self.messages_sent,
+            self.messages_received,
+            self.errors_encountered,
+        )
+    }
+
+    /// Detect if a message contains MCP initialization or ping
+    /// This method tracks connection state transitions based on message content
+    pub fn analyze_message(&mut self, message: &str) -> Result<()> {
+        // Parse message to check for initialization or ping
+        let parsed: Value = serde_json::from_str(message)
+            .map_err(|e| Error::Transport(format!("Invalid JSON in message analysis: {}", e)))?;
+
+        if let Value::Object(obj) = &parsed {
+            // Check for MCP initialize method
+            if let Some(method) = obj.get("method").and_then(|v| v.as_str()) {
+                match method {
+                    "initialize" => {
+                        info!(
+                            "Detected MCP initialize request - transitioning to initialized state"
+                        );
+                        self.connection_state = ConnectionState::Initialized;
+                    }
+                    "ping" => {
+                        if let Some(id) = obj.get("id").and_then(|v| v.as_str()) {
+                            debug!("Detected ping message with id: {}", id);
+                            self.last_ping_id = Some(id.to_string());
+                        }
+                    }
+                    _ => {}
+                }
+            }
+
+            // Check for initialize response (server to client)
+            if let Some(result) = obj.get("result") {
+                if result.is_object() {
+                    debug!("Detected potential MCP initialize response");
+                    // This could be an initialize response, maintain initialized state
+                    if self.connection_state == ConnectionState::Connected {
+                        self.connection_state = ConnectionState::Initialized;
+                    }
+                }
+            }
+        }
+
+        Ok(())
+    }
+
+    /// Create a ping message for connection health checking
+    pub fn create_ping_message(&mut self) -> String {
+        use uuid::Uuid;
+        let ping_id = Uuid::new_v4().to_string();
+        self.last_ping_id = Some(ping_id.clone());
+
+        format!(r#"{{"jsonrpc":"2.0","method":"ping","id":"{}"}}"#, ping_id)
     }
 
     /// Validate that a message is proper JSON-RPC and doesn't contain embedded newlines
@@ -397,12 +508,19 @@ impl Default for StdioTransport {
 #[async_trait::async_trait]
 impl Transport for StdioTransport {
     async fn send(&mut self, message: &str) -> Result<()> {
-        if self.is_closed {
+        if self.is_closed() {
+            self.errors_encountered += 1;
             return Err(Error::Transport("Stdio transport is closed".to_string()));
         }
 
         // Validate message before sending (Claude Code compatibility)
         Self::validate_message(message)?;
+
+        // Analyze message for connection state tracking
+        if let Err(e) = self.analyze_message(message) {
+            warn!("Failed to analyze outgoing message: {}", e);
+            // Continue with sending even if analysis fails
+        }
 
         // Create write operation with timeout
         let write_operation = async {
@@ -431,22 +549,35 @@ impl Transport for StdioTransport {
         };
 
         // Apply write timeout
-        timeout(self.write_timeout, write_operation)
-            .await
-            .map_err(|_| {
+        match timeout(self.write_timeout, write_operation).await {
+            Ok(Ok(())) => {
+                self.messages_sent += 1;
+                debug!(
+                    "Successfully sent message via stdio: {} bytes (total sent: {})",
+                    message.len(),
+                    self.messages_sent
+                );
+                Ok(())
+            }
+            Ok(Err(e)) => {
+                self.errors_encountered += 1;
+                error!("Write operation failed: {}", e);
+                Err(e)
+            }
+            Err(_) => {
+                self.errors_encountered += 1;
                 error!("Write operation timed out after {:?}", self.write_timeout);
-                Error::Transport(format!("Write timeout after {:?}", self.write_timeout))
-            })??;
-
-        debug!(
-            "Successfully sent message via stdio: {} bytes",
-            message.len()
-        );
-        Ok(())
+                Err(Error::Transport(format!(
+                    "Write timeout after {:?}",
+                    self.write_timeout
+                )))
+            }
+        }
     }
 
     async fn receive(&mut self) -> Result<String> {
-        if self.is_closed {
+        if self.is_closed() {
+            self.errors_encountered += 1;
             return Err(Error::Transport("Stdio transport is closed".to_string()));
         }
 
@@ -462,8 +593,9 @@ impl Transport for StdioTransport {
                     result = self.stdin_reader.read_line(&mut line) => {
                         match result {
                             Ok(0) => {
-                                debug!("Stdin reached EOF - client disconnected");
-                                self.is_closed = true;
+                                info!("Stdin reached EOF - client disconnected, closing transport");
+                                self.connection_state = ConnectionState::Closed;
+                                self.errors_encountered += 1;
                                 return Err(Error::Connection("Stdin reached EOF".to_string()));
                             }
                             Ok(bytes_read) => {
@@ -491,7 +623,15 @@ impl Transport for StdioTransport {
                                     continue;
                                 }
 
-                                debug!("Successfully received valid message: {} bytes", line.len());
+                                // Analyze message for connection state tracking
+                                if let Err(e) = self.analyze_message(&line) {
+                                    warn!("Failed to analyze incoming message: {}", e);
+                                    // Continue processing even if analysis fails
+                                }
+
+                                self.messages_received += 1;
+                                debug!("Successfully received valid message: {} bytes (total received: {})",
+                                       line.len(), self.messages_received);
                                 return Ok(line);
                             }
                             Err(e) => {
@@ -504,8 +644,9 @@ impl Transport for StdioTransport {
                                         continue;
                                     }
                                     std::io::ErrorKind::UnexpectedEof => {
-                                        info!("Unexpected EOF on stdin");
-                                        self.is_closed = true;
+                                        info!("Unexpected EOF on stdin, closing transport");
+                                        self.connection_state = ConnectionState::Closed;
+                                        self.errors_encountered += 1;
                                         return Err(Error::Connection("Unexpected EOF".to_string()));
                                     }
                                     _ => {
@@ -517,7 +658,7 @@ impl Transport for StdioTransport {
                     }
                     _ = Self::check_shutdown_signal() => {
                         info!("Graceful shutdown initiated via signal");
-                        self.is_closed = true;
+                        self.connection_state = ConnectionState::Closed;
                         return Err(Error::Connection("Shutdown signal received".to_string()));
                     }
                 }
@@ -532,20 +673,25 @@ impl Transport for StdioTransport {
     }
 
     async fn close(&mut self) -> Result<()> {
-        if !self.is_closed {
-            info!("Closing stdio transport - flushing buffers");
+        if !self.is_closed() {
+            info!(
+                "Closing stdio transport - flushing buffers (stats: sent={}, received={}, errors={})",
+                self.messages_sent, self.messages_received, self.errors_encountered
+            );
 
             // Ensure all buffered data is written before closing
             if let Err(e) = self.stdout_writer.flush().await {
                 warn!("Error flushing stdout buffer during close: {}", e);
+                self.errors_encountered += 1;
             }
 
             // Shutdown stdout to signal end of communication
             if let Err(e) = self.stdout_writer.shutdown().await {
                 warn!("Error shutting down stdout during close: {}", e);
+                self.errors_encountered += 1;
             }
 
-            self.is_closed = true;
+            self.connection_state = ConnectionState::Closed;
             info!("Stdio transport closed gracefully");
         }
         Ok(())
@@ -870,12 +1016,14 @@ mod tests {
     async fn test_stdio_transport_closed_state() {
         let mut transport = StdioTransport::new();
 
-        // Transport should start as open
-        assert!(!transport.is_closed);
+        // Transport should start as connected
+        assert_eq!(transport.connection_state(), ConnectionState::Connected);
+        assert!(!transport.is_closed());
 
         // Close the transport
         transport.close().await.unwrap();
-        assert!(transport.is_closed);
+        assert_eq!(transport.connection_state(), ConnectionState::Closed);
+        assert!(transport.is_closed());
 
         // Operations on closed transport should fail
         let send_result = transport.send(r#"{"jsonrpc":"2.0","id":1}"#).await;
@@ -896,7 +1044,10 @@ mod tests {
         assert_eq!(transport1.read_timeout, transport2.read_timeout);
         assert_eq!(transport1.write_timeout, transport2.write_timeout);
         assert_eq!(transport1.buffer_size, transport2.buffer_size);
-        assert_eq!(transport1.is_closed, transport2.is_closed);
+        assert_eq!(transport1.connection_state, transport2.connection_state);
+        assert_eq!(transport1.messages_sent, transport2.messages_sent);
+        assert_eq!(transport1.messages_received, transport2.messages_received);
+        assert_eq!(transport1.errors_encountered, transport2.errors_encountered);
     }
 
     #[tokio::test]
@@ -940,5 +1091,84 @@ mod tests {
         // Batch request
         let batch = r#"[{"jsonrpc":"2.0","method":"sum","params":[1,2,4],"id":"1"},{"jsonrpc":"2.0","method":"notify_hello","params":[7]}]"#;
         assert!(StdioTransport::validate_message(batch).is_ok());
+    }
+
+    #[tokio::test]
+    async fn test_stdio_transport_connection_state_management() {
+        let mut transport = StdioTransport::new();
+
+        // Initial state should be Connected
+        assert_eq!(transport.connection_state(), ConnectionState::Connected);
+        assert!(!transport.is_initialized());
+        assert!(!transport.is_closed());
+
+        // Simulate MCP initialize message
+        let init_message = r#"{"jsonrpc":"2.0","method":"initialize","params":{"protocolVersion":"2024-11-05","clientInfo":{"name":"test","version":"1.0"}},"id":1}"#;
+        transport.analyze_message(init_message).unwrap();
+
+        // Should transition to Initialized
+        assert_eq!(transport.connection_state(), ConnectionState::Initialized);
+        assert!(transport.is_initialized());
+        assert!(!transport.is_closed());
+
+        // Close transport
+        transport.close().await.unwrap();
+        assert_eq!(transport.connection_state(), ConnectionState::Closed);
+        assert!(!transport.is_initialized());
+        assert!(transport.is_closed());
+    }
+
+    #[tokio::test]
+    async fn test_stdio_transport_ping_handling() {
+        let mut transport = StdioTransport::new();
+
+        // Create ping message
+        let ping_message = transport.create_ping_message();
+        assert!(ping_message.contains(r#""method":"ping""#));
+        assert!(ping_message.contains(r#""jsonrpc":"2.0""#));
+        assert!(ping_message.contains(r#""id":"#));
+
+        // Analyze ping message
+        transport.analyze_message(&ping_message).unwrap();
+        assert!(transport.last_ping_id.is_some());
+    }
+
+    #[tokio::test]
+    async fn test_stdio_transport_statistics_tracking() {
+        let mut transport = StdioTransport::new();
+
+        // Initial statistics
+        let (sent, received, errors) = transport.get_stats();
+        assert_eq!(sent, 0);
+        assert_eq!(received, 0);
+        assert_eq!(errors, 0);
+
+        // Simulate some errors
+        transport.errors_encountered = 5;
+        let (_, _, errors) = transport.get_stats();
+        assert_eq!(errors, 5);
+    }
+
+    #[tokio::test]
+    async fn test_stdio_transport_message_analysis() {
+        let mut transport = StdioTransport::new();
+
+        // Test various message types
+        let init_request = r#"{"jsonrpc":"2.0","method":"initialize","params":{},"id":1}"#;
+        let ping_request = r#"{"jsonrpc":"2.0","method":"ping","id":"test-ping"}"#;
+        let other_request = r#"{"jsonrpc":"2.0","method":"list_tools","id":2}"#;
+
+        // Initialize message
+        transport.analyze_message(init_request).unwrap();
+        assert_eq!(transport.connection_state(), ConnectionState::Initialized);
+
+        // Ping message
+        transport.analyze_message(ping_request).unwrap();
+        assert_eq!(transport.last_ping_id, Some("test-ping".to_string()));
+
+        // Other message should not change state
+        let previous_state = transport.connection_state();
+        transport.analyze_message(other_request).unwrap();
+        assert_eq!(transport.connection_state(), previous_state);
     }
 }
