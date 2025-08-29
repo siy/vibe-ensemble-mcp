@@ -3,7 +3,7 @@
 {% block title %}{{ title }}{% endblock %}
 
 {% block page_title %}Link Health Dashboard{% endblock %}
-{% block page_description %}Monitor navigation integrity and link validation across the application{% endblock %}
+{% block page_description %}View application links for manual testing. Server-side validation has been moved to scripts/test-links.sh{% endblock %}
 
 {% block content %}
 <div id="health-overview" class="grid grid-4">
@@ -27,21 +27,13 @@
 
 <div class="grid grid-2">
     <div class="card">
-        <h3>Link Validation Controls</h3>
+        <h3>Link Testing</h3>
         <div style="margin-top: 15px;">
-            <button id="validate-all" class="btn btn-primary" style="margin-right: 10px; margin-bottom: 10px;">
-                <span class="spinner" id="validate-spinner" style="display: none;"></span>
-                Validate All Links
-            </button>
-            <button id="refresh-data" class="btn btn-secondary" style="margin-right: 10px; margin-bottom: 10px;">
-                Refresh Data
-            </button>
-            <a href="/api/links/analytics" class="btn btn-primary" style="margin-right: 10px; margin-bottom: 10px;">View Analytics</a>
-            <a href="/api/links/status" class="btn btn-secondary" style="margin-bottom: 10px;">Raw Status JSON</a>
-        </div>
-        <div style="margin-top: 15px;">
-            <label for="validation-timeout">Validation Timeout (seconds):</label>
-            <input type="number" id="validation-timeout" value="5" min="1" max="30" class="form-control" style="width: 100px; display: inline-block; margin-left: 10px;">
+            <p><strong>Server-side validation has been removed</strong> for security and performance reasons.</p>
+            <p>To test links locally or in CI, use:</p>
+            <code style="background: var(--bg-secondary); padding: 4px 8px; border-radius: 3px;">./scripts/test-links.sh</code>
+            <br><br>
+            <p>For manual testing, you can click the links in the table below.</p>
         </div>
     </div>
 
@@ -72,9 +64,7 @@
                 <tr>
                     <th>URL</th>
                     <th>Type</th>
-                    <th>Status</th>
-                    <th>Response Time</th>
-                    <th>Actions</th>
+                    <th>Notes</th>
                 </tr>
             </thead>
             <tbody>
@@ -94,14 +84,8 @@
                             <span class="status" style="background-color: var(--primary-color); color: white;">Page</span>
                         {% endif %}
                     </td>
-                    <td class="link-status">
-                        <span class="status status-offline">Not Validated</span>
-                    </td>
-                    <td class="response-time">-</td>
                     <td>
-                        <button class="btn btn-sm btn-secondary validate-single" data-url="{{ link }}">
-                            Validate
-                        </button>
+                        <small style="color: var(--text-muted);">Click to test manually</small>
                     </td>
                 </tr>
                 {% endfor %}
@@ -111,204 +95,56 @@
 </div>
 
 <div class="card">
-    <h3>Link Health Monitoring</h3>
+    <h3>Link Testing Information</h3>
     <div class="alert alert-info">
-        <strong>About Link Validation</strong><br>
-        This dashboard monitors the health of all discovered links in the Vibe Ensemble application, including:<br>
-        • Page routes (/, /dashboard, /agents, etc.)<br>
+        <strong>About This Dashboard</strong><br>
+        This page displays all discovered links in the Vibe Ensemble application for manual testing:<br>
+        • Page routes (/, /dashboard, /messages, etc.)<br>
         • API endpoints (/api/health, /api/stats, etc.)<br>
-        • WebSocket connections (/ws)<br>
-        • Authentication pages (/login, /logout)
+        • WebSocket connections (/ws)
         <br><br>
-        <strong>Status Meanings:</strong><br>
-        <span class="status" style="background-color: var(--success-color); color: white;">Healthy</span> - Link responds with 2xx status<br>
-        <span class="status" style="background-color: var(--warning-color); color: white;">Warning</span> - Link redirects (3xx) or special handling needed<br>
-        <span class="status" style="background-color: var(--danger-color); color: white;">Broken</span> - Link returns error or times out
+        <strong>Testing Links:</strong><br>
+        • <strong>Manual:</strong> Click any link above to test it in your browser<br>
+        • <strong>Automated:</strong> Use <code>./scripts/test-links.sh</code> for comprehensive testing<br>
+        • <strong>CI:</strong> The test script runs automatically in the CI pipeline
+        <br><br>
+        <strong>Why server-side validation was removed:</strong><br>
+        Server-side validation made HTTP requests from the server, which posed security and performance concerns.
+        External testing is more appropriate and allows for local development testing.
     </div>
 </div>
 {% endblock %}
 
 {% block extra_script %}
-let validationInProgress = false;
-
-// Validate all links function 
-function validateAllLinks() {
-    const button = document.getElementById('validate-all');
-    if (button) {
-        button.click();
-    }
-}
-
-// Link filtering functionality
-document.getElementById('link-filter').addEventListener('input', function(e) {
-    const filter = e.target.value.toLowerCase();
-    const rows = document.querySelectorAll('#links-table tbody tr');
-    
-    rows.forEach(row => {
-        const url = row.getAttribute('data-url').toLowerCase();
-        if (url.includes(filter)) {
-            row.style.display = '';
-        } else {
-            row.style.display = 'none';
-        }
-    });
-});
-
-// Validate all links
-document.getElementById('validate-all').addEventListener('click', async function() {
-    if (validationInProgress) return;
-    
-    validationInProgress = true;
-    const button = this;
-    const spinner = document.getElementById('validate-spinner');
-    const timeout = document.getElementById('validation-timeout').value;
-    
-    button.disabled = true;
-    spinner.style.display = 'inline-block';
-    button.querySelector('span:not(.spinner)') ? 
-        button.querySelector('span:not(.spinner)').textContent = 'Validating...' :
-        button.innerHTML = '<span class="spinner"></span> Validating...';
-    
-    try {
-        const response = await fetch(`/api/links/validate?timeout=${timeout}`);
-        const data = await response.json();
+// Simple link filtering functionality
+const linkFilter = document.getElementById('link-filter');
+if (linkFilter) {
+    linkFilter.addEventListener('input', function(e) {
+        const filter = e.target.value.toLowerCase();
+        const rows = document.querySelectorAll('#links-table tbody tr');
         
-        updateValidationResults(data);
-        updateStatistics(data.summary);
-        
-        document.getElementById('validation-status').innerHTML = 
-            `<div class="alert alert-success">Validation completed successfully!</div>`;
-            
-    } catch (error) {
-        document.getElementById('validation-status').innerHTML = 
-            `<div class="alert alert-danger">Validation failed: ${error.message}</div>`;
-    } finally {
-        validationInProgress = false;
-        button.disabled = false;
-        spinner.style.display = 'none';
-        button.innerHTML = 'Validate All Links';
-    }
-});
-
-// Validate single link
-document.querySelectorAll('.validate-single').forEach(button => {
-    button.addEventListener('click', async function() {
-        const url = this.getAttribute('data-url');
-        const timeout = document.getElementById('validation-timeout').value;
-        const row = this.closest('tr');
-        
-        this.disabled = true;
-        this.textContent = 'Validating...';
-        
-        try {
-            // For single link validation, we'll make a direct request
-            const startTime = Date.now();
-            let status, responseTime, statusCode;
-            
-            if (url.startsWith('ws://')) {
-                status = 'warning';
-                responseTime = Date.now() - startTime;
-                updateLinkRow(row, status, responseTime, null, 'WebSocket validation not implemented');
+        rows.forEach(row => {
+            const url = row.getAttribute('data-url').toLowerCase();
+            if (url.includes(filter)) {
+                row.style.display = '';
             } else {
-                try {
-                    const response = await fetch(url, { 
-                        method: 'HEAD',
-                        timeout: parseInt(timeout) * 1000 
-                    });
-                    responseTime = Date.now() - startTime;
-                    statusCode = response.status;
-                    
-                    if (statusCode >= 200 && statusCode < 300) {
-                        status = 'healthy';
-                    } else if (statusCode >= 300 && statusCode < 400) {
-                        status = 'warning';
-                    } else {
-                        status = 'broken';
-                    }
-                    
-                    updateLinkRow(row, status, responseTime, statusCode, null);
-                } catch (error) {
-                    responseTime = Date.now() - startTime;
-                    updateLinkRow(row, 'broken', responseTime, null, error.message);
-                }
+                row.style.display = 'none';
             }
-        } finally {
-            this.disabled = false;
-            this.textContent = 'Validate';
-        }
-    });
-});
-
-// Refresh data
-document.getElementById('refresh-data').addEventListener('click', function() {
-    window.location.reload();
-});
-
-function updateValidationResults(data) {
-    Object.entries(data.validation_results).forEach(([url, result]) => {
-        const row = document.querySelector(`tr[data-url="${url}"]`);
-        if (row) {
-            updateLinkRow(row, result.status, result.response_time_ms, result.status_code, result.error_message);
-        }
+        });
     });
 }
 
-function updateLinkRow(row, status, responseTime, statusCode, errorMessage) {
-    const statusCell = row.querySelector('.link-status');
-    const responseTimeCell = row.querySelector('.response-time');
-    
-    let statusClass = 'status-offline';
-    let statusText = status;
-    
-    switch (status) {
-        case 'healthy':
-            statusClass = 'status-online';
-            statusText = 'Healthy';
-            break;
-        case 'warning':
-            statusClass = 'status-busy';
-            statusText = 'Warning';
-            break;
-        case 'broken':
-            statusClass = 'status-offline';
-            statusText = 'Broken';
-            break;
+// Show instruction modal when validation buttons are clicked
+document.addEventListener('DOMContentLoaded', function() {
+    // Update validation-related elements to show instructions
+    const validationStatus = document.getElementById('validation-status');
+    if (validationStatus) {
+        validationStatus.innerHTML = `
+            <div class="alert alert-info">
+                <strong>Server-side validation is disabled.</strong><br>
+                Use <code>./scripts/test-links.sh</code> to test links locally or in CI.
+            </div>
+        `;
     }
-    
-    statusCell.innerHTML = `<span class="status ${statusClass}">${statusText}</span>`;
-    
-    if (statusCode) {
-        statusCell.innerHTML += ` <small>(${statusCode})</small>`;
-    }
-    
-    if (errorMessage) {
-        statusCell.title = errorMessage;
-    }
-    
-    responseTimeCell.textContent = responseTime ? `${responseTime}ms` : '-';
-}
-
-function updateStatistics(summary) {
-    const total = (summary.total ?? summary.total_links) ?? 0;
-    const healthy = (summary.healthy ?? summary.healthy_links) ?? 0;
-    const broken = (summary.broken ?? summary.broken_links) ?? 0;
-    const warning = (summary.warning ?? summary.warning_links) ?? 0;
-    document.getElementById('total-links').textContent = total;
-    document.getElementById('healthy-links').textContent = healthy;
-    document.getElementById('broken-links').textContent = broken;
-    document.getElementById('warning-links').textContent = warning;
-}
-
-// Auto-refresh statistics every 30 seconds
-setInterval(async () => {
-    try {
-        const response = await fetch('/api/links/health');
-        const data = await response.json();
-        if (data.summary) {
-            updateStatistics(data.summary);
-        }
-    } catch (error) {
-        console.log('Failed to refresh link health stats:', error);
-    }
-}, 30000);
+});
 {% endblock %}

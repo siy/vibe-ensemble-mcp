@@ -7,7 +7,6 @@
 pub mod auth;
 pub mod error;
 pub mod handlers;
-pub mod link_validator;
 pub mod metrics;
 pub mod middleware;
 pub mod server;
