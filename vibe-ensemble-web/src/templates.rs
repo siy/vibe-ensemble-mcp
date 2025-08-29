@@ -219,3 +219,6 @@ impl LinkHealthTemplate {
         }
     }
 }
+
+// Removed complex template structures to avoid Askama compilation issues
+// Templates are now handled with simple HTML in handlers for better compatibility

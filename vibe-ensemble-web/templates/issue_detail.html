@@ -1,0 +1,266 @@
+{% extends "base.html" %}
+
+{% block title %}{{ title }}{% endblock %}
+{% block page_title %}Issue Details{% endblock %}
+{% block page_description %}{{ issue.title }}{% endblock %}
+
+{% block content %}
+<div class="card">
+    <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 20px;">
+        <div>
+            <h2>{{ issue.title }}</h2>
+            <div style="margin-top: 10px;">
+                <span class="priority-{{ issue.priority | format("{:?}") | lower }}" style="margin-right: 10px;">
+                    {{ issue.priority | format("{:?}") }}
+                </span>
+                <span class="status status-{{ issue.status | format("{:?}") | lower | replace("_", "-") }}">
+                    {{ issue.status | format("{:?}") | replace("_", " ") }}
+                </span>
+            </div>
+        </div>
+        <div style="display: flex; gap: 10px;">
+            <a href="/issues/{{ issue.id }}/edit" class="btn btn-secondary">Edit Issue</a>
+            {% if issue.status != vibe_ensemble_core::issue::IssueStatus::Closed %}
+            <button class="btn btn-success" onclick="updateIssueStatus('{{ issue.id }}', 'Resolved')">Mark Resolved</button>
+            {% endif %}
+        </div>
+    </div>
+    
+    <div class="grid grid-2">
+        <div>
+            <h3>Issue Information</h3>
+            <table class="table">
+                <tr>
+                    <td><strong>ID</strong></td>
+                    <td><code>{{ issue.id }}</code></td>
+                </tr>
+                <tr>
+                    <td><strong>Title</strong></td>
+                    <td>{{ issue.title }}</td>
+                </tr>
+                <tr>
+                    <td><strong>Priority</strong></td>
+                    <td>
+                        <span class="priority-{{ issue.priority | format("{:?}") | lower }}">
+                            {{ issue.priority | format("{:?}") }}
+                        </span>
+                    </td>
+                </tr>
+                <tr>
+                    <td><strong>Status</strong></td>
+                    <td>
+                        <span class="status status-{{ issue.status | format("{:?}") | lower | replace("_", "-") }}">
+                            {{ issue.status | format("{:?}") | replace("_", " ") }}
+                        </span>
+                    </td>
+                </tr>
+                <tr>
+                    <td><strong>Created</strong></td>
+                    <td>{{ issue.created_at | format_timestamp }}</td>
+                </tr>
+                <tr>
+                    <td><strong>Last Updated</strong></td>
+                    <td>{{ issue.updated_at | relative_time }}</td>
+                </tr>
+            </table>
+        </div>
+        
+        <div>
+            <h3>Assignment</h3>
+            {% match issue.assigned_agent_id %}
+            {% when Some with (agent_id) %}
+            {% match assigned_agent %}
+            {% when Some with (agent) %}
+            <div class="assigned-agent-info">
+                <div style="display: flex; align-items: center; margin-bottom: 10px;">
+                    <span class="status 
+                    {%- match agent.status -%}
+                    {%- when vibe_ensemble_core::agent::AgentStatus::Online -%} status-online
+                    {%- when vibe_ensemble_core::agent::AgentStatus::Offline -%} status-offline  
+                    {%- when vibe_ensemble_core::agent::AgentStatus::Busy -%} status-busy
+                    {%- endmatch -%}
+                    " style="margin-right: 10px;">{{ agent.status | format("{:?}") }}</span>
+                    <strong>{{ agent.name }}</strong>
+                </div>
+                <p><strong>Type:</strong> {{ agent.agent_type | format("{:?}") }}</p>
+                <p><strong>Capabilities:</strong></p>
+                <div class="capabilities" style="margin-top: 5px;">
+                    {% for capability in agent.capabilities %}
+                    <span class="tag">{{ capability }}</span>
+                    {% endfor %}
+                </div>
+                <div style="margin-top: 15px;">
+                    <a href="/agents/{{ agent.id }}" class="btn btn-sm btn-primary">View Agent Details</a>
+                </div>
+            </div>
+            {% when None %}
+            <div class="alert alert-warning">
+                <strong>Agent not found</strong><br>
+                Assigned agent {{ agent_id }} is no longer available.
+            </div>
+            {% endmatch %}
+            {% when None %}
+            <div class="alert alert-info">
+                <strong>Unassigned</strong><br>
+                This issue has not been assigned to any agent yet.
+            </div>
+            {% endmatch %}
+        </div>
+    </div>
+</div>
+
+<div class="card">
+    <h3>Description</h3>
+    <div class="issue-description">
+        {% if issue.description.is_empty() %}
+        <p class="text-muted">No description provided.</p>
+        {% else %}
+        <div style="background: var(--gray-50); padding: 20px; border-radius: var(--border-radius); line-height: 1.6;">
+            {{ issue.description | nl2br }}
+        </div>
+        {% endif %}
+    </div>
+</div>
+
+{% if !related_messages.is_empty() %}
+<div class="card">
+    <h3>Related Messages ({{ related_messages.len() }})</h3>
+    <div class="messages-list">
+        {% for message in related_messages %}
+        <div class="message-item" style="border: 1px solid var(--gray-300); border-radius: var(--border-radius); padding: 15px; margin-bottom: 10px;">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+                <div>
+                    <span class="message-type">{{ message.message_type | format("{:?}") }}</span>
+                    <span class="text-muted">from {{ message.sender_id }}</span>
+                    {% match message.recipient_id %}
+                    {% when Some with (recipient_id) %}
+                    <span class="text-muted">→ {{ recipient_id }}</span>
+                    {% when None %}
+                    <span class="text-muted">(Broadcast)</span>
+                    {% endmatch %}
+                </div>
+                <div>
+                    <span class="priority-{{ message.metadata.priority | format("{:?}") | lower }}">
+                        {{ message.metadata.priority | format("{:?}") }}
+                    </span>
+                    <small class="text-muted">{{ message.created_at | relative_time }}</small>
+                </div>
+            </div>
+            <div class="message-content">
+                {{ message.content }}
+            </div>
+            {% if !message.metadata.knowledge_refs.is_empty() %}
+            <div style="margin-top: 10px; padding-top: 10px; border-top: 1px solid var(--gray-200);">
+                <small class="text-muted">Knowledge refs: {{ message.metadata.knowledge_refs | join(", ") }}</small>
+            </div>
+            {% endif %}
+        </div>
+        {% endfor %}
+    </div>
+</div>
+{% endif %}
+
+<div class="card">
+    <h3>Actions</h3>
+    <div style="display: flex; gap: 10px; flex-wrap: wrap;">
+        <a href="/issues" class="btn btn-secondary">← Back to Issues</a>
+        <a href="/issues/{{ issue.id }}/edit" class="btn btn-primary">Edit Issue</a>
+        {% if issue.status != vibe_ensemble_core::issue::IssueStatus::Resolved and issue.status != vibe_ensemble_core::issue::IssueStatus::Closed %}
+        <button class="btn btn-success" onclick="updateIssueStatus('{{ issue.id }}', 'InProgress')">Start Work</button>
+        <button class="btn btn-warning" onclick="updateIssueStatus('{{ issue.id }}', 'Resolved')">Mark Resolved</button>
+        {% endif %}
+        {% if issue.status == vibe_ensemble_core::issue::IssueStatus::Resolved %}
+        <button class="btn btn-success" onclick="updateIssueStatus('{{ issue.id }}', 'Closed')">Close Issue</button>
+        <button class="btn btn-warning" onclick="updateIssueStatus('{{ issue.id }}', 'Open')">Reopen Issue</button>
+        {% endif %}
+        <button class="btn btn-danger" onclick="deleteIssue('{{ issue.id }}')">Delete Issue</button>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_head %}
+<style>
+    .assigned-agent-info {
+        background: var(--gray-50);
+        padding: 15px;
+        border-radius: var(--border-radius);
+    }
+    .tag { 
+        background: var(--gray-300); 
+        color: var(--gray-700); 
+        padding: 2px 6px; 
+        border-radius: 3px; 
+        font-size: 0.75rem;
+        margin-right: 4px;
+        display: inline-block;
+    }
+    .message-type {
+        background: var(--info-color);
+        color: white;
+        padding: 2px 6px;
+        border-radius: 3px;
+        font-size: 0.75rem;
+        font-weight: 600;
+    }
+    .message-item:hover {
+        background-color: var(--gray-50);
+    }
+    .text-muted { color: var(--gray-600); }
+    .issue-description pre {
+        white-space: pre-wrap;
+        word-wrap: break-word;
+    }
+</style>
+{% endblock %}
+
+{% block extra_script %}
+function updateIssueStatus(issueId, newStatus) {
+    if (!confirm(`Are you sure you want to change the status to ${newStatus}?`)) {
+        return;
+    }
+    
+    fetch(`/api/issues/${issueId}`, {
+        method: 'PUT',
+        headers: {
+            'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+            title: '{{ issue.title }}',
+            description: '{{ issue.description }}',
+            priority: '{{ issue.priority | format("{:?}") }}',
+            status: newStatus
+        })
+    })
+    .then(response => response.json())
+    .then(data => {
+        alert('Issue status updated successfully!');
+        window.location.reload();
+    })
+    .catch(error => {
+        console.error('Error updating issue:', error);
+        alert('Failed to update issue status');
+    });
+}
+
+function deleteIssue(issueId) {
+    if (!confirm('Are you sure you want to delete this issue? This action cannot be undone.')) {
+        return;
+    }
+    
+    fetch(`/api/issues/${issueId}`, {
+        method: 'DELETE'
+    })
+    .then(response => {
+        if (response.ok) {
+            alert('Issue deleted successfully!');
+            window.location.href = '/issues';
+        } else {
+            throw new Error('Delete failed');
+        }
+    })
+    .catch(error => {
+        console.error('Error deleting issue:', error);
+        alert('Failed to delete issue');
+    });
+}
+{% endblock %}

@@ -69,19 +69,19 @@
     <h3>Agent Statistics</h3>
     <div class="grid grid-4">
         <div class="stat-card">
-            <div class="stat-number">{{ agents|length }}</div>
+            <div class="stat-number">{{ total_count }}</div>
             <div class="stat-label">Total Connected</div>
         </div>
         <div class="stat-card">
-            <div class="stat-number">{{ agents|selectattr("status", "equalto", "Online")|list|length }}</div>
+            <div class="stat-number">{{ active_count }}</div>
             <div class="stat-label">Online</div>
         </div>
         <div class="stat-card">
-            <div class="stat-number">{{ agents|selectattr("status", "equalto", "Busy")|list|length }}</div>
+            <div class="stat-number">0</div>
             <div class="stat-label">Busy</div>
         </div>
         <div class="stat-card">
-            <div class="stat-number">{{ agents|selectattr("agent_type", "equalto", "Coordinator")|list|length }}</div>
+            <div class="stat-number">0</div>
             <div class="stat-label">Coordinators</div>
         </div>
     </div>
