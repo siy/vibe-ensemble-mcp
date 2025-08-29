@@ -153,8 +153,14 @@ impl WebServer {
                 get(handlers::messages_by_correlation),
             )
             // Link validation API routes
-            .route("/api/links/health", get(handlers::links::link_health_summary))
-            .route("/api/links/status", get(handlers::links::link_status_details))
+            .route(
+                "/api/links/health",
+                get(handlers::links::link_health_summary),
+            )
+            .route(
+                "/api/links/status",
+                get(handlers::links::link_status_details),
+            )
             .route("/api/links/validate", get(handlers::links::validate_links))
             .route("/api/links/analytics", get(handlers::links::link_analytics))
             // Add shared state

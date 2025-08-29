@@ -797,7 +797,6 @@ pub async fn messages_by_correlation(
     ))
 }
 
-
 #[cfg(test)]
 mod tests {
     use super::*;

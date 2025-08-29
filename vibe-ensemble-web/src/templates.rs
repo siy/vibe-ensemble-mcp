@@ -3,6 +3,7 @@
 use askama::Template;
 use serde::Serialize;
 use vibe_ensemble_core::issue::Issue;
+
 use crate::handlers::links::LinkHealthSummary;
 
 /// Activity entry for the dashboard
