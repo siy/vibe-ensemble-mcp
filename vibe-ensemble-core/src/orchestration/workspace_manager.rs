@@ -153,6 +153,16 @@ impl WorkspaceManager {
         }
     }
 
+    /// Check if a path is managed by this workspace manager
+    pub fn is_managed_path(&self, path: &Path) -> bool {
+        path.starts_with(&self.workspaces_directory)
+    }
+
+    /// Get the workspaces root directory
+    pub fn workspace_root(&self) -> &Path {
+        &self.workspaces_directory
+    }
+
     /// Create a new workspace from a template
     pub async fn create_workspace(
         &self,
@@ -376,6 +386,9 @@ impl WorkspaceManager {
         // Validate worktree name
         self.validate_workspace_name(name)?;
 
+        // Validate branch name
+        self.validate_branch_name(&config.branch_name)?;
+
         // Canonicalize repo path and build a manager-scoped worktree path:
         let repo_path = tokio::fs::canonicalize(&config.main_repo_path)
             .await
@@ -434,15 +447,19 @@ impl WorkspaceManager {
                     .arg("symbolic-ref")
                     .arg("refs/remotes/origin/HEAD")
                     .current_dir(&repo_path);
-                if let Ok(out) = detect.output().await {
+
+                use std::time::Duration;
+                let detect_out =
+                    tokio::time::timeout(Duration::from_secs(5), detect.output()).await;
+                if let Ok(Ok(out)) = detect_out {
                     let head = String::from_utf8_lossy(&out.stdout);
                     if let Some(b) = head.rsplit('/').next() {
                         cmd.arg(b.trim());
                     } else {
-                        cmd.arg("main");
+                        cmd.arg("HEAD");
                     }
                 } else {
-                    cmd.arg("main");
+                    cmd.arg("HEAD");
                 }
             }
         } else {
@@ -740,6 +757,35 @@ impl WorkspaceManager {
         if name == "registry" || name == ".." || name == "." {
             return Err(Error::Validation {
                 message: format!("'{}' is a reserved workspace name", name),
+            });
+        }
+
+        Ok(())
+    }
+
+    /// Validate git branch name
+    fn validate_branch_name(&self, branch_name: &str) -> Result<()> {
+        if branch_name.trim().is_empty() {
+            return Err(Error::Validation {
+                message: "Branch name cannot be empty".to_string(),
+            });
+        }
+
+        // Check for obviously invalid/ref-unsafe names
+        if branch_name.contains(' ')
+            || branch_name.contains("..")
+            || branch_name.ends_with('/')
+            || branch_name.starts_with('/')
+            || branch_name == "HEAD"
+            || branch_name.contains('\0')
+            || branch_name.contains('\t')
+            || branch_name.contains('\n')
+        {
+            return Err(Error::Validation {
+                message: format!(
+                    "Branch name '{}' contains invalid characters or patterns",
+                    branch_name
+                ),
             });
         }
 

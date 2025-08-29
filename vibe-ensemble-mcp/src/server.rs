@@ -361,403 +361,407 @@ impl McpServer {
     async fn handle_list_tools(&self, request: JsonRpcRequest) -> Result<Option<JsonRpcResponse>> {
         debug!("Handling tools list request");
 
-        let result = serde_json::json!({
-            "tools": [
-                {
-                    "name": "vibe_agent_register",
-                    "description": "Register a new Claude Code agent with the system",
-                    "inputSchema": {
-                        "type": "object",
-                        "properties": {
-                            "name": {"type": "string", "description": "Agent name"},
-                            "agentType": {"type": "string", "enum": ["Coordinator", "Worker"], "description": "Agent type"},
-                            "capabilities": {"type": "array", "items": {"type": "string"}, "description": "Agent capabilities"},
-                            "connectionMetadata": {"type": "object", "description": "Connection metadata"}
-                        },
-                        "required": ["name", "agentType", "capabilities"]
-                    }
-                },
-                {
-                    "name": "vibe_agent_status",
-                    "description": "Report agent status or query system statistics",
-                    "inputSchema": {
-                        "type": "object",
-                        "properties": {
-                            "agentId": {"type": "string", "description": "Agent ID (for status updates)"},
-                            "status": {"type": "string", "enum": ["Connecting", "Online", "Idle", "Busy", "Maintenance", "Disconnecting", "Offline"], "description": "Agent status"},
-                            "currentTask": {"type": "string", "description": "Current task description"},
-                            "progress": {"type": "number", "minimum": 0, "maximum": 1, "description": "Task progress (0-1)"},
-                            "healthMetrics": {"type": "object", "description": "Health metrics data"}
-                        },
-                        "required": []
-                    }
-                },
-                {
-                    "name": "vibe_agent_list",
-                    "description": "List active agents with optional filtering",
-                    "inputSchema": {
-                        "type": "object",
-                        "properties": {
-                            "project": {"type": "string", "description": "Filter by project"},
-                            "capability": {"type": "string", "description": "Filter by capability"},
-                            "status": {"type": "string", "enum": ["Connecting", "Online", "Idle", "Busy", "Maintenance", "Disconnecting", "Offline"], "description": "Filter by status"},
-                            "agentType": {"type": "string", "enum": ["Coordinator", "Worker"], "description": "Filter by agent type"},
-                            "limit": {"type": "integer", "minimum": 1, "description": "Maximum number of agents to return"}
-                        },
-                        "required": []
-                    }
-                },
-                {
-                    "name": "vibe_agent_deregister",
-                    "description": "Deregister an agent from the system",
-                    "inputSchema": {
-                        "type": "object",
-                        "properties": {
-                            "agentId": {"type": "string", "description": "Agent ID to deregister"},
-                            "shutdownReason": {"type": "string", "description": "Reason for shutdown"}
-                        },
-                        "required": ["agentId"]
-                    }
-                },
-                {
-                    "name": "vibe_issue_create",
-                    "description": "Create a new issue in the tracking system",
-                    "inputSchema": {
-                        "type": "object",
-                        "properties": {
-                            "title": {"type": "string", "description": "Issue title"},
-                            "description": {"type": "string", "description": "Issue description"},
-                            "priority": {"type": "string", "enum": ["Low", "Medium", "High", "Critical"], "description": "Issue priority"},
-                            "issueType": {"type": "string", "description": "Type of issue (e.g., bug, feature, task)"},
-                            "projectId": {"type": "string", "description": "Project identifier"},
-                            "createdByAgentId": {"type": "string", "description": "ID of the agent creating the issue"},
-                            "labels": {"type": "array", "items": {"type": "string"}, "description": "Issue labels/tags"},
-                            "assignee": {"type": "string", "description": "Agent ID to assign the issue to"}
-                        },
-                        "required": ["title", "description", "createdByAgentId"]
-                    }
-                },
-                {
-                    "name": "vibe_issue_list",
-                    "description": "Query issues by project/status/assignee with comprehensive filtering",
-                    "inputSchema": {
-                        "type": "object",
-                        "properties": {
-                            "projectId": {"type": "string", "description": "Filter by project ID"},
-                            "status": {"type": "string", "enum": ["Open", "InProgress", "Resolved", "Closed"], "description": "Filter by status"},
-                            "assignee": {"type": "string", "description": "Filter by assignee agent ID"},
-                            "issueType": {"type": "string", "description": "Filter by issue type"},
-                            "priority": {"type": "string", "enum": ["Low", "Medium", "High", "Critical"], "description": "Filter by priority"},
-                            "labels": {"type": "array", "items": {"type": "string"}, "description": "Filter by labels"},
-                            "limit": {"type": "integer", "minimum": 1, "description": "Maximum number of issues to return"}
-                        },
-                        "required": []
-                    }
-                },
-                {
-                    "name": "vibe_issue_assign",
-                    "description": "Assign issues to workers or coordinator",
-                    "inputSchema": {
-                        "type": "object",
-                        "properties": {
-                            "issueId": {"type": "string", "description": "ID of the issue to assign"},
-                            "assigneeAgentId": {"type": "string", "description": "Agent ID to assign the issue to"},
-                            "assignedByAgentId": {"type": "string", "description": "Agent ID performing the assignment"},
-                            "reason": {"type": "string", "description": "Reason for assignment"}
-                        },
-                        "required": ["issueId", "assigneeAgentId", "assignedByAgentId"]
-                    }
-                },
-                {
-                    "name": "vibe_issue_update",
-                    "description": "Update issue status and add comments",
-                    "inputSchema": {
-                        "type": "object",
-                        "properties": {
-                            "issueId": {"type": "string", "description": "ID of the issue to update"},
-                            "status": {"type": "string", "enum": ["Open", "InProgress", "Resolved", "Closed"], "description": "New status"},
-                            "comment": {"type": "string", "description": "Comment to add to the issue"},
-                            "updatedByAgentId": {"type": "string", "description": "Agent ID performing the update"},
-                            "priority": {"type": "string", "enum": ["Low", "Medium", "High", "Critical"], "description": "Updated priority"}
-                        },
-                        "required": ["issueId", "updatedByAgentId"]
-                    }
-                },
-                {
-                    "name": "vibe_issue_close",
-                    "description": "Mark issues as resolved/closed",
-                    "inputSchema": {
-                        "type": "object",
-                        "properties": {
-                            "issueId": {"type": "string", "description": "ID of the issue to close"},
-                            "closedByAgentId": {"type": "string", "description": "Agent ID closing the issue"},
-                            "resolution": {"type": "string", "description": "Resolution description"},
-                            "closeReason": {"type": "string", "description": "Reason for closing"}
-                        },
-                        "required": ["issueId", "closedByAgentId", "resolution"]
-                    }
-                },
-                {
-                    "name": "vibe_worker_message",
-                    "description": "Send direct messages between workers for real-time coordination",
-                    "inputSchema": {
-                        "type": "object",
-                        "properties": {
-                            "recipientAgentId": {"type": "string", "description": "Agent ID of the message recipient"},
-                            "messageContent": {"type": "string", "description": "Content of the message"},
-                            "messageType": {"type": "string", "enum": ["Info", "Request", "Coordination", "Alert"], "description": "Type of message"},
-                            "senderAgentId": {"type": "string", "description": "Agent ID of the message sender"},
-                            "priority": {"type": "string", "enum": ["Low", "Normal", "High", "Urgent"], "description": "Message priority"},
-                            "metadata": {"type": "object", "description": "Additional message metadata"}
-                        },
-                        "required": ["recipientAgentId", "messageContent", "messageType", "senderAgentId"]
-                    }
-                },
-                {
-                    "name": "vibe_worker_request",
-                    "description": "Request specific actions from targeted workers",
-                    "inputSchema": {
-                        "type": "object",
-                        "properties": {
-                            "targetAgentId": {"type": "string", "description": "Agent ID of the request target"},
-                            "requestType": {"type": "string", "description": "Type of request being made"},
-                            "requestDetails": {"type": "object", "description": "Detailed request information"},
-                            "requestedByAgentId": {"type": "string", "description": "Agent ID making the request"},
-                            "deadline": {"type": "string", "format": "date-time", "description": "Request deadline"},
-                            "priority": {"type": "string", "enum": ["Low", "Normal", "High", "Urgent"], "description": "Request priority"}
-                        },
-                        "required": ["targetAgentId", "requestType", "requestDetails", "requestedByAgentId"]
-                    }
-                },
-                {
-                    "name": "vibe_worker_coordinate",
-                    "description": "Coordinate overlapping work areas between multiple workers",
-                    "inputSchema": {
-                        "type": "object",
-                        "properties": {
-                            "coordinationType": {"type": "string", "description": "Type of coordination needed"},
-                            "involvedAgents": {"type": "array", "items": {"type": "string"}, "description": "Agent IDs involved in coordination"},
-                            "scope": {"type": "object", "description": "Coordination scope (files/modules/projects)"},
-                            "coordinatorAgentId": {"type": "string", "description": "Agent ID initiating coordination"},
-                            "details": {"type": "object", "description": "Coordination details and requirements"}
-                        },
-                        "required": ["coordinationType", "involvedAgents", "scope", "coordinatorAgentId", "details"]
-                    }
-                },
-                {
-                    "name": "vibe_project_lock",
-                    "description": "Create project-level coordination locks to prevent conflicts",
-                    "inputSchema": {
-                        "type": "object",
-                        "properties": {
-                            "projectId": {"type": "string", "description": "Project identifier (optional)"},
-                            "resourcePath": {"type": "string", "description": "Path to resource being locked"},
-                            "lockType": {"type": "string", "enum": ["Exclusive", "Shared", "Coordination"], "description": "Type of lock"},
-                            "lockHolderAgentId": {"type": "string", "description": "Agent ID requesting the lock"},
-                            "duration": {"type": "integer", "description": "Lock duration in seconds"},
-                            "reason": {"type": "string", "description": "Reason for the lock"}
-                        },
-                        "required": ["resourcePath", "lockType", "lockHolderAgentId", "reason"]
-                    }
-                },
-                {
-                    "name": "vibe_dependency_declare",
-                    "description": "Declare a cross-project dependency and create coordination plan",
-                    "inputSchema": {
-                        "type": "object",
-                        "properties": {
-                            "declaringAgentId": {"type": "string", "description": "ID of agent declaring dependency"},
-                            "sourceProject": {"type": "string", "description": "Source project name"},
-                            "targetProject": {"type": "string", "description": "Target project name"},
-                            "dependencyType": {"type": "string", "enum": ["API_CHANGE", "SHARED_RESOURCE", "BUILD_DEPENDENCY", "CONFIGURATION", "DATA_SCHEMA"], "description": "Type of dependency"},
-                            "description": {"type": "string", "description": "Description of dependency"},
-                            "impact": {"type": "string", "enum": ["BLOCKER", "MAJOR", "MINOR", "INFO"], "description": "Impact level"},
-                            "urgency": {"type": "string", "enum": ["CRITICAL", "HIGH", "MEDIUM", "LOW"], "description": "Urgency level"},
-                            "affectedFiles": {"type": "array", "items": {"type": "string"}, "description": "List of affected files"},
-                            "metadata": {"type": "object", "description": "Additional metadata"}
-                        },
-                        "required": ["declaringAgentId", "sourceProject", "targetProject", "dependencyType", "description", "impact", "urgency"]
-                    }
-                },
-                {
-                    "name": "vibe_coordinator_request_worker",
-                    "description": "Request coordinator to spawn a new worker for a project",
-                    "inputSchema": {
-                        "type": "object",
-                        "properties": {
-                            "requestingAgentId": {"type": "string", "description": "ID of requesting agent"},
-                            "targetProject": {"type": "string", "description": "Target project name"},
-                            "requiredCapabilities": {"type": "array", "items": {"type": "string"}, "description": "Required worker capabilities"},
-                            "priority": {"type": "string", "enum": ["CRITICAL", "HIGH", "MEDIUM", "LOW"], "description": "Spawn priority"},
-                            "taskDescription": {"type": "string", "description": "Task description for new worker"},
-                            "estimatedDuration": {"type": "string", "description": "Estimated duration (e.g., '2h', '30m')"},
-                            "contextData": {"type": "object", "description": "Context data for worker"}
-                        },
-                        "required": ["requestingAgentId", "targetProject", "requiredCapabilities", "priority", "taskDescription"]
-                    }
-                },
-                {
-                    "name": "vibe_work_coordinate",
-                    "description": "Negotiate work ordering and coordination between agents",
-                    "inputSchema": {
-                        "type": "object",
-                        "properties": {
-                            "initiatingAgentId": {"type": "string", "description": "ID of initiating agent"},
-                            "targetAgentId": {"type": "string", "description": "ID of target agent"},
-                            "coordinationType": {"type": "string", "enum": ["SEQUENTIAL", "PARALLEL", "BLOCKING", "COLLABORATIVE", "CONFLICT_RESOLUTION"], "description": "Type of coordination"},
-                            "workItems": {"type": "array", "items": {"type": "object"}, "description": "List of work items to coordinate"},
-                            "dependencies": {"type": "array", "items": {"type": "object"}, "description": "Work dependencies"},
-                            "proposedTimeline": {"type": "object", "description": "Proposed coordination timeline"},
-                            "resourceRequirements": {"type": "object", "description": "Resource requirements"}
-                        },
-                        "required": ["initiatingAgentId", "targetAgentId", "coordinationType", "workItems"]
-                    }
-                },
-                {
-                    "name": "vibe_conflict_resolve",
-                    "description": "Resolve conflicts between agents working on overlapping resources",
-                    "inputSchema": {
-                        "type": "object",
-                        "properties": {
-                            "affectedAgents": {"type": "array", "items": {"type": "string"}, "description": "IDs of affected agents"},
-                            "conflictedResources": {"type": "array", "items": {"type": "string"}, "description": "List of conflicted resources"},
-                            "conflictType": {"type": "string", "enum": ["FILE_MODIFICATION", "RESOURCE_LOCK", "ARCHITECTURE", "BUSINESS_LOGIC", "TESTING", "DEPLOYMENT"], "description": "Type of conflict"},
-                            "resolutionStrategy": {"type": "string", "enum": ["LAST_WRITER_WINS", "FIRST_WRITER_WINS", "AUTO_MERGE", "MANUAL_MERGE", "RESOURCE_SPLIT", "SEQUENTIAL", "ESCALATE"], "description": "Preferred resolution strategy"},
-                            "resolverAgentId": {"type": "string", "description": "ID of agent handling resolution"},
-                            "conflictEvidence": {"type": "array", "items": {"type": "object"}, "description": "Evidence of the conflict"},
-                            "priority": {"type": "string", "enum": ["CRITICAL", "HIGH", "MEDIUM", "LOW"], "description": "Resolution priority"}
-                        },
-                        "required": ["affectedAgents", "conflictedResources", "conflictType", "resolverAgentId"]
-                    }
-                },
-                {
-                    "name": "vibe_schedule_coordinate",
-                    "description": "Plan work sequences across workers to prevent conflicts and optimize coordination",
-                    "inputSchema": {
-                        "type": "object",
-                        "properties": {
-                            "coordinatorAgentId": {"type": "string", "description": "ID of coordinating agent"},
-                            "workSequences": {"type": "array", "items": {"type": "object"}, "description": "List of work sequences to coordinate"},
-                            "involvedAgents": {"type": "array", "items": {"type": "string"}, "description": "IDs of agents involved in coordination"},
-                            "projectScopes": {"type": "array", "items": {"type": "string"}, "description": "Project scopes affected"},
-                            "resourceRequirements": {"type": "object", "description": "Resource requirements mapping"},
-                            "timeConstraints": {"type": "object", "description": "Time constraints and deadlines"}
-                        },
-                        "required": ["coordinatorAgentId", "workSequences", "involvedAgents", "projectScopes", "resourceRequirements"]
-                    }
-                },
-                {
-                    "name": "vibe_conflict_predict",
-                    "description": "Detect potential conflicts early before they occur in agent workflows",
-                    "inputSchema": {
-                        "type": "object",
-                        "properties": {
-                            "analyzerAgentId": {"type": "string", "description": "ID of agent performing analysis"},
-                            "plannedActions": {"type": "array", "items": {"type": "object"}, "description": "Planned actions to analyze"},
-                            "activeWorkflows": {"type": "array", "items": {"type": "object"}, "description": "Currently active workflows"},
-                            "resourceMap": {"type": "object", "description": "Resource utilization mapping"},
-                            "timeHorizon": {"type": "string", "description": "Time horizon for prediction (e.g., '24h', '1w')"}
-                        },
-                        "required": ["analyzerAgentId", "plannedActions", "activeWorkflows", "resourceMap"]
-                    }
-                },
-                {
-                    "name": "vibe_resource_reserve",
-                    "description": "Reserve files/modules for exclusive access to prevent conflicts",
-                    "inputSchema": {
-                        "type": "object",
-                        "properties": {
-                            "reservingAgentId": {"type": "string", "description": "ID of agent requesting reservation"},
-                            "resourcePaths": {"type": "array", "items": {"type": "string"}, "description": "Paths to resources to reserve"},
-                            "reservationType": {"type": "string", "enum": ["EXCLUSIVE", "SHARED", "READ_ONLY"], "description": "Type of reservation"},
-                            "reservationDuration": {"type": "string", "description": "Duration of reservation (e.g., '2h', '1d')"},
-                            "exclusiveAccess": {"type": "boolean", "description": "Whether to require exclusive access"},
-                            "allowedOperations": {"type": "array", "items": {"type": "string"}, "description": "Operations allowed on resource"},
-                            "justification": {"type": "string", "description": "Justification for reservation"}
-                        },
-                        "required": ["reservingAgentId", "resourcePaths", "reservationType", "reservationDuration", "justification"]
-                    }
-                },
-                {
-                    "name": "vibe_merge_coordinate",
-                    "description": "Coordinate complex merge scenarios between multiple agents and branches",
-                    "inputSchema": {
-                        "type": "object",
-                        "properties": {
-                            "coordinatorAgentId": {"type": "string", "description": "ID of agent coordinating the merge"},
-                            "mergeScenario": {"type": "string", "enum": ["MULTI_BRANCH", "FEATURE_INTEGRATION", "HOTFIX_MERGE", "RELEASE_MERGE"], "description": "Type of merge scenario"},
-                            "sourceBranches": {"type": "array", "items": {"type": "string"}, "description": "Source branches to merge"},
-                            "targetBranch": {"type": "string", "description": "Target branch for merge"},
-                            "involvedAgents": {"type": "array", "items": {"type": "string"}, "description": "IDs of agents involved in merge"},
-                            "complexityAnalysis": {"type": "object", "description": "Analysis of merge complexity"},
-                            "conflictResolutionStrategy": {"type": "string", "enum": ["AUTO", "MANUAL", "HYBRID", "ESCALATE"], "description": "Strategy for resolving conflicts"}
-                        },
-                        "required": ["coordinatorAgentId", "mergeScenario", "sourceBranches", "targetBranch", "involvedAgents", "complexityAnalysis"]
-                    }
-                },
-                {
-                    "name": "vibe_knowledge_query",
-                    "description": "Search coordination patterns and solutions from organizational knowledge",
-                    "inputSchema": {
-                        "type": "object",
-                        "properties": {
-                            "queryingAgentId": {"type": "string", "description": "ID of agent making the query"},
-                            "coordinationContext": {"type": "string", "description": "Context of coordination need"},
-                            "query": {"type": "string", "description": "Search query for relevant knowledge"},
-                            "searchScope": {"type": "array", "items": {"type": "string"}, "description": "Scope of search (patterns, practices, guidelines)"},
-                            "relevanceCriteria": {"type": "object", "description": "Criteria for relevance assessment"},
-                            "maxResults": {"type": "integer", "description": "Maximum number of results to return"}
-                        },
-                        "required": ["queryingAgentId", "query"]
-                    }
-                },
-                {
-                    "name": "vibe_pattern_suggest",
-                    "description": "Suggest coordination approaches based on historical patterns and context",
-                    "inputSchema": {
-                        "type": "object",
-                        "properties": {
-                            "requestingAgentId": {"type": "string", "description": "ID of agent requesting suggestions"},
-                            "coordinationScenario": {"type": "string", "description": "Description of coordination scenario"},
-                            "currentContext": {"type": "object", "description": "Current context and constraints"},
-                            "similarityThreshold": {"type": "number", "description": "Minimum similarity threshold for pattern matching"},
-                            "excludePatterns": {"type": "array", "items": {"type": "string"}, "description": "Patterns to exclude from suggestions"}
-                        },
-                        "required": ["requestingAgentId", "coordinationScenario", "currentContext"]
-                    }
-                },
-                {
-                    "name": "vibe_guideline_enforce",
-                    "description": "Apply organizational coordination policies and validate compliance",
-                    "inputSchema": {
-                        "type": "object",
-                        "properties": {
-                            "enforcingAgentId": {"type": "string", "description": "ID of agent enforcing guidelines"},
-                            "coordinationPlan": {"type": "object", "description": "Coordination plan to validate"},
-                            "applicableGuidelines": {"type": "array", "items": {"type": "string"}, "description": "Guidelines to apply"},
-                            "enforcementLevel": {"type": "string", "enum": ["STRICT", "MODERATE", "ADVISORY"], "description": "Level of enforcement"},
-                            "allowExceptions": {"type": "boolean", "description": "Whether to allow exceptions to guidelines"}
-                        },
-                        "required": ["enforcingAgentId", "coordinationPlan", "applicableGuidelines", "enforcementLevel"]
-                    }
-                },
-                {
-                    "name": "vibe_learning_capture",
-                    "description": "Learn from coordination successes/failures to improve future decisions",
-                    "inputSchema": {
-                        "type": "object",
-                        "properties": {
-                            "capturingAgentId": {"type": "string", "description": "ID of agent capturing learning"},
-                            "coordinationSession": {"type": "object", "description": "Details of coordination session"},
-                            "outcomeData": {"type": "object", "description": "Outcomes and results data"},
-                            "successMetrics": {"type": "object", "description": "Metrics measuring coordination success"},
-                            "lessonsLearned": {"type": "array", "items": {"type": "string"}, "description": "Key lessons learned"},
-                            "improvementOpportunities": {"type": "array", "items": {"type": "string"}, "description": "Opportunities for improvement"}
-                        },
-                        "required": ["capturingAgentId", "coordinationSession", "outcomeData", "successMetrics", "lessonsLearned"]
-                    }
-                },
-                {
+        let mut tools = vec![
+            serde_json::json!({
+                "name": "vibe_agent_register",
+                "description": "Register a new Claude Code agent with the system",
+                "inputSchema": {
+                    "type": "object",
+                    "properties": {
+                        "name": {"type": "string", "description": "Agent name"},
+                        "agentType": {"type": "string", "enum": ["Coordinator", "Worker"], "description": "Agent type"},
+                        "capabilities": {"type": "array", "items": {"type": "string"}, "description": "Agent capabilities"},
+                        "connectionMetadata": {"type": "object", "description": "Connection metadata"}
+                    },
+                    "required": ["name", "agentType", "capabilities"]
+                }
+            }),
+            serde_json::json!({
+                "name": "vibe_agent_status",
+                "description": "Report agent status or query system statistics",
+                "inputSchema": {
+                    "type": "object",
+                    "properties": {
+                        "agentId": {"type": "string", "description": "Agent ID (for status updates)"},
+                        "status": {"type": "string", "enum": ["Connecting", "Online", "Idle", "Busy", "Maintenance", "Disconnecting", "Offline"], "description": "Agent status"},
+                        "currentTask": {"type": "string", "description": "Current task description"},
+                        "progress": {"type": "number", "minimum": 0, "maximum": 1, "description": "Task progress (0-1)"},
+                        "healthMetrics": {"type": "object", "description": "Health metrics data"}
+                    },
+                    "required": []
+                }
+            }),
+            serde_json::json!({
+                "name": "vibe_agent_list",
+                "description": "List active agents with optional filtering",
+                "inputSchema": {
+                    "type": "object",
+                    "properties": {
+                        "project": {"type": "string", "description": "Filter by project"},
+                        "capability": {"type": "string", "description": "Filter by capability"},
+                        "status": {"type": "string", "enum": ["Connecting", "Online", "Idle", "Busy", "Maintenance", "Disconnecting", "Offline"], "description": "Filter by status"},
+                        "agentType": {"type": "string", "enum": ["Coordinator", "Worker"], "description": "Filter by agent type"},
+                        "limit": {"type": "integer", "minimum": 1, "description": "Maximum number of agents to return"}
+                    },
+                    "required": []
+                }
+            }),
+            serde_json::json!({
+                "name": "vibe_agent_deregister",
+                "description": "Deregister an agent from the system",
+                "inputSchema": {
+                    "type": "object",
+                    "properties": {
+                        "agentId": {"type": "string", "description": "Agent ID to deregister"},
+                        "shutdownReason": {"type": "string", "description": "Reason for shutdown"}
+                    },
+                    "required": ["agentId"]
+                }
+            }),
+            serde_json::json!({
+                "name": "vibe_issue_create",
+                "description": "Create a new issue in the tracking system",
+                "inputSchema": {
+                    "type": "object",
+                    "properties": {
+                        "title": {"type": "string", "description": "Issue title"},
+                        "description": {"type": "string", "description": "Issue description"},
+                        "priority": {"type": "string", "enum": ["Low", "Medium", "High", "Critical"], "description": "Issue priority"},
+                        "issueType": {"type": "string", "description": "Type of issue (e.g., bug, feature, task)"},
+                        "projectId": {"type": "string", "description": "Project identifier"},
+                        "createdByAgentId": {"type": "string", "description": "ID of the agent creating the issue"},
+                        "labels": {"type": "array", "items": {"type": "string"}, "description": "Issue labels/tags"},
+                        "assignee": {"type": "string", "description": "Agent ID to assign the issue to"}
+                    },
+                    "required": ["title", "description", "createdByAgentId"]
+                }
+            }),
+            serde_json::json!({
+                "name": "vibe_issue_list",
+                "description": "Query issues by project/status/assignee with comprehensive filtering",
+                "inputSchema": {
+                    "type": "object",
+                    "properties": {
+                        "projectId": {"type": "string", "description": "Filter by project ID"},
+                        "status": {"type": "string", "enum": ["Open", "InProgress", "Resolved", "Closed"], "description": "Filter by status"},
+                        "assignee": {"type": "string", "description": "Filter by assignee agent ID"},
+                        "issueType": {"type": "string", "description": "Filter by issue type"},
+                        "priority": {"type": "string", "enum": ["Low", "Medium", "High", "Critical"], "description": "Filter by priority"},
+                        "labels": {"type": "array", "items": {"type": "string"}, "description": "Filter by labels"},
+                        "limit": {"type": "integer", "minimum": 1, "description": "Maximum number of issues to return"}
+                    },
+                    "required": []
+                }
+            }),
+            serde_json::json!({
+                "name": "vibe_issue_assign",
+                "description": "Assign issues to workers or coordinator",
+                "inputSchema": {
+                    "type": "object",
+                    "properties": {
+                        "issueId": {"type": "string", "description": "ID of the issue to assign"},
+                        "assigneeAgentId": {"type": "string", "description": "Agent ID to assign the issue to"},
+                        "assignedByAgentId": {"type": "string", "description": "Agent ID performing the assignment"},
+                        "reason": {"type": "string", "description": "Reason for assignment"}
+                    },
+                    "required": ["issueId", "assigneeAgentId", "assignedByAgentId"]
+                }
+            }),
+            serde_json::json!({
+                "name": "vibe_issue_update",
+                "description": "Update issue status and add comments",
+                "inputSchema": {
+                    "type": "object",
+                    "properties": {
+                        "issueId": {"type": "string", "description": "ID of the issue to update"},
+                        "status": {"type": "string", "enum": ["Open", "InProgress", "Resolved", "Closed"], "description": "New status"},
+                        "comment": {"type": "string", "description": "Comment to add to the issue"},
+                        "updatedByAgentId": {"type": "string", "description": "Agent ID performing the update"},
+                        "priority": {"type": "string", "enum": ["Low", "Medium", "High", "Critical"], "description": "Updated priority"}
+                    },
+                    "required": ["issueId", "updatedByAgentId"]
+                }
+            }),
+            serde_json::json!({
+                "name": "vibe_issue_close",
+                "description": "Mark issues as resolved/closed",
+                "inputSchema": {
+                    "type": "object",
+                    "properties": {
+                        "issueId": {"type": "string", "description": "ID of the issue to close"},
+                        "closedByAgentId": {"type": "string", "description": "Agent ID closing the issue"},
+                        "resolution": {"type": "string", "description": "Resolution description"},
+                        "closeReason": {"type": "string", "description": "Reason for closing"}
+                    },
+                    "required": ["issueId", "closedByAgentId", "resolution"]
+                }
+            }),
+            serde_json::json!({
+                "name": "vibe_worker_message",
+                "description": "Send direct messages between workers for real-time coordination",
+                "inputSchema": {
+                    "type": "object",
+                    "properties": {
+                        "recipientAgentId": {"type": "string", "description": "Agent ID of the message recipient"},
+                        "messageContent": {"type": "string", "description": "Content of the message"},
+                        "messageType": {"type": "string", "enum": ["Info", "Request", "Coordination", "Alert"], "description": "Type of message"},
+                        "senderAgentId": {"type": "string", "description": "Agent ID of the message sender"},
+                        "priority": {"type": "string", "enum": ["Low", "Normal", "High", "Urgent"], "description": "Message priority"},
+                        "metadata": {"type": "object", "description": "Additional message metadata"}
+                    },
+                    "required": ["recipientAgentId", "messageContent", "messageType", "senderAgentId"]
+                }
+            }),
+            serde_json::json!({
+                "name": "vibe_worker_request",
+                "description": "Request specific actions from targeted workers",
+                "inputSchema": {
+                    "type": "object",
+                    "properties": {
+                        "targetAgentId": {"type": "string", "description": "Agent ID of the request target"},
+                        "requestType": {"type": "string", "description": "Type of request being made"},
+                        "requestDetails": {"type": "object", "description": "Detailed request information"},
+                        "requestedByAgentId": {"type": "string", "description": "Agent ID making the request"},
+                        "deadline": {"type": "string", "format": "date-time", "description": "Request deadline"},
+                        "priority": {"type": "string", "enum": ["Low", "Normal", "High", "Urgent"], "description": "Request priority"}
+                    },
+                    "required": ["targetAgentId", "requestType", "requestDetails", "requestedByAgentId"]
+                }
+            }),
+            serde_json::json!({
+                "name": "vibe_worker_coordinate",
+                "description": "Coordinate overlapping work areas between multiple workers",
+                "inputSchema": {
+                    "type": "object",
+                    "properties": {
+                        "coordinationType": {"type": "string", "description": "Type of coordination needed"},
+                        "involvedAgents": {"type": "array", "items": {"type": "string"}, "description": "Agent IDs involved in coordination"},
+                        "scope": {"type": "object", "description": "Coordination scope (files/modules/projects)"},
+                        "coordinatorAgentId": {"type": "string", "description": "Agent ID initiating coordination"},
+                        "details": {"type": "object", "description": "Coordination details and requirements"}
+                    },
+                    "required": ["coordinationType", "involvedAgents", "scope", "coordinatorAgentId", "details"]
+                }
+            }),
+            serde_json::json!({
+                "name": "vibe_project_lock",
+                "description": "Create project-level coordination locks to prevent conflicts",
+                "inputSchema": {
+                    "type": "object",
+                    "properties": {
+                        "projectId": {"type": "string", "description": "Project identifier (optional)"},
+                        "resourcePath": {"type": "string", "description": "Path to resource being locked"},
+                        "lockType": {"type": "string", "enum": ["Exclusive", "Shared", "Coordination"], "description": "Type of lock"},
+                        "lockHolderAgentId": {"type": "string", "description": "Agent ID requesting the lock"},
+                        "duration": {"type": "integer", "description": "Lock duration in seconds"},
+                        "reason": {"type": "string", "description": "Reason for the lock"}
+                    },
+                    "required": ["resourcePath", "lockType", "lockHolderAgentId", "reason"]
+                }
+            }),
+            serde_json::json!({
+                "name": "vibe_dependency_declare",
+                "description": "Declare a cross-project dependency and create coordination plan",
+                "inputSchema": {
+                    "type": "object",
+                    "properties": {
+                        "declaringAgentId": {"type": "string", "description": "ID of agent declaring dependency"},
+                        "sourceProject": {"type": "string", "description": "Source project name"},
+                        "targetProject": {"type": "string", "description": "Target project name"},
+                        "dependencyType": {"type": "string", "enum": ["API_CHANGE", "SHARED_RESOURCE", "BUILD_DEPENDENCY", "CONFIGURATION", "DATA_SCHEMA"], "description": "Type of dependency"},
+                        "description": {"type": "string", "description": "Description of dependency"},
+                        "impact": {"type": "string", "enum": ["BLOCKER", "MAJOR", "MINOR", "INFO"], "description": "Impact level"},
+                        "urgency": {"type": "string", "enum": ["CRITICAL", "HIGH", "MEDIUM", "LOW"], "description": "Urgency level"},
+                        "affectedFiles": {"type": "array", "items": {"type": "string"}, "description": "List of affected files"},
+                        "metadata": {"type": "object", "description": "Additional metadata"}
+                    },
+                    "required": ["declaringAgentId", "sourceProject", "targetProject", "dependencyType", "description", "impact", "urgency"]
+                }
+            }),
+            serde_json::json!({
+                "name": "vibe_coordinator_request_worker",
+                "description": "Request coordinator to spawn a new worker for a project",
+                "inputSchema": {
+                    "type": "object",
+                    "properties": {
+                        "requestingAgentId": {"type": "string", "description": "ID of requesting agent"},
+                        "targetProject": {"type": "string", "description": "Target project name"},
+                        "requiredCapabilities": {"type": "array", "items": {"type": "string"}, "description": "Required worker capabilities"},
+                        "priority": {"type": "string", "enum": ["CRITICAL", "HIGH", "MEDIUM", "LOW"], "description": "Spawn priority"},
+                        "taskDescription": {"type": "string", "description": "Task description for new worker"},
+                        "estimatedDuration": {"type": "string", "description": "Estimated duration (e.g., '2h', '30m')"},
+                        "contextData": {"type": "object", "description": "Context data for worker"}
+                    },
+                    "required": ["requestingAgentId", "targetProject", "requiredCapabilities", "priority", "taskDescription"]
+                }
+            }),
+            serde_json::json!({
+                "name": "vibe_work_coordinate",
+                "description": "Negotiate work ordering and coordination between agents",
+                "inputSchema": {
+                    "type": "object",
+                    "properties": {
+                        "initiatingAgentId": {"type": "string", "description": "ID of initiating agent"},
+                        "targetAgentId": {"type": "string", "description": "ID of target agent"},
+                        "coordinationType": {"type": "string", "enum": ["SEQUENTIAL", "PARALLEL", "BLOCKING", "COLLABORATIVE", "CONFLICT_RESOLUTION"], "description": "Type of coordination"},
+                        "workItems": {"type": "array", "items": {"type": "object"}, "description": "List of work items to coordinate"},
+                        "dependencies": {"type": "array", "items": {"type": "object"}, "description": "Work dependencies"},
+                        "proposedTimeline": {"type": "object", "description": "Proposed coordination timeline"},
+                        "resourceRequirements": {"type": "object", "description": "Resource requirements"}
+                    },
+                    "required": ["initiatingAgentId", "targetAgentId", "coordinationType", "workItems"]
+                }
+            }),
+            serde_json::json!({
+                "name": "vibe_conflict_resolve",
+                "description": "Resolve conflicts between agents working on overlapping resources",
+                "inputSchema": {
+                    "type": "object",
+                    "properties": {
+                        "affectedAgents": {"type": "array", "items": {"type": "string"}, "description": "IDs of affected agents"},
+                        "conflictedResources": {"type": "array", "items": {"type": "string"}, "description": "List of conflicted resources"},
+                        "conflictType": {"type": "string", "enum": ["FILE_MODIFICATION", "RESOURCE_LOCK", "ARCHITECTURE", "BUSINESS_LOGIC", "TESTING", "DEPLOYMENT"], "description": "Type of conflict"},
+                        "resolutionStrategy": {"type": "string", "enum": ["LAST_WRITER_WINS", "FIRST_WRITER_WINS", "AUTO_MERGE", "MANUAL_MERGE", "RESOURCE_SPLIT", "SEQUENTIAL", "ESCALATE"], "description": "Preferred resolution strategy"},
+                        "resolverAgentId": {"type": "string", "description": "ID of agent handling resolution"},
+                        "conflictEvidence": {"type": "array", "items": {"type": "object"}, "description": "Evidence of the conflict"},
+                        "priority": {"type": "string", "enum": ["CRITICAL", "HIGH", "MEDIUM", "LOW"], "description": "Resolution priority"}
+                    },
+                    "required": ["affectedAgents", "conflictedResources", "conflictType", "resolverAgentId"]
+                }
+            }),
+            serde_json::json!({
+                "name": "vibe_schedule_coordinate",
+                "description": "Plan work sequences across workers to prevent conflicts and optimize coordination",
+                "inputSchema": {
+                    "type": "object",
+                    "properties": {
+                        "coordinatorAgentId": {"type": "string", "description": "ID of coordinating agent"},
+                        "workSequences": {"type": "array", "items": {"type": "object"}, "description": "List of work sequences to coordinate"},
+                        "involvedAgents": {"type": "array", "items": {"type": "string"}, "description": "IDs of agents involved in coordination"},
+                        "projectScopes": {"type": "array", "items": {"type": "string"}, "description": "Project scopes affected"},
+                        "resourceRequirements": {"type": "object", "description": "Resource requirements mapping"},
+                        "timeConstraints": {"type": "object", "description": "Time constraints and deadlines"}
+                    },
+                    "required": ["coordinatorAgentId", "workSequences", "involvedAgents", "projectScopes", "resourceRequirements"]
+                }
+            }),
+            serde_json::json!({
+                "name": "vibe_conflict_predict",
+                "description": "Detect potential conflicts early before they occur in agent workflows",
+                "inputSchema": {
+                    "type": "object",
+                    "properties": {
+                        "analyzerAgentId": {"type": "string", "description": "ID of agent performing analysis"},
+                        "plannedActions": {"type": "array", "items": {"type": "object"}, "description": "Planned actions to analyze"},
+                        "activeWorkflows": {"type": "array", "items": {"type": "object"}, "description": "Currently active workflows"},
+                        "resourceMap": {"type": "object", "description": "Resource utilization mapping"},
+                        "timeHorizon": {"type": "string", "description": "Time horizon for prediction (e.g., '24h', '1w')"}
+                    },
+                    "required": ["analyzerAgentId", "plannedActions", "activeWorkflows", "resourceMap"]
+                }
+            }),
+            serde_json::json!({
+                "name": "vibe_resource_reserve",
+                "description": "Reserve files/modules for exclusive access to prevent conflicts",
+                "inputSchema": {
+                    "type": "object",
+                    "properties": {
+                        "reservingAgentId": {"type": "string", "description": "ID of agent requesting reservation"},
+                        "resourcePaths": {"type": "array", "items": {"type": "string"}, "description": "Paths to resources to reserve"},
+                        "reservationType": {"type": "string", "enum": ["EXCLUSIVE", "SHARED", "READ_ONLY"], "description": "Type of reservation"},
+                        "reservationDuration": {"type": "string", "description": "Duration of reservation (e.g., '2h', '1d')"},
+                        "exclusiveAccess": {"type": "boolean", "description": "Whether to require exclusive access"},
+                        "allowedOperations": {"type": "array", "items": {"type": "string"}, "description": "Operations allowed on resource"},
+                        "justification": {"type": "string", "description": "Justification for reservation"}
+                    },
+                    "required": ["reservingAgentId", "resourcePaths", "reservationType", "reservationDuration", "justification"]
+                }
+            }),
+            serde_json::json!({
+                "name": "vibe_merge_coordinate",
+                "description": "Coordinate complex merge scenarios between multiple agents and branches",
+                "inputSchema": {
+                    "type": "object",
+                    "properties": {
+                        "coordinatorAgentId": {"type": "string", "description": "ID of agent coordinating the merge"},
+                        "mergeScenario": {"type": "string", "enum": ["MULTI_BRANCH", "FEATURE_INTEGRATION", "HOTFIX_MERGE", "RELEASE_MERGE"], "description": "Type of merge scenario"},
+                        "sourceBranches": {"type": "array", "items": {"type": "string"}, "description": "Source branches to merge"},
+                        "targetBranch": {"type": "string", "description": "Target branch for merge"},
+                        "involvedAgents": {"type": "array", "items": {"type": "string"}, "description": "IDs of agents involved in merge"},
+                        "complexityAnalysis": {"type": "object", "description": "Analysis of merge complexity"},
+                        "conflictResolutionStrategy": {"type": "string", "enum": ["AUTO", "MANUAL", "HYBRID", "ESCALATE"], "description": "Strategy for resolving conflicts"}
+                    },
+                    "required": ["coordinatorAgentId", "mergeScenario", "sourceBranches", "targetBranch", "involvedAgents", "complexityAnalysis"]
+                }
+            }),
+            serde_json::json!({
+                "name": "vibe_knowledge_query",
+                "description": "Search coordination patterns and solutions from organizational knowledge",
+                "inputSchema": {
+                    "type": "object",
+                    "properties": {
+                        "queryingAgentId": {"type": "string", "description": "ID of agent making the query"},
+                        "coordinationContext": {"type": "string", "description": "Context of coordination need"},
+                        "query": {"type": "string", "description": "Search query for relevant knowledge"},
+                        "searchScope": {"type": "array", "items": {"type": "string"}, "description": "Scope of search (patterns, practices, guidelines)"},
+                        "relevanceCriteria": {"type": "object", "description": "Criteria for relevance assessment"},
+                        "maxResults": {"type": "integer", "description": "Maximum number of results to return"}
+                    },
+                    "required": ["queryingAgentId", "query"]
+                }
+            }),
+            serde_json::json!({
+                "name": "vibe_pattern_suggest",
+                "description": "Suggest coordination approaches based on historical patterns and context",
+                "inputSchema": {
+                    "type": "object",
+                    "properties": {
+                        "requestingAgentId": {"type": "string", "description": "ID of agent requesting suggestions"},
+                        "coordinationScenario": {"type": "string", "description": "Description of coordination scenario"},
+                        "currentContext": {"type": "object", "description": "Current context and constraints"},
+                        "similarityThreshold": {"type": "number", "description": "Minimum similarity threshold for pattern matching"},
+                        "excludePatterns": {"type": "array", "items": {"type": "string"}, "description": "Patterns to exclude from suggestions"}
+                    },
+                    "required": ["requestingAgentId", "coordinationScenario", "currentContext"]
+                }
+            }),
+            serde_json::json!({
+                "name": "vibe_guideline_enforce",
+                "description": "Apply organizational coordination policies and validate compliance",
+                "inputSchema": {
+                    "type": "object",
+                    "properties": {
+                        "enforcingAgentId": {"type": "string", "description": "ID of agent enforcing guidelines"},
+                        "coordinationPlan": {"type": "object", "description": "Coordination plan to validate"},
+                        "applicableGuidelines": {"type": "array", "items": {"type": "string"}, "description": "Guidelines to apply"},
+                        "enforcementLevel": {"type": "string", "enum": ["STRICT", "MODERATE", "ADVISORY"], "description": "Level of enforcement"},
+                        "allowExceptions": {"type": "boolean", "description": "Whether to allow exceptions to guidelines"}
+                    },
+                    "required": ["enforcingAgentId", "coordinationPlan", "applicableGuidelines", "enforcementLevel"]
+                }
+            }),
+            serde_json::json!({
+                "name": "vibe_learning_capture",
+                "description": "Learn from coordination successes/failures to improve future decisions",
+                "inputSchema": {
+                    "type": "object",
+                    "properties": {
+                        "capturingAgentId": {"type": "string", "description": "ID of agent capturing learning"},
+                        "coordinationSession": {"type": "object", "description": "Details of coordination session"},
+                        "outcomeData": {"type": "object", "description": "Outcomes and results data"},
+                        "successMetrics": {"type": "object", "description": "Metrics measuring coordination success"},
+                        "lessonsLearned": {"type": "array", "items": {"type": "string"}, "description": "Key lessons learned"},
+                        "improvementOpportunities": {"type": "array", "items": {"type": "string"}, "description": "Opportunities for improvement"}
+                    },
+                    "required": ["capturingAgentId", "coordinationSession", "outcomeData", "successMetrics", "lessonsLearned"]
+                }
+            })
+        ];
+
+        // Only include workspace tools if workspace manager is configured
+        if self.workspace_manager.is_some() {
+            tools.extend([
+                serde_json::json!({
                     "name": "vibe_workspace_create",
                     "description": "Create a git worktree for parallel agent development",
                     "inputSchema": {
@@ -800,8 +804,8 @@ impl McpServer {
                         },
                         "required": ["name", "mainRepoPath", "branchName", "createBranch"]
                     }
-                },
-                {
+                }),
+                serde_json::json!({
                     "name": "vibe_workspace_list",
                     "description": "List all active git worktrees and their status",
                     "inputSchema": {
@@ -820,8 +824,8 @@ impl McpServer {
                             }
                         }
                     }
-                },
-                {
+                }),
+                serde_json::json!({
                     "name": "vibe_workspace_assign",
                     "description": "Assign an agent to a specific worktree",
                     "inputSchema": {
@@ -842,8 +846,8 @@ impl McpServer {
                         },
                         "required": ["agentId", "worktreePath"]
                     }
-                },
-                {
+                }),
+                serde_json::json!({
                     "name": "vibe_workspace_status",
                     "description": "Get status and information about a worktree",
                     "inputSchema": {
@@ -858,8 +862,8 @@ impl McpServer {
                         },
                         "required": ["worktreePath"]
                     }
-                },
-                {
+                }),
+                serde_json::json!({
                     "name": "vibe_workspace_cleanup",
                     "description": "Remove inactive worktrees and clean up resources",
                     "inputSchema": {
@@ -883,8 +887,12 @@ impl McpServer {
                             }
                         }
                     }
-                }
-            ]
+                }),
+            ]);
+        }
+
+        let result = serde_json::json!({
+            "tools": tools
         });
 
         Ok(Some(JsonRpcResponse::success(request.id, result)))
@@ -6419,6 +6427,21 @@ impl McpServer {
                             )));
                         }
                     };
+
+                    // Ensure path is within managed workspace directory
+                    if !workspace_manager.is_managed_path(&canonical) {
+                        return Ok(Some(JsonRpcResponse::error(
+                            request.id.clone(),
+                            JsonRpcError {
+                                code: error_codes::INVALID_PARAMS,
+                                message:
+                                    "specificPath must be within the managed workspaces directory"
+                                        .to_string(),
+                                data: None,
+                            },
+                        )));
+                    }
+
                     workspace_manager
                         .remove_worktree(canonical.as_path())
                         .await?;
