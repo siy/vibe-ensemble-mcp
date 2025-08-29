@@ -148,7 +148,7 @@ pub async fn validate_links(
 
     Ok(Json(json!({
         "status": "completed",
-        "validation_results": results,
+        "results": results,
         "summary": {
             "total": discovered_links.len(),
             "healthy": healthy_count,
