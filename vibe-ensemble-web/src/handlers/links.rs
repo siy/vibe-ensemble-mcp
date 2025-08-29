@@ -2,7 +2,7 @@
 //!
 //! Provides a basic link health dashboard page for manual testing
 
-use axum::{extract::State, response::IntoResponse};
+use axum::{extract::State, response::IntoResponse, Json};
 use serde_json::json;
 use std::sync::Arc;
 use vibe_ensemble_storage::StorageManager;

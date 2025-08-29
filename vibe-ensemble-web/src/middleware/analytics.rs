@@ -1,9 +1,8 @@
 //! Navigation analytics middleware
 //!
-//! Tracks navigation patterns, response times, and errors for link validation
-//! and navigation integrity monitoring.
+//! Tracks navigation patterns, response times, and errors for navigation monitoring.
 
-use crate::{link_validator::LinkValidator, Result};
+use crate::Result;
 use axum::{
     extract::{Request, State},
     http::{HeaderMap, StatusCode},
@@ -50,25 +49,25 @@ fn extract_user_agent(headers: &HeaderMap) -> Option<String> {
 
 /// Record navigation analytics
 async fn record_navigation_analytics(
-    storage: Arc<StorageManager>,
+    _storage: Arc<StorageManager>,
     path: String,
     user_agent: Option<String>,
     response_time: std::time::Duration,
     status_code: StatusCode,
 ) -> Result<()> {
-    // Create a link validator instance for analytics recording
-    let validator = LinkValidator::new(
-        crate::link_validator::ValidationConfig::default(),
-        Some(storage),
+    // Simple navigation logging without validator
+    tracing::debug!(
+        "Navigation: {} {} ({}ms) - Agent: {:?}",
+        status_code.as_u16(),
+        path,
+        response_time.as_millis(),
+        user_agent.as_deref().unwrap_or("unknown")
     );
 
-    // Record the navigation event
-    validator.record_navigation(&path, user_agent.as_deref(), Some(response_time));
-
-    // If this was an error response, we might want to record it separately
+    // If this was an error response, log it as a warning
     if status_code.is_client_error() || status_code.is_server_error() {
         tracing::warn!(
-            "Navigation error recorded: {} {} ({}ms)",
+            "Navigation error: {} {} ({}ms)",
             status_code.as_u16(),
             path,
             response_time.as_millis()
