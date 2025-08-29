@@ -121,23 +121,9 @@ impl McpServer {
         }
     }
 
-    /// Create an MCP server with custom capabilities.
-    /// Useful for testing and specialized configurations.
-    pub fn with_capabilities(capabilities: ServerCapabilities) -> Self {
-        Self {
-            clients: Arc::new(RwLock::new(HashMap::new())),
-            capabilities,
-            agent_service: None,
-            issue_service: None,
-            message_service: None,
-            coordination_service: None,
-            knowledge_service: None,
-        }
-    }
-
-    /// Create a full coordination server with all services and custom capabilities.
-    /// Combines coordination services with custom server capabilities.
-    pub fn with_coordination_and_capabilities(
+    /// Create a full coordination server with custom capabilities.
+    /// Combines all coordination services with custom server capabilities.
+    pub fn with_custom_capabilities(
         services: CoordinationServices,
         capabilities: ServerCapabilities,
     ) -> Self {
@@ -149,35 +135,6 @@ impl McpServer {
             message_service: Some(services.message_service),
             coordination_service: Some(services.coordination_service),
             knowledge_service: Some(services.knowledge_service),
-        }
-    }
-
-    /// Legacy builder method for backward compatibility. Use `with_coordination` instead.
-    #[deprecated(
-        since = "0.2.2",
-        note = "Use McpServer::with_coordination() or McpServer::new() instead"
-    )]
-    pub fn builder() -> McpServerBuilder {
-        McpServerBuilder::new()
-    }
-
-    /// Legacy constructor for backward compatibility. Use `with_coordination` instead.
-    #[deprecated(since = "0.2.2", note = "Use `with_coordination` or `new` instead")]
-    pub fn with_services(
-        agent_service: Option<Arc<AgentService>>,
-        issue_service: Option<Arc<IssueService>>,
-        message_service: Option<Arc<MessageService>>,
-        coordination_service: Option<Arc<CoordinationService>>,
-        knowledge_service: Option<Arc<KnowledgeService>>,
-    ) -> Self {
-        Self {
-            clients: Arc::new(RwLock::new(HashMap::new())),
-            capabilities: ServerCapabilities::default(),
-            agent_service,
-            issue_service,
-            message_service,
-            coordination_service,
-            knowledge_service,
         }
     }
 
@@ -830,57 +787,17 @@ impl McpServer {
             params: Some(arguments),
         };
 
-        // Direct dispatch to specific handlers to avoid recursion
-        let result = match method.as_str() {
-            #[allow(deprecated)]
-            "vibe/agent/register" => self.handle_agent_register(subreq).await,
-            #[allow(deprecated)]
-            "vibe/agent/status" => self.handle_agent_status(subreq).await,
-            #[allow(deprecated)]
-            "vibe/agent/list" => self.handle_agent_list(subreq).await,
-            #[allow(deprecated)]
-            "vibe/agent/deregister" => self.handle_agent_deregister(subreq).await,
-            #[allow(deprecated)]
-            "vibe/issue/create" => self.handle_issue_create_new(subreq).await,
-            #[allow(deprecated)]
-            "vibe/issue/list" => self.handle_issue_list_new(subreq).await,
-            #[allow(deprecated)]
-            "vibe/issue/assign" => self.handle_issue_assign(subreq).await,
-            #[allow(deprecated)]
-            "vibe/issue/update" => self.handle_issue_update_new(subreq).await,
-            #[allow(deprecated)]
-            "vibe/issue/close" => self.handle_issue_close(subreq).await,
-            #[allow(deprecated)]
-            "vibe/message/send" => self.handle_message_send(subreq).await,
-            #[allow(deprecated)]
-            "vibe/message/broadcast" => self.handle_message_broadcast(subreq).await,
-            #[allow(deprecated)]
-            "vibe/knowledge/query" => self.handle_knowledge_query(subreq).await,
-            "vibe/worker/message" => self.handle_worker_message(subreq).await,
-            "vibe/worker/request" => self.handle_worker_request(subreq).await,
-            "vibe/worker/coordinate" => self.handle_worker_coordinate(subreq).await,
-            "vibe/project/lock" => self.handle_project_lock(subreq).await,
-            "vibe/dependency/declare" => self.handle_dependency_declare(subreq).await,
-            "vibe/coordinator/request_worker" => {
-                self.handle_coordinator_request_worker(subreq).await
-            }
-            "vibe/work/coordinate" => self.handle_work_coordinate(subreq).await,
-            "vibe/conflict/resolve" => self.handle_conflict_resolve(subreq).await,
-            "vibe/schedule/coordinate" => self.handle_schedule_coordinate(subreq).await,
-            "vibe/conflict/predict" => self.handle_conflict_predict(subreq).await,
-            "vibe/resource/reserve" => self.handle_resource_reserve(subreq).await,
-            "vibe/merge/coordinate" => self.handle_merge_coordinate(subreq).await,
-            "vibe/knowledge/query/coordination" => {
-                self.handle_knowledge_query_coordination(subreq).await
-            }
-            "vibe/pattern/suggest" => self.handle_pattern_suggest(subreq).await,
-            "vibe/guideline/enforce" => self.handle_guideline_enforce(subreq).await,
-            "vibe/learning/capture" => self.handle_learning_capture(subreq).await,
-            _ => {
-                return Err(Error::InvalidParams {
-                    message: format!("Unknown tool: {}", tool_name),
-                });
-            }
+        // Route to streamlined handlers based on method prefix
+        let result = if method.starts_with("vibe/agent/") {
+            self.handle_vibe_agent(subreq).await
+        } else if method.starts_with("vibe/issue/") {
+            self.handle_vibe_issue(subreq).await
+        } else if method.starts_with("vibe/") {
+            self.handle_vibe_coordination(subreq).await
+        } else {
+            return Err(Error::InvalidParams {
+                message: format!("Unknown tool: {}", tool_name),
+            });
         };
 
         let response_result = match result? {
@@ -6089,108 +6006,6 @@ impl McpServer {
                     data: None,
                 },
             ))),
-        }
-    }
-}
-
-/// Legacy builder for configuring MCP server instances.
-/// Deprecated: Use `McpServer::with_coordination()` or `McpServer::new()` instead.
-#[deprecated(
-    since = "0.2.2",
-    note = "Use McpServer::with_coordination() or McpServer::new() instead"
-)]
-#[derive(Default)]
-pub struct McpServerBuilder {
-    capabilities: Option<ServerCapabilities>,
-    agent_service: Option<Arc<AgentService>>,
-    issue_service: Option<Arc<IssueService>>,
-    message_service: Option<Arc<MessageService>>,
-    coordination_service: Option<Arc<CoordinationService>>,
-    knowledge_service: Option<Arc<KnowledgeService>>,
-}
-
-#[allow(deprecated)]
-impl McpServerBuilder {
-    /// Create a new builder
-    #[deprecated(
-        since = "0.2.2",
-        note = "Use McpServer::with_coordination() or McpServer::new() instead"
-    )]
-    pub fn new() -> Self {
-        Self::default()
-    }
-
-    /// Set custom server capabilities
-    #[deprecated(since = "0.2.2", note = "Use McpServer::with_capabilities() instead")]
-    pub fn with_capabilities(mut self, capabilities: ServerCapabilities) -> Self {
-        self.capabilities = Some(capabilities);
-        self
-    }
-
-    /// Add agent service
-    #[deprecated(since = "0.2.2", note = "Use McpServer::with_coordination() instead")]
-    pub fn with_agent_service(mut self, service: Arc<AgentService>) -> Self {
-        self.agent_service = Some(service);
-        self
-    }
-
-    /// Add issue service
-    #[deprecated(since = "0.2.2", note = "Use McpServer::with_coordination() instead")]
-    pub fn with_issue_service(mut self, service: Arc<IssueService>) -> Self {
-        self.issue_service = Some(service);
-        self
-    }
-
-    /// Add message service
-    #[deprecated(since = "0.2.2", note = "Use McpServer::with_coordination() instead")]
-    pub fn with_message_service(mut self, service: Arc<MessageService>) -> Self {
-        self.message_service = Some(service);
-        self
-    }
-
-    /// Add coordination service
-    #[deprecated(since = "0.2.2", note = "Use McpServer::with_coordination() instead")]
-    pub fn with_coordination_service(mut self, service: Arc<CoordinationService>) -> Self {
-        self.coordination_service = Some(service);
-        self
-    }
-
-    /// Add knowledge service
-    #[deprecated(since = "0.2.2", note = "Use McpServer::with_coordination() instead")]
-    pub fn with_knowledge_service(mut self, service: Arc<KnowledgeService>) -> Self {
-        self.knowledge_service = Some(service);
-        self
-    }
-
-    /// Add all services at once
-    #[deprecated(since = "0.2.2", note = "Use McpServer::with_coordination() instead")]
-    pub fn with_all_services(
-        mut self,
-        agent_service: Arc<AgentService>,
-        issue_service: Arc<IssueService>,
-        message_service: Arc<MessageService>,
-        coordination_service: Arc<CoordinationService>,
-        knowledge_service: Arc<KnowledgeService>,
-    ) -> Self {
-        self.agent_service = Some(agent_service);
-        self.issue_service = Some(issue_service);
-        self.message_service = Some(message_service);
-        self.coordination_service = Some(coordination_service);
-        self.knowledge_service = Some(knowledge_service);
-        self
-    }
-
-    /// Build the MCP server instance
-    #[deprecated(since = "0.2.2", note = "Use McpServer::with_coordination() instead")]
-    pub fn build(self) -> McpServer {
-        McpServer {
-            clients: Arc::new(RwLock::new(HashMap::new())),
-            capabilities: self.capabilities.unwrap_or_default(),
-            agent_service: self.agent_service,
-            issue_service: self.issue_service,
-            message_service: self.message_service,
-            coordination_service: self.coordination_service,
-            knowledge_service: self.knowledge_service,
         }
     }
 }

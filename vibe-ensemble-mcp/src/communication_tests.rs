@@ -11,14 +11,19 @@
 #[cfg(test)]
 mod tests {
     use crate::protocol::*;
+    use crate::server::CoordinationServices;
     use crate::server::McpServer;
     use chrono::Utc;
     use serde_json::json;
     use std::sync::Arc;
     use uuid::Uuid;
     use vibe_ensemble_core::agent::{AgentType, ConnectionMetadata};
-    use vibe_ensemble_storage::repositories::{AgentRepository, MessageRepository};
-    use vibe_ensemble_storage::services::{AgentService, MessageService};
+    use vibe_ensemble_storage::repositories::{
+        AgentRepository, IssueRepository, KnowledgeRepository, MessageRepository,
+    };
+    use vibe_ensemble_storage::services::{
+        AgentService, CoordinationService, IssueService, KnowledgeService, MessageService,
+    };
 
     async fn setup_test_server() -> (McpServer, Arc<AgentService>, Arc<MessageService>) {
         // Create in-memory database
@@ -29,24 +34,29 @@ mod tests {
 
         // Create repositories
         let agent_repo = Arc::new(AgentRepository::new(pool.clone()));
+        let issue_repo = Arc::new(IssueRepository::new(pool.clone()));
         let message_repo = Arc::new(MessageRepository::new(pool.clone()));
+        let knowledge_repo = Arc::new(KnowledgeRepository::new(pool));
 
         // Create services
-        let agent_service = Arc::new(AgentService::new(agent_repo));
-        let message_service = Arc::new(MessageService::new(message_repo));
+        let agent_service = Arc::new(AgentService::new(agent_repo.clone()));
+        let issue_service = Arc::new(IssueService::new(issue_repo.clone()));
+        let message_service = Arc::new(MessageService::new(message_repo.clone()));
+        let knowledge_service = Arc::new(KnowledgeService::new((*knowledge_repo).clone()));
+        let coordination_service = Arc::new(CoordinationService::new(
+            agent_repo,
+            issue_repo,
+            message_repo,
+        ));
 
-        // Create server with all services using with_services method
-        let server = McpServer::with_services(
-            Some(agent_service.clone()),
-            Some(Arc::new(
-                vibe_ensemble_storage::services::IssueService::new(Arc::new(
-                    vibe_ensemble_storage::repositories::IssueRepository::new(pool),
-                )),
-            )),
-            Some(message_service.clone()),
-            None,
-            None,
+        let coordination_services = CoordinationServices::new(
+            agent_service.clone(),
+            issue_service,
+            message_service.clone(),
+            coordination_service,
+            knowledge_service,
         );
+        let server = McpServer::with_coordination(coordination_services);
 
         (server, agent_service, message_service)
     }
