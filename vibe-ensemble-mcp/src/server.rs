@@ -1093,8 +1093,12 @@ impl McpServer {
 
         // Check if this is a status update (has agentId) or status query (no agentId)
         if let Some(ref params) = request.params {
-            // Check if params contains agentId - if so, it's a status update; if not, it's a status query
-            if params.get("agentId").is_some() {
+            // Status update if either "agentId" (camelCase) or "agent_id" (snake_case) is present
+            let has_agent_id = params
+                .get("agentId")
+                .or_else(|| params.get("agent_id"))
+                .is_some();
+            if has_agent_id {
                 // Status update from an agent
                 let status_params: AgentStatusParams = serde_json::from_value(params.clone())
                     .map_err(|e| Error::Protocol {

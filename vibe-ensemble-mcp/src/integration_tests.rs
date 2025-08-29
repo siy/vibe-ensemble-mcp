@@ -27,7 +27,9 @@ mod tests {
             },
         };
 
-        let pool = sqlx::SqlitePool::connect("sqlite::memory:?cache=shared")
+        let pool = sqlx::sqlite::SqlitePoolOptions::new()
+            .max_connections(1)
+            .connect("sqlite::memory:")
             .await
             .unwrap();
         vibe_ensemble_storage::migrations::run_migrations(&pool)
@@ -435,7 +437,9 @@ mod tests {
         };
 
         // Create in-memory database for testing
-        let pool = sqlx::SqlitePool::connect("sqlite::memory:?cache=shared")
+        let pool = sqlx::sqlite::SqlitePoolOptions::new()
+            .max_connections(1)
+            .connect("sqlite::memory:")
             .await
             .unwrap();
         vibe_ensemble_storage::migrations::run_migrations(&pool)
@@ -513,7 +517,9 @@ mod tests {
         };
 
         // Create in-memory database and add test agents
-        let pool = sqlx::SqlitePool::connect("sqlite::memory:?cache=shared")
+        let pool = sqlx::sqlite::SqlitePoolOptions::new()
+            .max_connections(1)
+            .connect("sqlite::memory:")
             .await
             .unwrap();
         vibe_ensemble_storage::migrations::run_migrations(&pool)
@@ -650,7 +656,9 @@ mod tests {
         };
 
         // Create in-memory database and add test agent
-        let pool = sqlx::SqlitePool::connect("sqlite::memory:?cache=shared")
+        let pool = sqlx::sqlite::SqlitePoolOptions::new()
+            .max_connections(1)
+            .connect("sqlite::memory:")
             .await
             .unwrap();
         vibe_ensemble_storage::migrations::run_migrations(&pool)
@@ -748,7 +756,9 @@ mod tests {
         };
 
         // Create in-memory database for testing
-        let pool = sqlx::SqlitePool::connect("sqlite::memory:?cache=shared")
+        let pool = sqlx::sqlite::SqlitePoolOptions::new()
+            .max_connections(1)
+            .connect("sqlite::memory:")
             .await
             .unwrap();
         vibe_ensemble_storage::migrations::run_migrations(&pool)
@@ -844,7 +854,9 @@ mod tests {
         };
 
         // Create in-memory database for testing
-        let pool = sqlx::SqlitePool::connect("sqlite::memory:?cache=shared")
+        let pool = sqlx::sqlite::SqlitePoolOptions::new()
+            .max_connections(1)
+            .connect("sqlite::memory:")
             .await
             .unwrap();
         vibe_ensemble_storage::migrations::run_migrations(&pool)
@@ -959,7 +971,9 @@ mod tests {
         };
 
         // Create in-memory database for testing
-        let pool = sqlx::SqlitePool::connect("sqlite::memory:?cache=shared")
+        let pool = sqlx::sqlite::SqlitePoolOptions::new()
+            .max_connections(1)
+            .connect("sqlite::memory:")
             .await
             .unwrap();
         vibe_ensemble_storage::migrations::run_migrations(&pool)
@@ -1189,7 +1203,9 @@ mod tests {
         };
 
         // Create in-memory database for testing
-        let pool = sqlx::SqlitePool::connect("sqlite::memory:?cache=shared")
+        let pool = sqlx::sqlite::SqlitePoolOptions::new()
+            .max_connections(1)
+            .connect("sqlite::memory:")
             .await
             .unwrap();
         vibe_ensemble_storage::migrations::run_migrations(&pool)
@@ -1308,7 +1324,9 @@ mod tests {
         };
 
         // Create in-memory database for testing
-        let pool = sqlx::SqlitePool::connect("sqlite::memory:?cache=shared")
+        let pool = sqlx::sqlite::SqlitePoolOptions::new()
+            .max_connections(1)
+            .connect("sqlite::memory:")
             .await
             .unwrap();
         vibe_ensemble_storage::migrations::run_migrations(&pool)

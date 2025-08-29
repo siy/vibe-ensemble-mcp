@@ -323,7 +323,7 @@ pub struct AgentRegisterResult {
 /// Agent status reporting parameters
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AgentStatusParams {
-    #[serde(rename = "agentId")]
+    #[serde(rename = "agentId", alias = "agent_id")]
     pub agent_id: String,
     pub status: String,
     #[serde(rename = "currentTask")]
