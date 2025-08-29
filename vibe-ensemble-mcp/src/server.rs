@@ -755,7 +755,7 @@ impl McpServer {
                     },
                     "required": ["capturingAgentId", "coordinationSession", "outcomeData", "successMetrics", "lessonsLearned"]
                 }
-            })
+            }),
         ];
 
         // Only include workspace tools if workspace manager is configured
