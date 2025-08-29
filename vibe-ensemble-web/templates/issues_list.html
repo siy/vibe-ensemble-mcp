@@ -1,0 +1,216 @@
+{% extends "base.html" %}
+
+{% block title %}{{ title }}{% endblock %}
+{% block page_title %}Issue Management{% endblock %}
+{% block page_description %}Task tracking and coordination{% endblock %}
+
+{% block content %}
+<div class="grid grid-3">
+    <div class="card stat-card">
+        <div class="stat-number">{{ total_count }}</div>
+        <div class="stat-label">Total Issues</div>
+    </div>
+    <div class="card stat-card">
+        <div class="stat-number">{{ open_count }}</div>
+        <div class="stat-label">Open Issues</div>
+    </div>
+    <div class="card stat-card">
+        <div class="stat-number">{{ high_priority_count }}</div>
+        <div class="stat-label">High Priority</div>
+    </div>
+</div>
+
+<div class="card">
+    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
+        <h2>Issues</h2>
+        <div style="display: flex; gap: 10px; align-items: center;">
+            <input type="text" id="searchIssues" placeholder="Search issues..." class="form-control" style="width: 300px;">
+            <select id="filterPriority" class="form-control" style="width: 120px;">
+                <option value="">All Priorities</option>
+                <option value="low">Low</option>
+                <option value="medium">Medium</option>
+                <option value="high">High</option>
+                <option value="critical">Critical</option>
+            </select>
+            <select id="filterStatus" class="form-control" style="width: 120px;">
+                <option value="">All Status</option>
+                <option value="open">Open</option>
+                <option value="inprogress">In Progress</option>
+                <option value="resolved">Resolved</option>
+                <option value="closed">Closed</option>
+            </select>
+            <a href="/issues/new" class="btn btn-primary">New Issue</a>
+        </div>
+    </div>
+
+    {% if issues.is_empty() %}
+    <div class="alert alert-info">
+        <strong>No issues found</strong><br>
+        Issues created through the API or coordination system will appear here.
+        <a href="/issues/new" class="btn btn-primary" style="margin-left: 10px;">Create First Issue</a>
+    </div>
+    {% else %}
+    <div class="table-responsive">
+        <table class="table" id="issuesTable">
+            <thead>
+                <tr>
+                    <th>Title</th>
+                    <th>Priority</th>
+                    <th>Status</th>
+                    <th>Assigned Agent</th>
+                    <th>Created</th>
+                    <th>Updated</th>
+                    <th>Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for issue in issues %}
+                <tr class="issue-row" data-priority="{{ issue.priority | format("{:?}") | lower }}" data-status="{{ issue.status | format("{:?}") | lower }}">
+                    <td>
+                        <strong>{{ issue.title }}</strong>
+                        {% if issue.description.len() > 80 %}
+                        <br><small class="text-muted">{{ issue.description | truncate(80) }}...</small>
+                        {% else %}
+                        <br><small class="text-muted">{{ issue.description }}</small>
+                        {% endif %}
+                    </td>
+                    <td>
+                        <span class="priority-{{ issue.priority | format("{:?}") | lower }}">
+                            {{ issue.priority | format("{:?}") }}
+                        </span>
+                    </td>
+                    <td>
+                        <span class="status status-{{ issue.status | format("{:?}") | lower | replace("_", "-") }}">
+                            {{ issue.status | format("{:?}") | replace("_", " ") }}
+                        </span>
+                    </td>
+                    <td>
+                        {% match issue.assigned_agent_id %}
+                        {% when Some with (agent_id) %}
+                        <span class="assigned-agent">
+                            <a href="/agents/{{ agent_id }}">{{ agent_id }}</a>
+                        </span>
+                        {% when None %}
+                        <span class="text-muted">Unassigned</span>
+                        {% endmatch %}
+                    </td>
+                    <td>{{ issue.created_at | relative_time }}</td>
+                    <td>{{ issue.updated_at | relative_time }}</td>
+                    <td>
+                        <div style="display: flex; gap: 5px;">
+                            <a href="/issues/{{ issue.id }}" class="btn btn-sm btn-primary">View</a>
+                            <a href="/issues/{{ issue.id }}/edit" class="btn btn-sm btn-secondary">Edit</a>
+                        </div>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    {% endif %}
+</div>
+
+<div class="card">
+    <h3>Issue Statistics</h3>
+    <div class="grid grid-2">
+        <div>
+            <h4 style="margin-bottom: 10px; color: var(--gray-700);">By Priority</h4>
+            <div class="priority-stats">
+                <div class="stat-item">
+                    <span class="priority-critical">Critical:</span>
+                    <span>0</span>
+                </div>
+                <div class="stat-item">
+                    <span class="priority-high">High:</span>
+                    <span>{{ high_priority_count }}</span>
+                </div>
+                <div class="stat-item">
+                    <span class="priority-medium">Medium:</span>
+                    <span>0</span>
+                </div>
+                <div class="stat-item">
+                    <span class="priority-low">Low:</span>
+                    <span>0</span>
+                </div>
+            </div>
+        </div>
+        <div>
+            <h4 style="margin-bottom: 10px; color: var(--gray-700);">By Status</h4>
+            <div class="status-stats">
+                <div class="stat-item">
+                    <span class="status-open">Open:</span>
+                    <span>{{ open_count }}</span>
+                </div>
+                <div class="stat-item">
+                    <span class="status-in-progress">In Progress:</span>
+                    <span>0</span>
+                </div>
+                <div class="stat-item">
+                    <span class="status-resolved">Resolved:</span>
+                    <span>0</span>
+                </div>
+                <div class="stat-item">
+                    <span class="status-closed">Closed:</span>
+                    <span>0</span>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_head %}
+<style>
+    .text-muted { color: var(--gray-600); font-size: 0.875rem; }
+    .table-responsive { overflow-x: auto; }
+    .issue-row:hover { background-color: rgba(0, 123, 255, 0.05); }
+    .assigned-agent a { 
+        color: var(--primary-color); 
+        text-decoration: none; 
+        font-family: monospace;
+        font-size: 0.875rem;
+    }
+    .assigned-agent a:hover { text-decoration: underline; }
+    .stat-item {
+        display: flex;
+        justify-content: space-between;
+        padding: 4px 0;
+        border-bottom: 1px solid var(--gray-200);
+    }
+    .stat-item:last-child { border-bottom: none; }
+    .priority-stats, .status-stats { margin-top: 10px; }
+</style>
+{% endblock %}
+
+{% block extra_script %}
+// Issue list filtering and search
+document.addEventListener('DOMContentLoaded', function() {
+    const searchInput = document.getElementById('searchIssues');
+    const priorityFilter = document.getElementById('filterPriority');
+    const statusFilter = document.getElementById('filterStatus');
+    const table = document.getElementById('issuesTable');
+    const rows = table ? table.getElementsByClassName('issue-row') : [];
+
+    function filterTable() {
+        const searchTerm = searchInput.value.toLowerCase();
+        const priorityFilter = document.getElementById('filterPriority').value.toLowerCase();
+        const statusFilter = document.getElementById('filterStatus').value.toLowerCase();
+
+        Array.from(rows).forEach(row => {
+            const title = row.cells[0].textContent.toLowerCase();
+            const priority = row.dataset.priority;
+            const status = row.dataset.status;
+            
+            const matchesSearch = !searchTerm || title.includes(searchTerm);
+            const matchesPriority = !priorityFilter || priority === priorityFilter;
+            const matchesStatus = !statusFilter || status.replace('_', '') === statusFilter.replace('_', '');
+            
+            row.style.display = (matchesSearch && matchesPriority && matchesStatus) ? '' : 'none';
+        });
+    }
+
+    if (searchInput) searchInput.addEventListener('input', filterTable);
+    if (priorityFilter) priorityFilter.addEventListener('change', filterTable);
+    if (statusFilter) statusFilter.addEventListener('change', filterTable);
+});
+{% endblock %}

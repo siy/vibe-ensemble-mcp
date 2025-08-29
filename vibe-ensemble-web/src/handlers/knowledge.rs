@@ -2,14 +2,14 @@
 
 use crate::{Error, Result};
 use axum::{
-    extract::{Path, State},
+    extract::{Path, Query, State},
     response::Html,
     Form,
 };
 use serde::Deserialize;
 use std::sync::Arc;
 use uuid::Uuid;
-use vibe_ensemble_core::knowledge::{AccessLevel, KnowledgeEntry, KnowledgeType};
+use vibe_ensemble_core::knowledge::{AccessLevel, Knowledge, KnowledgeType};
 use vibe_ensemble_storage::StorageManager;
 
 /// Form data for creating knowledge entries
@@ -25,45 +25,130 @@ pub struct KnowledgeForm {
 
 /// List all knowledge entries
 pub async fn list(State(storage): State<Arc<StorageManager>>) -> Result<Html<String>> {
-    let knowledge_entries = storage.knowledge().list().await?;
+    // Use list_accessible_by with a dummy UUID to get all public and team entries
+    let dummy_agent_id = Uuid::new_v4();
+    let knowledge_entries = storage
+        .knowledge()
+        .list_accessible_by(dummy_agent_id)
+        .await
+        .map_err(crate::Error::Storage)?;
 
-    let mut html = String::from(
+    // Use simple HTML for now
+    let html = format!(
         r#"
-        <html>
-            <head><title>Knowledge Base</title></head>
-            <body>
-                <h1>Knowledge Base</h1>
-                <table border="1">
-                    <tr>
-                        <th>Title</th>
-                        <th>Type</th>
-                        <th>Access Level</th>
-                        <th>Created</th>
-                        <th>Actions</th>
-                    </tr>
+        <!DOCTYPE html>
+        <html lang="en">
+        <head>
+            <meta charset="UTF-8">
+            <meta name="viewport" content="width=device-width, initial-scale=1.0">
+            <title>Knowledge Browser - Vibe Ensemble</title>
+            <style>
+                body {{ font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; margin: 0; padding: 20px; background-color: #f8f9fa; }}
+                .container {{ max-width: 1200px; margin: 0 auto; background: white; padding: 30px; border-radius: 8px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); }}
+                .header {{ border-bottom: 1px solid #e9ecef; padding-bottom: 20px; margin-bottom: 30px; }}
+                .nav {{ margin-bottom: 20px; }}
+                .nav a {{ margin-right: 20px; text-decoration: none; color: #007bff; }}
+                .nav a:hover {{ text-decoration: underline; }}
+                .stats {{ display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 20px; margin-bottom: 30px; }}
+                .stat-card {{ background: #f8f9fa; padding: 20px; border-radius: 8px; text-align: center; }}
+                .stat-number {{ font-size: 2rem; font-weight: bold; color: #007bff; }}
+                .stat-label {{ color: #6c757d; font-size: 0.875rem; }}
+                .card {{ background: white; padding: 20px; border-radius: 8px; box-shadow: 0 1px 3px rgba(0,0,0,0.1); margin-bottom: 20px; }}
+                table {{ width: 100%; border-collapse: collapse; }}
+                th, td {{ padding: 12px 8px; text-align: left; border-bottom: 1px solid #dee2e6; }}
+                th {{ background-color: #f8f9fa; font-weight: 600; }}
+                .knowledge-type {{ padding: 4px 8px; border-radius: 4px; font-size: 0.75rem; font-weight: 500; }}
+                .type-pattern {{ background: #007bff; color: white; }}
+                .type-practice {{ background: #28a745; color: white; }}
+                .type-guideline {{ background: #ffc107; color: #343a40; }}
+                .type-solution {{ background: #17a2b8; color: white; }}
+                .type-reference {{ background: #6f42c1; color: white; }}
+                .access-level {{ padding: 4px 8px; border-radius: 4px; font-size: 0.75rem; font-weight: 500; }}
+                .access-public {{ background: #28a745; color: white; }}
+                .access-team {{ background: #ffc107; color: #343a40; }}
+                .access-private {{ background: #dc3545; color: white; }}
+                .btn {{ background: #007bff; color: white; padding: 6px 12px; text-decoration: none; border-radius: 4px; font-size: 0.75rem; }}
+                .btn:hover {{ background: #0056b3; }}
+                .btn-primary {{ background: #28a745; }}
+                .btn-primary:hover {{ background: #218838; }}
+            </style>
+        </head>
+        <body>
+            <div class="container">
+                <div class="header">
+                    <h1>Knowledge Browser</h1>
+                    <div class="nav">
+                        <a href="/dashboard">Dashboard</a>
+                        <a href="/agents">Agents</a>
+                        <a href="/issues">Issues</a>
+                        <a href="/messages">Messages</a>
+                        <a href="/knowledge">Knowledge</a>
+                    </div>
+                </div>
+                
+                <div class="stats">
+                    <div class="stat-card">
+                        <div class="stat-number">{}</div>
+                        <div class="stat-label">Total Items</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-number">0</div>
+                        <div class="stat-label">Public Items</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-number">0</div>
+                        <div class="stat-label">Recent Updates</div>
+                    </div>
+                </div>
+                
+                <div class="card">
+                    <h3>Knowledge Repository <a href="/knowledge/new" class="btn btn-primary" style="float: right;">Add Knowledge</a></h3>
+                    {}
+                </div>
+            </div>
+        </body>
+        </html>
         "#,
+        knowledge_entries.len(),
+        if knowledge_entries.is_empty() {
+            "<p>No knowledge items found. <a href='/knowledge/new' class='btn btn-primary'>Add First Knowledge Item</a></p>".to_string()
+        } else {
+            let mut table_html = String::from("<table><tr><th>Title</th><th>Type</th><th>Access Level</th><th>Created</th><th>Actions</th></tr>");
+
+            for entry in knowledge_entries {
+                table_html.push_str(&format!(
+                    r#"<tr>
+                        <td><strong>{}</strong></td>
+                        <td><span class="knowledge-type type-{}">{:?}</span></td>
+                        <td><span class="access-level access-{}">{:?}</span></td>
+                        <td>{}</td>
+                        <td><a href="/knowledge/{}" class="btn">View</a></td>
+                    </tr>"#,
+                    entry.title,
+                    match entry.knowledge_type {
+                        vibe_ensemble_core::knowledge::KnowledgeType::Pattern => "pattern",
+                        vibe_ensemble_core::knowledge::KnowledgeType::Practice => "practice",
+                        vibe_ensemble_core::knowledge::KnowledgeType::Guideline => "guideline",
+                        vibe_ensemble_core::knowledge::KnowledgeType::Solution => "solution",
+                        vibe_ensemble_core::knowledge::KnowledgeType::Reference => "reference",
+                    },
+                    entry.knowledge_type,
+                    match entry.access_level {
+                        vibe_ensemble_core::knowledge::AccessLevel::Public => "public",
+                        vibe_ensemble_core::knowledge::AccessLevel::Team => "team",
+                        vibe_ensemble_core::knowledge::AccessLevel::Private => "private",
+                    },
+                    entry.access_level,
+                    entry.created_at.format("%Y-%m-%d %H:%M"),
+                    entry.id
+                ));
+            }
+
+            table_html.push_str("</table>");
+            table_html
+        }
     );
 
-    for knowledge in knowledge_entries {
-        html.push_str(&format!(
-            r#"
-            <tr>
-                <td>{}</td>
-                <td>{:?}</td>
-                <td>{:?}</td>
-                <td>{}</td>
-                <td><a href="/knowledge/{}">View</a></td>
-            </tr>
-            "#,
-            knowledge.title,
-            knowledge.knowledge_type,
-            knowledge.access_level,
-            knowledge.created_at.format("%Y-%m-%d %H:%M"),
-            knowledge.id
-        ));
-    }
-
-    html.push_str("</table></body></html>");
     Ok(Html(html))
 }
 
@@ -133,7 +218,8 @@ pub async fn new_form() -> Result<Html<String>> {
                                 <option value="Pattern">Pattern</option>
                                 <option value="Practice">Practice</option>
                                 <option value="Guideline">Guideline</option>
-                                <option value="Example">Example</option>
+                                <option value="Solution">Solution</option>
+                                <option value="Reference">Reference</option>
                             </select>
                         </label>
                     </p>
@@ -141,8 +227,8 @@ pub async fn new_form() -> Result<Html<String>> {
                         <label>Access Level: 
                             <select name="access_level">
                                 <option value="Public">Public</option>
-                                <option value="Internal">Internal</option>
-                                <option value="Restricted">Restricted</option>
+                                <option value="Team">Team</option>
+                                <option value="Private">Private</option>
                             </select>
                         </label>
                     </p>
@@ -166,6 +252,45 @@ pub async fn new_form() -> Result<Html<String>> {
     Ok(Html(html.to_string()))
 }
 
+/// Search knowledge entries
+pub async fn search(
+    State(storage): State<Arc<StorageManager>>,
+    Query(params): Query<std::collections::HashMap<String, String>>,
+) -> Result<Html<String>> {
+    let search_term = params.get("q").cloned().unwrap_or_default();
+
+    if search_term.trim().is_empty() {
+        // No search term, show all entries
+        return list(State(storage)).await;
+    }
+
+    let dummy_agent_id = Uuid::new_v4();
+    let knowledge_entries = storage
+        .knowledge()
+        .list_accessible_by(dummy_agent_id)
+        .await
+        .map_err(crate::Error::Storage)?;
+
+    // Basic text search
+    let search_lower = search_term.to_lowercase();
+    let _matching_entries: Vec<_> = knowledge_entries
+        .into_iter()
+        .filter(|entry| {
+            entry.title.to_lowercase().contains(&search_lower)
+                || entry.content.to_lowercase().contains(&search_lower)
+                || entry.title.to_lowercase().contains(&search_lower) // Remove category reference
+                || entry
+                    .tags
+                    .iter()
+                    .any(|tag| tag.to_lowercase().contains(&search_lower))
+        })
+        .collect();
+
+    // For now, redirect to the existing simple HTML implementation
+    // In a real implementation, this would show search results
+    list(State(storage)).await
+}
+
 /// Create a new knowledge entry
 pub async fn create(
     State(storage): State<Arc<StorageManager>>,
@@ -175,14 +300,15 @@ pub async fn create(
         "Pattern" => KnowledgeType::Pattern,
         "Practice" => KnowledgeType::Practice,
         "Guideline" => KnowledgeType::Guideline,
-        "Example" => KnowledgeType::Example,
+        "Solution" => KnowledgeType::Solution,
+        "Reference" => KnowledgeType::Reference,
         _ => return Err(Error::BadRequest("Invalid knowledge type".to_string())),
     };
 
     let access_level = match form.access_level.as_str() {
         "Public" => AccessLevel::Public,
-        "Internal" => AccessLevel::Internal,
-        "Restricted" => AccessLevel::Restricted,
+        "Team" => AccessLevel::Team,
+        "Private" => AccessLevel::Private,
         _ => return Err(Error::BadRequest("Invalid access level".to_string())),
     };
 
@@ -194,14 +320,19 @@ pub async fn create(
         .filter(|s| !s.is_empty())
         .collect();
 
-    let knowledge_entry = KnowledgeEntry::new(
+    let dummy_created_by = Uuid::new_v4(); // In real implementation, use authenticated user
+    let mut knowledge_entry = Knowledge::new(
         form.title.clone(),
         form.content,
         knowledge_type,
+        dummy_created_by,
         access_level,
-        form.category,
-        tags,
     )?;
+
+    // Add tags
+    for tag in tags {
+        knowledge_entry.add_tag(tag)?;
+    }
 
     storage.knowledge().create(&knowledge_entry).await?;
 

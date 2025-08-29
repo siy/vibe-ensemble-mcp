@@ -1,0 +1,305 @@
+{% extends "base.html" %}
+
+{% block title %}{{ title }}{% endblock %}
+{% block page_title %}Knowledge Browser{% endblock %}
+{% block page_description %}Development patterns, best practices, and organizational knowledge{% endblock %}
+
+{% block content %}
+<div class="card">
+    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
+        <h2>Knowledge Repository ({{ total_count }} items)</h2>
+        <a href="/knowledge/new" class="btn btn-primary">Add Knowledge</a>
+    </div>
+    
+    <div class="search-filters" style="margin-bottom: 30px;">
+        <div class="grid grid-3">
+            <div class="form-group">
+                <label for="searchKnowledge">Search Knowledge</label>
+                <form method="get" action="/knowledge/search" style="display: flex; gap: 10px;">
+                    <input type="text" 
+                           id="searchKnowledge" 
+                           name="q" 
+                           class="form-control" 
+                           placeholder="Search titles, content, tags..."
+                           value="{% if search_query %}{{ search_query }}{% endif %}">
+                    <button type="submit" class="btn btn-primary">Search</button>
+                </form>
+            </div>
+            <div class="form-group">
+                <label for="filterType">Filter by Type</label>
+                <select id="filterType" class="form-control">
+                    <option value="">All Types</option>
+                    <option value="pattern">Pattern</option>
+                    <option value="practice">Practice</option>
+                    <option value="guideline">Guideline</option>
+                    <option value="solution">Solution</option>
+                    <option value="reference">Reference</option>
+                </select>
+            </div>
+            <div class="form-group">
+                <label for="filterAccess">Access Level</label>
+                <select id="filterAccess" class="form-control">
+                    <option value="">All Access</option>
+                    <option value="public">Public</option>
+                    <option value="team">Team</option>
+                    <option value="private">Private</option>
+                </select>
+            </div>
+        </div>
+    </div>
+
+    {% if search_query %}
+    <div class="alert alert-info">
+        <strong>Search Results</strong> for "{{ search_query }}" ({{ knowledge_items.len() }} found)
+        <a href="/knowledge" style="margin-left: 10px;">Show All</a>
+    </div>
+    {% endif %}
+
+    {% if !tags.is_empty() %}
+    <div style="margin-bottom: 20px;">
+        <h4>Popular Tags</h4>
+        <div class="tags-cloud" style="display: flex; flex-wrap: wrap; gap: 8px;">
+            {% for tag in tags %}
+            <span class="tag-link" onclick="searchByTag('{{ tag }}')">{{ tag }}</span>
+            {% endfor %}
+        </div>
+    </div>
+    {% endif %}
+</div>
+
+{% if knowledge_items.is_empty() %}
+<div class="card">
+    <div class="alert alert-info" style="text-align: center; padding: 40px;">
+        <h4>No Knowledge Items Found</h4>
+        {% if search_query %}
+        <p>No knowledge items match your search criteria.</p>
+        <a href="/knowledge" class="btn btn-primary">Show All Knowledge</a>
+        {% else %}
+        <p>Start building your knowledge repository by adding patterns, practices, and guidelines.</p>
+        <a href="/knowledge/new" class="btn btn-primary">Add First Knowledge Item</a>
+        {% endif %}
+    </div>
+</div>
+{% else %}
+<div class="knowledge-grid">
+    {% for item in knowledge_items %}
+    <div class="card knowledge-item" data-type="{{ item.knowledge_type | format("{:?}") | lower }}" data-access="{{ item.access_level | format("{:?}") | lower }}">
+        <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 15px;">
+            <div>
+                <h3 style="margin: 0; margin-bottom: 8px;">
+                    <a href="/knowledge/{{ item.id }}" style="color: var(--gray-800); text-decoration: none;">
+                        {{ item.title }}
+                    </a>
+                </h3>
+                <div class="knowledge-meta">
+                    <span class="knowledge-type type-{{ item.knowledge_type | format("{:?}") | lower }}">
+                        {{ item.knowledge_type | format("{:?}") }}
+                    </span>
+                    <span class="access-level access-{{ item.access_level | format("{:?}") | lower }}">
+                        {{ item.access_level | format("{:?}") }}
+                    </span>
+                    <span class="text-muted">{{ item.category }}</span>
+                </div>
+            </div>
+            <div style="text-align: right;">
+                <small class="text-muted">v{{ item.version }}</small><br>
+                <small class="text-muted">{{ item.updated_at | relative_time }}</small>
+            </div>
+        </div>
+        
+        <div class="knowledge-content" style="margin-bottom: 15px;">
+            {% if item.content.len() > 200 %}
+            {{ item.content | truncate(200) }}...
+            {% else %}
+            {{ item.content }}
+            {% endif %}
+        </div>
+        
+        {% if !item.tags.is_empty() %}
+        <div class="knowledge-tags" style="margin-bottom: 15px;">
+            {% for tag in item.tags %}
+            <span class="tag" onclick="searchByTag('{{ tag }}')">{{ tag }}</span>
+            {% endfor %}
+        </div>
+        {% endif %}
+        
+        <div style="display: flex; justify-content: space-between; align-items: center; padding-top: 15px; border-top: 1px solid var(--gray-200);">
+            <small class="text-muted">Created {{ item.created_at | relative_time }}</small>
+            <div>
+                <a href="/knowledge/{{ item.id }}" class="btn btn-sm btn-primary">View Details</a>
+            </div>
+        </div>
+    </div>
+    {% endfor %}
+</div>
+{% endif %}
+
+<div class="card">
+    <h3>Knowledge Statistics</h3>
+    <div class="grid grid-2">
+        <div>
+            <h4 style="margin-bottom: 10px; color: var(--gray-700);">By Type</h4>
+            <div class="type-stats">
+                <div class="stat-item">
+                    <span class="type-pattern">Pattern:</span>
+                    <span>0</span>
+                </div>
+                <div class="stat-item">
+                    <span class="type-practice">Practice:</span>
+                    <span>0</span>
+                </div>
+                <div class="stat-item">
+                    <span class="type-guideline">Guideline:</span>
+                    <span>0</span>
+                </div>
+                <div class="stat-item">
+                    <span class="type-solution">Solution:</span>
+                    <span>0</span>
+                </div>
+                <div class="stat-item">
+                    <span class="type-reference">Reference:</span>
+                    <span>0</span>
+                </div>
+            </div>
+        </div>
+        <div>
+            <h4 style="margin-bottom: 10px; color: var(--gray-700);">By Access Level</h4>
+            <div class="access-stats">
+                <div class="stat-item">
+                    <span class="access-public">Public:</span>
+                    <span>0</span>
+                </div>
+                <div class="stat-item">
+                    <span class="access-team">Team:</span>
+                    <span>0</span>
+                </div>
+                <div class="stat-item">
+                    <span class="access-private">Private:</span>
+                    <span>0</span>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_head %}
+<style>
+    .knowledge-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(400px, 1fr));
+        gap: 20px;
+        margin-bottom: 20px;
+    }
+    
+    .knowledge-item {
+        height: fit-content;
+        transition: transform 0.2s ease, box-shadow 0.2s ease;
+    }
+    
+    .knowledge-item:hover {
+        transform: translateY(-2px);
+        box-shadow: var(--box-shadow-lg);
+    }
+    
+    .knowledge-meta {
+        display: flex;
+        gap: 8px;
+        align-items: center;
+        flex-wrap: wrap;
+    }
+    
+    .knowledge-type, .access-level {
+        padding: 2px 6px;
+        border-radius: 3px;
+        font-size: 0.75rem;
+        font-weight: 600;
+    }
+    
+    .type-pattern { background: var(--primary-color); color: white; }
+    .type-practice { background: var(--success-color); color: white; }
+    .type-guideline { background: var(--warning-color); color: var(--dark-color); }
+    .type-solution { background: var(--info-color); color: white; }
+    .type-reference { background: var(--secondary-color); color: white; }
+    
+    .access-public { background: var(--success-color); color: white; }
+    .access-team { background: var(--warning-color); color: var(--dark-color); }
+    .access-private { background: var(--danger-color); color: white; }
+    
+    .knowledge-content {
+        line-height: 1.5;
+        color: var(--gray-700);
+    }
+    
+    .knowledge-tags .tag {
+        cursor: pointer;
+        transition: background-color 0.2s ease;
+    }
+    
+    .knowledge-tags .tag:hover {
+        background-color: var(--primary-color);
+        color: white;
+    }
+    
+    .tags-cloud .tag-link {
+        background: var(--gray-200);
+        color: var(--gray-700);
+        padding: 4px 8px;
+        border-radius: 4px;
+        cursor: pointer;
+        font-size: 0.875rem;
+        transition: all 0.2s ease;
+    }
+    
+    .tags-cloud .tag-link:hover {
+        background: var(--primary-color);
+        color: white;
+    }
+    
+    .text-muted { color: var(--gray-600); }
+    .stat-item {
+        display: flex;
+        justify-content: space-between;
+        padding: 4px 0;
+        border-bottom: 1px solid var(--gray-200);
+    }
+    .stat-item:last-child { border-bottom: none; }
+    
+    @media (max-width: 768px) {
+        .knowledge-grid {
+            grid-template-columns: 1fr;
+        }
+    }
+</style>
+{% endblock %}
+
+{% block extra_script %}
+// Knowledge browser filtering
+document.addEventListener('DOMContentLoaded', function() {
+    const typeFilter = document.getElementById('filterType');
+    const accessFilter = document.getElementById('filterAccess');
+    const knowledgeItems = document.getElementsByClassName('knowledge-item');
+
+    function filterKnowledge() {
+        const typeValue = typeFilter.value.toLowerCase();
+        const accessValue = accessFilter.value.toLowerCase();
+
+        Array.from(knowledgeItems).forEach(item => {
+            const itemType = item.dataset.type;
+            const itemAccess = item.dataset.access;
+            
+            const matchesType = !typeValue || itemType === typeValue;
+            const matchesAccess = !accessValue || itemAccess === accessValue;
+            
+            item.style.display = (matchesType && matchesAccess) ? 'block' : 'none';
+        });
+    }
+
+    if (typeFilter) typeFilter.addEventListener('change', filterKnowledge);
+    if (accessFilter) accessFilter.addEventListener('change', filterKnowledge);
+});
+
+function searchByTag(tag) {
+    window.location.href = `/knowledge/search?q=${encodeURIComponent(tag)}`;
+}
+{% endblock %}

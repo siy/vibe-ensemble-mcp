@@ -1,0 +1,247 @@
+{% extends "base.html" %}
+
+{% block title %}{{ title }}{% endblock %}
+{% block page_title %}Agent Details{% endblock %}
+{% block page_description %}{{ agent.name }} - {{ agent.agent_type | format("{:?}") }}{% endblock %}
+
+{% block content %}
+<div class="card">
+    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
+        <h2>{{ agent.name }}</h2>
+        <span class="status 
+        {%- match agent.status -%}
+        {%- when vibe_ensemble_core::agent::AgentStatus::Online -%} status-online
+        {%- when vibe_ensemble_core::agent::AgentStatus::Offline -%} status-offline  
+        {%- when vibe_ensemble_core::agent::AgentStatus::Busy -%} status-busy
+        {%- endmatch -%}
+        ">{{ agent.status | format("{:?}") }}</span>
+    </div>
+    
+    <div class="grid grid-2">
+        <div>
+            <h3>Agent Information</h3>
+            <table class="table">
+                <tr>
+                    <td><strong>ID</strong></td>
+                    <td><code>{{ agent.id }}</code></td>
+                </tr>
+                <tr>
+                    <td><strong>Name</strong></td>
+                    <td>{{ agent.name }}</td>
+                </tr>
+                <tr>
+                    <td><strong>Type</strong></td>
+                    <td>
+                        <span class="status 
+                        {%- match agent.agent_type -%}
+                        {%- when vibe_ensemble_core::agent::AgentType::Coordinator -%} status-coordinator
+                        {%- when vibe_ensemble_core::agent::AgentType::Worker -%} status-worker
+                        {%- endmatch -%}
+                        ">{{ agent.agent_type | format("{:?}") }}</span>
+                    </td>
+                </tr>
+                <tr>
+                    <td><strong>Status</strong></td>
+                    <td>
+                        <span class="status 
+                        {%- match agent.status -%}
+                        {%- when vibe_ensemble_core::agent::AgentStatus::Online -%} status-online
+                        {%- when vibe_ensemble_core::agent::AgentStatus::Offline -%} status-offline  
+                        {%- when vibe_ensemble_core::agent::AgentStatus::Busy -%} status-busy
+                        {%- endmatch -%}
+                        ">{{ agent.status | format("{:?}") }}</span>
+                    </td>
+                </tr>
+                <tr>
+                    <td><strong>Created</strong></td>
+                    <td>{{ agent.created_at | format_timestamp }}</td>
+                </tr>
+                <tr>
+                    <td><strong>Last Seen</strong></td>
+                    <td>{{ agent.last_seen | relative_time }}</td>
+                </tr>
+            </table>
+        </div>
+        
+        <div>
+            <h3>Connection Details</h3>
+            <table class="table">
+                <tr>
+                    <td><strong>Endpoint</strong></td>
+                    <td><code>{{ agent.connection_metadata.endpoint }}</code></td>
+                </tr>
+                <tr>
+                    <td><strong>Protocol Version</strong></td>
+                    <td>{{ agent.connection_metadata.protocol_version }}</td>
+                </tr>
+                {% match agent.connection_metadata.session_id %}
+                {% when Some with (session_id) %}
+                <tr>
+                    <td><strong>Session ID</strong></td>
+                    <td><code>{{ session_id }}</code></td>
+                </tr>
+                {% when None %}
+                {% endmatch %}
+            </table>
+        </div>
+    </div>
+</div>
+
+<div class="card">
+    <h3>Capabilities</h3>
+    {% if agent.capabilities.is_empty() %}
+    <div class="alert alert-info">
+        This agent has no specific capabilities defined.
+    </div>
+    {% else %}
+    <div class="capabilities-grid" style="display: flex; flex-wrap: wrap; gap: 8px;">
+        {% for capability in agent.capabilities %}
+        <span class="capability-tag">{{ capability }}</span>
+        {% endfor %}
+    </div>
+    {% endif %}
+</div>
+
+{% if !assigned_issues.is_empty() %}
+<div class="card">
+    <h3>Assigned Issues ({{ assigned_issues.len() }})</h3>
+    <table class="table">
+        <thead>
+            <tr>
+                <th>Title</th>
+                <th>Priority</th>
+                <th>Status</th>
+                <th>Created</th>
+                <th>Actions</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for issue in assigned_issues %}
+            <tr>
+                <td>
+                    <strong>{{ issue.title }}</strong>
+                    {% if issue.description.len() > 100 %}
+                    <br><small class="text-muted">{{ issue.description | truncate(100) }}...</small>
+                    {% else %}
+                    <br><small class="text-muted">{{ issue.description }}</small>
+                    {% endif %}
+                </td>
+                <td>
+                    <span class="priority-{{ issue.priority | format("{:?}") | lower }}">
+                        {{ issue.priority | format("{:?}") }}
+                    </span>
+                </td>
+                <td>
+                    <span class="status status-{{ issue.status | format("{:?}") | lower | replace("_", "-") }}">
+                        {{ issue.status | format("{:?}") }}
+                    </span>
+                </td>
+                <td>{{ issue.created_at | relative_time }}</td>
+                <td>
+                    <a href="/issues/{{ issue.id }}" class="btn btn-sm btn-primary">View</a>
+                </td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+{% endif %}
+
+{% if !recent_messages.is_empty() %}
+<div class="card">
+    <h3>Recent Messages ({{ recent_messages.len() }})</h3>
+    <div class="messages-list">
+        {% for message in recent_messages %}
+        <div class="message-item" style="border: 1px solid var(--gray-300); border-radius: var(--border-radius); padding: 15px; margin-bottom: 10px;">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+                <div>
+                    <span class="message-type">{{ message.message_type | format("{:?}") }}</span>
+                    {% match message.recipient_id %}
+                    {% when Some with (recipient_id) %}
+                    <span class="text-muted">→ {{ recipient_id }}</span>
+                    {% when None %}
+                    <span class="text-muted">(Broadcast)</span>
+                    {% endmatch %}
+                </div>
+                <div>
+                    <span class="priority-{{ message.metadata.priority | format("{:?}") | lower }}">
+                        {{ message.metadata.priority | format("{:?}") }}
+                    </span>
+                    <small class="text-muted">{{ message.created_at | relative_time }}</small>
+                </div>
+            </div>
+            <div class="message-content">
+                {% if message.content.len() > 200 %}
+                {{ message.content | truncate(200) }}...
+                {% else %}
+                {{ message.content }}
+                {% endif %}
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+</div>
+{% endif %}
+
+<div class="card">
+    <h3>Actions</h3>
+    <div style="display: flex; gap: 10px; flex-wrap: wrap;">
+        <a href="/agents" class="btn btn-secondary">← Back to Agents</a>
+        {% if agent.status == vibe_ensemble_core::agent::AgentStatus::Online %}
+        <button class="btn btn-primary" onclick="sendTestMessage('{{ agent.id }}')">Send Test Message</button>
+        {% endif %}
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_head %}
+<style>
+    .status-coordinator { background-color: #e3f2fd; color: #1976d2; }
+    .status-worker { background-color: #f3e5f5; color: #7b1fa2; }
+    .capability-tag {
+        background: var(--primary-color);
+        color: white;
+        padding: 6px 12px;
+        border-radius: var(--border-radius);
+        font-size: 0.875rem;
+        font-weight: 500;
+    }
+    .message-type {
+        background: var(--info-color);
+        color: white;
+        padding: 2px 6px;
+        border-radius: 3px;
+        font-size: 0.75rem;
+        font-weight: 600;
+    }
+    .message-item:hover {
+        background-color: var(--gray-50);
+    }
+    .text-muted { color: var(--gray-600); }
+</style>
+{% endblock %}
+
+{% block extra_script %}
+function sendTestMessage(agentId) {
+    fetch('/api/messages', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+            recipient_id: agentId,
+            message_type: 'DirectMessage',
+            content: 'Test message from web dashboard',
+            priority: 'Normal'
+        })
+    })
+    .then(response => response.json())
+    .then(data => {
+        alert('Test message sent successfully!');
+    })
+    .catch(error => {
+        console.error('Error sending message:', error);
+        alert('Failed to send test message');
+    });
+}
+{% endblock %}
