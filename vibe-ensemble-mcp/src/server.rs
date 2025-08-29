@@ -22,7 +22,6 @@ use crate::{
     },
     Error, Result,
 };
-use humantime;
 use std::collections::HashMap;
 use std::sync::Arc;
 use tokio::sync::RwLock;
@@ -790,6 +789,14 @@ impl McpServer {
             } else {
                 rest.replace('/', "_")
             };
+            if (rest.starts_with("agent/") || rest.starts_with("issue/")) && operation.is_empty() {
+                return Err(Error::InvalidParams {
+                    message: format!(
+                        "Missing operation in tool name '{}'; expected vibe/agent/<op> or vibe/issue/<op>",
+                        tool_name
+                    ),
+                });
+            }
             let vibe_params = VibeOperationParams {
                 operation,
                 params: arguments,

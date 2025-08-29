@@ -425,50 +425,7 @@ mod tests {
     /// Test agent status reporting functionality
     #[tokio::test]
     async fn test_agent_status_reporting() {
-        use crate::server::CoordinationServices;
-        use std::sync::Arc;
-        use vibe_ensemble_storage::{
-            repositories::{
-                AgentRepository, IssueRepository, KnowledgeRepository, MessageRepository,
-            },
-            services::{
-                AgentService, CoordinationService, IssueService, KnowledgeService, MessageService,
-            },
-        };
-
-        // Create in-memory database for testing
-        let pool = sqlx::sqlite::SqlitePoolOptions::new()
-            .max_connections(1)
-            .connect("sqlite::memory:")
-            .await
-            .unwrap();
-        vibe_ensemble_storage::migrations::run_migrations(&pool)
-            .await
-            .unwrap();
-
-        let agent_repo = Arc::new(AgentRepository::new(pool.clone()));
-        let issue_repo = Arc::new(IssueRepository::new(pool.clone()));
-        let message_repo = Arc::new(MessageRepository::new(pool.clone()));
-        let knowledge_repo = Arc::new(KnowledgeRepository::new(pool));
-
-        let agent_service = Arc::new(AgentService::new(agent_repo.clone()));
-        let issue_service = Arc::new(IssueService::new(issue_repo.clone()));
-        let message_service = Arc::new(MessageService::new(message_repo.clone()));
-        let knowledge_service = Arc::new(KnowledgeService::new((*knowledge_repo).clone()));
-        let coordination_service = Arc::new(CoordinationService::new(
-            agent_repo,
-            issue_repo,
-            message_repo,
-        ));
-
-        let coordination_services = CoordinationServices::new(
-            agent_service,
-            issue_service,
-            message_service,
-            coordination_service,
-            knowledge_service,
-        );
-        let server = McpServer::with_coordination(coordination_services);
+        let (server, _agent_repo) = setup_coordination_server().await;
 
         // Test status query (no parameters)
         let status_request = JsonRpcRequest::new(methods::AGENT_STATUS, None);
@@ -504,51 +461,8 @@ mod tests {
     /// Test agent list functionality with various filters
     #[tokio::test]
     async fn test_agent_list_filtering() {
-        use crate::server::CoordinationServices;
-        use std::sync::Arc;
         use vibe_ensemble_core::agent::{Agent, AgentType, ConnectionMetadata};
-        use vibe_ensemble_storage::{
-            repositories::{
-                AgentRepository, IssueRepository, KnowledgeRepository, MessageRepository,
-            },
-            services::{
-                AgentService, CoordinationService, IssueService, KnowledgeService, MessageService,
-            },
-        };
-
-        // Create in-memory database and add test agents
-        let pool = sqlx::sqlite::SqlitePoolOptions::new()
-            .max_connections(1)
-            .connect("sqlite::memory:")
-            .await
-            .unwrap();
-        vibe_ensemble_storage::migrations::run_migrations(&pool)
-            .await
-            .unwrap();
-
-        let agent_repo = Arc::new(AgentRepository::new(pool.clone()));
-        let issue_repo = Arc::new(IssueRepository::new(pool.clone()));
-        let message_repo = Arc::new(MessageRepository::new(pool.clone()));
-        let knowledge_repo = Arc::new(KnowledgeRepository::new(pool));
-
-        let agent_service = Arc::new(AgentService::new(agent_repo.clone()));
-        let issue_service = Arc::new(IssueService::new(issue_repo.clone()));
-        let message_service = Arc::new(MessageService::new(message_repo.clone()));
-        let knowledge_service = Arc::new(KnowledgeService::new((*knowledge_repo).clone()));
-        let coordination_service = Arc::new(CoordinationService::new(
-            agent_repo.clone(),
-            issue_repo,
-            message_repo,
-        ));
-
-        let coordination_services = CoordinationServices::new(
-            agent_service.clone(),
-            issue_service,
-            message_service,
-            coordination_service,
-            knowledge_service,
-        );
-        let server = McpServer::with_coordination(coordination_services);
+        let (server, agent_repo) = setup_coordination_server().await;
 
         // Create test agents
         let test_agent1 = Agent::new(
@@ -744,50 +658,7 @@ mod tests {
     /// Test error handling for invalid agent management requests
     #[tokio::test]
     async fn test_agent_management_error_handling() {
-        use crate::server::CoordinationServices;
-        use std::sync::Arc;
-        use vibe_ensemble_storage::{
-            repositories::{
-                AgentRepository, IssueRepository, KnowledgeRepository, MessageRepository,
-            },
-            services::{
-                AgentService, CoordinationService, IssueService, KnowledgeService, MessageService,
-            },
-        };
-
-        // Create in-memory database for testing
-        let pool = sqlx::sqlite::SqlitePoolOptions::new()
-            .max_connections(1)
-            .connect("sqlite::memory:")
-            .await
-            .unwrap();
-        vibe_ensemble_storage::migrations::run_migrations(&pool)
-            .await
-            .unwrap();
-
-        let agent_repo = Arc::new(AgentRepository::new(pool.clone()));
-        let issue_repo = Arc::new(IssueRepository::new(pool.clone()));
-        let message_repo = Arc::new(MessageRepository::new(pool.clone()));
-        let knowledge_repo = Arc::new(KnowledgeRepository::new(pool));
-
-        let agent_service = Arc::new(AgentService::new(agent_repo.clone()));
-        let issue_service = Arc::new(IssueService::new(issue_repo.clone()));
-        let message_service = Arc::new(MessageService::new(message_repo.clone()));
-        let knowledge_service = Arc::new(KnowledgeService::new((*knowledge_repo).clone()));
-        let coordination_service = Arc::new(CoordinationService::new(
-            agent_repo,
-            issue_repo,
-            message_repo,
-        ));
-
-        let coordination_services = CoordinationServices::new(
-            agent_service,
-            issue_service,
-            message_service,
-            coordination_service,
-            knowledge_service,
-        );
-        let server = McpServer::with_coordination(coordination_services);
+        let (server, _agent_repo) = setup_coordination_server().await;
 
         // Test agent status with invalid agent ID
         let invalid_status_params = json!({
@@ -842,50 +713,7 @@ mod tests {
     /// Test comprehensive agent lifecycle through MCP tools
     #[tokio::test]
     async fn test_complete_agent_lifecycle() {
-        use crate::server::CoordinationServices;
-        use std::sync::Arc;
-        use vibe_ensemble_storage::{
-            repositories::{
-                AgentRepository, IssueRepository, KnowledgeRepository, MessageRepository,
-            },
-            services::{
-                AgentService, CoordinationService, IssueService, KnowledgeService, MessageService,
-            },
-        };
-
-        // Create in-memory database for testing
-        let pool = sqlx::sqlite::SqlitePoolOptions::new()
-            .max_connections(1)
-            .connect("sqlite::memory:")
-            .await
-            .unwrap();
-        vibe_ensemble_storage::migrations::run_migrations(&pool)
-            .await
-            .unwrap();
-
-        let agent_repo = Arc::new(AgentRepository::new(pool.clone()));
-        let issue_repo = Arc::new(IssueRepository::new(pool.clone()));
-        let message_repo = Arc::new(MessageRepository::new(pool.clone()));
-        let knowledge_repo = Arc::new(KnowledgeRepository::new(pool));
-
-        let agent_service = Arc::new(AgentService::new(agent_repo.clone()));
-        let issue_service = Arc::new(IssueService::new(issue_repo.clone()));
-        let message_service = Arc::new(MessageService::new(message_repo.clone()));
-        let knowledge_service = Arc::new(KnowledgeService::new((*knowledge_repo).clone()));
-        let coordination_service = Arc::new(CoordinationService::new(
-            agent_repo,
-            issue_repo,
-            message_repo,
-        ));
-
-        let coordination_services = CoordinationServices::new(
-            agent_service,
-            issue_service,
-            message_service,
-            coordination_service,
-            knowledge_service,
-        );
-        let server = McpServer::with_coordination(coordination_services);
+        let (server, _agent_repo) = setup_coordination_server().await;
 
         // 1. Register agent
         let register_params = json!({
