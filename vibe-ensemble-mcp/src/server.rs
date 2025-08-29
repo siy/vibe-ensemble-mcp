@@ -762,13 +762,41 @@ impl McpServer {
                     "description": "Create a git worktree for parallel agent development",
                     "inputSchema": {
                         "type": "object",
+                        "additionalProperties": false,
                         "properties": {
-                            "name": {"type": "string", "description": "Name for the worktree (used in path)"},
-                            "mainRepoPath": {"type": "string", "description": "Path to the main repository"},
-                            "branchName": {"type": "string", "description": "Branch name for the worktree"},
-                            "createBranch": {"type": "boolean", "description": "Whether to create a new branch"},
-                            "baseBranch": {"type": "string", "description": "Base branch to create from (optional)"},
-                            "agentId": {"type": "string", "description": "Agent to assign to this worktree (optional)"}
+                            "name": {
+                                "type": "string",
+                                "pattern": "^[A-Za-z0-9._-]{1,64}$",
+                                "maxLength": 64,
+                                "description": "Name for the worktree (used in path)"
+                            },
+                            "mainRepoPath": {
+                                "type": "string",
+                                "minLength": 1,
+                                "description": "Path to the main repository"
+                            },
+                            "branchName": {
+                                "type": "string",
+                                "pattern": "^[A-Za-z0-9._/-]{1,128}$",
+                                "maxLength": 128,
+                                "description": "Branch name for the worktree"
+                            },
+                            "createBranch": {
+                                "type": "boolean",
+                                "description": "Whether to create a new branch"
+                            },
+                            "baseBranch": {
+                                "type": "string",
+                                "pattern": "^[A-Za-z0-9._/-]{1,128}$",
+                                "maxLength": 128,
+                                "description": "Base branch to create from (optional)"
+                            },
+                            "agentId": {
+                                "type": "string",
+                                "minLength": 1,
+                                "maxLength": 256,
+                                "description": "Agent to assign to this worktree (optional)"
+                            }
                         },
                         "required": ["name", "mainRepoPath", "branchName", "createBranch"]
                     }
@@ -778,9 +806,18 @@ impl McpServer {
                     "description": "List all active git worktrees and their status",
                     "inputSchema": {
                         "type": "object",
+                        "additionalProperties": false,
                         "properties": {
-                            "agentId": {"type": "string", "description": "Filter by agent ID (optional)"},
-                            "includeInactive": {"type": "boolean", "description": "Include inactive worktrees"}
+                            "agentId": {
+                                "type": "string",
+                                "minLength": 1,
+                                "maxLength": 256,
+                                "description": "Filter by agent ID (optional)"
+                            },
+                            "includeInactive": {
+                                "type": "boolean",
+                                "description": "Include inactive worktrees"
+                            }
                         }
                     }
                 },
@@ -789,9 +826,19 @@ impl McpServer {
                     "description": "Assign an agent to a specific worktree",
                     "inputSchema": {
                         "type": "object",
+                        "additionalProperties": false,
                         "properties": {
-                            "agentId": {"type": "string", "description": "Agent ID to assign"},
-                            "worktreePath": {"type": "string", "description": "Path to the worktree"}
+                            "agentId": {
+                                "type": "string",
+                                "minLength": 1,
+                                "maxLength": 256,
+                                "description": "Agent ID to assign"
+                            },
+                            "worktreePath": {
+                                "type": "string",
+                                "minLength": 1,
+                                "description": "Path to the worktree"
+                            }
                         },
                         "required": ["agentId", "worktreePath"]
                     }
@@ -801,8 +848,13 @@ impl McpServer {
                     "description": "Get status and information about a worktree",
                     "inputSchema": {
                         "type": "object",
+                        "additionalProperties": false,
                         "properties": {
-                            "worktreePath": {"type": "string", "description": "Path to the worktree"}
+                            "worktreePath": {
+                                "type": "string",
+                                "minLength": 1,
+                                "description": "Path to the worktree"
+                            }
                         },
                         "required": ["worktreePath"]
                     }
@@ -812,10 +864,23 @@ impl McpServer {
                     "description": "Remove inactive worktrees and clean up resources",
                     "inputSchema": {
                         "type": "object",
+                        "additionalProperties": false,
                         "properties": {
-                            "inactiveThresholdHours": {"type": "number", "description": "Hours of inactivity before cleanup (default: 24)"},
-                            "forceCleanup": {"type": "boolean", "description": "Force cleanup even if recently used"},
-                            "specificPath": {"type": "string", "description": "Clean up specific worktree path (optional)"}
+                            "inactiveThresholdHours": {
+                                "type": "number",
+                                "minimum": 0,
+                                "maximum": 168,
+                                "description": "Hours of inactivity before cleanup (default: 24)"
+                            },
+                            "forceCleanup": {
+                                "type": "boolean",
+                                "description": "Force cleanup even if recently used"
+                            },
+                            "specificPath": {
+                                "type": "string",
+                                "minLength": 1,
+                                "description": "Clean up specific worktree path (optional)"
+                            }
                         }
                     }
                 }
@@ -6184,11 +6249,27 @@ impl McpServer {
                     .ok_or_else(|| Error::InvalidParams {
                         message: "Missing 'name' parameter".to_string(),
                     })?;
-                let main_repo_path =
+
+                // Validate workspace name to prevent path abuse
+                if name.contains('/') || name.contains('\\') || name.contains("..") {
+                    return Err(Error::InvalidParams {
+                        message: "Workspace name cannot contain path separators or relative path components".to_string(),
+                    });
+                }
+
+                let main_repo_path_str =
                     arguments["mainRepoPath"]
                         .as_str()
                         .ok_or_else(|| Error::InvalidParams {
                             message: "Missing 'mainRepoPath' parameter".to_string(),
+                        })?;
+
+                // Canonicalize main_repo_path to prevent path abuse
+                let main_repo_path =
+                    tokio::fs::canonicalize(main_repo_path_str)
+                        .await
+                        .map_err(|e| Error::InvalidParams {
+                            message: format!("Invalid mainRepoPath - must exist: {e}"),
                         })?;
                 let branch_name =
                     arguments["branchName"]
@@ -6207,82 +6288,62 @@ impl McpServer {
 
                 let config =
                     vibe_ensemble_core::orchestration::workspace_manager::GitWorktreeConfig {
-                        main_repo_path: std::path::PathBuf::from(main_repo_path),
+                        main_repo_path,
                         branch_name: branch_name.to_string(),
                         create_branch,
                         base_branch,
                     };
 
-                match workspace_manager
+                let worktree_info = workspace_manager
                     .create_worktree(name, &config, agent_id)
-                    .await
-                {
-                    Ok(worktree_info) => {
-                        let result = serde_json::json!({
-                            "success": true,
-                            "worktree": {
-                                "path": worktree_info.path.display().to_string(),
-                                "branch": worktree_info.branch,
-                                "agentId": worktree_info.agent_id,
-                                "createdAt": worktree_info.created_at.to_rfc3339(),
-                                "isActive": worktree_info.is_active
-                            }
-                        });
-                        Ok(Some(JsonRpcResponse::success(request.id.clone(), result)))
+                    .await?;
+
+                let result = serde_json::json!({
+                    "success": true,
+                    "worktree": {
+                        "path": worktree_info.path.display().to_string(),
+                        "branch": worktree_info.branch,
+                        "agentId": worktree_info.agent_id,
+                        "createdAt": worktree_info.created_at.to_rfc3339(),
+                        "isActive": worktree_info.is_active
                     }
-                    Err(e) => {
-                        let result = serde_json::json!({
-                            "success": false,
-                            "error": e.to_string()
-                        });
-                        Ok(Some(JsonRpcResponse::success(request.id.clone(), result)))
-                    }
-                }
+                });
+                Ok(Some(JsonRpcResponse::success(request.id.clone(), result)))
             }
             "list" => {
                 let agent_id = arguments["agentId"].as_str();
                 let include_inactive = arguments["includeInactive"].as_bool().unwrap_or(false);
 
-                match workspace_manager.list_worktrees().await {
-                    Ok(worktrees) => {
-                        let filtered_worktrees: Vec<_> = worktrees
-                            .into_iter()
-                            .filter(|w| {
-                                if !include_inactive && !w.is_active {
-                                    return false;
-                                }
-                                if let Some(filter_agent) = agent_id {
-                                    w.agent_id.as_ref().is_some_and(|id| id == filter_agent)
-                                } else {
-                                    true
-                                }
-                            })
-                            .map(|w| {
-                                serde_json::json!({
-                                    "path": w.path.display().to_string(),
-                                    "branch": w.branch,
-                                    "agentId": w.agent_id,
-                                    "createdAt": w.created_at.to_rfc3339(),
-                                    "lastUsedAt": w.last_used_at.to_rfc3339(),
-                                    "isActive": w.is_active
-                                })
-                            })
-                            .collect();
+                let worktrees = workspace_manager.list_worktrees().await?;
+                let filtered_worktrees: Vec<_> = worktrees
+                    .into_iter()
+                    .filter(|w| {
+                        if !include_inactive && !w.is_active {
+                            return false;
+                        }
+                        if let Some(filter_agent) = agent_id {
+                            w.agent_id.as_ref().is_some_and(|id| id == filter_agent)
+                        } else {
+                            true
+                        }
+                    })
+                    .map(|w| {
+                        serde_json::json!({
+                            "path": w.path.display().to_string(),
+                            "branch": w.branch,
+                            "agentId": w.agent_id,
+                            "createdAt": w.created_at.to_rfc3339(),
+                            "lastUsedAt": w.last_used_at.to_rfc3339(),
+                            "isActive": w.is_active
+                        })
+                    })
+                    .collect();
 
-                        let result = serde_json::json!({
-                            "success": true,
-                            "worktrees": filtered_worktrees
-                        });
-                        Ok(Some(JsonRpcResponse::success(request.id.clone(), result)))
-                    }
-                    Err(e) => {
-                        let result = serde_json::json!({
-                            "success": false,
-                            "error": e.to_string()
-                        });
-                        Ok(Some(JsonRpcResponse::success(request.id.clone(), result)))
-                    }
-                }
+                let result = serde_json::json!({
+                    "success": true,
+                    "worktrees": filtered_worktrees
+                });
+                Ok(Some(JsonRpcResponse::success(request.id.clone(), result)))
             }
             "assign" => {
                 let agent_id =
@@ -6298,25 +6359,15 @@ impl McpServer {
                             message: "Missing 'worktreePath' parameter".to_string(),
                         })?;
 
-                match workspace_manager
+                workspace_manager
                     .assign_agent_to_worktree(agent_id, std::path::Path::new(worktree_path))
-                    .await
-                {
-                    Ok(()) => {
-                        let result = serde_json::json!({
-                            "success": true,
-                            "message": format!("Agent {} assigned to worktree {}", agent_id, worktree_path)
-                        });
-                        Ok(Some(JsonRpcResponse::success(request.id.clone(), result)))
-                    }
-                    Err(e) => {
-                        let result = serde_json::json!({
-                            "success": false,
-                            "error": e.to_string()
-                        });
-                        Ok(Some(JsonRpcResponse::success(request.id.clone(), result)))
-                    }
-                }
+                    .await?;
+
+                let result = serde_json::json!({
+                    "success": true,
+                    "message": format!("Agent {} assigned to worktree {}", agent_id, worktree_path)
+                });
+                Ok(Some(JsonRpcResponse::success(request.id.clone(), result)))
             }
             "status" => {
                 let worktree_path =
@@ -6326,84 +6377,64 @@ impl McpServer {
                             message: "Missing 'worktreePath' parameter".to_string(),
                         })?;
 
-                match workspace_manager
+                let worktree_info = workspace_manager
                     .get_worktree(std::path::Path::new(worktree_path))
-                    .await
-                {
-                    Ok(worktree_info) => {
-                        let result = serde_json::json!({
-                            "success": true,
-                            "worktree": {
-                                "path": worktree_info.path.display().to_string(),
-                                "branch": worktree_info.branch,
-                                "agentId": worktree_info.agent_id,
-                                "createdAt": worktree_info.created_at.to_rfc3339(),
-                                "lastUsedAt": worktree_info.last_used_at.to_rfc3339(),
-                                "isActive": worktree_info.is_active
-                            }
-                        });
-                        Ok(Some(JsonRpcResponse::success(request.id.clone(), result)))
+                    .await?;
+
+                let result = serde_json::json!({
+                    "success": true,
+                    "worktree": {
+                        "path": worktree_info.path.display().to_string(),
+                        "branch": worktree_info.branch,
+                        "agentId": worktree_info.agent_id,
+                        "createdAt": worktree_info.created_at.to_rfc3339(),
+                        "lastUsedAt": worktree_info.last_used_at.to_rfc3339(),
+                        "isActive": worktree_info.is_active
                     }
-                    Err(e) => {
-                        let result = serde_json::json!({
-                            "success": false,
-                            "error": e.to_string()
-                        });
-                        Ok(Some(JsonRpcResponse::success(request.id.clone(), result)))
-                    }
-                }
+                });
+                Ok(Some(JsonRpcResponse::success(request.id.clone(), result)))
             }
             "cleanup" => {
-                let inactive_threshold_hours =
-                    arguments["inactiveThresholdHours"].as_f64().unwrap_or(24.0);
-                let _force_cleanup = arguments["forceCleanup"].as_bool().unwrap_or(false);
+                let inactive_threshold_hours = arguments["inactiveThresholdHours"]
+                    .as_f64()
+                    .unwrap_or(24.0)
+                    .max(0.0); // Clamp to non-negative
+
+                let force_cleanup = arguments["forceCleanup"].as_bool().unwrap_or(false);
                 let specific_path = arguments["specificPath"].as_str();
 
                 if let Some(path) = specific_path {
                     // Clean up specific worktree
-                    match workspace_manager
+                    workspace_manager
                         .remove_worktree(std::path::Path::new(path))
-                        .await
-                    {
-                        Ok(()) => {
-                            let result = serde_json::json!({
-                                "success": true,
-                                "message": format!("Worktree {} removed successfully", path),
-                                "cleanedPaths": [path]
-                            });
-                            Ok(Some(JsonRpcResponse::success(request.id.clone(), result)))
-                        }
-                        Err(e) => {
-                            let result = serde_json::json!({
-                                "success": false,
-                                "error": e.to_string()
-                            });
-                            Ok(Some(JsonRpcResponse::success(request.id.clone(), result)))
-                        }
-                    }
+                        .await?;
+
+                    let result = serde_json::json!({
+                        "success": true,
+                        "message": format!("Worktree {} removed successfully", path),
+                        "cleanedPaths": [path]
+                    });
+                    Ok(Some(JsonRpcResponse::success(request.id.clone(), result)))
                 } else {
                     // Clean up inactive worktrees
-                    let threshold = chrono::Duration::hours(inactive_threshold_hours as i64);
-                    match workspace_manager
+                    let threshold = if force_cleanup {
+                        chrono::Duration::zero()
+                    } else {
+                        // Convert hours to minutes for precision, then to chrono Duration
+                        let threshold_minutes = (inactive_threshold_hours * 60.0).round() as i64;
+                        chrono::Duration::minutes(threshold_minutes)
+                    };
+
+                    let cleaned_paths = workspace_manager
                         .cleanup_inactive_worktrees(threshold)
-                        .await
-                    {
-                        Ok(cleaned_paths) => {
-                            let result = serde_json::json!({
-                                "success": true,
-                                "message": format!("Cleaned up {} inactive worktrees", cleaned_paths.len()),
-                                "cleanedPaths": cleaned_paths
-                            });
-                            Ok(Some(JsonRpcResponse::success(request.id.clone(), result)))
-                        }
-                        Err(e) => {
-                            let result = serde_json::json!({
-                                "success": false,
-                                "error": e.to_string()
-                            });
-                            Ok(Some(JsonRpcResponse::success(request.id.clone(), result)))
-                        }
-                    }
+                        .await?;
+
+                    let result = serde_json::json!({
+                        "success": true,
+                        "message": format!("Cleaned up {} inactive worktrees", cleaned_paths.len()),
+                        "cleanedPaths": cleaned_paths
+                    });
+                    Ok(Some(JsonRpcResponse::success(request.id.clone(), result)))
                 }
             }
             _ => Ok(Some(JsonRpcResponse::error(

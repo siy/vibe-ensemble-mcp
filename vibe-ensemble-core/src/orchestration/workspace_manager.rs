@@ -110,17 +110,6 @@ pub struct WorkspaceRegistry {
     pub updated_at: chrono::DateTime<chrono::Utc>,
 }
 
-/// Git worktree registry for tracking parallel development environments
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct GitWorktreeRegistry {
-    /// Map of worktree path to worktree info
-    pub worktrees: HashMap<String, GitWorktreeInfo>,
-    /// Agent assignments to worktrees
-    pub agent_assignments: HashMap<String, String>, // agent_id -> worktree_path
-    /// Last updated timestamp
-    pub updated_at: chrono::DateTime<chrono::Utc>,
-}
-
 impl Default for WorkspaceConfig {
     fn default() -> Self {
         Self {
@@ -138,16 +127,6 @@ impl Default for WorkspaceRegistry {
         Self {
             workspaces: HashMap::new(),
             worktrees: HashMap::new(),
-            updated_at: chrono::Utc::now(),
-        }
-    }
-}
-
-impl Default for GitWorktreeRegistry {
-    fn default() -> Self {
-        Self {
-            worktrees: HashMap::new(),
-            agent_assignments: HashMap::new(),
             updated_at: chrono::Utc::now(),
         }
     }
@@ -394,15 +373,33 @@ impl WorkspaceManager {
         // Validate worktree name
         self.validate_workspace_name(name)?;
 
-        let worktree_path = config
-            .main_repo_path
-            .parent()
-            .unwrap_or(&config.main_repo_path)
-            .join(format!(
-                "{}-worktree-{}",
-                config.main_repo_path.file_name().unwrap().to_string_lossy(),
-                name
-            ));
+        // Canonicalize repo path and build a manager-scoped worktree path:
+        let repo_path = tokio::fs::canonicalize(&config.main_repo_path)
+            .await
+            .map_err(|e| Error::Validation {
+                message: format!("main_repo_path must exist: {e}"),
+            })?;
+        let repo_name = repo_path
+            .file_name()
+            .ok_or_else(|| Error::Validation {
+                message: "main_repo_path must not be filesystem root".into(),
+            })?
+            .to_string_lossy()
+            .to_string();
+        let worktree_path = self
+            .workspaces_directory
+            .join("worktrees")
+            .join(&repo_name)
+            .join(name);
+
+        // Create parent directories
+        if let Some(parent) = worktree_path.parent() {
+            tokio::fs::create_dir_all(parent)
+                .await
+                .map_err(|e| Error::Execution {
+                    message: format!("Failed to create worktree parent directories: {e}"),
+                })?;
+        }
 
         // Check if worktree already exists
         if worktree_path.exists() {
@@ -434,9 +431,15 @@ impl WorkspaceManager {
             cmd.arg(&config.branch_name);
         }
 
-        let output = cmd.output().await.map_err(|e| Error::Execution {
-            message: format!("Failed to execute git worktree add: {}", e),
-        })?;
+        use std::time::Duration;
+        let output = tokio::time::timeout(Duration::from_secs(30), cmd.output())
+            .await
+            .map_err(|_| Error::Execution {
+                message: "Timed out executing git worktree add".into(),
+            })?
+            .map_err(|e| Error::Execution {
+                message: format!("Failed to execute git worktree add: {}", e),
+            })?;
 
         if !output.status.success() {
             let stderr = String::from_utf8_lossy(&output.stderr);
@@ -471,7 +474,10 @@ impl WorkspaceManager {
     /// Get worktree information by path
     pub async fn get_worktree(&self, worktree_path: &Path) -> Result<GitWorktreeInfo> {
         let registry = self.load_registry().await?;
-        let path_key = worktree_path.display().to_string();
+        let canonical = tokio::fs::canonicalize(worktree_path)
+            .await
+            .unwrap_or_else(|_| worktree_path.to_path_buf());
+        let path_key = canonical.display().to_string();
 
         registry
             .worktrees
@@ -521,14 +527,23 @@ impl WorkspaceManager {
             .arg(worktree_path)
             .arg("--force");
 
-        let output = cmd.output().await.map_err(|e| Error::Execution {
-            message: format!("Failed to execute git worktree remove: {}", e),
-        })?;
+        use std::time::Duration;
+        let output = tokio::time::timeout(Duration::from_secs(15), cmd.output())
+            .await
+            .map_err(|_| Error::Execution {
+                message: "Timed out executing git worktree remove".into(),
+            })?
+            .map_err(|e| Error::Execution {
+                message: format!("Failed to execute git worktree remove: {}", e),
+            })?;
 
         if !output.status.success() {
             let stderr = String::from_utf8_lossy(&output.stderr);
-            // Continue with registry cleanup even if git command fails
-            warn!("Git worktree remove failed: {}", stderr);
+            warn!(
+                "Git worktree remove failed (code {:?}): {}",
+                output.status.code(),
+                stderr
+            );
         }
 
         // Remove from registry
@@ -585,7 +600,10 @@ impl WorkspaceManager {
         _agent_id: Option<&str>,
     ) -> Result<()> {
         let mut registry = self.load_registry().await?;
-        let path_key = worktree_info.path.display().to_string();
+        let canonical = tokio::fs::canonicalize(&worktree_info.path)
+            .await
+            .unwrap_or_else(|_| worktree_info.path.clone());
+        let path_key = canonical.display().to_string();
 
         registry.worktrees.insert(path_key, worktree_info.clone());
         registry.updated_at = chrono::Utc::now();
@@ -763,9 +781,15 @@ impl WorkspaceManager {
             cmd.arg("--branch").arg(branch);
         }
 
-        let output = cmd.output().await.map_err(|e| Error::Execution {
-            message: format!("Failed to execute git clone: {}", e),
-        })?;
+        use std::time::Duration;
+        let output = tokio::time::timeout(Duration::from_secs(60), cmd.output()) // Clone can take longer
+            .await
+            .map_err(|_| Error::Execution {
+                message: "Timed out executing git clone".into(),
+            })?
+            .map_err(|e| Error::Execution {
+                message: format!("Failed to execute git clone: {}", e),
+            })?;
 
         if !output.status.success() {
             let stderr = String::from_utf8_lossy(&output.stderr);
