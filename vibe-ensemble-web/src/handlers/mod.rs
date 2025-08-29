@@ -63,16 +63,18 @@ pub async fn messages_page(
         .count();
 
     // Count by type and priority
-    let mut type_counts = std::collections::HashMap::new();
-    let mut priority_counts = std::collections::HashMap::new();
-    let mut delivery_stats = (0, 0);
+    let mut type_counts: std::collections::HashMap<String, usize> =
+        std::collections::HashMap::new();
+    let mut priority_counts: std::collections::HashMap<String, usize> =
+        std::collections::HashMap::new();
+    let mut delivery_stats: (usize, usize) = (0usize, 0usize);
 
     for message in &messages {
         let msg_type = format!("{:?}", message.message_type);
-        *type_counts.entry(msg_type).or_insert(0) += 1;
+        *type_counts.entry(msg_type).or_insert(0usize) += 1usize;
 
         let priority = format!("{:?}", message.metadata.priority);
-        *priority_counts.entry(priority).or_insert(0) += 1;
+        *priority_counts.entry(priority).or_insert(0usize) += 1usize;
 
         if message.is_delivered() {
             delivery_stats.0 += 1;
@@ -758,9 +760,11 @@ pub async fn messages_by_correlation(
     State(storage): State<Arc<StorageManager>>,
     Path(correlation_id): Path<Uuid>,
 ) -> Result<impl IntoResponse> {
+    // Fetch a larger window to reduce risk of missing thread messages
+    // TODO: Add find_by_correlation_id method to storage layer for better performance
     let messages = storage
         .messages()
-        .list_recent(500)
+        .list_recent(5000)
         .await
         .map_err(crate::Error::Storage)?;
 

@@ -289,10 +289,14 @@ function updateLinkRow(row, status, responseTime, statusCode, errorMessage) {
 }
 
 function updateStatistics(summary) {
-    document.getElementById('total-links').textContent = summary.total;
-    document.getElementById('healthy-links').textContent = summary.healthy;
-    document.getElementById('broken-links').textContent = summary.broken;
-    document.getElementById('warning-links').textContent = summary.warning;
+    const total = (summary.total ?? summary.total_links) ?? 0;
+    const healthy = (summary.healthy ?? summary.healthy_links) ?? 0;
+    const broken = (summary.broken ?? summary.broken_links) ?? 0;
+    const warning = (summary.warning ?? summary.warning_links) ?? 0;
+    document.getElementById('total-links').textContent = total;
+    document.getElementById('healthy-links').textContent = healthy;
+    document.getElementById('broken-links').textContent = broken;
+    document.getElementById('warning-links').textContent = warning;
 }
 
 // Auto-refresh statistics every 30 seconds

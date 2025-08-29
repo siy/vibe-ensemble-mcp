@@ -96,7 +96,9 @@ pub async fn link_status_details(
     Query(query): Query<LinkValidationQuery>,
 ) -> Result<impl IntoResponse> {
     let link_validator = LinkValidator::new();
-    let timeout = Duration::from_secs(query.timeout.unwrap_or(5));
+    // Clamp timeout between 1 and 30 seconds to prevent unbounded durations
+    let timeout_secs = query.timeout.unwrap_or(5).clamp(1, 30);
+    let timeout = Duration::from_secs(timeout_secs);
 
     let discovered_links = link_validator.discover_application_links().await;
     let mut link_statuses = Vec::new();
@@ -128,7 +130,10 @@ pub async fn validate_links(
     let mut broken_count = 0;
     let mut warning_count = 0;
 
-    for url in discovered_links.iter() {
+    for url in discovered_links
+        .iter()
+        .filter(|u| !u.ends_with("/api/links/validate"))
+    {
         let status = link_validator.validate_link(url, timeout).await;
 
         match status.status.as_str() {
@@ -143,7 +148,6 @@ pub async fn validate_links(
 
     Ok(Json(json!({
         "status": "completed",
-        "results": results,
         "validation_results": results,
         "summary": {
             "total": discovered_links.len(),

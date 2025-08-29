@@ -282,33 +282,73 @@ impl LinkValidator {
         let start_time = Instant::now();
 
         match link_type {
-            LinkType::Api => match self.client.get(&full_url).send().await {
-                Ok(response) => {
-                    let response_time = start_time.elapsed();
-                    let status_code = response.status().as_u16();
-
-                    let status = if response.status().is_success() {
-                        LinkStatus::Healthy
-                    } else if response.status().is_client_error()
-                        || response.status().is_server_error()
+            LinkType::Api => {
+                // Prefer HEAD to avoid side effects; fallback to GET on 405
+                match self.client.head(&full_url).send().await {
+                    Ok(response)
+                        if response.status() == reqwest::StatusCode::METHOD_NOT_ALLOWED =>
                     {
-                        LinkStatus::Broken
-                    } else {
-                        LinkStatus::Warning
-                    };
+                        // Retry with GET
+                        match self.client.get(&full_url).send().await {
+                            Ok(response) => {
+                                let response_time = start_time.elapsed();
+                                let status_code = response.status().as_u16();
 
-                    result.update_result(status, Some(response_time), Some(status_code), None);
+                                let status = if response.status().is_success() {
+                                    LinkStatus::Healthy
+                                } else if response.status().is_client_error()
+                                    || response.status().is_server_error()
+                                {
+                                    LinkStatus::Broken
+                                } else {
+                                    LinkStatus::Warning
+                                };
+
+                                result.update_result(
+                                    status,
+                                    Some(response_time),
+                                    Some(status_code),
+                                    None,
+                                );
+                            }
+                            Err(e) => {
+                                let response_time = start_time.elapsed();
+                                result.update_result(
+                                    LinkStatus::Broken,
+                                    Some(response_time),
+                                    None,
+                                    Some(e.to_string()),
+                                );
+                            }
+                        }
+                    }
+                    Ok(response) => {
+                        let response_time = start_time.elapsed();
+                        let status_code = response.status().as_u16();
+
+                        let status = if response.status().is_success() {
+                            LinkStatus::Healthy
+                        } else if response.status().is_client_error()
+                            || response.status().is_server_error()
+                        {
+                            LinkStatus::Broken
+                        } else {
+                            LinkStatus::Warning
+                        };
+
+                        result.update_result(status, Some(response_time), Some(status_code), None);
+                    }
+                    Err(e) => {
+                        let response_time = start_time.elapsed();
+                        result.update_result(
+                            LinkStatus::Broken,
+                            Some(response_time),
+                            None,
+                            Some(e.to_string()),
+                        );
+                    }
                 }
-                Err(e) => {
-                    let response_time = start_time.elapsed();
-                    result.update_result(
-                        LinkStatus::Broken,
-                        Some(response_time),
-                        None,
-                        Some(e.to_string()),
-                    );
-                }
-            },
+            }
             LinkType::Navigation => {
                 // For navigation links, we'll check if they're handled by our router
                 let status = if self.is_route_registered(url) {
