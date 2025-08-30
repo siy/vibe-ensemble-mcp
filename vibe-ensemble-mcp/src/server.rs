@@ -1187,7 +1187,7 @@ impl McpServer {
                 return Ok(Some(JsonRpcResponse::error(
                     request.id,
                     crate::protocol::JsonRpcError {
-                        code: -32602,
+                        code: crate::protocol::error_codes::INVALID_PARAMS,
                         message: format!("Unknown resource URI: {}", uri),
                         data: None,
                     },

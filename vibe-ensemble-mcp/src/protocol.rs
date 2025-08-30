@@ -66,6 +66,7 @@ pub mod methods {
     pub const LIST_TOOLS: &str = "tools/list";
     pub const CALL_TOOL: &str = "tools/call";
     pub const LIST_RESOURCES: &str = "resources/list";
+    /// Read a single resource identified by its URI.
     pub const READ_RESOURCE: &str = "resources/read";
     pub const LIST_PROMPTS: &str = "prompts/list";
 
