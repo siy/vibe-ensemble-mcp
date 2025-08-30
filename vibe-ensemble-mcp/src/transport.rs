@@ -245,6 +245,19 @@ impl Transport for InMemoryTransport {
     }
 }
 
+/// Connection state for MCP initialization sequencing
+#[derive(Debug, Clone, PartialEq)]
+pub enum ConnectionState {
+    /// Connection is uninitialized
+    Uninitialized,
+    /// Connection is in the process of being initialized
+    Initializing,
+    /// Connection has been successfully initialized
+    Initialized,
+    /// Connection has been closed
+    Closed,
+}
+
 /// Stdio transport implementation for MCP protocol communication over stdin/stdout
 ///
 /// This implementation is optimized for Claude Code compatibility and includes:
@@ -254,10 +267,12 @@ impl Transport for InMemoryTransport {
 /// - Signal handling for graceful shutdown
 /// - Performance-optimized buffering
 /// - Robust error handling and recovery
+/// - Initialization state management with request/response correlation
 pub struct StdioTransport {
     stdin_reader: BufReader<Stdin>,
     stdout_writer: BufWriter<Stdout>,
-    is_closed: bool,
+    connection_state: ConnectionState,
+    last_init_id: Option<Value>,
     read_timeout: Duration,
     write_timeout: Duration,
     #[cfg_attr(not(test), allow(dead_code))]
@@ -280,7 +295,8 @@ impl StdioTransport {
         Self {
             stdin_reader: BufReader::with_capacity(Self::DEFAULT_BUFFER_SIZE, tokio::io::stdin()),
             stdout_writer: BufWriter::with_capacity(Self::DEFAULT_BUFFER_SIZE, tokio::io::stdout()),
-            is_closed: false,
+            connection_state: ConnectionState::Uninitialized,
+            last_init_id: None,
             read_timeout: Self::DEFAULT_READ_TIMEOUT,
             write_timeout: Self::DEFAULT_WRITE_TIMEOUT,
             buffer_size: Self::DEFAULT_BUFFER_SIZE,
@@ -298,11 +314,108 @@ impl StdioTransport {
         Self {
             stdin_reader: BufReader::with_capacity(clamped_buffer_size, tokio::io::stdin()),
             stdout_writer: BufWriter::with_capacity(clamped_buffer_size, tokio::io::stdout()),
-            is_closed: false,
+            connection_state: ConnectionState::Uninitialized,
+            last_init_id: None,
             read_timeout,
             write_timeout,
             buffer_size: clamped_buffer_size,
         }
+    }
+
+    /// Check if a message is an MCP initialize request
+    fn is_initialize_request(message: &str) -> Result<Option<Value>> {
+        let parsed: Value = serde_json::from_str(message)
+            .map_err(|e| Error::Transport(format!("Invalid JSON in message: {}", e)))?;
+
+        if let Value::Object(obj) = &parsed {
+            if obj.get("method").and_then(|v| v.as_str()) == Some("initialize") {
+                return Ok(obj.get("id").cloned());
+            }
+        }
+        Ok(None)
+    }
+
+    /// Check if a message is an MCP initialize response correlating to our request
+    fn is_initialize_response(&self, message: &str) -> Result<bool> {
+        if let Some(expected_id) = &self.last_init_id {
+            let parsed: Value = serde_json::from_str(message)
+                .map_err(|e| Error::Transport(format!("Invalid JSON in message: {}", e)))?;
+
+            if let Value::Object(obj) = &parsed {
+                // Check if this is a response with the expected ID
+                if let Some(response_id) = obj.get("id") {
+                    if response_id == expected_id {
+                        // Check if it's a successful initialize response
+                        if obj.get("result").is_some() {
+                            return Ok(true);
+                        }
+                        // Check if it's an initialize error response
+                        if let Some(error) = obj.get("error") {
+                            warn!("Initialize request failed: {}", error);
+                            return Ok(true); // Still counts as a response
+                        }
+                    }
+                }
+            }
+        }
+        Ok(false)
+    }
+
+    /// Update connection state based on initialization progress
+    async fn update_initialization_state(
+        &mut self,
+        message: &str,
+        is_outgoing: bool,
+    ) -> Result<()> {
+        if is_outgoing {
+            // Check if we're sending an initialize request
+            if let Some(init_id) = Self::is_initialize_request(message)? {
+                match self.connection_state {
+                    ConnectionState::Uninitialized => {
+                        debug!(
+                            "Transitioning to Initializing state with request ID: {:?}",
+                            init_id
+                        );
+                        self.connection_state = ConnectionState::Initializing;
+                        self.last_init_id = Some(init_id);
+                    }
+                    ConnectionState::Initializing => {
+                        warn!(
+                            "Received initialize request while already initializing - updating ID"
+                        );
+                        self.last_init_id = Some(init_id);
+                    }
+                    ConnectionState::Initialized => {
+                        warn!("Received initialize request after initialization complete - reinitializing");
+                        self.connection_state = ConnectionState::Initializing;
+                        self.last_init_id = Some(init_id);
+                    }
+                    ConnectionState::Closed => {
+                        return Err(Error::Transport(
+                            "Cannot initialize a closed connection".to_string(),
+                        ));
+                    }
+                }
+            }
+        } else {
+            // Check if we're receiving an initialize response
+            if self.is_initialize_response(message)? {
+                match &self.connection_state {
+                    ConnectionState::Initializing => {
+                        info!("Initialize response received - connection now initialized");
+                        self.connection_state = ConnectionState::Initialized;
+                        self.last_init_id = None;
+                    }
+                    other_state => {
+                        warn!(
+                            "Received initialize response in unexpected state: {:?}",
+                            other_state
+                        );
+                    }
+                }
+            }
+        }
+        Ok(())
     }
 
     /// Validate that a message is proper JSON-RPC and doesn't contain embedded newlines
@@ -397,12 +510,15 @@ impl Default for StdioTransport {
 #[async_trait::async_trait]
 impl Transport for StdioTransport {
     async fn send(&mut self, message: &str) -> Result<()> {
-        if self.is_closed {
+        if self.connection_state == ConnectionState::Closed {
             return Err(Error::Transport("Stdio transport is closed".to_string()));
         }
 
         // Validate message before sending (Claude Code compatibility)
         Self::validate_message(message)?;
+
+        // Update initialization state based on outgoing message
+        self.update_initialization_state(message, true).await?;
 
         // Create write operation with timeout
         let write_operation = async {
@@ -446,7 +562,7 @@ impl Transport for StdioTransport {
     }
 
     async fn receive(&mut self) -> Result<String> {
-        if self.is_closed {
+        if self.connection_state == ConnectionState::Closed {
             return Err(Error::Transport("Stdio transport is closed".to_string()));
         }
 
@@ -463,7 +579,7 @@ impl Transport for StdioTransport {
                         match result {
                             Ok(0) => {
                                 debug!("Stdin reached EOF - client disconnected");
-                                self.is_closed = true;
+                                self.connection_state = ConnectionState::Closed;
                                 return Err(Error::Connection("Stdin reached EOF".to_string()));
                             }
                             Ok(bytes_read) => {
@@ -491,6 +607,12 @@ impl Transport for StdioTransport {
                                     continue;
                                 }
 
+                                // Update initialization state based on incoming message
+                                if let Err(e) = self.update_initialization_state(&line, false).await {
+                                    warn!("Error updating initialization state: {}", e);
+                                    // Continue processing the message even if state update fails
+                                }
+
                                 debug!("Successfully received valid message: {} bytes", line.len());
                                 return Ok(line);
                             }
@@ -505,7 +627,7 @@ impl Transport for StdioTransport {
                                     }
                                     std::io::ErrorKind::UnexpectedEof => {
                                         info!("Unexpected EOF on stdin");
-                                        self.is_closed = true;
+                                        self.connection_state = ConnectionState::Closed;
                                         return Err(Error::Connection("Unexpected EOF".to_string()));
                                     }
                                     _ => {
@@ -517,7 +639,7 @@ impl Transport for StdioTransport {
                     }
                     _ = Self::check_shutdown_signal() => {
                         info!("Graceful shutdown initiated via signal");
-                        self.is_closed = true;
+                        self.connection_state = ConnectionState::Closed;
                         return Err(Error::Connection("Shutdown signal received".to_string()));
                     }
                 }
@@ -532,7 +654,7 @@ impl Transport for StdioTransport {
     }
 
     async fn close(&mut self) -> Result<()> {
-        if !self.is_closed {
+        if self.connection_state != ConnectionState::Closed {
             info!("Closing stdio transport - flushing buffers");
 
             // Ensure all buffered data is written before closing
@@ -545,7 +667,8 @@ impl Transport for StdioTransport {
                 warn!("Error shutting down stdout during close: {}", e);
             }
 
-            self.is_closed = true;
+            self.connection_state = ConnectionState::Closed;
+            self.last_init_id = None;
             info!("Stdio transport closed gracefully");
         }
         Ok(())
@@ -870,12 +993,12 @@ mod tests {
     async fn test_stdio_transport_closed_state() {
         let mut transport = StdioTransport::new();
 
-        // Transport should start as open
-        assert!(!transport.is_closed);
+        // Transport should start as uninitialized
+        assert_eq!(transport.connection_state, ConnectionState::Uninitialized);
 
         // Close the transport
         transport.close().await.unwrap();
-        assert!(transport.is_closed);
+        assert_eq!(transport.connection_state, ConnectionState::Closed);
 
         // Operations on closed transport should fail
         let send_result = transport.send(r#"{"jsonrpc":"2.0","id":1}"#).await;
@@ -896,7 +1019,7 @@ mod tests {
         assert_eq!(transport1.read_timeout, transport2.read_timeout);
         assert_eq!(transport1.write_timeout, transport2.write_timeout);
         assert_eq!(transport1.buffer_size, transport2.buffer_size);
-        assert_eq!(transport1.is_closed, transport2.is_closed);
+        assert_eq!(transport1.connection_state, transport2.connection_state);
     }
 
     #[tokio::test]
@@ -940,5 +1063,111 @@ mod tests {
         // Batch request
         let batch = r#"[{"jsonrpc":"2.0","method":"sum","params":[1,2,4],"id":"1"},{"jsonrpc":"2.0","method":"notify_hello","params":[7]}]"#;
         assert!(StdioTransport::validate_message(batch).is_ok());
+    }
+
+    #[tokio::test]
+    async fn test_initialization_state_management() {
+        let mut transport = StdioTransport::new();
+        assert_eq!(transport.connection_state, ConnectionState::Uninitialized);
+        assert!(transport.last_init_id.is_none());
+
+        // Test initialization request detection
+        let init_request = r#"{"jsonrpc":"2.0","method":"initialize","params":{"protocolVersion":"2024-11-05","capabilities":{},"clientInfo":{"name":"test","version":"1.0"}},"id":"init-123"}"#;
+
+        // Simulate sending an initialize request
+        transport
+            .update_initialization_state(init_request, true)
+            .await
+            .unwrap();
+        assert_eq!(transport.connection_state, ConnectionState::Initializing);
+        assert_eq!(
+            transport.last_init_id,
+            Some(serde_json::Value::String("init-123".to_string()))
+        );
+
+        // Test initialization response detection
+        let init_response = r#"{"jsonrpc":"2.0","result":{"protocolVersion":"2024-11-05","serverInfo":{"name":"test-server","version":"1.0"},"capabilities":{}},"id":"init-123"}"#;
+
+        // Simulate receiving an initialize response
+        transport
+            .update_initialization_state(init_response, false)
+            .await
+            .unwrap();
+        assert_eq!(transport.connection_state, ConnectionState::Initialized);
+        assert!(transport.last_init_id.is_none());
+    }
+
+    #[tokio::test]
+    async fn test_initialization_error_handling() {
+        let mut transport = StdioTransport::new();
+
+        // Send initialize request
+        let init_request = r#"{"jsonrpc":"2.0","method":"initialize","params":{},"id":42}"#;
+        transport
+            .update_initialization_state(init_request, true)
+            .await
+            .unwrap();
+        assert_eq!(transport.connection_state, ConnectionState::Initializing);
+        assert_eq!(
+            transport.last_init_id,
+            Some(serde_json::Value::Number(serde_json::Number::from(42)))
+        );
+
+        // Receive error response
+        let error_response =
+            r#"{"jsonrpc":"2.0","error":{"code":-32602,"message":"Invalid params"},"id":42}"#;
+        transport
+            .update_initialization_state(error_response, false)
+            .await
+            .unwrap();
+        assert_eq!(transport.connection_state, ConnectionState::Initialized); // Error still counts as response
+        assert!(transport.last_init_id.is_none());
+    }
+
+    #[tokio::test]
+    async fn test_initialize_request_detection() {
+        // Test various initialize request formats
+        let request_with_string_id =
+            r#"{"jsonrpc":"2.0","method":"initialize","params":{},"id":"test"}"#;
+        let id = StdioTransport::is_initialize_request(request_with_string_id).unwrap();
+        assert_eq!(id, Some(serde_json::Value::String("test".to_string())));
+
+        let request_with_number_id =
+            r#"{"jsonrpc":"2.0","method":"initialize","params":{},"id":123}"#;
+        let id = StdioTransport::is_initialize_request(request_with_number_id).unwrap();
+        assert_eq!(
+            id,
+            Some(serde_json::Value::Number(serde_json::Number::from(123)))
+        );
+
+        // Test non-initialize request
+        let ping_request = r#"{"jsonrpc":"2.0","method":"ping","id":1}"#;
+        let id = StdioTransport::is_initialize_request(ping_request).unwrap();
+        assert!(id.is_none());
+    }
+
+    #[tokio::test]
+    async fn test_connection_state_transitions() {
+        let mut transport = StdioTransport::new();
+
+        // Test closed connection prevents initialization
+        transport.connection_state = ConnectionState::Closed;
+        let init_request = r#"{"jsonrpc":"2.0","method":"initialize","params":{},"id":1}"#;
+        let result = transport
+            .update_initialization_state(init_request, true)
+            .await;
+        assert!(result.is_err());
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("Cannot initialize a closed connection"));
+
+        // Test re-initialization from initialized state
+        transport.connection_state = ConnectionState::Initialized;
+        transport
+            .update_initialization_state(init_request, true)
+            .await
+            .unwrap();
+        assert_eq!(transport.connection_state, ConnectionState::Initializing);
     }
 }
