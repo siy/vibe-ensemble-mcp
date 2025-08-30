@@ -209,6 +209,7 @@ impl McpServer {
             methods::LIST_TOOLS => self.handle_list_tools(request).await,
             methods::CALL_TOOL => self.handle_call_tool(request).await,
             methods::LIST_RESOURCES => self.handle_list_resources(request).await,
+            methods::READ_RESOURCE => self.handle_read_resource(request).await,
             methods::LIST_PROMPTS => self.handle_list_prompts(request).await,
 
             // Streamlined Vibe Ensemble extensions (3 essential methods for all functionality)
@@ -1068,6 +1069,153 @@ impl McpServer {
 
         let result = serde_json::json!({
             "resources": resources
+        });
+
+        Ok(Some(JsonRpcResponse::success(request.id, result)))
+    }
+
+    /// Handle resource read request
+    async fn handle_read_resource(
+        &self,
+        request: JsonRpcRequest,
+    ) -> Result<Option<JsonRpcResponse>> {
+        debug!("Handling resource read request");
+
+        // Extract URI parameter from request
+        let params = request
+            .params
+            .unwrap_or(serde_json::Value::Object(serde_json::Map::new()));
+        let uri = params
+            .as_object()
+            .and_then(|obj| obj.get("uri"))
+            .and_then(|uri| uri.as_str())
+            .ok_or_else(|| Error::validation("Missing uri parameter"))?;
+
+        let content = match uri {
+            "vibe://agents" => {
+                if let Some(agent_service) = &self.agent_service {
+                    match agent_service.list_agents().await {
+                        Ok(agents) => serde_json::to_value(agents)?,
+                        Err(e) => {
+                            warn!("Failed to list agents: {}", e);
+                            serde_json::json!([])
+                        }
+                    }
+                } else {
+                    serde_json::json!([])
+                }
+            }
+            "vibe://issues" => {
+                if let Some(issue_service) = &self.issue_service {
+                    match issue_service.list_issues().await {
+                        Ok(issues) => serde_json::to_value(issues)?,
+                        Err(e) => {
+                            warn!("Failed to list issues: {}", e);
+                            serde_json::json!([])
+                        }
+                    }
+                } else {
+                    serde_json::json!([])
+                }
+            }
+            "vibe://knowledge" => {
+                serde_json::json!({
+                    "patterns": [],
+                    "guidelines": [],
+                    "practices": []
+                })
+            }
+            "vibe://agents/online" => {
+                if let Some(agent_service) = &self.agent_service {
+                    match agent_service.list_agents().await {
+                        Ok(agents) => {
+                            let online_agents: Vec<_> = agents
+                                .into_iter()
+                                .filter(|agent| {
+                                    matches!(
+                                        agent.status,
+                                        vibe_ensemble_core::agent::AgentStatus::Online
+                                            | vibe_ensemble_core::agent::AgentStatus::Busy
+                                    )
+                                })
+                                .collect();
+                            serde_json::to_value(online_agents)?
+                        }
+                        Err(e) => {
+                            warn!("Failed to list online agents: {}", e);
+                            serde_json::json!([])
+                        }
+                    }
+                } else {
+                    serde_json::json!([])
+                }
+            }
+            "vibe://agents/coordinators" => {
+                if let Some(agent_service) = &self.agent_service {
+                    match agent_service.list_agents().await {
+                        Ok(agents) => {
+                            let coordinators: Vec<_> = agents
+                                .into_iter()
+                                .filter(|agent| {
+                                    matches!(
+                                        agent.agent_type,
+                                        vibe_ensemble_core::agent::AgentType::Coordinator
+                                    )
+                                })
+                                .collect();
+                            serde_json::to_value(coordinators)?
+                        }
+                        Err(e) => {
+                            warn!("Failed to list online agents: {}", e);
+                            serde_json::json!([])
+                        }
+                    }
+                } else {
+                    serde_json::json!([])
+                }
+            }
+            "vibe://agents/workers" => {
+                if let Some(agent_service) = &self.agent_service {
+                    match agent_service.list_agents().await {
+                        Ok(agents) => {
+                            let workers: Vec<_> = agents
+                                .into_iter()
+                                .filter(|agent| {
+                                    matches!(
+                                        agent.agent_type,
+                                        vibe_ensemble_core::agent::AgentType::Worker
+                                    )
+                                })
+                                .collect();
+                            serde_json::to_value(workers)?
+                        }
+                        Err(e) => {
+                            warn!("Failed to list online agents: {}", e);
+                            serde_json::json!([])
+                        }
+                    }
+                } else {
+                    serde_json::json!([])
+                }
+            }
+            _ => {
+                return Ok(Some(JsonRpcResponse::error(
+                    request.id,
+                    crate::protocol::JsonRpcError {
+                        code: crate::protocol::error_codes::INVALID_PARAMS,
+                        message: format!("Unknown resource URI: {}", uri),
+                        data: None,
+                    },
+                )));
+            }
+        };
+
+        let result = serde_json::json!({
+            "contents": [{
+                "uri": uri,
+                "mimeType": "application/json",
+                "text": serde_json::to_string(&content)?
+            }]
         });
 
         Ok(Some(JsonRpcResponse::success(request.id, result)))
