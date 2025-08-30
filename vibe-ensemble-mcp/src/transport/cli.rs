@@ -4,8 +4,8 @@
 //! enabling easy integration with CI/CD pipelines and manual testing.
 
 use crate::transport::automated_runner::{
-    run_automated_transport_tests_with_config, AutomatedTestConfig,
-    OutputFormat, PerformanceThresholds, TransportType,
+    run_automated_transport_tests_with_config, AutomatedTestConfig, OutputFormat,
+    PerformanceThresholds, TransportType,
 };
 use crate::Result;
 

@@ -5,8 +5,9 @@
 //! with detailed reporting, comparison, and CI integration.
 
 use crate::transport::testing::{
-    PerformanceMetrics, TestScenario, TestSuiteResult, TransportTestBuilder, TransportTester,
+    PerformanceMetrics, TestSuiteResult, TransportTestBuilder, TransportTester,
 };
+use crate::transport::Transport;
 use crate::{Error, Result};
 
 use serde::{Deserialize, Serialize};
@@ -236,7 +237,6 @@ impl AutomatedTestRunner {
         }
     }
 
-
     /// Set performance baselines for regression detection
     pub fn with_baselines(mut self, baselines: HashMap<String, PerformanceMetrics>) -> Self {
         self.baseline_metrics = Some(baselines);
@@ -319,7 +319,9 @@ impl AutomatedTestRunner {
 
         match transport_type {
             TransportType::InMemory => {
-                let (transport, _) = crate::transport::InMemoryTransport::pair();
+                let (transport, server_transport) = crate::transport::InMemoryTransport::pair();
+                // Spawn mock MCP peer in background to handle requests
+                let _mock_peer_handle = tokio::spawn(Self::run_mock_mcp_peer(server_transport));
                 Ok(tester
                     .test_transport(transport, transport_type.name())
                     .await)
@@ -349,51 +351,21 @@ impl AutomatedTestRunner {
     fn build_tester_for_transport(&self, transport_type: &TransportType) -> TransportTester {
         let mut builder = TransportTestBuilder::new();
 
-        // Always include standard scenarios
-        builder = builder.with_standard_scenarios();
+        // Always include core MCP scenarios
+        builder = builder.with_core_scenarios();
 
-        // Add transport-specific scenarios based on configuration
+        // Add scenario categories based on configuration
         if self.config.include_performance_tests {
-            builder = builder.add_scenario(
-                TestScenario::new(
-                    &format!("perf_throughput_{}", transport_type.id()),
-                    &format!("{} Throughput Test", transport_type.name()),
-                    &format!("Performance throughput test for {}", transport_type.name()),
-                    Duration::from_secs(30),
-                    true,
-                )
-                .with_tags(vec!["performance", "throughput", transport_type.id()]),
-            );
+            builder = builder.with_performance_scenarios();
         }
 
         if self.config.include_stress_tests {
-            builder = builder.add_scenario(
-                TestScenario::new(
-                    &format!("stress_load_{}", transport_type.id()),
-                    &format!("{} Stress Test", transport_type.name()),
-                    &format!("Stress test for {}", transport_type.name()),
-                    Duration::from_secs(60),
-                    true,
-                )
-                .with_tags(vec!["stress", "load", transport_type.id()]),
-            );
+            // Stress tests are considered a subset of performance tests
+            builder = builder.with_stress_scenarios();
         }
 
         if self.config.include_error_tests {
-            builder = builder.add_scenario(
-                TestScenario::new(
-                    &format!("error_handling_{}", transport_type.id()),
-                    &format!("{} Error Handling", transport_type.name()),
-                    &format!("Error handling test for {}", transport_type.name()),
-                    Duration::from_secs(10),
-                    false, // Expect errors
-                )
-                .with_tags(vec![
-                    "error_handling",
-                    "resilience",
-                    transport_type.id(),
-                ]),
-            );
+            builder = builder.with_error_scenarios();
         }
 
         // Set baseline if available
@@ -840,6 +812,181 @@ impl AutomatedTestRunner {
     async fn output_junit_xml_results(&self, _results: &AutomatedTestResults) -> Result<()> {
         // TODO: Implement JUnit XML output format
         warn!("JUnit XML output format not yet implemented");
+        Ok(())
+    }
+
+    /// Spawn a mock MCP peer for InMemory transport testing
+    async fn run_mock_mcp_peer(mut transport: impl Transport + 'static) -> Result<()> {
+        use serde_json::{json, Value};
+        use tracing::{debug, info, warn};
+
+        info!("Starting mock MCP peer for InMemory transport testing");
+
+        loop {
+            match transport.receive().await {
+                Ok(message) => {
+                    debug!("Mock MCP peer received message: {}", message);
+
+                    // Parse the JSON-RPC message
+                    let parsed: Value = match serde_json::from_str(&message) {
+                        Ok(v) => v,
+                        Err(e) => {
+                            warn!("Failed to parse JSON in mock MCP peer: {}", e);
+                            continue;
+                        }
+                    };
+
+                    // Extract method and id for response
+                    let method = parsed.get("method").and_then(|v| v.as_str());
+                    let id = parsed.get("id").cloned();
+
+                    // Generate appropriate response based on method
+                    let response = match method {
+                        Some("initialize") => {
+                            json!({
+                                "jsonrpc": "2.0",
+                                "id": id,
+                                "result": {
+                                    "protocolVersion": "2024-11-05",
+                                    "capabilities": {
+                                        "tools": { "listChanged": true },
+                                        "resources": { "listChanged": true },
+                                        "prompts": { "listChanged": true }
+                                    },
+                                    "serverInfo": {
+                                        "name": "mock-mcp-server",
+                                        "version": "1.0.0"
+                                    }
+                                }
+                            })
+                        }
+                        Some("tools/list") => {
+                            json!({
+                                "jsonrpc": "2.0",
+                                "id": id,
+                                "result": {
+                                    "tools": [
+                                        {
+                                            "name": "test_tool",
+                                            "description": "A test tool for transport testing",
+                                            "inputSchema": {
+                                                "type": "object",
+                                                "properties": {
+                                                    "message": {
+                                                        "type": "string",
+                                                        "description": "Test message"
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    ]
+                                }
+                            })
+                        }
+                        Some("tools/call") => {
+                            json!({
+                                "jsonrpc": "2.0",
+                                "id": id,
+                                "result": {
+                                    "content": [
+                                        {
+                                            "type": "text",
+                                            "text": "Mock tool execution successful"
+                                        }
+                                    ]
+                                }
+                            })
+                        }
+                        Some("resources/list") => {
+                            json!({
+                                "jsonrpc": "2.0",
+                                "id": id,
+                                "result": {
+                                    "resources": [
+                                        {
+                                            "uri": "test://resource",
+                                            "name": "Test Resource",
+                                            "description": "A test resource",
+                                            "mimeType": "text/plain"
+                                        }
+                                    ]
+                                }
+                            })
+                        }
+                        Some("resources/read") => {
+                            json!({
+                                "jsonrpc": "2.0",
+                                "id": id,
+                                "result": {
+                                    "contents": [
+                                        {
+                                            "uri": "test://resource",
+                                            "mimeType": "text/plain",
+                                            "text": "Test resource content"
+                                        }
+                                    ]
+                                }
+                            })
+                        }
+                        Some("prompts/list") => {
+                            json!({
+                                "jsonrpc": "2.0",
+                                "id": id,
+                                "result": {
+                                    "prompts": [
+                                        {
+                                            "name": "test_prompt",
+                                            "description": "A test prompt",
+                                            "arguments": []
+                                        }
+                                    ]
+                                }
+                            })
+                        }
+                        Some("notifications/initialized") => {
+                            // No response for notifications
+                            debug!("Received initialized notification, no response needed");
+                            continue;
+                        }
+                        Some(unknown_method) => {
+                            debug!(
+                                "Unknown method: {}, sending method not found error",
+                                unknown_method
+                            );
+                            json!({
+                                "jsonrpc": "2.0",
+                                "id": id,
+                                "error": {
+                                    "code": -32601,
+                                    "message": "Method not found",
+                                    "data": format!("The method '{}' is not supported by this mock server", unknown_method)
+                                }
+                            })
+                        }
+                        None => {
+                            warn!("Received message without method field");
+                            continue;
+                        }
+                    };
+
+                    // Send response if we have one and it's not a notification
+                    if parsed.get("id").is_some() {
+                        let response_str = response.to_string();
+                        if let Err(e) = transport.send(&response_str).await {
+                            warn!("Failed to send mock MCP response: {}", e);
+                            break;
+                        }
+                        debug!("Mock MCP peer sent response: {}", response_str);
+                    }
+                }
+                Err(e) => {
+                    debug!("Mock MCP peer transport closed or error: {}", e);
+                    break;
+                }
+            }
+        }
+
+        info!("Mock MCP peer shutting down");
         Ok(())
     }
 }

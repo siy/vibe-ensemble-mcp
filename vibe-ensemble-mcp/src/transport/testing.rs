@@ -285,6 +285,13 @@ impl TransportTester {
 
     /// Add standard MCP protocol test scenarios
     fn add_standard_scenarios(&mut self) {
+        self.add_core_mcp_scenarios();
+        self.add_error_scenarios();
+        self.add_performance_scenarios();
+    }
+
+    /// Add core MCP protocol test scenarios
+    fn add_core_mcp_scenarios(&mut self) {
         // Initialization scenarios
         self.add_scenario(
             TestScenario::new(
@@ -295,17 +302,6 @@ impl TransportTester {
                 true,
             )
             .with_tags(vec!["mcp", "initialization", "basic"]),
-        );
-
-        self.add_scenario(
-            TestScenario::new(
-                "mcp_initialize_invalid_version",
-                "Invalid Protocol Version",
-                "Tests handling of invalid protocol version during initialization",
-                Duration::from_secs(5),
-                false,
-            )
-            .with_tags(vec!["mcp", "initialization", "error_handling"]),
         );
 
         // Tools scenarios
@@ -331,17 +327,6 @@ impl TransportTester {
             .with_tags(vec!["mcp", "tools", "execution"]),
         );
 
-        self.add_scenario(
-            TestScenario::new(
-                "mcp_tools_call_invalid",
-                "Invalid Tool Call",
-                "Tests error handling for invalid tool calls",
-                Duration::from_secs(10),
-                false,
-            )
-            .with_tags(vec!["mcp", "tools", "error_handling"]),
-        );
-
         // Resources scenarios
         self.add_scenario(
             TestScenario::new(
@@ -363,17 +348,6 @@ impl TransportTester {
                 true,
             )
             .with_tags(vec!["mcp", "resources", "read"]),
-        );
-
-        self.add_scenario(
-            TestScenario::new(
-                "mcp_resources_read_invalid",
-                "Invalid Resource Read",
-                "Tests error handling for non-existent resources",
-                Duration::from_secs(5),
-                false,
-            )
-            .with_tags(vec!["mcp", "resources", "error_handling"]),
         );
 
         // Prompts scenarios
@@ -399,20 +373,45 @@ impl TransportTester {
             )
             .with_tags(vec!["mcp", "notifications", "basic"]),
         );
+    }
 
-        // Concurrent request scenarios
+    /// Add error handling test scenarios
+    fn add_error_scenarios(&mut self) {
+        // Protocol error scenarios
         self.add_scenario(
             TestScenario::new(
-                "mcp_concurrent_requests",
-                "Concurrent Request Handling",
-                "Tests multiple simultaneous MCP requests",
-                Duration::from_secs(30),
-                true,
+                "mcp_initialize_invalid_version",
+                "Invalid Protocol Version",
+                "Tests handling of invalid protocol version during initialization",
+                Duration::from_secs(5),
+                false,
             )
-            .with_tags(vec!["mcp", "concurrency", "performance"]),
+            .with_tags(vec!["mcp", "initialization", "error_handling"]),
         );
 
-        // Error handling scenarios
+        self.add_scenario(
+            TestScenario::new(
+                "mcp_tools_call_invalid",
+                "Invalid Tool Call",
+                "Tests error handling for invalid tool calls",
+                Duration::from_secs(10),
+                false,
+            )
+            .with_tags(vec!["mcp", "tools", "error_handling"]),
+        );
+
+        self.add_scenario(
+            TestScenario::new(
+                "mcp_resources_read_invalid",
+                "Invalid Resource Read",
+                "Tests error handling for non-existent resources",
+                Duration::from_secs(5),
+                false,
+            )
+            .with_tags(vec!["mcp", "resources", "error_handling"]),
+        );
+
+        // Message format error scenarios
         self.add_scenario(
             TestScenario::new(
                 "mcp_invalid_json",
@@ -434,8 +433,23 @@ impl TransportTester {
             )
             .with_tags(vec!["mcp", "error_handling", "unknown_method"]),
         );
+    }
 
-        // Performance scenarios
+    /// Add performance test scenarios
+    fn add_performance_scenarios(&mut self) {
+        // Concurrent request scenarios
+        self.add_scenario(
+            TestScenario::new(
+                "mcp_concurrent_requests",
+                "Concurrent Request Handling",
+                "Tests multiple simultaneous MCP requests",
+                Duration::from_secs(30),
+                true,
+            )
+            .with_tags(vec!["mcp", "concurrency", "performance"]),
+        );
+
+        // High throughput scenarios
         self.add_scenario(
             TestScenario::new(
                 "performance_high_throughput",
@@ -456,6 +470,33 @@ impl TransportTester {
                 true,
             )
             .with_tags(vec!["performance", "large_messages", "stress"]),
+        );
+    }
+
+    /// Add stress test scenarios
+    fn add_stress_scenarios(&mut self) {
+        // Note: Stress scenarios are a subset of performance scenarios
+        // focused on extreme conditions
+        self.add_scenario(
+            TestScenario::new(
+                "stress_high_load",
+                "High Load Stress Test",
+                "Tests transport under extreme load conditions",
+                Duration::from_secs(120),
+                true,
+            )
+            .with_tags(vec!["stress", "load", "extreme"]),
+        );
+
+        self.add_scenario(
+            TestScenario::new(
+                "stress_memory_pressure",
+                "Memory Pressure Test",
+                "Tests transport under memory pressure conditions",
+                Duration::from_secs(90),
+                true,
+            )
+            .with_tags(vec!["stress", "memory", "pressure"]),
         );
     }
 
@@ -1437,9 +1478,33 @@ impl TransportTestBuilder {
         }
     }
 
-    /// Add standard MCP scenarios
+    /// Add standard MCP scenarios (includes core, error, and performance)
     pub fn with_standard_scenarios(mut self) -> Self {
         self.tester.add_standard_scenarios();
+        self
+    }
+
+    /// Add core MCP protocol scenarios only
+    pub fn with_core_scenarios(mut self) -> Self {
+        self.tester.add_core_mcp_scenarios();
+        self
+    }
+
+    /// Add error handling scenarios only
+    pub fn with_error_scenarios(mut self) -> Self {
+        self.tester.add_error_scenarios();
+        self
+    }
+
+    /// Add performance testing scenarios only
+    pub fn with_performance_scenarios(mut self) -> Self {
+        self.tester.add_performance_scenarios();
+        self
+    }
+
+    /// Add stress testing scenarios only
+    pub fn with_stress_scenarios(mut self) -> Self {
+        self.tester.add_stress_scenarios();
         self
     }
 
