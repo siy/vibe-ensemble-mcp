@@ -31,7 +31,7 @@ permissions:
 
 env:
   CARGO_TERM_COLOR: always
-  DATABASE_URL: sqlite:./integration_test.db
+  DATABASE_URL: sqlite://./integration_test.db
   CARGO_REGISTRIES_CRATES_IO_PROTOCOL: sparse
 
 concurrency:
@@ -67,17 +67,22 @@ jobs:
           persist-credentials: false
 
       - name: Install Rust toolchain
-        uses: dtolnay/rust-toolchain@1.82.0
+        uses: dtolnay/rust-toolchain@stable
         with:
           toolchain: "1.82.0"
 
       - name: Set up git for workspace tests
-        if: matrix.setup_git
+        if: ${{ matrix.setup_git }}
         run: |
           git config --global user.name "Workspace Tests"
           git config --global user.email "workspace-tests@vibe-ensemble.local"
           git config --global init.defaultBranch main
           git config --global --add safe.directory "$GITHUB_WORKSPACE"
+
+      - name: Install system SQLite (if not using bundled)
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libsqlite3-dev pkg-config
 
       - name: Cache cargo (compiler-aware)
         uses: Swatinem/rust-cache@v2
@@ -86,10 +91,12 @@ jobs:
           shared-key: integration-tests
 
       - name: Run scenario
-        run: cargo test --locked --test coordinator_worker_integration ${{ matrix.test }} --verbose -- --nocapture
+        run: |
+          cargo install cargo-nextest --locked || true
+          NEXTEST_SHOW_OUTPUT=always cargo nextest run --locked --test coordinator_worker_integration "${{ matrix.test }}"
         env:
           RUST_BACKTRACE: 1
-          DATABASE_URL: sqlite:./${{ matrix.db }}
+          DATABASE_URL: sqlite://./${{ matrix.db }}
           SQLX_OFFLINE: true
 
       - name: Upload DB (on failure)
@@ -114,10 +121,15 @@ jobs:
           persist-credentials: false
 
       - name: Install Rust toolchain
-        uses: dtolnay/rust-toolchain@1.82.0
+        uses: dtolnay/rust-toolchain@stable
         with:
           toolchain: "1.82.0"
           components: rustfmt, clippy
+
+      - name: Install system SQLite (if not using bundled)
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libsqlite3-dev pkg-config
 
       - name: Cache cargo (compiler-aware)
         uses: Swatinem/rust-cache@v2
@@ -133,10 +145,11 @@ jobs:
       - name: Run all integration tests together
         run: |
           # Run all three integration tests to ensure they work together
-          cargo test --locked --test coordinator_worker_integration --verbose -- --nocapture
+          cargo install cargo-nextest --locked || true
+          NEXTEST_SHOW_OUTPUT=always cargo nextest run --locked --test coordinator_worker_integration
         env:
           RUST_BACKTRACE: 1
-          DATABASE_URL: sqlite:./complete_integration_test.db
+          DATABASE_URL: sqlite://./complete_integration_test.db
           SQLX_OFFLINE: true
 
       - name: Upload complete-suite DB (on failure)
