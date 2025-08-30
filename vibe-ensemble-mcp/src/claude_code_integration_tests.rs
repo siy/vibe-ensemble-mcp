@@ -94,7 +94,7 @@ impl MockClaudeCodeStdioClient {
 
         // Wait for server to be ready with shorter intervals for faster startup
         tokio::time::sleep(Duration::from_millis(50)).await;
-        
+
         // Check if process is still running (hasn't crashed)
         match process.try_wait() {
             Ok(Some(exit_status)) => {
