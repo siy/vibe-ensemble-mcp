@@ -3,8 +3,24 @@ name: Integration Tests
 on:
   push:
     branches: [ main, develop ]
+    paths:
+      - '.github/workflows/**'
+      - 'Cargo.toml'
+      - 'Cargo.lock'
+      - 'vibe-ensemble-mcp/**'
+      - 'vibe-ensemble-core/**'
+      - 'vibe-ensemble-storage/**'
+      - 'vibe-ensemble-prompts/**'
   pull_request:
     branches: [ main, develop ]
+    paths:
+      - '.github/workflows/**'
+      - 'Cargo.toml'
+      - 'Cargo.lock'
+      - 'vibe-ensemble-mcp/**'
+      - 'vibe-ensemble-core/**'
+      - 'vibe-ensemble-storage/**'
+      - 'vibe-ensemble-prompts/**'
   schedule:
     # Run integration tests nightly at 2 AM UTC
     - cron: '0 2 * * *'
@@ -35,14 +51,15 @@ jobs:
           fetch-depth: 0
 
       - name: Install Rust toolchain
-        uses: dtolnay/rust-toolchain@stable
+        uses: dtolnay/rust-toolchain@1.82.0
         with:
-          toolchain: "stable"
+          toolchain: "1.82.0"
 
       - name: Cache cargo (compiler-aware)
         uses: Swatinem/rust-cache@v2
         with:
           cache-on-failure: true
+          shared-key: integration-tests
 
       - name: Test coordinator ticket management functionality
         run: |
@@ -58,6 +75,7 @@ jobs:
         with:
           name: coordinator-sqlite-db
           path: ./coordinator_test.db
+          retention-days: 7
 
   workspace-isolation:
     name: Multi-Worker Workspace Isolation
@@ -70,9 +88,9 @@ jobs:
           fetch-depth: 0
 
       - name: Install Rust toolchain
-        uses: dtolnay/rust-toolchain@stable
+        uses: dtolnay/rust-toolchain@1.82.0
         with:
-          toolchain: "stable"
+          toolchain: "1.82.0"
 
       - name: Set up git for workspace tests
         run: |
@@ -80,12 +98,12 @@ jobs:
           git config --global user.email "workspace-tests@vibe-ensemble.local"
           git config --global init.defaultBranch main
           git config --global --add safe.directory "$GITHUB_WORKSPACE"
-          git config --global --add safe.directory '*'
 
       - name: Cache cargo (compiler-aware)
         uses: Swatinem/rust-cache@v2
         with:
           cache-on-failure: true
+          shared-key: integration-tests
 
       - name: Test workspace isolation between multiple workers
         run: |
@@ -101,6 +119,7 @@ jobs:
         with:
           name: workspace-sqlite-db
           path: ./workspace_test.db
+          retention-days: 7
 
   error-recovery:
     name: Error Recovery and Task Reassignment
@@ -113,14 +132,15 @@ jobs:
           fetch-depth: 0
 
       - name: Install Rust toolchain
-        uses: dtolnay/rust-toolchain@stable
+        uses: dtolnay/rust-toolchain@1.82.0
         with:
-          toolchain: "stable"
+          toolchain: "1.82.0"
 
       - name: Cache cargo (compiler-aware)
         uses: Swatinem/rust-cache@v2
         with:
           cache-on-failure: true
+          shared-key: integration-tests
 
       - name: Test error recovery and task reassignment workflows
         run: |
@@ -136,9 +156,11 @@ jobs:
         with:
           name: recovery-sqlite-db
           path: ./recovery_test.db
+          retention-days: 7
 
   complete-integration-suite:
     name: Complete Integration Test Suite
+    needs: [coordinator-ticket-management, workspace-isolation, error-recovery]
     runs-on: ubuntu-latest
     timeout-minutes: 20
 
@@ -148,15 +170,16 @@ jobs:
           fetch-depth: 0
 
       - name: Install Rust toolchain
-        uses: dtolnay/rust-toolchain@stable
+        uses: dtolnay/rust-toolchain@1.82.0
         with:
-          toolchain: "stable"
+          toolchain: "1.82.0"
           components: rustfmt, clippy
 
       - name: Cache cargo (compiler-aware)
         uses: Swatinem/rust-cache@v2
         with:
           cache-on-failure: true
+          shared-key: integration-tests
 
       - name: Build integration tests
         run: |
@@ -176,8 +199,11 @@ jobs:
         with:
           name: complete-suite-sqlite-db
           path: ./complete_integration_test.db
+          retention-days: 7
+
+      - name: Check formatting
+        run: cargo fmt --all -- --check
 
       - name: Lint integration tests
         run: |
-          # Ensure integration tests follow coding standards
           cargo clippy --tests --all-features --package vibe-ensemble-mcp -- -D warnings
