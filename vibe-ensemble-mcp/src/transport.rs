@@ -279,7 +279,7 @@ pub struct StdioTransport {
     // Used for configuration tracking and potential future features
     buffer_size: usize,
     /// Keep track of message IDs for heartbeat/ping handling
-    last_ping_id: Option<String>,
+    last_ping_id: Option<Value>,
     /// Statistics for connection monitoring
     messages_sent: u64,
     messages_received: u64,
@@ -473,23 +473,25 @@ impl StdioTransport {
 
     /// Detect if a message contains ping for heartbeat handling
     pub fn analyze_message(&mut self, message: &str) -> Result<()> {
-        // Parse message to check for ping
-        let parsed: Value = serde_json::from_str(message)
-            .map_err(|e| Error::Transport(format!("Invalid JSON in message analysis: {}", e)))?;
+        // Parse message to check for ping - don't fail on malformed JSON
+        let parsed: Value = match serde_json::from_str(message) {
+            Ok(value) => value,
+            Err(e) => {
+                debug!(
+                    "Failed to parse JSON in message analysis: {}, continuing",
+                    e
+                );
+                return Ok(());
+            }
+        };
 
         if let Value::Object(obj) = &parsed {
             // Check for ping method
             if let Some(method) = obj.get("method").and_then(|v| v.as_str()) {
                 if method == "ping" {
                     if let Some(id_val) = obj.get("id") {
-                        let id_str = match id_val {
-                            Value::String(s) => s.clone(),
-                            Value::Number(n) => n.to_string(),
-                            Value::Null => "null".to_string(),
-                            other => other.to_string(),
-                        };
-                        debug!("Detected ping message with id: {}", id_str);
-                        self.last_ping_id = Some(id_str);
+                        debug!("Detected ping message with id: {}", id_val);
+                        self.last_ping_id = Some(id_val.clone());
                     }
                 }
             }
@@ -502,7 +504,7 @@ impl StdioTransport {
     pub fn create_ping_message(&mut self) -> String {
         use uuid::Uuid;
         let ping_id = Uuid::new_v4().to_string();
-        self.last_ping_id = Some(ping_id.clone());
+        self.last_ping_id = Some(Value::String(ping_id.clone()));
 
         format!(r#"{{"jsonrpc":"2.0","method":"ping","id":"{}"}}"#, ping_id)
     }
@@ -577,7 +579,7 @@ impl StdioTransport {
     }
 
     /// Wait for SIGTERM signal (Unix-like systems)
-    #[cfg(any(unix, test))]
+    #[cfg(unix)]
     #[doc(hidden)]
     pub async fn wait_for_sigterm() {
         use tokio::signal::unix::{signal, SignalKind};
@@ -587,7 +589,7 @@ impl StdioTransport {
     }
 
     /// Wait for SIGTERM signal (Windows - no-op as SIGTERM doesn't exist)
-    #[cfg(all(not(unix), not(test)))]
+    #[cfg(not(unix))]
     #[doc(hidden)]
     pub async fn wait_for_sigterm() {
         // On Windows, we only handle Ctrl+C
@@ -637,6 +639,7 @@ impl Transport for StdioTransport {
             // Ensure data is written to the underlying stream
             self.stdout_writer.flush().await.map_err(|e| {
                 error!("Failed to flush stdout buffer: {}", e);
+                self.connection_state = ConnectionState::Closed;
                 Error::Transport(format!("Failed to flush stdout: {}", e))
             })?;
 
@@ -1335,17 +1338,26 @@ mod tests {
         // Test ping message with string ID
         let ping_request = r#"{"jsonrpc":"2.0","method":"ping","id":"test-ping"}"#;
         transport.analyze_message(ping_request).unwrap();
-        assert_eq!(transport.last_ping_id, Some("test-ping".to_string()));
+        assert_eq!(
+            transport.last_ping_id,
+            Some(Value::String("test-ping".to_string()))
+        );
 
         // Test ping message with number ID
         let ping_number = r#"{"jsonrpc":"2.0","method":"ping","id":42}"#;
         transport.analyze_message(ping_number).unwrap();
-        assert_eq!(transport.last_ping_id, Some("42".to_string()));
+        assert_eq!(
+            transport.last_ping_id,
+            Some(Value::Number(serde_json::Number::from(42)))
+        );
 
         // Test non-ping message
         let other_request = r#"{"jsonrpc":"2.0","method":"list_tools","id":2}"#;
         transport.analyze_message(other_request).unwrap();
         // Should keep the last ping ID
-        assert_eq!(transport.last_ping_id, Some("42".to_string()));
+        assert_eq!(
+            transport.last_ping_id,
+            Some(Value::Number(serde_json::Number::from(42)))
+        );
     }
 }
