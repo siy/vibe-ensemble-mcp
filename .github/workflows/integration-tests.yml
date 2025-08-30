@@ -32,7 +32,6 @@ permissions:
 env:
   CARGO_TERM_COLOR: always
   DATABASE_URL: sqlite:./integration_test.db
-  SQLX_OFFLINE: true
   CARGO_REGISTRIES_CRATES_IO_PROTOCOL: sparse
 
 concurrency:
@@ -40,52 +39,32 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  coordinator-ticket-management:
-    name: Coordinator Ticket Management
+  scenario:
+    name: ${{ matrix.name }}
     runs-on: ubuntu-latest
     timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: Coordinator Ticket Management
+            test: test_coordinator_creates_assigns_tickets
+            db: coordinator_test.db
+            setup_git: false
+          - name: Multi-Worker Workspace Isolation
+            test: test_multi_worker_isolated_workspaces
+            db: workspace_test.db
+            setup_git: true
+          - name: Error Recovery and Task Reassignment
+            test: test_error_recovery_workflow
+            db: recovery_test.db
+            setup_git: false
 
     steps:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
-
-      - name: Install Rust toolchain
-        uses: dtolnay/rust-toolchain@1.82.0
-        with:
-          toolchain: "1.82.0"
-
-      - name: Cache cargo (compiler-aware)
-        uses: Swatinem/rust-cache@v2
-        with:
-          cache-on-failure: true
-          shared-key: integration-tests
-
-      - name: Test coordinator ticket management functionality
-        run: |
-          # Test coordinator creating and assigning tickets to specialized workers
-          cargo test --test coordinator_worker_integration test_coordinator_creates_assigns_tickets --verbose -- --nocapture
-        env:
-          RUST_BACKTRACE: 1
-          DATABASE_URL: sqlite:./coordinator_test.db
-
-      - name: Upload coordinator DB (on failure)
-        if: failure()
-        uses: actions/upload-artifact@v4
-        with:
-          name: coordinator-sqlite-db
-          path: ./coordinator_test.db
-          retention-days: 7
-
-  workspace-isolation:
-    name: Multi-Worker Workspace Isolation
-    runs-on: ubuntu-latest
-    timeout-minutes: 15
-
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
+          persist-credentials: false
 
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@1.82.0
@@ -93,6 +72,7 @@ jobs:
           toolchain: "1.82.0"
 
       - name: Set up git for workspace tests
+        if: matrix.setup_git
         run: |
           git config --global user.name "Workspace Tests"
           git config --global user.email "workspace-tests@vibe-ensemble.local"
@@ -105,62 +85,25 @@ jobs:
           cache-on-failure: true
           shared-key: integration-tests
 
-      - name: Test workspace isolation between multiple workers
-        run: |
-          # Test multiple workers working on same project in isolated workspaces
-          cargo test --test coordinator_worker_integration test_multi_worker_isolated_workspaces --verbose -- --nocapture
+      - name: Run scenario
+        run: cargo test --locked --test coordinator_worker_integration ${{ matrix.test }} --verbose -- --nocapture
         env:
           RUST_BACKTRACE: 1
-          DATABASE_URL: sqlite:./workspace_test.db
+          DATABASE_URL: sqlite:./${{ matrix.db }}
+          SQLX_OFFLINE: true
 
-      - name: Upload workspace DB (on failure)
+      - name: Upload DB (on failure)
         if: failure()
         uses: actions/upload-artifact@v4
         with:
-          name: workspace-sqlite-db
-          path: ./workspace_test.db
-          retention-days: 7
-
-  error-recovery:
-    name: Error Recovery and Task Reassignment
-    runs-on: ubuntu-latest
-    timeout-minutes: 15
-
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-
-      - name: Install Rust toolchain
-        uses: dtolnay/rust-toolchain@1.82.0
-        with:
-          toolchain: "1.82.0"
-
-      - name: Cache cargo (compiler-aware)
-        uses: Swatinem/rust-cache@v2
-        with:
-          cache-on-failure: true
-          shared-key: integration-tests
-
-      - name: Test error recovery and task reassignment workflows
-        run: |
-          # Test failure scenarios, task reassignment, and recovery procedures
-          cargo test --test coordinator_worker_integration test_error_recovery_workflow --verbose -- --nocapture
-        env:
-          RUST_BACKTRACE: 1
-          DATABASE_URL: sqlite:./recovery_test.db
-
-      - name: Upload recovery DB (on failure)
-        if: failure()
-        uses: actions/upload-artifact@v4
-        with:
-          name: recovery-sqlite-db
-          path: ./recovery_test.db
+          name: ${{ matrix.db }}-artifact
+          path: ./${{ matrix.db }}
+          if-no-files-found: ignore
           retention-days: 7
 
   complete-integration-suite:
     name: Complete Integration Test Suite
-    needs: [coordinator-ticket-management, workspace-isolation, error-recovery]
+    needs: [scenario]
     runs-on: ubuntu-latest
     timeout-minutes: 20
 
@@ -168,6 +111,7 @@ jobs:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
+          persist-credentials: false
 
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@1.82.0
@@ -182,16 +126,18 @@ jobs:
           shared-key: integration-tests
 
       - name: Build integration tests
-        run: |
-          cargo build --workspace --tests
+        run: cargo build --workspace --tests --locked
+        env:
+          SQLX_OFFLINE: true
 
       - name: Run all integration tests together
         run: |
           # Run all three integration tests to ensure they work together
-          cargo test --test coordinator_worker_integration --verbose -- --nocapture
+          cargo test --locked --test coordinator_worker_integration --verbose -- --nocapture
         env:
           RUST_BACKTRACE: 1
           DATABASE_URL: sqlite:./complete_integration_test.db
+          SQLX_OFFLINE: true
 
       - name: Upload complete-suite DB (on failure)
         if: failure()
@@ -199,11 +145,13 @@ jobs:
         with:
           name: complete-suite-sqlite-db
           path: ./complete_integration_test.db
+          if-no-files-found: ignore
           retention-days: 7
 
       - name: Check formatting
         run: cargo fmt --all -- --check
 
       - name: Lint integration tests
-        run: |
-          cargo clippy --tests --all-features --package vibe-ensemble-mcp -- -D warnings
+        run: cargo clippy --workspace --tests --all-features -- -D warnings
+        env:
+          SQLX_OFFLINE: true
