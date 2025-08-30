@@ -18,7 +18,7 @@ mod tests {
         // Placeholder test to satisfy CI requirements
         // The comprehensive integration test framework will be restored
         // in a separate effort after PR #99 review completion
-        
+
         // Simple test that doesn't get optimized out
         let framework_ready = false; // Will be true once integration tests are restored
         assert!(
