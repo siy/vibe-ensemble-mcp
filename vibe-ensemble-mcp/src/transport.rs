@@ -246,7 +246,7 @@ impl Transport for InMemoryTransport {
 }
 
 /// Connection state for MCP initialization sequencing
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, Copy, PartialEq)]
 pub enum ConnectionState {
     /// Connection is uninitialized
     Uninitialized,
@@ -346,7 +346,7 @@ impl StdioTransport {
 
     /// Get the current connection state
     pub fn connection_state(&self) -> ConnectionState {
-        self.connection_state.clone()
+        self.connection_state
     }
 
     /// Check if transport is ready for MCP protocol operations
@@ -382,7 +382,8 @@ impl StdioTransport {
     }
 
     /// Check if a message is an MCP initialize response correlating to our request
-    fn is_initialize_response(&self, message: &str) -> Result<bool> {
+    /// Returns Ok(Some(true)) for success, Ok(Some(false)) for error, Ok(None) for no match
+    fn is_initialize_response(&self, message: &str) -> Result<Option<bool>> {
         if let Some(expected_id) = &self.last_init_id {
             let parsed: Value = serde_json::from_str(message)
                 .map_err(|e| Error::Transport(format!("Invalid JSON in message: {}", e)))?;
@@ -393,18 +394,18 @@ impl StdioTransport {
                     if response_id == expected_id {
                         // Check if it's a successful initialize response
                         if obj.get("result").is_some() {
-                            return Ok(true);
+                            return Ok(Some(true)); // Success
                         }
                         // Check if it's an initialize error response
                         if let Some(error) = obj.get("error") {
                             warn!("Initialize request failed: {}", error);
-                            return Ok(true); // Still counts as a response
+                            return Ok(Some(false)); // Error
                         }
                     }
                 }
             }
         }
-        Ok(false)
+        Ok(None) // No matching response
     }
 
     /// Update connection state based on initialization progress
@@ -445,12 +446,18 @@ impl StdioTransport {
             }
         } else {
             // Check if we're receiving an initialize response
-            if self.is_initialize_response(message)? {
+            if let Some(success) = self.is_initialize_response(message)? {
                 match &self.connection_state {
                     ConnectionState::Initializing => {
-                        info!("Initialize response received - connection now initialized");
-                        self.connection_state = ConnectionState::Initialized;
-                        self.last_init_id = None;
+                        if success {
+                            info!("Initialize response received - connection now initialized");
+                            self.connection_state = ConnectionState::Initialized;
+                            self.last_init_id = None;
+                        } else {
+                            error!("Initialize failed - closing connection");
+                            self.connection_state = ConnectionState::Closed;
+                            self.last_init_id = None;
+                        }
                     }
                     other_state => {
                         warn!(
@@ -1261,7 +1268,7 @@ mod tests {
             .update_initialization_state(error_response, false)
             .await
             .unwrap();
-        assert_eq!(transport.connection_state(), ConnectionState::Initialized); // Error still counts as response
+        assert_eq!(transport.connection_state(), ConnectionState::Closed); // Error should close the connection
         assert!(transport.last_init_id.is_none());
     }
 
