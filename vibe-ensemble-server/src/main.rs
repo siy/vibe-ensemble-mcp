@@ -267,7 +267,10 @@ async fn run_mcp_stdio_mode_unified(config: &Config) -> Result<()> {
 
         // Log progress periodically for monitoring
         if loop_count % 100 == 0 {
-            info!("Processing loop iteration {} - connection active", loop_count);
+            info!(
+                "Processing loop iteration {} - connection active",
+                loop_count
+            );
         }
 
         match transport.receive().await {
@@ -324,7 +327,10 @@ async fn run_mcp_stdio_mode_unified(config: &Config) -> Result<()> {
     }
 
     // Log shutdown
-    info!("Shutting down MCP server after {} loop iterations", loop_count);
+    info!(
+        "Shutting down MCP server after {} loop iterations",
+        loop_count
+    );
 
     transport.close().await?;
 

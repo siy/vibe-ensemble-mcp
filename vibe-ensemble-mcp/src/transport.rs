@@ -245,14 +245,16 @@ impl Transport for InMemoryTransport {
     }
 }
 
-/// Connection state for MCP stdio transport
+/// Connection state for MCP initialization sequencing
 #[derive(Debug, Clone, PartialEq)]
 pub enum ConnectionState {
-    /// Transport is open but not yet initialized (no MCP initialize received)
-    Connected,
-    /// MCP initialization sequence has been completed successfully
+    /// Connection is uninitialized
+    Uninitialized,
+    /// Connection is in the process of being initialized
+    Initializing,
+    /// Connection has been successfully initialized
     Initialized,
-    /// Connection is closed or in error state
+    /// Connection has been closed
     Closed,
 }
 
@@ -265,13 +267,12 @@ pub enum ConnectionState {
 /// - Signal handling for graceful shutdown (SIGINT/SIGTERM)
 /// - Performance-optimized buffering with configurable sizes
 /// - Robust error handling and connection recovery
-/// - MCP initialization sequence tracking and management
-/// - Connection state management and heartbeat support
-/// - Enhanced logging for debugging and monitoring
+/// - Initialization state management with request/response correlation
 pub struct StdioTransport {
     stdin_reader: BufReader<Stdin>,
     stdout_writer: BufWriter<Stdout>,
     connection_state: ConnectionState,
+    last_init_id: Option<Value>,
     read_timeout: Duration,
     write_timeout: Duration,
     #[cfg_attr(not(test), allow(dead_code))]
@@ -304,7 +305,8 @@ impl StdioTransport {
         Self {
             stdin_reader: BufReader::with_capacity(Self::DEFAULT_BUFFER_SIZE, tokio::io::stdin()),
             stdout_writer: BufWriter::with_capacity(Self::DEFAULT_BUFFER_SIZE, tokio::io::stdout()),
-            connection_state: ConnectionState::Connected,
+            connection_state: ConnectionState::Uninitialized,
+            last_init_id: None,
             read_timeout: Self::DEFAULT_READ_TIMEOUT,
             write_timeout: Self::DEFAULT_WRITE_TIMEOUT,
             buffer_size: Self::DEFAULT_BUFFER_SIZE,
@@ -330,7 +332,8 @@ impl StdioTransport {
         Self {
             stdin_reader: BufReader::with_capacity(clamped_buffer_size, tokio::io::stdin()),
             stdout_writer: BufWriter::with_capacity(clamped_buffer_size, tokio::io::stdout()),
-            connection_state: ConnectionState::Connected,
+            connection_state: ConnectionState::Uninitialized,
+            last_init_id: None,
             read_timeout,
             write_timeout,
             buffer_size: clamped_buffer_size,
@@ -365,40 +368,121 @@ impl StdioTransport {
         )
     }
 
-    /// Detect if a message contains MCP initialization or ping
-    /// This method tracks connection state transitions based on message content
+    /// Check if a message is an MCP initialize request
+    fn is_initialize_request(message: &str) -> Result<Option<Value>> {
+        let parsed: Value = serde_json::from_str(message)
+            .map_err(|e| Error::Transport(format!("Invalid JSON in message: {}", e)))?;
+
+        if let Value::Object(obj) = &parsed {
+            if obj.get("method").and_then(|v| v.as_str()) == Some("initialize") {
+                return Ok(obj.get("id").cloned());
+            }
+        }
+        Ok(None)
+    }
+
+    /// Check if a message is an MCP initialize response correlating to our request
+    fn is_initialize_response(&self, message: &str) -> Result<bool> {
+        if let Some(expected_id) = &self.last_init_id {
+            let parsed: Value = serde_json::from_str(message)
+                .map_err(|e| Error::Transport(format!("Invalid JSON in message: {}", e)))?;
+
+            if let Value::Object(obj) = &parsed {
+                // Check if this is a response with the expected ID
+                if let Some(response_id) = obj.get("id") {
+                    if response_id == expected_id {
+                        // Check if it's a successful initialize response
+                        if obj.get("result").is_some() {
+                            return Ok(true);
+                        }
+                        // Check if it's an initialize error response
+                        if let Some(error) = obj.get("error") {
+                            warn!("Initialize request failed: {}", error);
+                            return Ok(true); // Still counts as a response
+                        }
+                    }
+                }
+            }
+        }
+        Ok(false)
+    }
+
+    /// Update connection state based on initialization progress
+    async fn update_initialization_state(
+        &mut self,
+        message: &str,
+        is_outgoing: bool,
+    ) -> Result<()> {
+        if is_outgoing {
+            // Check if we're sending an initialize request
+            if let Some(init_id) = Self::is_initialize_request(message)? {
+                match self.connection_state {
+                    ConnectionState::Uninitialized => {
+                        debug!(
+                            "Transitioning to Initializing state with request ID: {:?}",
+                            init_id
+                        );
+                        self.connection_state = ConnectionState::Initializing;
+                        self.last_init_id = Some(init_id);
+                    }
+                    ConnectionState::Initializing => {
+                        warn!(
+                            "Received initialize request while already initializing - updating ID"
+                        );
+                        self.last_init_id = Some(init_id);
+                    }
+                    ConnectionState::Initialized => {
+                        warn!("Received initialize request after initialization complete - reinitializing");
+                        self.connection_state = ConnectionState::Initializing;
+                        self.last_init_id = Some(init_id);
+                    }
+                    ConnectionState::Closed => {
+                        return Err(Error::Transport(
+                            "Cannot initialize a closed connection".to_string(),
+                        ));
+                    }
+                }
+            }
+        } else {
+            // Check if we're receiving an initialize response
+            if self.is_initialize_response(message)? {
+                match &self.connection_state {
+                    ConnectionState::Initializing => {
+                        info!("Initialize response received - connection now initialized");
+                        self.connection_state = ConnectionState::Initialized;
+                        self.last_init_id = None;
+                    }
+                    other_state => {
+                        warn!(
+                            "Received initialize response in unexpected state: {:?}",
+                            other_state
+                        );
+                    }
+                }
+            }
+        }
+        Ok(())
+    }
+
+    /// Detect if a message contains ping for heartbeat handling
     pub fn analyze_message(&mut self, message: &str) -> Result<()> {
-        // Parse message to check for initialization or ping
+        // Parse message to check for ping
         let parsed: Value = serde_json::from_str(message)
             .map_err(|e| Error::Transport(format!("Invalid JSON in message analysis: {}", e)))?;
 
         if let Value::Object(obj) = &parsed {
-            // Check for MCP initialize method
+            // Check for ping method
             if let Some(method) = obj.get("method").and_then(|v| v.as_str()) {
-                match method {
-                    "initialize" => {
-                        info!(
-                            "Detected MCP initialize request - transitioning to initialized state"
-                        );
-                        self.connection_state = ConnectionState::Initialized;
-                    }
-                    "ping" => {
-                        if let Some(id) = obj.get("id").and_then(|v| v.as_str()) {
-                            debug!("Detected ping message with id: {}", id);
-                            self.last_ping_id = Some(id.to_string());
-                        }
-                    }
-                    _ => {}
-                }
-            }
-
-            // Check for initialize response (server to client)
-            if let Some(result) = obj.get("result") {
-                if result.is_object() {
-                    debug!("Detected potential MCP initialize response");
-                    // This could be an initialize response, maintain initialized state
-                    if self.connection_state == ConnectionState::Connected {
-                        self.connection_state = ConnectionState::Initialized;
+                if method == "ping" {
+                    if let Some(id_val) = obj.get("id") {
+                        let id_str = match id_val {
+                            Value::String(s) => s.clone(),
+                            Value::Number(n) => n.to_string(),
+                            Value::Null => "null".to_string(),
+                            other => other.to_string(),
+                        };
+                        debug!("Detected ping message with id: {}", id_str);
+                        self.last_ping_id = Some(id_str);
                     }
                 }
             }
@@ -516,11 +600,8 @@ impl Transport for StdioTransport {
         // Validate message before sending (Claude Code compatibility)
         Self::validate_message(message)?;
 
-        // Analyze message for connection state tracking
-        if let Err(e) = self.analyze_message(message) {
-            warn!("Failed to analyze outgoing message: {}", e);
-            // Continue with sending even if analysis fails
-        }
+        // Update initialization state based on outgoing message
+        self.update_initialization_state(message, true).await?;
 
         // Create write operation with timeout
         let write_operation = async {
@@ -623,10 +704,10 @@ impl Transport for StdioTransport {
                                     continue;
                                 }
 
-                                // Analyze message for connection state tracking
-                                if let Err(e) = self.analyze_message(&line) {
-                                    warn!("Failed to analyze incoming message: {}", e);
-                                    // Continue processing even if analysis fails
+                                // Update initialization state based on incoming message
+                                if let Err(e) = self.update_initialization_state(&line, false).await {
+                                    warn!("Error updating initialization state: {}", e);
+                                    // Continue processing the message even if state update fails
                                 }
 
                                 self.messages_received += 1;
@@ -692,6 +773,7 @@ impl Transport for StdioTransport {
             }
 
             self.connection_state = ConnectionState::Closed;
+            self.last_init_id = None;
             info!("Stdio transport closed gracefully");
         }
         Ok(())
@@ -1016,8 +1098,8 @@ mod tests {
     async fn test_stdio_transport_closed_state() {
         let mut transport = StdioTransport::new();
 
-        // Transport should start as connected
-        assert_eq!(transport.connection_state(), ConnectionState::Connected);
+        // Transport should start as uninitialized
+        assert_eq!(transport.connection_state(), ConnectionState::Uninitialized);
         assert!(!transport.is_closed());
 
         // Close the transport
@@ -1094,28 +1176,35 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_stdio_transport_connection_state_management() {
+    async fn test_initialization_state_management() {
         let mut transport = StdioTransport::new();
+        assert_eq!(transport.connection_state(), ConnectionState::Uninitialized);
+        assert!(transport.last_init_id.is_none());
 
-        // Initial state should be Connected
-        assert_eq!(transport.connection_state(), ConnectionState::Connected);
-        assert!(!transport.is_initialized());
-        assert!(!transport.is_closed());
+        // Test initialization request detection
+        let init_request = r#"{"jsonrpc":"2.0","method":"initialize","params":{"protocolVersion":"2024-11-05","capabilities":{},"clientInfo":{"name":"test","version":"1.0"}},"id":"init-123"}"#;
 
-        // Simulate MCP initialize message
-        let init_message = r#"{"jsonrpc":"2.0","method":"initialize","params":{"protocolVersion":"2024-11-05","clientInfo":{"name":"test","version":"1.0"}},"id":1}"#;
-        transport.analyze_message(init_message).unwrap();
+        // Simulate sending an initialize request
+        transport
+            .update_initialization_state(init_request, true)
+            .await
+            .unwrap();
+        assert_eq!(transport.connection_state(), ConnectionState::Initializing);
+        assert_eq!(
+            transport.last_init_id,
+            Some(serde_json::Value::String("init-123".to_string()))
+        );
 
-        // Should transition to Initialized
+        // Test initialization response detection
+        let init_response = r#"{"jsonrpc":"2.0","result":{"protocolVersion":"2024-11-05","serverInfo":{"name":"test-server","version":"1.0"},"capabilities":{}},"id":"init-123"}"#;
+
+        // Simulate receiving an initialize response
+        transport
+            .update_initialization_state(init_response, false)
+            .await
+            .unwrap();
         assert_eq!(transport.connection_state(), ConnectionState::Initialized);
-        assert!(transport.is_initialized());
-        assert!(!transport.is_closed());
-
-        // Close transport
-        transport.close().await.unwrap();
-        assert_eq!(transport.connection_state(), ConnectionState::Closed);
-        assert!(!transport.is_initialized());
-        assert!(transport.is_closed());
+        assert!(transport.last_init_id.is_none());
     }
 
     #[tokio::test]
@@ -1150,25 +1239,97 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_stdio_transport_message_analysis() {
+    async fn test_initialization_error_handling() {
         let mut transport = StdioTransport::new();
 
-        // Test various message types
+        // Send initialize request
+        let init_request = r#"{"jsonrpc":"2.0","method":"initialize","params":{},"id":42}"#;
+        transport
+            .update_initialization_state(init_request, true)
+            .await
+            .unwrap();
+        assert_eq!(transport.connection_state(), ConnectionState::Initializing);
+        assert_eq!(
+            transport.last_init_id,
+            Some(serde_json::Value::Number(serde_json::Number::from(42)))
+        );
+
+        // Receive error response
+        let error_response =
+            r#"{"jsonrpc":"2.0","error":{"code":-32602,"message":"Invalid params"},"id":42}"#;
+        transport
+            .update_initialization_state(error_response, false)
+            .await
+            .unwrap();
+        assert_eq!(transport.connection_state(), ConnectionState::Initialized); // Error still counts as response
+        assert!(transport.last_init_id.is_none());
+    }
+
+    #[tokio::test]
+    async fn test_initialize_request_detection() {
+        // Test various initialize request formats
+        let request_with_string_id =
+            r#"{"jsonrpc":"2.0","method":"initialize","params":{},"id":"test"}"#;
+        let id = StdioTransport::is_initialize_request(request_with_string_id).unwrap();
+        assert_eq!(id, Some(serde_json::Value::String("test".to_string())));
+
+        let request_with_number_id =
+            r#"{"jsonrpc":"2.0","method":"initialize","params":{},"id":123}"#;
+        let id = StdioTransport::is_initialize_request(request_with_number_id).unwrap();
+        assert_eq!(
+            id,
+            Some(serde_json::Value::Number(serde_json::Number::from(123)))
+        );
+
+        // Test non-initialize request
+        let ping_request = r#"{"jsonrpc":"2.0","method":"ping","id":1}"#;
+        let id = StdioTransport::is_initialize_request(ping_request).unwrap();
+        assert!(id.is_none());
+    }
+
+    #[tokio::test]
+    async fn test_connection_state_transitions() {
+        let mut transport = StdioTransport::new();
+
+        // Test closed connection prevents initialization
+        transport.connection_state = ConnectionState::Closed;
         let init_request = r#"{"jsonrpc":"2.0","method":"initialize","params":{},"id":1}"#;
+        let result = transport
+            .update_initialization_state(init_request, true)
+            .await;
+        assert!(result.is_err());
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("Cannot initialize a closed connection"));
+
+        // Test re-initialization from initialized state
+        transport.connection_state = ConnectionState::Initialized;
+        transport
+            .update_initialization_state(init_request, true)
+            .await
+            .unwrap();
+        assert_eq!(transport.connection_state(), ConnectionState::Initializing);
+    }
+
+    #[tokio::test]
+    async fn test_stdio_transport_ping_analysis() {
+        let mut transport = StdioTransport::new();
+
+        // Test ping message with string ID
         let ping_request = r#"{"jsonrpc":"2.0","method":"ping","id":"test-ping"}"#;
-        let other_request = r#"{"jsonrpc":"2.0","method":"list_tools","id":2}"#;
-
-        // Initialize message
-        transport.analyze_message(init_request).unwrap();
-        assert_eq!(transport.connection_state(), ConnectionState::Initialized);
-
-        // Ping message
         transport.analyze_message(ping_request).unwrap();
         assert_eq!(transport.last_ping_id, Some("test-ping".to_string()));
 
-        // Other message should not change state
-        let previous_state = transport.connection_state();
+        // Test ping message with number ID
+        let ping_number = r#"{"jsonrpc":"2.0","method":"ping","id":42}"#;
+        transport.analyze_message(ping_number).unwrap();
+        assert_eq!(transport.last_ping_id, Some("42".to_string()));
+
+        // Test non-ping message
+        let other_request = r#"{"jsonrpc":"2.0","method":"list_tools","id":2}"#;
         transport.analyze_message(other_request).unwrap();
-        assert_eq!(transport.connection_state(), previous_state);
+        // Should keep the last ping ID
+        assert_eq!(transport.last_ping_id, Some("42".to_string()));
     }
 }
