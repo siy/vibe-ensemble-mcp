@@ -9,5 +9,5 @@ async fn test_storage_integration_placeholder() {
     // Placeholder integration test for storage
     let _db_helper = DatabaseTestHelper::new().await.unwrap();
     // Storage integration tests would go here
-    println!("Storage integration test placeholder");
+    tracing::info!("Storage integration test placeholder");
 }

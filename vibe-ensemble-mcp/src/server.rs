@@ -1096,7 +1096,10 @@ impl McpServer {
                 if let Some(agent_service) = &self.agent_service {
                     match agent_service.list_agents().await {
                         Ok(agents) => serde_json::to_value(agents)?,
-                        Err(_) => serde_json::json!([]),
+                        Err(e) => {
+                            warn!("Failed to list agents: {}", e);
+                            serde_json::json!([])
+                        }
                     }
                 } else {
                     serde_json::json!([])
@@ -1106,7 +1109,10 @@ impl McpServer {
                 if let Some(issue_service) = &self.issue_service {
                     match issue_service.list_issues().await {
                         Ok(issues) => serde_json::to_value(issues)?,
-                        Err(_) => serde_json::json!([]),
+                        Err(e) => {
+                            warn!("Failed to list issues: {}", e);
+                            serde_json::json!([])
+                        }
                     }
                 } else {
                     serde_json::json!([])
@@ -1135,7 +1141,10 @@ impl McpServer {
                                 .collect();
                             serde_json::to_value(online_agents)?
                         }
-                        Err(_) => serde_json::json!([]),
+                        Err(e) => {
+                            warn!("Failed to list online agents: {}", e);
+                            serde_json::json!([])
+                        }
                     }
                 } else {
                     serde_json::json!([])
@@ -1156,7 +1165,10 @@ impl McpServer {
                                 .collect();
                             serde_json::to_value(coordinators)?
                         }
-                        Err(_) => serde_json::json!([]),
+                        Err(e) => {
+                            warn!("Failed to list online agents: {}", e);
+                            serde_json::json!([])
+                        }
                     }
                 } else {
                     serde_json::json!([])
@@ -1177,7 +1189,10 @@ impl McpServer {
                                 .collect();
                             serde_json::to_value(workers)?
                         }
-                        Err(_) => serde_json::json!([]),
+                        Err(e) => {
+                            warn!("Failed to list online agents: {}", e);
+                            serde_json::json!([])
+                        }
                     }
                 } else {
                     serde_json::json!([])
