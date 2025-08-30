@@ -84,11 +84,12 @@ impl TestContext {
 
     /// Creates a test message
     pub fn create_test_message(&self, sender_id: Uuid, recipient_id: Option<Uuid>) -> Message {
+        use vibe_ensemble_core::message::MessagePriority;
         if let Some(recipient) = recipient_id {
-            Message::direct(sender_id, recipient, "Test message content")
+            Message::new_direct(sender_id, recipient, "Test message content".to_string(), MessagePriority::Normal)
                 .expect("Failed to create direct message")
         } else {
-            Message::broadcast(sender_id, "Test broadcast message")
+            Message::new_broadcast(sender_id, "Test broadcast message".to_string(), MessagePriority::Normal)
                 .expect("Failed to create broadcast message")
         }
     }
@@ -98,8 +99,8 @@ impl TestContext {
         Knowledge::builder()
             .title(format!("Test Knowledge {}", Uuid::new_v4()))
             .content("This is test knowledge content for automated testing")
-            .knowledge_type(KnowledgeType::BestPractice)
-            .access_level(AccessLevel::TeamVisible)
+            .knowledge_type(KnowledgeType::Practice)
+            .access_level(AccessLevel::Team)
             .created_by(created_by)
             .build()
             .expect("Failed to create test knowledge")
@@ -124,7 +125,7 @@ impl TestDataGenerator for Agent {
             .connection_metadata(ConnectionMetadata {
                 endpoint: format!(
                     "https://{}",
-                    fake::faker::internet::en::DomainSuffix().fake()
+                    fake::faker::internet::en::DomainSuffix().fake::<String>()
                 ),
                 protocol_version: "1.0".to_string(),
                 session_id: Some(Uuid::new_v4().to_string()),
@@ -142,7 +143,7 @@ impl TestDataGenerator for Agent {
 impl TestDataGenerator for Issue {
     fn generate_realistic() -> Self {
         Issue::builder()
-            .title(fake::faker::lorem::en::Sentence(5..10).fake())
+            .title(fake::faker::lorem::en::Sentence(5..10).fake::<String>())
             .description(
                 fake::faker::lorem::en::Paragraphs(1..3)
                     .fake::<Vec<String>>()

@@ -24,11 +24,9 @@ impl TestScenarios {
         let coordinator = Agent::builder()
             .name("coordinator-agent")
             .connection_metadata(ConnectionMetadata {
-                host: "localhost".to_string(),
-                port: 8080,
-                protocol: "http".to_string(),
-                last_heartbeat: Utc::now(),
-                connection_id: "coord-001".to_string(),
+                endpoint: "http://localhost:8080".to_string(),
+                protocol_version: "1.0".to_string(),
+                session_id: Some("coord-001".to_string()),
             })
             .capabilities(vec![
                 "project_management".to_string(),
