@@ -414,6 +414,33 @@ impl StdioTransport {
         message: &str,
         is_outgoing: bool,
     ) -> Result<()> {
+        // If we're receiving an initialize request (server role), enter Initializing.
+        if !is_outgoing {
+            if let Some(init_id) = Self::is_initialize_request(message)? {
+                match self.connection_state {
+                    ConnectionState::Uninitialized | ConnectionState::Initialized => {
+                        debug!(
+                            "Incoming initialize request - transitioning to Initializing with ID: {:?}",
+                            init_id
+                        );
+                        self.connection_state = ConnectionState::Initializing;
+                        self.last_init_id = Some(init_id);
+                    }
+                    ConnectionState::Initializing => {
+                        warn!("Incoming initialize while already initializing - updating ID");
+                        self.last_init_id = Some(init_id);
+                    }
+                    ConnectionState::Closed => {
+                        return Err(Error::Transport(
+                            "Cannot initialize a closed connection".to_string(),
+                        ));
+                    }
+                }
+                // Nothing else to do for the request itself.
+                return Ok(());
+            }
+        }
+
         if is_outgoing {
             // Check if we're sending an initialize request
             if let Some(init_id) = Self::is_initialize_request(message)? {
@@ -444,8 +471,32 @@ impl StdioTransport {
                     }
                 }
             }
+            // If we're sending a response to a recorded initialize, finalize state now (server role).
+            if let Some(success) = self.is_initialize_response(message)? {
+                match &self.connection_state {
+                    ConnectionState::Initializing => {
+                        if success {
+                            info!("Initialize response sent - connection now initialized");
+                            self.connection_state = ConnectionState::Initialized;
+                            self.last_init_id = None;
+                        } else {
+                            error!("Initialize error response sent - closing connection");
+                            self.connection_state = ConnectionState::Closed;
+                            self.last_init_id = None;
+                            self.errors_encountered += 1;
+                        }
+                    }
+                    other_state => {
+                        warn!(
+                            "Sending initialize response in unexpected state: {:?}",
+                            other_state
+                        );
+                    }
+                }
+                return Ok(());
+            }
         } else {
-            // Check if we're receiving an initialize response
+            // Check if we're receiving an initialize response (client role)
             if let Some(success) = self.is_initialize_response(message)? {
                 match &self.connection_state {
                     ConnectionState::Initializing => {
@@ -468,6 +519,7 @@ impl StdioTransport {
                 }
             }
         }
+
         Ok(())
     }
 
