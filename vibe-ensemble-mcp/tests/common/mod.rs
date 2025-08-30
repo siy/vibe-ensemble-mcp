@@ -6,32 +6,32 @@
 //! - Test agent factories
 //! - Common assertions and helpers
 
-use std::sync::Arc;
-use tokio::sync::Mutex;
-use uuid::Uuid;
 use chrono::{DateTime, Utc};
 use fake::{Fake, Faker};
 use sqlx::{Pool, Sqlite, SqlitePool};
+use std::sync::Arc;
 use tempfile::NamedTempFile;
+use tokio::sync::Mutex;
+use uuid::Uuid;
 
 use vibe_ensemble_core::{
     agent::{Agent, AgentStatus, ConnectionMetadata},
-    issue::{Issue, IssueStatus, IssuePriority},
-    message::{Message, MessageType},
-    knowledge::{Knowledge, KnowledgeType, AccessLevel},
     config::Configuration,
+    issue::{Issue, IssuePriority, IssueStatus},
+    knowledge::{AccessLevel, Knowledge, KnowledgeType},
+    message::{Message, MessageType},
 };
 
 pub mod agents;
+pub mod assertions;
 pub mod database;
 pub mod fixtures;
-pub mod assertions;
 
 // Integration test framework modules
+pub mod file_system_verifier;
 pub mod framework;
 pub mod mock_agents;
 pub mod worktree_manager;
-pub mod file_system_verifier;
 
 /// Test configuration and shared resources
 pub struct TestContext {
@@ -44,12 +44,14 @@ impl TestContext {
     pub async fn new() -> Result<Self, Box<dyn std::error::Error>> {
         let temp_db = NamedTempFile::new()?;
         let db_url = format!("sqlite:{}", temp_db.path().display());
-        
+
         let db_pool = SqlitePool::connect(&db_url).await?;
-        
+
         // Run migrations
-        sqlx::migrate!("../vibe-ensemble-storage/migrations").run(&db_pool).await?;
-        
+        sqlx::migrate!("../vibe-ensemble-storage/migrations")
+            .run(&db_pool)
+            .await?;
+
         Ok(TestContext {
             db_pool: Arc::new(db_pool),
             temp_db,
@@ -61,11 +63,9 @@ impl TestContext {
         Agent::builder()
             .name(format!("test-agent-{}", Uuid::new_v4()))
             .connection_metadata(ConnectionMetadata {
-                host: "localhost".to_string(),
-                port: 8080,
-                protocol: "http".to_string(),
-                last_heartbeat: Utc::now(),
-                connection_id: Uuid::new_v4().to_string(),
+                endpoint: "http://localhost:8080".to_string(),
+                protocol_version: "1.0".to_string(),
+                session_id: Some(Uuid::new_v4().to_string()),
             })
             .capabilities(vec!["test".to_string(), "mock".to_string()])
             .build()
@@ -114,21 +114,25 @@ pub trait TestDataGenerator {
 impl TestDataGenerator for Agent {
     fn generate_realistic() -> Self {
         Agent::builder()
-            .name(format!("agent-{}", fake::faker::name::en::Name().fake::<String>().to_lowercase().replace(" ", "-")))
+            .name(format!(
+                "agent-{}",
+                fake::faker::name::en::Name()
+                    .fake::<String>()
+                    .to_lowercase()
+                    .replace(" ", "-")
+            ))
             .connection_metadata(ConnectionMetadata {
-                host: fake::faker::internet::en::DomainSuffix().fake(),
-                port: (8000..9000).fake(),
-                protocol: "https".to_string(),
-                last_heartbeat: fake::faker::chrono::en::DateTimeBetween(
-                    DateTime::parse_from_rfc3339("2024-01-01T00:00:00Z").unwrap().with_timezone(&Utc),
-                    Utc::now()
-                ).fake(),
-                connection_id: Uuid::new_v4().to_string(),
+                endpoint: format!(
+                    "https://{}",
+                    fake::faker::internet::en::DomainSuffix().fake()
+                ),
+                protocol_version: "1.0".to_string(),
+                session_id: Some(Uuid::new_v4().to_string()),
             })
             .capabilities(vec![
                 "coding".to_string(),
-                "analysis".to_string(), 
-                "review".to_string()
+                "analysis".to_string(),
+                "review".to_string(),
             ])
             .build()
             .expect("Failed to generate realistic agent")
@@ -139,7 +143,11 @@ impl TestDataGenerator for Issue {
     fn generate_realistic() -> Self {
         Issue::builder()
             .title(fake::faker::lorem::en::Sentence(5..10).fake())
-            .description(fake::faker::lorem::en::Paragraphs(1..3).fake::<Vec<String>>().join("\n\n"))
+            .description(
+                fake::faker::lorem::en::Paragraphs(1..3)
+                    .fake::<Vec<String>>()
+                    .join("\n\n"),
+            )
             .priority(IssuePriority::Medium)
             .build()
             .expect("Failed to generate realistic issue")
@@ -152,7 +160,9 @@ macro_rules! async_test {
     ($test_name:ident, $test_body:expr) => {
         #[tokio::test]
         async fn $test_name() {
-            let ctx = TestContext::new().await.expect("Failed to create test context");
+            let ctx = TestContext::new()
+                .await
+                .expect("Failed to create test context");
             $test_body(ctx).await
         }
     };

@@ -8,12 +8,17 @@ on:
   schedule:
     # Run integration tests nightly at 2 AM UTC
     - cron: '0 2 * * *'
+  workflow_dispatch:
 
 env:
   CARGO_TERM_COLOR: always
   DATABASE_URL: sqlite:./integration_test.db
   RUSTFLAGS: "-D warnings"
   SQLX_OFFLINE: true
+
+concurrency:
+  group: integration-tests-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   coordinator-worker-integration:
@@ -26,27 +31,27 @@ jobs:
         with:
           # Need full history for git worktree operations
           fetch-depth: 0
-      
+
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@stable
         with:
           toolchain: "stable"
           components: rustfmt, clippy
-      
+
       - name: Install system dependencies
         run: |
           sudo apt-get update
           sudo apt-get install -y git
           git --version
-      
+
       - name: Set up git for integration tests
         run: |
           git config --global user.name "Integration Tests"
           git config --global user.email "integration-tests@vibe-ensemble.local"
           git config --global init.defaultBranch main
-      
+
       - name: Cache cargo dependencies
-        uses: actions/cache@v3
+        uses: actions/cache@v4
         with:
           path: |
             ~/.cargo/bin/
@@ -56,13 +61,14 @@ jobs:
             target/
           key: ${{ runner.os }}-integration-${{ hashFiles('**/Cargo.lock') }}
           restore-keys: |
-            ${{ runner.os }}-cargo-
-      
+            ${{ runner.os }}-integration-
+            ${{ runner.os }}-
+
       - name: Build integration test dependencies
         run: |
           # Build the workspace first to ensure all dependencies are available
           cargo build --workspace --tests
-      
+
       - name: Run coordinator-worker integration tests
         run: |
           # Run the specific coordinator-worker integration tests
@@ -72,12 +78,12 @@ jobs:
           RUST_LOG: debug
           # Use a separate database for integration tests
           DATABASE_URL: sqlite:./coordinator_worker_integration_test.db
-      
+
       - name: Run comprehensive workflow tests
         run: |
           # Run additional integration test scenarios
           cargo test coordinator_worker_integration::tests::test_coordinator_creates_assigns_tickets --verbose
-          cargo test coordinator_worker_integration::tests::test_multi_worker_isolated_workspaces --verbose  
+          cargo test coordinator_worker_integration::tests::test_multi_worker_isolated_workspaces --verbose
           cargo test coordinator_worker_integration::tests::test_error_recovery_workflow --verbose
         env:
           RUST_BACKTRACE: full
@@ -93,19 +99,19 @@ jobs:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
-      
+
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@stable
         with:
           toolchain: "stable"
-      
+
       - name: Set up git
         run: |
           git config --global user.name "Worktree Tests"
           git config --global user.email "worktree-tests@vibe-ensemble.local"
-      
+
       - name: Cache cargo dependencies
-        uses: actions/cache@v3
+        uses: actions/cache@v4
         with:
           path: |
             ~/.cargo/bin/
@@ -115,8 +121,9 @@ jobs:
             target/
           key: ${{ runner.os }}-worktree-${{ hashFiles('**/Cargo.lock') }}
           restore-keys: |
-            ${{ runner.os }}-cargo-
-      
+            ${{ runner.os }}-worktree-
+            ${{ runner.os }}-
+
       - name: Test git worktree operations
         run: |
           # Test the worktree manager functionality
@@ -125,20 +132,20 @@ jobs:
           RUST_BACKTRACE: 1
 
   file-system-verification:
-    name: File System Verification Tests  
+    name: File System Verification Tests
     runs-on: ubuntu-latest
     timeout-minutes: 15
 
     steps:
       - uses: actions/checkout@v4
-      
+
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@stable
         with:
           toolchain: "stable"
-      
+
       - name: Cache cargo dependencies
-        uses: actions/cache@v3
+        uses: actions/cache@v4
         with:
           path: |
             ~/.cargo/bin/
@@ -148,8 +155,9 @@ jobs:
             target/
           key: ${{ runner.os }}-filesystem-${{ hashFiles('**/Cargo.lock') }}
           restore-keys: |
-            ${{ runner.os }}-cargo-
-      
+            ${{ runner.os }}-filesystem-
+            ${{ runner.os }}-
+
       - name: Test file system verification
         run: |
           # Test the file system verifier functionality
@@ -164,14 +172,14 @@ jobs:
 
     steps:
       - uses: actions/checkout@v4
-      
+
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@stable
         with:
           toolchain: "stable"
-      
+
       - name: Cache cargo dependencies
-        uses: actions/cache@v3
+        uses: actions/cache@v4
         with:
           path: |
             ~/.cargo/bin/
@@ -181,8 +189,9 @@ jobs:
             target/
           key: ${{ runner.os }}-mock-agents-${{ hashFiles('**/Cargo.lock') }}
           restore-keys: |
-            ${{ runner.os }}-cargo-
-      
+            ${{ runner.os }}-mock-agents-
+            ${{ runner.os }}-
+
       - name: Test mock agent interactions
         run: |
           # Test mock coordinator and worker agent functionality
@@ -200,19 +209,19 @@ jobs:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
-      
+
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@stable
         with:
           toolchain: "stable"
-      
+
       - name: Set up git
         run: |
           git config --global user.name "Performance Tests"
           git config --global user.email "perf-tests@vibe-ensemble.local"
-      
+
       - name: Cache cargo dependencies
-        uses: actions/cache@v3
+        uses: actions/cache@v4
         with:
           path: |
             ~/.cargo/bin/
@@ -222,19 +231,20 @@ jobs:
             target/
           key: ${{ runner.os }}-perf-${{ hashFiles('**/Cargo.lock') }}
           restore-keys: |
-            ${{ runner.os }}-cargo-
-      
+            ${{ runner.os }}-perf-
+            ${{ runner.os }}-
+
       - name: Run performance benchmarks
         run: |
           # Build in release mode for performance testing
           cargo build --release --workspace --tests
-          
+
           # Run performance-focused integration tests
           cargo test --release --test coordinator_worker_integration -- --nocapture --test-threads=1
         env:
           RUST_BACKTRACE: 1
           DATABASE_URL: sqlite:./performance_test.db
-      
+
       - name: Upload performance results
         if: github.event_name == 'push' && github.ref == 'refs/heads/main'
         run: |
@@ -267,7 +277,7 @@ jobs:
             echo "  Performance: ${{ needs.performance-benchmarks.result }}"
             exit 1
           fi
-      
+
       - name: Post integration test results
         if: github.event_name == 'pull_request'
         run: |

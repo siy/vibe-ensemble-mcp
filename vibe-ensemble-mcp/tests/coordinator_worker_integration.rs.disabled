@@ -24,15 +24,9 @@ use vibe_ensemble_mcp::{
     transport::{Transport, TransportFactory},
 };
 
-mod framework;
-mod mock_agents;
-mod worktree_manager;
-mod file_system_verifier;
+mod common;
 
-pub use framework::*;
-pub use mock_agents::*;
-pub use worktree_manager::*;
-pub use file_system_verifier::*;
+use common::{file_system_verifier::*, framework::*, mock_agents::*, worktree_manager::*};
 
 /// Integration test framework for coordinator-worker workflows
 pub struct CoordinatorWorkerTestFramework {
@@ -53,6 +47,56 @@ pub struct CoordinatorWorkerTestFramework {
 }
 
 impl CoordinatorWorkerTestFramework {
+    /// Initialize git repository with test configuration
+    async fn initialize_git_repo(workspace_dir: &Path) -> Result<(), Box<dyn std::error::Error>> {
+        // Initialize git repository
+        let git_init_result = tokio::process::Command::new("git")
+            .args(&["init"])
+            .current_dir(workspace_dir)
+            .output()
+            .await?;
+
+        if !git_init_result.status.success() {
+            return Err(format!(
+                "Failed to initialize git repository: {}",
+                String::from_utf8_lossy(&git_init_result.stderr)
+            )
+            .into());
+        }
+
+        // Set up git config
+        tokio::process::Command::new("git")
+            .args(&["config", "user.name", "Test Framework"])
+            .current_dir(workspace_dir)
+            .output()
+            .await?;
+
+        tokio::process::Command::new("git")
+            .args(&["config", "user.email", "test@vibe-ensemble.local"])
+            .current_dir(workspace_dir)
+            .output()
+            .await?;
+
+        // Create initial commit
+        tokio::fs::write(
+            workspace_dir.join("README.md"),
+            "# Integration Test Workspace\n",
+        )
+        .await?;
+        tokio::process::Command::new("git")
+            .args(&["add", "README.md"])
+            .current_dir(workspace_dir)
+            .output()
+            .await?;
+
+        tokio::process::Command::new("git")
+            .args(&["commit", "-m", "Initial commit"])
+            .current_dir(workspace_dir)
+            .output()
+            .await?;
+
+        Ok(())
+    }
     /// Creates a new test framework instance
     pub async fn new() -> Result<Self, Box<dyn std::error::Error>> {
         // Set up test database
@@ -60,72 +104,52 @@ impl CoordinatorWorkerTestFramework {
             .max_connections(5)
             .connect("sqlite::memory:")
             .await?;
-            
+
         vibe_ensemble_storage::migrations::run_migrations(&pool).await?;
 
         // Create coordination services
-        let agent_repo = Arc::new(vibe_ensemble_storage::repositories::AgentRepository::new(pool.clone()));
-        let issue_repo = Arc::new(vibe_ensemble_storage::repositories::IssueRepository::new(pool.clone()));
-        let message_repo = Arc::new(vibe_ensemble_storage::repositories::MessageRepository::new(pool.clone()));
-        let knowledge_repo = Arc::new(vibe_ensemble_storage::repositories::KnowledgeRepository::new(pool));
+        let agent_repo = Arc::new(vibe_ensemble_storage::repositories::AgentRepository::new(
+            pool.clone(),
+        ));
+        let issue_repo = Arc::new(vibe_ensemble_storage::repositories::IssueRepository::new(
+            pool.clone(),
+        ));
+        let message_repo = Arc::new(vibe_ensemble_storage::repositories::MessageRepository::new(
+            pool.clone(),
+        ));
+        let knowledge_repo =
+            Arc::new(vibe_ensemble_storage::repositories::KnowledgeRepository::new(pool));
 
         let coordination_services = CoordinationServices::new(
-            Arc::new(vibe_ensemble_storage::services::AgentService::new(agent_repo.clone())),
-            Arc::new(vibe_ensemble_storage::services::IssueService::new(issue_repo.clone())),
-            Arc::new(vibe_ensemble_storage::services::MessageService::new(message_repo.clone())),
+            Arc::new(vibe_ensemble_storage::services::AgentService::new(
+                agent_repo.clone(),
+            )),
+            Arc::new(vibe_ensemble_storage::services::IssueService::new(
+                issue_repo.clone(),
+            )),
+            Arc::new(vibe_ensemble_storage::services::MessageService::new(
+                message_repo.clone(),
+            )),
             Arc::new(vibe_ensemble_storage::services::CoordinationService::new(
                 agent_repo,
                 issue_repo,
                 message_repo,
             )),
-            Arc::new(vibe_ensemble_storage::services::KnowledgeService::new(knowledge_repo)),
+            Arc::new(vibe_ensemble_storage::services::KnowledgeService::new(
+                knowledge_repo,
+            )),
         );
 
         // Create MCP server
         let server = McpServer::with_coordination(coordination_services.clone());
 
         // Create test workspace directory
-        let workspace_dir = std::env::temp_dir().join(format!("vibe-ensemble-test-{}", Uuid::new_v4()));
+        let workspace_dir =
+            std::env::temp_dir().join(format!("vibe-ensemble-test-{}", Uuid::new_v4()));
         tokio::fs::create_dir_all(&workspace_dir).await?;
 
-        // Initialize git repository in workspace
-        let git_init_result = tokio::process::Command::new("git")
-            .args(&["init"])
-            .current_dir(&workspace_dir)
-            .output()
-            .await?;
-
-        if !git_init_result.status.success() {
-            return Err(format!("Failed to initialize git repository: {}", 
-                String::from_utf8_lossy(&git_init_result.stderr)).into());
-        }
-
-        // Set up git config for tests
-        tokio::process::Command::new("git")
-            .args(&["config", "user.name", "Test Framework"])
-            .current_dir(&workspace_dir)
-            .output()
-            .await?;
-
-        tokio::process::Command::new("git")
-            .args(&["config", "user.email", "test@vibe-ensemble.local"])
-            .current_dir(&workspace_dir)
-            .output()
-            .await?;
-
-        // Create initial commit
-        tokio::fs::write(workspace_dir.join("README.md"), "# Integration Test Workspace\n").await?;
-        tokio::process::Command::new("git")
-            .args(&["add", "README.md"])
-            .current_dir(&workspace_dir)
-            .output()
-            .await?;
-
-        tokio::process::Command::new("git")
-            .args(&["commit", "-m", "Initial commit"])
-            .current_dir(&workspace_dir)
-            .output()
-            .await?;
+        // Initialize git repository
+        Self::initialize_git_repo(&workspace_dir).await?;
 
         Ok(Self {
             server,
@@ -139,7 +163,11 @@ impl CoordinatorWorkerTestFramework {
     }
 
     /// Adds a mock worker to the framework
-    pub async fn add_worker(&mut self, name: &str, capabilities: Vec<String>) -> Result<(), Box<dyn std::error::Error>> {
+    pub async fn add_worker(
+        &mut self,
+        name: &str,
+        capabilities: Vec<String>,
+    ) -> Result<(), Box<dyn std::error::Error>> {
         let worker = MockWorker::new(name, capabilities).await?;
         self.workers.push(worker);
         Ok(())
@@ -159,21 +187,28 @@ impl CoordinatorWorkerTestFramework {
     }
 
     /// Runs a complete coordinator-worker workflow test
-    pub async fn run_workflow_test(&mut self, test_scenario: WorkflowTestScenario) -> Result<WorkflowTestResult, Box<dyn std::error::Error>> {
+    pub async fn run_workflow_test(
+        &mut self,
+        test_scenario: WorkflowTestScenario,
+    ) -> Result<WorkflowTestResult, Box<dyn std::error::Error>> {
         let start_time = std::time::Instant::now();
         let mut result = WorkflowTestResult::new(test_scenario.name.clone());
 
         // Phase 1: Coordinator creates tickets
-        let ticket_ids = self.coordinator.create_tickets(&self.server, test_scenario.tickets).await?;
+        let ticket_ids = self
+            .coordinator
+            .create_tickets(&self.server, test_scenario.tickets)
+            .await?;
         result.add_phase("ticket_creation", start_time.elapsed());
 
         // Phase 2: Create isolated worktrees for workers
         let mut worktree_assignments = HashMap::new();
         for (worker_id, ticket_id) in test_scenario.assignments.iter() {
             if let Some(worker) = self.workers.iter().find(|w| w.id() == *worker_id) {
-                let worktree_path = self.worktree_manager.create_worktree(
-                    &format!("worker-{}-{}", worker.name(), ticket_id)
-                ).await?;
+                let worktree_path = self
+                    .worktree_manager
+                    .create_worktree(&format!("worker-{}-{}", worker.name(), ticket_id))
+                    .await?;
                 worktree_assignments.insert(*worker_id, worktree_path);
             }
         }
@@ -181,7 +216,9 @@ impl CoordinatorWorkerTestFramework {
 
         // Phase 3: Assign tickets to workers
         for (worker_id, ticket_id) in test_scenario.assignments.iter() {
-            self.coordinator.assign_ticket(&self.server, *ticket_id, *worker_id).await?;
+            self.coordinator
+                .assign_ticket(&self.server, *ticket_id, *worker_id)
+                .await?;
         }
         result.add_phase("ticket_assignment", start_time.elapsed());
 
@@ -189,7 +226,8 @@ impl CoordinatorWorkerTestFramework {
         let mut file_creation_tasks = Vec::new();
         for worker in &self.workers {
             if let Some(worktree_path) = worktree_assignments.get(&worker.id()) {
-                let assigned_tickets: Vec<_> = test_scenario.assignments
+                let assigned_tickets: Vec<_> = test_scenario
+                    .assignments
                     .iter()
                     .filter(|(worker_id, _)| *worker_id == worker.id())
                     .map(|(_, ticket_id)| *ticket_id)
@@ -197,10 +235,8 @@ impl CoordinatorWorkerTestFramework {
 
                 for ticket_id in assigned_tickets {
                     if let Some(files) = test_scenario.expected_files.get(&ticket_id) {
-                        let task = worker.create_files_in_worktree(
-                            worktree_path.clone(),
-                            files.clone()
-                        );
+                        let task =
+                            worker.create_files_in_worktree(worktree_path.clone(), files.clone());
                         file_creation_tasks.push(task);
                     }
                 }
@@ -217,13 +253,19 @@ impl CoordinatorWorkerTestFramework {
         // Phase 5: Verify file system changes
         for (ticket_id, expected_files) in test_scenario.expected_files.iter() {
             // Find the worker assigned to this ticket
-            if let Some((worker_id, _)) = test_scenario.assignments.iter().find(|(_, tid)| *tid == ticket_id) {
+            if let Some((worker_id, _)) = test_scenario
+                .assignments
+                .iter()
+                .find(|(_, tid)| *tid == ticket_id)
+            {
                 if let Some(worktree_path) = worktree_assignments.get(worker_id) {
                     for expected_file in expected_files {
-                        self.file_verifier.verify_file_exists(
-                            &worktree_path.join(&expected_file.path),
-                            &expected_file.expected_content
-                        ).await?;
+                        self.file_verifier
+                            .verify_file_exists(
+                                &worktree_path.join(&expected_file.path),
+                                &expected_file.expected_content,
+                            )
+                            .await?;
                     }
                 }
             }
@@ -232,21 +274,26 @@ impl CoordinatorWorkerTestFramework {
 
         // Phase 6: Workers update ticket status
         for worker in &self.workers {
-            let assigned_tickets: Vec<_> = test_scenario.assignments
+            let assigned_tickets: Vec<_> = test_scenario
+                .assignments
                 .iter()
                 .filter(|(worker_id, _)| *worker_id == worker.id())
                 .map(|(_, ticket_id)| *ticket_id)
                 .collect();
 
             for ticket_id in assigned_tickets {
-                worker.update_ticket_status(&self.server, ticket_id, "completed").await?;
+                worker
+                    .update_ticket_status(&self.server, ticket_id, "completed")
+                    .await?;
             }
         }
         result.add_phase("status_update", start_time.elapsed());
 
         // Phase 7: Cleanup worktrees
         for (_, worktree_path) in worktree_assignments {
-            self.worktree_manager.cleanup_worktree(&worktree_path).await?;
+            self.worktree_manager
+                .cleanup_worktree(&worktree_path)
+                .await?;
         }
         result.add_phase("cleanup", start_time.elapsed());
 
@@ -339,7 +386,8 @@ impl WorkflowTestResult {
 
     /// Adds a phase duration to the result
     pub fn add_phase(&mut self, phase_name: &str, duration: Duration) {
-        self.phase_durations.insert(phase_name.to_string(), duration);
+        self.phase_durations
+            .insert(phase_name.to_string(), duration);
     }
 
     /// Sets the total test duration
@@ -371,11 +419,19 @@ mod tests {
             .expect("Failed to create test framework");
 
         // Add workers with specific capabilities
-        framework.add_worker("backend-worker", vec!["rust".to_string(), "api".to_string()])
+        framework
+            .add_worker(
+                "backend-worker",
+                vec!["rust".to_string(), "api".to_string()],
+            )
             .await
             .expect("Failed to add backend worker");
-        
-        framework.add_worker("frontend-worker", vec!["typescript".to_string(), "react".to_string()])
+
+        framework
+            .add_worker(
+                "frontend-worker",
+                vec!["typescript".to_string(), "react".to_string()],
+            )
             .await
             .expect("Failed to add frontend worker");
 
@@ -400,7 +456,8 @@ mod tests {
                 TicketDefinition {
                     id: frontend_ticket_id,
                     title: "Create login component".to_string(),
-                    description: "Build React component for user login with form validation".to_string(),
+                    description: "Build React component for user login with form validation"
+                        .to_string(),
                     priority: "medium".to_string(),
                 },
             ],
@@ -431,7 +488,8 @@ mod tests {
         };
 
         // Run the workflow test
-        let result = framework.run_workflow_test(scenario)
+        let result = framework
+            .run_workflow_test(scenario)
             .await
             .expect("Workflow test failed");
 
@@ -450,7 +508,10 @@ mod tests {
         }
 
         // Cleanup
-        framework.cleanup().await.expect("Failed to cleanup framework");
+        framework
+            .cleanup()
+            .await
+            .expect("Failed to cleanup framework");
     }
 
     /// Test multiple workers working on the same project with workspace isolation
@@ -462,10 +523,13 @@ mod tests {
 
         // Add multiple workers of the same type
         for i in 0..3 {
-            framework.add_worker(
-                &format!("worker-{}", i),
-                vec!["development".to_string(), "collaboration".to_string()]
-            ).await.expect("Failed to add worker");
+            framework
+                .add_worker(
+                    &format!("worker-{}", i),
+                    vec!["development".to_string(), "collaboration".to_string()],
+                )
+                .await
+                .expect("Failed to add worker");
         }
 
         framework.setup().await.expect("Failed to setup framework");
@@ -483,15 +547,19 @@ mod tests {
                 description: format!("Worker {} implements their assigned module", i),
                 priority: "medium".to_string(),
             });
-            
+
             assignments.push((worker.id(), ticket_id));
-            
-            expected_files.insert(ticket_id, vec![
-                ExpectedFile {
+
+            expected_files.insert(
+                ticket_id,
+                vec![ExpectedFile {
                     path: PathBuf::from(format!("src/module_{}.rs", i)),
-                    expected_content: format!("// Module {} implementation\npub struct Module{};\n", i, i),
-                },
-            ]);
+                    expected_content: format!(
+                        "// Module {} implementation\npub struct Module{};\n",
+                        i, i
+                    ),
+                }],
+            );
         }
 
         let scenario = WorkflowTestScenario {
@@ -501,15 +569,19 @@ mod tests {
             expected_files,
         };
 
-        let result = framework.run_workflow_test(scenario)
+        let result = framework
+            .run_workflow_test(scenario)
             .await
             .expect("Multi-worker test failed");
 
         assert!(result.success, "Multi-worker test should succeed");
-        
+
         println!("✓ Multi-worker isolated workspace test completed successfully");
 
-        framework.cleanup().await.expect("Failed to cleanup framework");
+        framework
+            .cleanup()
+            .await
+            .expect("Failed to cleanup framework");
     }
 
     /// Test error handling and recovery in coordinator-worker workflows
@@ -519,8 +591,10 @@ mod tests {
             .await
             .expect("Failed to create test framework");
 
-        framework.add_worker("reliable-worker", vec!["development".to_string()])
-            .await.expect("Failed to add worker");
+        framework
+            .add_worker("reliable-worker", vec!["development".to_string()])
+            .await
+            .expect("Failed to add worker");
 
         framework.setup().await.expect("Failed to setup framework");
 
@@ -530,14 +604,12 @@ mod tests {
         // Test scenario with a file that should cause an error initially
         let scenario = WorkflowTestScenario {
             name: "error_recovery_workflow".to_string(),
-            tickets: vec![
-                TicketDefinition {
-                    id: ticket_id,
-                    title: "Implement error-prone feature".to_string(),
-                    description: "Feature that initially fails but recovers".to_string(),
-                    priority: "high".to_string(),
-                },
-            ],
+            tickets: vec![TicketDefinition {
+                id: ticket_id,
+                title: "Implement error-prone feature".to_string(),
+                description: "Feature that initially fails but recovers".to_string(),
+                priority: "high".to_string(),
+            }],
             assignments: vec![(worker_id, ticket_id)],
             expected_files: {
                 let mut files = HashMap::new();
@@ -551,14 +623,18 @@ mod tests {
             },
         };
 
-        let result = framework.run_workflow_test(scenario)
+        let result = framework
+            .run_workflow_test(scenario)
             .await
             .expect("Error recovery test failed");
 
         assert!(result.success, "Error recovery test should succeed");
-        
+
         println!("✓ Error recovery workflow test completed successfully");
 
-        framework.cleanup().await.expect("Failed to cleanup framework");
+        framework
+            .cleanup()
+            .await
+            .expect("Failed to cleanup framework");
     }
 }

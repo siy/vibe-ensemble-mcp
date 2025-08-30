@@ -31,6 +31,8 @@ humantime = "2"
 
 [dev-dependencies]
 sqlx = { workspace = true }
+fake = { version = "2.9", features = ["derive", "chrono"] }
+tempfile = "3.8"
 
 # Binary removed - functionality consolidated into vibe-ensemble
 # Use: vibe-ensemble --mcp-only --transport=stdio
