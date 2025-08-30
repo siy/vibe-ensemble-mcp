@@ -16,22 +16,21 @@ use futures_util::{SinkExt, StreamExt};
 use serde_json::{json, Value};
 use std::collections::HashMap;
 use std::time::Duration;
-use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader, BufWriter};
+use tokio::io::{AsyncBufReadExt, AsyncReadExt, AsyncWriteExt, BufReader, BufWriter};
 use tokio::process::{Child, ChildStdin, ChildStdout, Command};
 use tokio::time::timeout;
 use tokio_tungstenite::tungstenite::Message;
 use tokio_tungstenite::{connect_async, MaybeTlsStream, WebSocketStream};
 
 use crate::protocol::{
-    methods, ClientCapabilities, ClientInfo, InitializeParams, JsonRpcNotification,
-    JsonRpcRequest,
+    methods, ClientCapabilities, ClientInfo, InitializeParams, JsonRpcNotification, JsonRpcRequest,
 };
 use crate::transport::{SseTransport, Transport};
 use crate::{Error, Result};
 
 /// Claude Code client simulation trait
 #[async_trait::async_trait]
-pub trait ClaudeCodeClient: Send + Sync {
+pub trait ClaudeCodeClient: Send {
     /// Perform MCP handshake and initialization
     async fn initialize(&mut self) -> Result<Value>;
 
@@ -72,15 +71,11 @@ pub struct MockClaudeCodeStdioClient {
 impl MockClaudeCodeStdioClient {
     /// Create a new stdio client that spawns the vibe-ensemble server process
     pub async fn new() -> Result<Self> {
-        let mut process = Command::new("cargo")
-            .args([
-                "run",
-                "--bin",
-                "vibe-ensemble",
-                "--",
-                "--mcp-only",
-                "--transport=stdio",
-            ])
+        // Prefer invoking the compiled binary directly rather than `cargo run`
+        let bin = std::env::var("CARGO_BIN_EXE_vibe-ensemble")
+            .unwrap_or_else(|_| "vibe-ensemble".to_string());
+        let mut process = Command::new(bin)
+            .args(["--mcp-only", "--transport=stdio"])
             .stdin(std::process::Stdio::piped())
             .stdout(std::process::Stdio::piped())
             .stderr(std::process::Stdio::piped())
@@ -124,38 +119,49 @@ impl MockClaudeCodeStdioClient {
         let request = JsonRpcRequest::new_with_id(json!(self.request_id), method, params);
         self.request_id += 1;
 
-        let message = serde_json::to_string(&request)
+        let body = serde_json::to_string(&request)
             .map_err(|e| Error::Transport(format!("Failed to serialize request: {}", e)))?;
 
-        // Send message with newline
+        // Write framed message: Content-Length header + \r\n\r\n + body
+        let header = format!("Content-Length: {}\r\n\r\n", body.len());
         stdin
-            .write_all(message.as_bytes())
+            .write_all(header.as_bytes())
             .await
-            .map_err(|e| Error::Transport(format!("Failed to write to stdin: {}", e)))?;
+            .map_err(|e| Error::Transport(format!("Failed to write header: {}", e)))?;
         stdin
-            .write_all(b"\n")
+            .write_all(body.as_bytes())
             .await
-            .map_err(|e| Error::Transport(format!("Failed to write newline: {}", e)))?;
+            .map_err(|e| Error::Transport(format!("Failed to write body: {}", e)))?;
         stdin
             .flush()
             .await
             .map_err(|e| Error::Transport(format!("Failed to flush stdin: {}", e)))?;
 
-        // Read response with timeout
-        let mut response_line = String::new();
-        timeout(
-            Duration::from_secs(10),
-            stdout.read_line(&mut response_line),
-        )
-        .await
-        .map_err(|_| Error::Transport("Response timeout".to_string()))?
-        .map_err(|e| Error::Transport(format!("Failed to read response: {}", e)))?;
-
-        if response_line.trim().is_empty() {
-            return Err(Error::Transport("Empty response received".to_string()));
+        // Read framed response
+        let mut headers = String::new();
+        timeout(Duration::from_secs(10), stdout.read_line(&mut headers))
+            .await
+            .map_err(|_| Error::Transport("Response timeout".to_string()))?
+            .map_err(|e| Error::Transport(format!("Failed to read response header: {}", e)))?;
+        while !headers.ends_with("\r\n\r\n") {
+            let mut line = String::new();
+            stdout.read_line(&mut line).await.map_err(|e| {
+                Error::Transport(format!("Failed to read response header line: {}", e))
+            })?;
+            headers.push_str(&line);
         }
+        let content_length = headers
+            .lines()
+            .find_map(|l| l.strip_prefix("Content-Length: "))
+            .and_then(|v| v.trim().parse::<usize>().ok())
+            .ok_or_else(|| Error::Transport("Missing Content-Length".to_string()))?;
+        let mut buf = vec![0u8; content_length];
+        timeout(Duration::from_secs(10), stdout.read_exact(&mut buf))
+            .await
+            .map_err(|_| Error::Transport("Response body timeout".to_string()))?
+            .map_err(|e| Error::Transport(format!("Failed to read response body: {}", e)))?;
 
-        let response: Value = serde_json::from_str(&response_line)
+        let response: Value = serde_json::from_slice(&buf)
             .map_err(|e| Error::Transport(format!("Failed to parse response: {}", e)))?;
 
         if let Some(error) = response.get("error") {
@@ -180,17 +186,18 @@ impl MockClaudeCodeStdioClient {
             .ok_or_else(|| Error::Transport("Stdin not available".to_string()))?;
 
         let notification = JsonRpcNotification::new(method, params);
-        let message = serde_json::to_string(&notification)
+        let body = serde_json::to_string(&notification)
             .map_err(|e| Error::Transport(format!("Failed to serialize notification: {}", e)))?;
 
+        let header = format!("Content-Length: {}\r\n\r\n", body.len());
         stdin
-            .write_all(message.as_bytes())
+            .write_all(header.as_bytes())
             .await
-            .map_err(|e| Error::Transport(format!("Failed to write notification: {}", e)))?;
+            .map_err(|e| Error::Transport(format!("Failed to write header: {}", e)))?;
         stdin
-            .write_all(b"\n")
+            .write_all(body.as_bytes())
             .await
-            .map_err(|e| Error::Transport(format!("Failed to write newline: {}", e)))?;
+            .map_err(|e| Error::Transport(format!("Failed to write body: {}", e)))?;
         stdin
             .flush()
             .await
@@ -204,7 +211,7 @@ impl MockClaudeCodeStdioClient {
 impl ClaudeCodeClient for MockClaudeCodeStdioClient {
     async fn initialize(&mut self) -> Result<Value> {
         let init_params = InitializeParams {
-            protocol_version: "1.0".to_string(),
+            protocol_version: "2024-11-05".to_string(),
             client_info: ClientInfo {
                 name: "claude-code".to_string(),
                 version: "1.0.0".to_string(),
@@ -292,7 +299,10 @@ impl ClaudeCodeClient for MockClaudeCodeStdioClient {
             tokio::time::sleep(Duration::from_millis(100)).await;
 
             // Force kill if still running
-            if timeout(Duration::from_secs(2), process.wait()).await.is_err() {
+            if timeout(Duration::from_secs(2), process.wait())
+                .await
+                .is_err()
+            {
                 let _ = process.kill().await;
             }
         }
@@ -413,7 +423,7 @@ impl MockClaudeCodeWebSocketClient {
 impl ClaudeCodeClient for MockClaudeCodeWebSocketClient {
     async fn initialize(&mut self) -> Result<Value> {
         let init_params = InitializeParams {
-            protocol_version: "1.0".to_string(),
+            protocol_version: "2024-11-05".to_string(),
             client_info: ClientInfo {
                 name: "claude-code".to_string(),
                 version: "1.0.0".to_string(),
@@ -551,7 +561,7 @@ impl MockClaudeCodeSseClient {
 impl ClaudeCodeClient for MockClaudeCodeSseClient {
     async fn initialize(&mut self) -> Result<Value> {
         let init_params = InitializeParams {
-            protocol_version: "1.0".to_string(),
+            protocol_version: "2024-11-05".to_string(),
             client_info: ClientInfo {
                 name: "claude-code".to_string(),
                 version: "1.0.0".to_string(),
@@ -743,11 +753,11 @@ impl ClaudeCodeTestSuite {
 
                     if has_protocol_version && has_server_info && has_capabilities {
                         TestResult::Success(
-                            "Initialization successful with proper response structure".to_string()
+                            "Initialization successful with proper response structure".to_string(),
                         )
                     } else {
                         TestResult::Failure(
-                            "Initialization response missing required fields".to_string()
+                            "Initialization response missing required fields".to_string(),
                         )
                     }
                 } else {
