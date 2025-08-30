@@ -21,122 +21,8 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  coordinator-worker-integration:
-    name: Coordinator-Worker Integration Tests
-    runs-on: ubuntu-latest
-    timeout-minutes: 30
-
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          # Need full history for git worktree operations
-          fetch-depth: 0
-
-      - name: Install Rust toolchain
-        uses: dtolnay/rust-toolchain@stable
-        with:
-          toolchain: "stable"
-          components: rustfmt, clippy
-
-      - name: Install system dependencies
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y git
-          git --version
-
-      - name: Set up git for integration tests
-        run: |
-          git config --global user.name "Integration Tests"
-          git config --global user.email "integration-tests@vibe-ensemble.local"
-          git config --global init.defaultBranch main
-
-      - name: Cache cargo dependencies
-        uses: actions/cache@v4
-        with:
-          path: |
-            ~/.cargo/bin/
-            ~/.cargo/registry/index/
-            ~/.cargo/registry/cache/
-            ~/.cargo/git/db/
-            target/
-          key: ${{ runner.os }}-integration-${{ hashFiles('**/Cargo.lock') }}
-          restore-keys: |
-            ${{ runner.os }}-integration-
-            ${{ runner.os }}-
-
-      - name: Build integration test dependencies
-        run: |
-          # Build the workspace first to ensure all dependencies are available
-          cargo build --workspace --tests
-
-      - name: Run coordinator-worker integration tests
-        run: |
-          # Run the specific coordinator-worker integration tests
-          cargo test --test coordinator_worker_integration --verbose -- --nocapture
-        env:
-          RUST_BACKTRACE: full
-          RUST_LOG: debug
-          # Use a separate database for integration tests
-          DATABASE_URL: sqlite:./coordinator_worker_integration_test.db
-
-      - name: Verify integration test framework status
-        run: |
-          # Integration test framework is temporarily disabled during PR #99 completion
-          # This step verifies the placeholder test runs successfully until framework is restored
-          echo "ℹ️  Integration test framework is temporarily disabled for PR #99 completion"
-          echo "📝 Comprehensive integration tests will be restored in a separate effort"
-          echo "✅ Running placeholder test to verify framework structure..."
-          cargo test --test coordinator_worker_integration --verbose -- --nocapture
-        env:
-          RUST_BACKTRACE: full
-          RUST_LOG: info
-          DATABASE_URL: sqlite:./workflow_test.db
-
-  git-worktree-integration:
-    name: Git Worktree Integration Tests
-    runs-on: ubuntu-latest
-    timeout-minutes: 20
-
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-
-      - name: Install Rust toolchain
-        uses: dtolnay/rust-toolchain@stable
-        with:
-          toolchain: "stable"
-
-      - name: Set up git
-        run: |
-          git config --global user.name "Worktree Tests"
-          git config --global user.email "worktree-tests@vibe-ensemble.local"
-
-      - name: Cache cargo dependencies
-        uses: actions/cache@v4
-        with:
-          path: |
-            ~/.cargo/bin/
-            ~/.cargo/registry/index/
-            ~/.cargo/registry/cache/
-            ~/.cargo/git/db/
-            target/
-          key: ${{ runner.os }}-worktree-${{ hashFiles('**/Cargo.lock') }}
-          restore-keys: |
-            ${{ runner.os }}-worktree-
-            ${{ runner.os }}-
-
-      - name: Test git worktree operations
-        run: |
-          # Integration test framework is temporarily disabled during PR #99 completion
-          # This verifies that the basic test structure is intact
-          echo "ℹ️  Worktree integration tests temporarily disabled for PR #99 completion"
-          cargo test --test coordinator_worker_integration --verbose -- --nocapture
-        env:
-          RUST_BACKTRACE: 1
-
-  file-system-verification:
-    name: File System Verification Tests
+  coordinator-ticket-management:
+    name: Coordinator Ticket Management
     runs-on: ubuntu-latest
     timeout-minutes: 15
 
@@ -157,61 +43,23 @@ jobs:
             ~/.cargo/registry/cache/
             ~/.cargo/git/db/
             target/
-          key: ${{ runner.os }}-filesystem-${{ hashFiles('**/Cargo.lock') }}
+          key: ${{ runner.os }}-coordinator-${{ hashFiles('**/Cargo.lock') }}
           restore-keys: |
-            ${{ runner.os }}-filesystem-
+            ${{ runner.os }}-coordinator-
             ${{ runner.os }}-
 
-      - name: Test file system verification
+      - name: Test coordinator ticket management functionality
         run: |
-          # Integration test framework is temporarily disabled during PR #99 completion
-          # This verifies that the basic test structure is intact
-          echo "ℹ️  File system verification tests temporarily disabled for PR #99 completion"
-          cargo test --test coordinator_worker_integration --verbose -- --nocapture
+          # Test coordinator creating and assigning tickets to specialized workers
+          cargo test --test coordinator_worker_integration test_coordinator_creates_assigns_tickets --verbose -- --nocapture
         env:
           RUST_BACKTRACE: 1
+          DATABASE_URL: sqlite:./coordinator_test.db
 
-  mock-agent-integration:
-    name: Mock Agent Integration Tests
+  workspace-isolation:
+    name: Multi-Worker Workspace Isolation
     runs-on: ubuntu-latest
-    timeout-minutes: 20
-
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Install Rust toolchain
-        uses: dtolnay/rust-toolchain@stable
-        with:
-          toolchain: "stable"
-
-      - name: Cache cargo dependencies
-        uses: actions/cache@v4
-        with:
-          path: |
-            ~/.cargo/bin/
-            ~/.cargo/registry/index/
-            ~/.cargo/registry/cache/
-            ~/.cargo/git/db/
-            target/
-          key: ${{ runner.os }}-mock-agents-${{ hashFiles('**/Cargo.lock') }}
-          restore-keys: |
-            ${{ runner.os }}-mock-agents-
-            ${{ runner.os }}-
-
-      - name: Test mock agent interactions
-        run: |
-          # Integration test framework is temporarily disabled during PR #99 completion
-          # This verifies that the basic test structure is intact
-          echo "ℹ️  Mock agent integration tests temporarily disabled for PR #99 completion"
-          cargo test --test coordinator_worker_integration --verbose -- --nocapture
-        env:
-          RUST_BACKTRACE: 1
-          DATABASE_URL: sqlite:./mock_agent_test.db
-
-  performance-benchmarks:
-    name: Integration Test Performance
-    runs-on: ubuntu-latest
-    timeout-minutes: 25
+    timeout-minutes: 15
 
     steps:
       - uses: actions/checkout@v4
@@ -223,10 +71,11 @@ jobs:
         with:
           toolchain: "stable"
 
-      - name: Set up git
+      - name: Set up git for workspace tests
         run: |
-          git config --global user.name "Performance Tests"
-          git config --global user.email "perf-tests@vibe-ensemble.local"
+          git config --global user.name "Workspace Tests"
+          git config --global user.email "workspace-tests@vibe-ensemble.local"
+          git config --global init.defaultBranch main
 
       - name: Cache cargo dependencies
         uses: actions/cache@v4
@@ -237,56 +86,95 @@ jobs:
             ~/.cargo/registry/cache/
             ~/.cargo/git/db/
             target/
-          key: ${{ runner.os }}-perf-${{ hashFiles('**/Cargo.lock') }}
+          key: ${{ runner.os }}-workspace-${{ hashFiles('**/Cargo.lock') }}
           restore-keys: |
-            ${{ runner.os }}-perf-
+            ${{ runner.os }}-workspace-
             ${{ runner.os }}-
 
-      - name: Run performance benchmarks
+      - name: Test workspace isolation between multiple workers
         run: |
-          # Integration test framework is temporarily disabled during PR #99 completion
-          # This verifies that the basic test structure compiles and runs in release mode
-          echo "ℹ️  Performance integration tests temporarily disabled for PR #99 completion"
-          cargo build --release --workspace --tests
-          cargo test --release --test coordinator_worker_integration -- --nocapture --test-threads=1
+          # Test multiple workers working on same project in isolated workspaces
+          cargo test --test coordinator_worker_integration test_multi_worker_isolated_workspaces --verbose -- --nocapture
         env:
           RUST_BACKTRACE: 1
-          DATABASE_URL: sqlite:./performance_test.db
+          DATABASE_URL: sqlite:./workspace_test.db
 
-      - name: Upload performance results
-        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-        run: |
-          # In a real setup, you might upload results to a performance monitoring service
-          echo "Performance test completed successfully"
-
-  integration-test-summary:
-    name: Integration Test Summary
+  error-recovery:
+    name: Error Recovery and Task Reassignment
     runs-on: ubuntu-latest
-    needs: [coordinator-worker-integration, git-worktree-integration, file-system-verification, mock-agent-integration, performance-benchmarks]
-    if: always()
+    timeout-minutes: 15
 
     steps:
-      - name: Check integration test results
-        run: |
-          # Check if all integration tests passed
-          if [[ "${{ needs.coordinator-worker-integration.result }}" == "success" && \
-                "${{ needs.git-worktree-integration.result }}" == "success" && \
-                "${{ needs.file-system-verification.result }}" == "success" && \
-                "${{ needs.mock-agent-integration.result }}" == "success" && \
-                "${{ needs.performance-benchmarks.result }}" == "success" ]]; then
-            echo "✅ All integration tests passed!"
-            exit 0
-          else
-            echo "❌ Some integration tests failed:"
-            echo "  Coordinator-Worker: ${{ needs.coordinator-worker-integration.result }}"
-            echo "  Git Worktree: ${{ needs.git-worktree-integration.result }}"
-            echo "  File System: ${{ needs.file-system-verification.result }}"
-            echo "  Mock Agents: ${{ needs.mock-agent-integration.result }}"
-            echo "  Performance: ${{ needs.performance-benchmarks.result }}"
-            exit 1
-          fi
+      - uses: actions/checkout@v4
 
-      - name: Post integration test results
-        if: github.event_name == 'pull_request'
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: "stable"
+
+      - name: Cache cargo dependencies
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/bin/
+            ~/.cargo/registry/index/
+            ~/.cargo/registry/cache/
+            ~/.cargo/git/db/
+            target/
+          key: ${{ runner.os }}-recovery-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-recovery-
+            ${{ runner.os }}-
+
+      - name: Test error recovery and task reassignment workflows
         run: |
-          echo "Integration test results would be posted to PR here in a full implementation"
+          # Test failure scenarios, task reassignment, and recovery procedures
+          cargo test --test coordinator_worker_integration test_error_recovery_workflow --verbose -- --nocapture
+        env:
+          RUST_BACKTRACE: 1
+          DATABASE_URL: sqlite:./recovery_test.db
+
+  complete-integration-suite:
+    name: Complete Integration Test Suite
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: "stable"
+          components: rustfmt, clippy
+
+      - name: Cache cargo dependencies
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/bin/
+            ~/.cargo/registry/index/
+            ~/.cargo/registry/cache/
+            ~/.cargo/git/db/
+            target/
+          key: ${{ runner.os }}-complete-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-complete-
+            ${{ runner.os }}-
+
+      - name: Build integration tests
+        run: |
+          cargo build --workspace --tests
+
+      - name: Run all integration tests together
+        run: |
+          # Run all three integration tests to ensure they work together
+          cargo test --test coordinator_worker_integration --verbose -- --nocapture
+        env:
+          RUST_BACKTRACE: 1
+          DATABASE_URL: sqlite:./complete_integration_test.db
+
+      - name: Lint integration tests
+        run: |
+          # Ensure integration tests follow coding standards
+          cargo clippy --tests --package vibe-ensemble-mcp -- -D warnings
