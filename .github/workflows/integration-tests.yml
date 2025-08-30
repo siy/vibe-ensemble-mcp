@@ -17,9 +17,10 @@ env:
   CARGO_TERM_COLOR: always
   DATABASE_URL: sqlite:./integration_test.db
   SQLX_OFFLINE: true
+  CARGO_REGISTRIES_CRATES_IO_PROTOCOL: sparse
 
 concurrency:
-  group: integration-tests-${{ github.workflow }}-${{ github.ref }}
+  group: integration-tests-${{ github.workflow }}-${{ github.head_ref || github.ref_name }}
   cancel-in-progress: true
 
 jobs:
@@ -30,25 +31,18 @@ jobs:
 
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@stable
         with:
           toolchain: "stable"
 
-      - name: Cache cargo dependencies
-        uses: actions/cache@v4
+      - name: Cache cargo (compiler-aware)
+        uses: Swatinem/rust-cache@v2
         with:
-          path: |
-            ~/.cargo/bin/
-            ~/.cargo/registry/index/
-            ~/.cargo/registry/cache/
-            ~/.cargo/git/db/
-            target/
-          key: ${{ runner.os }}-coordinator-${{ hashFiles('**/Cargo.lock') }}
-          restore-keys: |
-            ${{ runner.os }}-coordinator-
-            ${{ runner.os }}-
+          cache-on-failure: true
 
       - name: Test coordinator ticket management functionality
         run: |
@@ -85,20 +79,13 @@ jobs:
           git config --global user.name "Workspace Tests"
           git config --global user.email "workspace-tests@vibe-ensemble.local"
           git config --global init.defaultBranch main
+          git config --global --add safe.directory "$GITHUB_WORKSPACE"
+          git config --global --add safe.directory '*'
 
-      - name: Cache cargo dependencies
-        uses: actions/cache@v4
+      - name: Cache cargo (compiler-aware)
+        uses: Swatinem/rust-cache@v2
         with:
-          path: |
-            ~/.cargo/bin/
-            ~/.cargo/registry/index/
-            ~/.cargo/registry/cache/
-            ~/.cargo/git/db/
-            target/
-          key: ${{ runner.os }}-workspace-${{ hashFiles('**/Cargo.lock') }}
-          restore-keys: |
-            ${{ runner.os }}-workspace-
-            ${{ runner.os }}-
+          cache-on-failure: true
 
       - name: Test workspace isolation between multiple workers
         run: |
@@ -122,25 +109,18 @@ jobs:
 
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@stable
         with:
           toolchain: "stable"
 
-      - name: Cache cargo dependencies
-        uses: actions/cache@v4
+      - name: Cache cargo (compiler-aware)
+        uses: Swatinem/rust-cache@v2
         with:
-          path: |
-            ~/.cargo/bin/
-            ~/.cargo/registry/index/
-            ~/.cargo/registry/cache/
-            ~/.cargo/git/db/
-            target/
-          key: ${{ runner.os }}-recovery-${{ hashFiles('**/Cargo.lock') }}
-          restore-keys: |
-            ${{ runner.os }}-recovery-
-            ${{ runner.os }}-
+          cache-on-failure: true
 
       - name: Test error recovery and task reassignment workflows
         run: |
@@ -164,6 +144,8 @@ jobs:
 
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@stable
@@ -171,19 +153,10 @@ jobs:
           toolchain: "stable"
           components: rustfmt, clippy
 
-      - name: Cache cargo dependencies
-        uses: actions/cache@v4
+      - name: Cache cargo (compiler-aware)
+        uses: Swatinem/rust-cache@v2
         with:
-          path: |
-            ~/.cargo/bin/
-            ~/.cargo/registry/index/
-            ~/.cargo/registry/cache/
-            ~/.cargo/git/db/
-            target/
-          key: ${{ runner.os }}-complete-${{ hashFiles('**/Cargo.lock') }}
-          restore-keys: |
-            ${{ runner.os }}-complete-
-            ${{ runner.os }}-
+          cache-on-failure: true
 
       - name: Build integration tests
         run: |
@@ -207,4 +180,4 @@ jobs:
       - name: Lint integration tests
         run: |
           # Ensure integration tests follow coding standards
-          cargo clippy --tests --package vibe-ensemble-mcp -- -D warnings
+          cargo clippy --tests --all-features --package vibe-ensemble-mcp -- -D warnings
