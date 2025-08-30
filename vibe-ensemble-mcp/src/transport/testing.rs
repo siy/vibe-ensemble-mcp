@@ -17,6 +17,12 @@ use std::time::{Duration, Instant};
 use tokio::time::timeout;
 use tracing::{debug, info, warn};
 
+// Performance test parameters
+const THROUGHPUT_TEST_MESSAGE_COUNT: u32 = 50;
+const MIN_ACCEPTABLE_THROUGHPUT: f64 = 10.0; // messages per second
+const LARGE_MESSAGE_SIZE_BYTES: usize = 10_000;
+const LARGE_MESSAGE_TIMEOUT_SECS: u64 = 5;
+
 /// Transport test scenario configuration
 #[derive(Clone, Debug, serde::Serialize)]
 pub struct TestScenario {
@@ -561,13 +567,13 @@ impl TransportTester {
         }
 
         // Calculate average roundtrip time
-        let total_roundtrip_nanos: u64 = test_results
+        let total_roundtrip_nanos: u128 = test_results
             .iter()
-            .map(|r| r.performance.avg_roundtrip_time.as_nanos() as u64)
+            .map(|r| r.performance.avg_roundtrip_time.as_nanos())
             .sum();
         if !test_results.is_empty() {
             aggregate_performance.avg_roundtrip_time =
-                Duration::from_nanos(total_roundtrip_nanos / test_results.len() as u64);
+                Duration::from_nanos((total_roundtrip_nanos / test_results.len() as u128) as u64);
         }
 
         aggregate_performance.duration = total_duration;
@@ -1299,7 +1305,7 @@ impl TransportTester {
         self.initialize_transport(transport, performance).await?;
 
         let start_time = Instant::now();
-        let message_count = 50; // Reasonable number for throughput test
+        let message_count = THROUGHPUT_TEST_MESSAGE_COUNT;
         let mut total_roundtrip_time = Duration::ZERO;
 
         for i in 0..message_count {
@@ -1324,14 +1330,14 @@ impl TransportTester {
         }
 
         let total_duration = start_time.elapsed();
-        performance.avg_roundtrip_time = total_roundtrip_time / message_count as u32;
+        performance.avg_roundtrip_time = total_roundtrip_time / message_count;
         performance.throughput_msg_per_sec = message_count as f64 / total_duration.as_secs_f64();
 
-        // Require reasonable throughput (at least 10 messages per second)
-        if performance.throughput_msg_per_sec < 10.0 {
+        // Require minimum acceptable throughput
+        if performance.throughput_msg_per_sec < MIN_ACCEPTABLE_THROUGHPUT {
             return Err(Error::Transport(format!(
-                "Throughput too low: {:.2} msg/sec",
-                performance.throughput_msg_per_sec
+                "Throughput too low: {:.2} msg/sec (minimum required: {:.2})",
+                performance.throughput_msg_per_sec, MIN_ACCEPTABLE_THROUGHPUT
             )));
         }
 
@@ -1349,8 +1355,8 @@ impl TransportTester {
         // First initialize
         self.initialize_transport(transport, performance).await?;
 
-        // Create a large message (10KB)
-        let large_data = "x".repeat(10000);
+        // Create a large message
+        let large_data = "x".repeat(LARGE_MESSAGE_SIZE_BYTES);
         let request = json!({
             "jsonrpc": "2.0",
             "id": 200,
@@ -1377,8 +1383,8 @@ impl TransportTester {
         performance.max_roundtrip_time = performance.max_roundtrip_time.max(roundtrip_time);
         performance.avg_roundtrip_time = roundtrip_time;
 
-        // Require reasonable performance for large messages (under 5 seconds)
-        if roundtrip_time > Duration::from_secs(5) {
+        // Require reasonable performance for large messages
+        if roundtrip_time > Duration::from_secs(LARGE_MESSAGE_TIMEOUT_SECS) {
             return Err(Error::Transport(format!(
                 "Large message handling too slow: {:?}",
                 roundtrip_time
@@ -1439,7 +1445,17 @@ impl Default for TransportTester {
 
 /// Get approximate memory usage in KB
 fn get_memory_usage_kb() -> u64 {
-    // Simplified mock implementation - in production would use actual memory profiling
+    // TODO: This is a mock implementation for testing purposes.
+    // In production, consider using:
+    // - `sys-info` crate for cross-platform memory metrics
+    // - `/proc/self/status` on Linux for VmRSS
+    // - `jemalloc` stats if using jemalloc allocator
+    #[cfg(not(test))]
+    {
+        // In production, use actual memory profiling
+        // For now, return a placeholder
+        warn!("Memory profiling not yet implemented, using mock value");
+    }
     use std::sync::atomic::{AtomicU64, Ordering};
     static MOCK_MEMORY: AtomicU64 = AtomicU64::new(1024); // Start at 1MB
 
@@ -1478,9 +1494,9 @@ impl TransportTestBuilder {
         }
     }
 
-    /// Add standard MCP scenarios (includes core, error, and performance)
+    /// Add standard MCP scenarios (core scenarios only, use specific methods for others)
     pub fn with_standard_scenarios(mut self) -> Self {
-        self.tester.add_standard_scenarios();
+        self.tester.add_core_mcp_scenarios();
         self
     }
 

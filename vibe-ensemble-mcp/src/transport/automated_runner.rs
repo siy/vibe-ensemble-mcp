@@ -16,6 +16,21 @@ use std::time::{Duration, Instant};
 use tokio::fs;
 use tracing::{error, info, warn};
 
+// MCP protocol constants
+const MCP_PROTOCOL_VERSION: &str = "2024-11-05";
+const MCP_METHOD_INITIALIZE: &str = "initialize";
+const MCP_METHOD_TOOLS_LIST: &str = "tools/list";
+const MCP_METHOD_TOOLS_CALL: &str = "tools/call";
+const MCP_METHOD_RESOURCES_LIST: &str = "resources/list";
+const MCP_METHOD_RESOURCES_READ: &str = "resources/read";
+const MCP_METHOD_PROMPTS_LIST: &str = "prompts/list";
+const MCP_METHOD_NOTIFICATION_INITIALIZED: &str = "notifications/initialized";
+
+// Performance classification thresholds
+const HIGH_THROUGHPUT_THRESHOLD: f64 = 20.0; // msg/sec
+const LOW_LATENCY_THRESHOLD_MS: u64 = 50;
+const HIGH_RELIABILITY_THRESHOLD: f64 = 95.0; // percentage
+
 /// Configuration for automated test execution
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct AutomatedTestConfig {
@@ -506,7 +521,7 @@ impl AutomatedTestRunner {
         let mut total_scenarios = 0;
         let mut total_passed = 0;
         let mut best_throughput = 0.0;
-        let mut worst_throughput = f64::INFINITY;
+        let mut worst_throughput = f64::MAX;
         let mut best_transport = String::new();
         let mut worst_transport = String::new();
         let mut total_throughput = 0.0;
@@ -551,6 +566,11 @@ impl AutomatedTestRunner {
         } else {
             0.0
         };
+
+        // Handle case where no valid throughput was found
+        if worst_throughput == f64::MAX {
+            // No valid results were found, so we don't update worst_transport
+        }
 
         TestSummary {
             total_scenarios,
@@ -627,13 +647,13 @@ impl AutomatedTestRunner {
         let mut strengths = Vec::new();
         let perf = &result.aggregate_performance;
 
-        if perf.throughput_msg_per_sec > 20.0 {
+        if perf.throughput_msg_per_sec > HIGH_THROUGHPUT_THRESHOLD {
             strengths.push("High throughput".to_string());
         }
-        if perf.avg_roundtrip_time < Duration::from_millis(50) {
+        if perf.avg_roundtrip_time < Duration::from_millis(LOW_LATENCY_THRESHOLD_MS) {
             strengths.push("Low latency".to_string());
         }
-        if result.success_rate() > 95.0 {
+        if result.success_rate() > HIGH_RELIABILITY_THRESHOLD {
             strengths.push("High reliability".to_string());
         }
         if perf.error_count == 0 {
@@ -673,7 +693,10 @@ impl AutomatedTestRunner {
         if let Some(dir) = &self.config.results_directory {
             // Create directory if it doesn't exist
             fs::create_dir_all(dir).await.map_err(|e| {
-                Error::Transport(format!("Failed to create results directory: {}", e))
+                Error::Transport(format!(
+                    "Failed to create results directory '{}': {}",
+                    dir, e
+                ))
             })?;
 
             // Save JSON results
@@ -684,9 +707,12 @@ impl AutomatedTestRunner {
             );
             let json_content = serde_json::to_string_pretty(results)
                 .map_err(|e| Error::Transport(format!("Failed to serialize results: {}", e)))?;
-            fs::write(&json_path, json_content)
-                .await
-                .map_err(|e| Error::Transport(format!("Failed to write results file: {}", e)))?;
+            fs::write(&json_path, json_content).await.map_err(|e| {
+                Error::Transport(format!(
+                    "Failed to write results file '{}': {}",
+                    json_path, e
+                ))
+            })?;
 
             info!("Detailed results saved to: {}", json_path);
         }
@@ -842,12 +868,12 @@ impl AutomatedTestRunner {
 
                     // Generate appropriate response based on method
                     let response = match method {
-                        Some("initialize") => {
+                        Some(MCP_METHOD_INITIALIZE) => {
                             json!({
                                 "jsonrpc": "2.0",
                                 "id": id,
                                 "result": {
-                                    "protocolVersion": "2024-11-05",
+                                    "protocolVersion": MCP_PROTOCOL_VERSION,
                                     "capabilities": {
                                         "tools": { "listChanged": true },
                                         "resources": { "listChanged": true },
@@ -860,7 +886,7 @@ impl AutomatedTestRunner {
                                 }
                             })
                         }
-                        Some("tools/list") => {
+                        Some(MCP_METHOD_TOOLS_LIST) => {
                             json!({
                                 "jsonrpc": "2.0",
                                 "id": id,
@@ -883,7 +909,7 @@ impl AutomatedTestRunner {
                                 }
                             })
                         }
-                        Some("tools/call") => {
+                        Some(MCP_METHOD_TOOLS_CALL) => {
                             json!({
                                 "jsonrpc": "2.0",
                                 "id": id,
@@ -897,7 +923,7 @@ impl AutomatedTestRunner {
                                 }
                             })
                         }
-                        Some("resources/list") => {
+                        Some(MCP_METHOD_RESOURCES_LIST) => {
                             json!({
                                 "jsonrpc": "2.0",
                                 "id": id,
@@ -913,7 +939,7 @@ impl AutomatedTestRunner {
                                 }
                             })
                         }
-                        Some("resources/read") => {
+                        Some(MCP_METHOD_RESOURCES_READ) => {
                             json!({
                                 "jsonrpc": "2.0",
                                 "id": id,
@@ -928,7 +954,7 @@ impl AutomatedTestRunner {
                                 }
                             })
                         }
-                        Some("prompts/list") => {
+                        Some(MCP_METHOD_PROMPTS_LIST) => {
                             json!({
                                 "jsonrpc": "2.0",
                                 "id": id,
@@ -943,7 +969,7 @@ impl AutomatedTestRunner {
                                 }
                             })
                         }
-                        Some("notifications/initialized") => {
+                        Some(MCP_METHOD_NOTIFICATION_INITIALIZED) => {
                             // No response for notifications
                             debug!("Received initialized notification, no response needed");
                             continue;

@@ -4,6 +4,7 @@
 //! communication, including WebSocket and in-memory transports.
 
 pub mod automated_runner;
+#[cfg(feature = "transport-test-cli")]
 pub mod cli;
 pub mod testing;
 

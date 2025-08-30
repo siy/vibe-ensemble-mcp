@@ -17,7 +17,7 @@ use tracing::info;
 #[derive(Parser)]
 #[command(name = "transport-tester")]
 #[command(about = "Comprehensive automated transport testing framework")]
-#[command(version = "1.0.0")]
+#[command(version = env!("CARGO_PKG_VERSION"))]
 pub struct TransportTestCli {
     #[command(subcommand)]
     pub command: Commands,
@@ -238,7 +238,9 @@ pub async fn execute_cli_command(cli: TransportTestCli) -> Result<()> {
 
         Commands::GenerateConfig { output } => {
             let sample_config = AutomatedTestConfig::default();
-            let json_config = serde_json::to_string_pretty(&sample_config).unwrap();
+            let json_config = serde_json::to_string_pretty(&sample_config).map_err(|e| {
+                crate::Error::Transport(format!("Failed to serialize config: {}", e))
+            })?;
 
             tokio::fs::write(&output, json_config).await.map_err(|e| {
                 crate::Error::Transport(format!("Failed to write config file: {}", e))
