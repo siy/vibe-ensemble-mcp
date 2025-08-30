@@ -103,6 +103,9 @@ mod communication_tests;
 #[cfg(test)]
 mod coordination_tests;
 
+#[cfg(test)]
+mod transport_compliance_tests;
+
 pub use error::{Error, Result};
 
 /// Re-export core types for convenience
