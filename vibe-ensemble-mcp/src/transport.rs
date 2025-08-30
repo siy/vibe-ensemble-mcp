@@ -246,7 +246,7 @@ impl Transport for InMemoryTransport {
 }
 
 /// Connection state for MCP initialization sequencing
-#[derive(Debug, Clone, Copy, PartialEq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ConnectionState {
     /// Connection is uninitialized
     Uninitialized,
@@ -507,6 +507,11 @@ impl StdioTransport {
         format!(r#"{{"jsonrpc":"2.0","method":"ping","id":"{}"}}"#, ping_id)
     }
 
+    /// Create a pong response message for responding to pings
+    pub fn create_pong_message(&self, ping_id: &Value) -> String {
+        format!(r#"{{"jsonrpc":"2.0","result":"pong","id":{}}}"#, ping_id)
+    }
+
     /// Validate that a message is proper JSON-RPC and doesn't contain embedded newlines
     /// Strict per JSON-RPC 2.0: root must be Object or Array; every object must have "jsonrpc":"2.0".
     #[doc(hidden)]
@@ -618,12 +623,14 @@ impl Transport for StdioTransport {
                 .await
                 .map_err(|e| {
                     error!("Failed to write message to stdout: {}", e);
+                    self.connection_state = ConnectionState::Closed;
                     Error::Transport(format!("Failed to write to stdout: {}", e))
                 })?;
 
             // Add newline delimiter (MCP requirement)
             self.stdout_writer.write_all(b"\n").await.map_err(|e| {
                 error!("Failed to write newline delimiter to stdout: {}", e);
+                self.connection_state = ConnectionState::Closed;
                 Error::Transport(format!("Failed to write newline to stdout: {}", e))
             })?;
 
@@ -655,7 +662,8 @@ impl Transport for StdioTransport {
             Err(_) => {
                 self.errors_encountered += 1;
                 error!("Write operation timed out after {:?}", self.write_timeout);
-                Err(Error::Transport(format!(
+                self.connection_state = ConnectionState::Closed;
+                Err(Error::Timeout(format!(
                     "Write timeout after {:?}",
                     self.write_timeout
                 )))
@@ -706,6 +714,7 @@ impl Transport for StdioTransport {
                                 // Validate received message
                                 if let Err(e) = Self::validate_message(&line) {
                                     warn!("Received invalid message: {}, continuing to read", e);
+                                    self.errors_encountered += 1;
                                     // Don't fail hard on invalid messages, just log and continue
                                     // This provides better resilience against malformed input
                                     continue;
@@ -756,7 +765,7 @@ impl Transport for StdioTransport {
         // Apply read timeout
         timeout(read_timeout, read_operation).await.map_err(|_| {
             debug!("Read operation timed out after {:?}", read_timeout);
-            Error::Transport(format!("Read timeout after {:?}", read_timeout))
+            Error::Timeout(format!("Read timeout after {:?}", read_timeout))
         })?
     }
 
