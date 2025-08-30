@@ -9,6 +9,9 @@ description = "MCP protocol implementation for Vibe Ensemble"
 rust-version.workspace = true
 publish = false
 
+[features]
+test-support = []
+
 [dependencies]
 vibe-ensemble-core = { path = "../vibe-ensemble-core" }
 vibe-ensemble-storage = { path = "../vibe-ensemble-storage" }

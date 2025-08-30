@@ -106,6 +106,9 @@ mod coordination_tests;
 #[cfg(test)]
 mod transport_compliance_tests;
 
+#[cfg(any(test, feature = "test-support"))]
+pub mod claude_code_integration_tests;
+
 pub use error::{Error, Result};
 
 /// Re-export core types for convenience
