@@ -78,7 +78,7 @@ impl MockClaudeCodeStdioClient {
             .args(["--mcp-only", "--transport=stdio"])
             .stdin(std::process::Stdio::piped())
             .stdout(std::process::Stdio::piped())
-            .stderr(std::process::Stdio::piped())
+            .stderr(std::process::Stdio::inherit())
             .spawn()
             .map_err(|e| Error::Transport(format!("Failed to spawn server process: {}", e)))?;
 
@@ -156,18 +156,29 @@ impl MockClaudeCodeStdioClient {
             .await
             .map_err(|e| Error::Transport(format!("Failed to flush stdin: {}", e)))?;
 
-        // Read framed response
+        // Read framed response with overall timeout
+        let deadline = tokio::time::Instant::now() + Duration::from_secs(10);
         let mut headers = String::new();
-        timeout(Duration::from_secs(10), stdout.read_line(&mut headers))
-            .await
-            .map_err(|_| Error::Transport("Response timeout".to_string()))?
-            .map_err(|e| Error::Transport(format!("Failed to read response header: {}", e)))?;
-        while !headers.ends_with("\r\n\r\n") {
+
+        // Read headers until we get \r\n\r\n
+        loop {
             let mut line = String::new();
-            stdout.read_line(&mut line).await.map_err(|e| {
-                Error::Transport(format!("Failed to read response header line: {}", e))
-            })?;
+
+            let remaining = deadline.saturating_duration_since(tokio::time::Instant::now());
+            if remaining.is_zero() {
+                return Err(Error::Transport("Response header timeout".to_string()));
+            }
+
+            timeout(remaining, stdout.read_line(&mut line))
+                .await
+                .map_err(|_| Error::Transport("Response header timeout".to_string()))?
+                .map_err(|e| Error::Transport(format!("Failed to read response header: {}", e)))?;
+
             headers.push_str(&line);
+
+            if headers.ends_with("\r\n\r\n") {
+                break;
+            }
         }
         let content_length = headers
             .lines()
@@ -587,11 +598,23 @@ impl MockClaudeCodeSseClient {
         self.transport.send(&message).await?;
 
         // For SSE, we would normally listen to the SSE stream for responses
-        // In this mock implementation, we simulate a successful response
+        // In this mock implementation, we simulate shaped responses expected by the suite
+        let shaped = match method {
+            m if m == crate::protocol::methods::INITIALIZE => json!({
+                "protocolVersion": "2024-11-05",
+                "serverInfo": { "name": "mock-sse", "version": "0.0.0" },
+                "capabilities": {}
+            }),
+            m if m == crate::protocol::methods::LIST_TOOLS => json!({ "tools": [] }),
+            m if m == crate::protocol::methods::LIST_RESOURCES => json!({ "resources": [] }),
+            m if m == crate::protocol::methods::READ_RESOURCE => json!({ "contents": [] }),
+            m if m == crate::protocol::methods::LIST_PROMPTS => json!({ "prompts": [] }),
+            _ => json!({}),
+        };
         let response = json!({
             "jsonrpc": "2.0",
             "id": request.id,
-            "result": {}
+            "result": shaped
         });
 
         Ok(response)
