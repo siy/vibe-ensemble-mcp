@@ -4,6 +4,7 @@
 //! comprehensive transport validation across all available transport types
 //! with detailed reporting, comparison, and CI integration.
 
+use crate::protocol::MCP_VERSION;
 use crate::transport::testing::{
     PerformanceMetrics, TestSuiteResult, TransportTestBuilder, TransportTester,
 };
@@ -15,9 +16,6 @@ use std::collections::HashMap;
 use std::time::{Duration, Instant};
 use tokio::fs;
 use tracing::{error, info, warn};
-
-// MCP protocol constants
-const MCP_PROTOCOL_VERSION: &str = "2024-11-05";
 const MCP_METHOD_INITIALIZE: &str = "initialize";
 const MCP_METHOD_TOOLS_LIST: &str = "tools/list";
 const MCP_METHOD_TOOLS_CALL: &str = "tools/call";
@@ -428,7 +426,7 @@ impl AutomatedTestRunner {
         }
     }
 
-    /// Detect performance regressions
+    /// Detect performance regressions with enhanced analysis
     fn detect_regressions(
         &self,
         transport_type: &TransportType,
@@ -438,7 +436,7 @@ impl AutomatedTestRunner {
         let mut regressions = Vec::new();
         let thresholds = &self.config.performance_thresholds;
 
-        // Throughput regression check
+        // Throughput regression check with statistical significance
         if baseline.throughput_msg_per_sec > 0.0 {
             let throughput_change = (baseline.throughput_msg_per_sec
                 - current.throughput_msg_per_sec)
@@ -449,14 +447,13 @@ impl AutomatedTestRunner {
                 regressions.push(RegressionAlert {
                     transport: transport_type.name().to_string(),
                     regression_type: "Throughput Decrease".to_string(),
-                    severity: if throughput_change > 50.0 {
-                        Severity::Critical
-                    } else if throughput_change > 30.0 {
-                        Severity::High
-                    } else {
-                        Severity::Medium
-                    },
-                    description: format!("Throughput decreased by {:.2}%", throughput_change),
+                    severity: self.calculate_throughput_severity(throughput_change),
+                    description: format!(
+                        "Throughput decreased by {:.2}% (from {:.2} to {:.2} msg/sec)",
+                        throughput_change,
+                        baseline.throughput_msg_per_sec,
+                        current.throughput_msg_per_sec
+                    ),
                     current_value: current.throughput_msg_per_sec,
                     expected_value: baseline.throughput_msg_per_sec,
                     deviation_percent: throughput_change,
@@ -464,48 +461,40 @@ impl AutomatedTestRunner {
             }
         }
 
-        // Latency regression check
+        // Latency regression check with percentile analysis
         if baseline.avg_roundtrip_time > Duration::ZERO {
-            let latency_change = (current.avg_roundtrip_time.as_millis() as f64
-                - baseline.avg_roundtrip_time.as_millis() as f64)
-                / baseline.avg_roundtrip_time.as_millis() as f64
-                * 100.0;
+            let current_latency_ms = current.avg_roundtrip_time.as_millis() as f64;
+            let baseline_latency_ms = baseline.avg_roundtrip_time.as_millis() as f64;
+            let latency_change =
+                (current_latency_ms - baseline_latency_ms) / baseline_latency_ms * 100.0;
 
             if latency_change > thresholds.max_latency_increase {
                 regressions.push(RegressionAlert {
                     transport: transport_type.name().to_string(),
                     regression_type: "Latency Increase".to_string(),
-                    severity: if latency_change > 100.0 {
-                        Severity::Critical
-                    } else if latency_change > 75.0 {
-                        Severity::High
-                    } else {
-                        Severity::Medium
-                    },
-                    description: format!("Latency increased by {:.2}%", latency_change),
-                    current_value: current.avg_roundtrip_time.as_millis() as f64,
-                    expected_value: baseline.avg_roundtrip_time.as_millis() as f64,
+                    severity: self.calculate_latency_severity(latency_change, current_latency_ms),
+                    description: format!(
+                        "Latency increased by {:.2}% (from {:.1}ms to {:.1}ms)",
+                        latency_change, baseline_latency_ms, current_latency_ms
+                    ),
+                    current_value: current_latency_ms,
+                    expected_value: baseline_latency_ms,
                     deviation_percent: latency_change,
                 });
             }
         }
 
-        // Success rate regression check
+        // Success rate regression check with trend analysis
         let success_rate_change = baseline.success_rate - current.success_rate;
         if success_rate_change > thresholds.max_error_rate_increase {
             regressions.push(RegressionAlert {
                 transport: transport_type.name().to_string(),
                 regression_type: "Success Rate Decrease".to_string(),
-                severity: if success_rate_change > 20.0 {
-                    Severity::Critical
-                } else if success_rate_change > 10.0 {
-                    Severity::High
-                } else {
-                    Severity::Medium
-                },
+                severity: self
+                    .calculate_success_rate_severity(success_rate_change, current.success_rate),
                 description: format!(
-                    "Success rate decreased by {:.2} percentage points",
-                    success_rate_change
+                    "Success rate decreased by {:.2} percentage points (from {:.1}% to {:.1}%)",
+                    success_rate_change, baseline.success_rate, current.success_rate
                 ),
                 current_value: current.success_rate,
                 expected_value: baseline.success_rate,
@@ -513,7 +502,88 @@ impl AutomatedTestRunner {
             });
         }
 
+        // Memory usage regression check (based on memory delta during test)
+        let baseline_memory_delta = baseline.end_memory_kb.saturating_sub(baseline.start_memory_kb);
+        let current_memory_delta = current.end_memory_kb.saturating_sub(current.start_memory_kb);
+        
+        if baseline_memory_delta > 0 {
+            let memory_change = (current_memory_delta as f64 - baseline_memory_delta as f64) 
+                / baseline_memory_delta as f64 * 100.0;
+            
+            // Flag significant memory increases (>50% increase in memory delta)
+            if memory_change > 50.0 {
+                let baseline_mb = baseline_memory_delta as f64 / 1024.0;
+                let current_mb = current_memory_delta as f64 / 1024.0;
+                
+                regressions.push(RegressionAlert {
+                    transport: transport_type.name().to_string(),
+                    regression_type: "Memory Usage Increase".to_string(),
+                    severity: if memory_change > 200.0 {
+                        Severity::Critical
+                    } else if memory_change > 100.0 {
+                        Severity::High
+                    } else {
+                        Severity::Medium
+                    },
+                    description: format!(
+                        "Memory delta increased by {:.1}% (from {:.1}MB to {:.1}MB)",
+                        memory_change,
+                        baseline_mb,
+                        current_mb
+                    ),
+                    current_value: current_mb,
+                    expected_value: baseline_mb,
+                    deviation_percent: memory_change,
+                });
+            }
+        }
+
         regressions
+    }
+
+    /// Calculate throughput regression severity based on performance impact
+    fn calculate_throughput_severity(&self, change_percent: f64) -> Severity {
+        if change_percent > 75.0 {
+            Severity::Critical // Severe performance degradation
+        } else if change_percent > 50.0 {
+            Severity::High // Major performance impact
+        } else if change_percent > 25.0 {
+            Severity::Medium // Noticeable performance impact
+        } else {
+            Severity::Low // Minor performance impact
+        }
+    }
+
+    /// Calculate latency regression severity based on absolute and relative impact
+    fn calculate_latency_severity(&self, change_percent: f64, current_latency_ms: f64) -> Severity {
+        // Consider both percentage change and absolute latency values
+        let is_high_latency = current_latency_ms > 1000.0; // >1 second is problematic
+
+        if change_percent > 200.0 || is_high_latency {
+            Severity::Critical
+        } else if change_percent > 100.0 || current_latency_ms > 500.0 {
+            Severity::High
+        } else if change_percent > 50.0 {
+            Severity::Medium
+        } else {
+            Severity::Low
+        }
+    }
+
+    /// Calculate success rate regression severity based on absolute success rate
+    fn calculate_success_rate_severity(&self, change_percent: f64, current_rate: f64) -> Severity {
+        // Consider both the change and the absolute success rate
+        let is_low_success_rate = current_rate < 80.0;
+
+        if change_percent > 20.0 || is_low_success_rate {
+            Severity::Critical
+        } else if change_percent > 10.0 || current_rate < 90.0 {
+            Severity::High
+        } else if change_percent > 5.0 {
+            Severity::Medium
+        } else {
+            Severity::Low
+        }
     }
 
     /// Generate summary statistics
@@ -873,7 +943,7 @@ impl AutomatedTestRunner {
                                 "jsonrpc": "2.0",
                                 "id": id,
                                 "result": {
-                                    "protocolVersion": MCP_PROTOCOL_VERSION,
+                                    "protocolVersion": MCP_VERSION,
                                     "capabilities": {
                                         "tools": { "listChanged": true },
                                         "resources": { "listChanged": true },

@@ -199,8 +199,8 @@ pub async fn execute_cli_command(cli: TransportTestCli) -> Result<()> {
         Commands::Benchmark {
             transports,
             duration,
-            concurrency: _concurrency,
-            output_format: _output_format,
+            concurrency,
+            output_format,
         } => {
             let transport_types = transports
                 .unwrap_or_else(|| vec![CliTransportType::InMemory])
@@ -210,6 +210,7 @@ pub async fn execute_cli_command(cli: TransportTestCli) -> Result<()> {
 
             info!("Running benchmarks for transports: {:?}", transport_types);
             info!("Benchmark duration: {}s", duration);
+            info!("Concurrency level: {}", concurrency);
 
             // Create benchmark-focused configuration
             let config = AutomatedTestConfig {
@@ -220,7 +221,7 @@ pub async fn execute_cli_command(cli: TransportTestCli) -> Result<()> {
                 include_error_tests: false,
                 min_success_rate: 0.0, // Don't fail on success rate for benchmarks
                 performance_thresholds: PerformanceThresholds::default(),
-                output_format: OutputFormat::Console,
+                output_format: output_format.into(),
                 save_detailed_results: false,
                 results_directory: None,
             };
