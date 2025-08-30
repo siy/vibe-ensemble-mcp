@@ -10,10 +10,12 @@ on:
     - cron: '0 2 * * *'
   workflow_dispatch:
 
+permissions:
+  contents: read
+
 env:
   CARGO_TERM_COLOR: always
   DATABASE_URL: sqlite:./integration_test.db
-  RUSTFLAGS: "-D warnings"
   SQLX_OFFLINE: true
 
 concurrency:
@@ -55,6 +57,13 @@ jobs:
         env:
           RUST_BACKTRACE: 1
           DATABASE_URL: sqlite:./coordinator_test.db
+
+      - name: Upload coordinator DB (on failure)
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: coordinator-sqlite-db
+          path: ./coordinator_test.db
 
   workspace-isolation:
     name: Multi-Worker Workspace Isolation
@@ -99,6 +108,13 @@ jobs:
           RUST_BACKTRACE: 1
           DATABASE_URL: sqlite:./workspace_test.db
 
+      - name: Upload workspace DB (on failure)
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: workspace-sqlite-db
+          path: ./workspace_test.db
+
   error-recovery:
     name: Error Recovery and Task Reassignment
     runs-on: ubuntu-latest
@@ -133,6 +149,13 @@ jobs:
         env:
           RUST_BACKTRACE: 1
           DATABASE_URL: sqlite:./recovery_test.db
+
+      - name: Upload recovery DB (on failure)
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: recovery-sqlite-db
+          path: ./recovery_test.db
 
   complete-integration-suite:
     name: Complete Integration Test Suite
@@ -173,6 +196,13 @@ jobs:
         env:
           RUST_BACKTRACE: 1
           DATABASE_URL: sqlite:./complete_integration_test.db
+
+      - name: Upload complete-suite DB (on failure)
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: complete-suite-sqlite-db
+          path: ./complete_integration_test.db
 
       - name: Lint integration tests
         run: |
