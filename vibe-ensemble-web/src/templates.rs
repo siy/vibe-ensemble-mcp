@@ -219,3 +219,59 @@ impl LinkHealthTemplate {
         }
     }
 }
+
+// Removed complex template structures to avoid Askama compilation issues
+// Templates are now handled with simple HTML in handlers for better compatibility
+
+/// Askama custom filters for templates
+pub mod filters {
+    /// Truncate text to specified length (char-boundary safe)
+    pub fn truncate(s: &str, len: usize) -> askama::Result<String> {
+        if s.chars().count() <= len {
+            Ok(s.to_string())
+        } else {
+            Ok(format!("{}...", s.chars().take(len).collect::<String>()))
+        }
+    }
+
+    /// Format timestamp as relative time (e.g., "2 hours ago")
+    pub fn relative_time(timestamp: &chrono::DateTime<chrono::Utc>) -> askama::Result<String> {
+        let now = chrono::Utc::now();
+        let duration = now.signed_duration_since(*timestamp);
+
+        if duration.num_seconds() < 60 {
+            Ok("just now".to_string())
+        } else if duration.num_minutes() < 60 {
+            let mins = duration.num_minutes();
+            Ok(format!(
+                "{} minute{} ago",
+                mins,
+                if mins == 1 { "" } else { "s" }
+            ))
+        } else if duration.num_hours() < 24 {
+            let hours = duration.num_hours();
+            Ok(format!(
+                "{} hour{} ago",
+                hours,
+                if hours == 1 { "" } else { "s" }
+            ))
+        } else {
+            let days = duration.num_days();
+            Ok(format!(
+                "{} day{} ago",
+                days,
+                if days == 1 { "" } else { "s" }
+            ))
+        }
+    }
+
+    /// Format timestamp for display
+    pub fn format_timestamp(timestamp: &chrono::DateTime<chrono::Utc>) -> askama::Result<String> {
+        Ok(timestamp.format("%Y-%m-%d %H:%M:%S").to_string())
+    }
+
+    /// Convert newlines to HTML line breaks
+    pub fn nl2br(s: &str) -> askama::Result<String> {
+        Ok(s.replace('\n', "<br>"))
+    }
+}

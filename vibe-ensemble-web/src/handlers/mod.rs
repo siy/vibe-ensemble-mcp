@@ -1,6 +1,9 @@
 //! Web handlers for the Vibe Ensemble dashboard
 
+pub mod agents;
 pub mod dashboard;
+pub mod issues;
+pub mod knowledge;
 pub mod links;
 
 use askama::Template;
@@ -19,6 +22,39 @@ use vibe_ensemble_storage::StorageManager;
 use crate::handlers::dashboard::index;
 
 use crate::Result;
+use vibe_ensemble_core::{agent::AgentStatus, agent::AgentType, issue::IssueStatus};
+
+/// Helper function to match agent status case-insensitively
+fn matches_agent_status(status: &AgentStatus, filter: &str) -> bool {
+    let filter_lower = filter.to_lowercase();
+    match status {
+        AgentStatus::Online => filter_lower == "online",
+        AgentStatus::Offline => filter_lower == "offline",
+        AgentStatus::Busy => filter_lower == "busy",
+        _ => false,
+    }
+}
+
+/// Helper function to match agent type case-insensitively
+fn matches_agent_type(agent_type: &AgentType, filter: &str) -> bool {
+    let filter_lower = filter.to_lowercase();
+    match agent_type {
+        AgentType::Worker => filter_lower == "worker",
+        AgentType::Coordinator => filter_lower == "coordinator",
+    }
+}
+
+/// Helper function to match issue status case-insensitively
+fn matches_issue_status(status: &IssueStatus, filter: &str) -> bool {
+    let filter_lower = filter.to_lowercase();
+    match status {
+        IssueStatus::Open => filter_lower == "open",
+        IssueStatus::InProgress => filter_lower == "in_progress" || filter_lower == "inprogress",
+        IssueStatus::Blocked { .. } => filter_lower == "blocked",
+        IssueStatus::Resolved => filter_lower == "resolved",
+        IssueStatus::Closed => filter_lower == "closed",
+    }
+}
 
 /// Health check endpoint
 pub async fn health(State(storage): State<Arc<StorageManager>>) -> Result<impl IntoResponse> {
@@ -151,14 +187,14 @@ pub async fn agents_list(
         .into_iter()
         .filter(|agent| {
             if let Some(status) = &query.status {
-                format!("{:?}", agent.status).to_lowercase() == status.to_lowercase()
+                matches_agent_status(&agent.status, status)
             } else {
                 true
             }
         })
         .filter(|agent| {
             if let Some(agent_type) = &query.agent_type {
-                format!("{:?}", agent.agent_type).to_lowercase() == agent_type.to_lowercase()
+                matches_agent_type(&agent.agent_type, agent_type)
             } else {
                 true
             }
@@ -209,7 +245,7 @@ pub async fn issues_list(
         .into_iter()
         .filter(|issue| {
             if let Some(status) = &query.status {
-                format!("{:?}", issue.status).to_lowercase() == status.to_lowercase()
+                matches_issue_status(&issue.status, status)
             } else {
                 true
             }
@@ -251,6 +287,7 @@ pub struct IssueRequest {
     pub description: String,
     pub priority: String,
     pub assigned_agent_id: Option<Uuid>,
+    pub status: Option<String>,
 }
 
 /// Create issue API endpoint
@@ -350,7 +387,7 @@ pub async fn issue_update(
     Path(id): Path<Uuid>,
     Json(request): Json<IssueRequest>,
 ) -> Result<impl IntoResponse> {
-    use vibe_ensemble_core::issue::IssuePriority;
+    use vibe_ensemble_core::issue::{IssuePriority, IssueStatus};
 
     let mut issue = storage
         .issues()
@@ -370,6 +407,21 @@ pub async fn issue_update(
         _ => return Err(crate::Error::BadRequest("Invalid priority".to_string())),
     };
     issue.assigned_agent_id = request.assigned_agent_id;
+
+    // Update status if provided
+    if let Some(status_str) = request.status {
+        issue.status = match status_str.to_lowercase().as_str() {
+            "open" => IssueStatus::Open,
+            "in_progress" => IssueStatus::InProgress,
+            "blocked" => IssueStatus::Blocked {
+                reason: "Blocked via web interface".to_string(),
+            },
+            "resolved" => IssueStatus::Resolved,
+            "closed" => IssueStatus::Closed,
+            _ => return Err(crate::Error::BadRequest("Invalid status".to_string())),
+        };
+    }
+
     issue.updated_at = chrono::Utc::now();
 
     storage
