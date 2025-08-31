@@ -1,15 +1,14 @@
-# Contributing to Vibe Ensemble MCP Server
+# Contributing to Vibe Ensemble
 
-Thank you for your interest in contributing to Vibe Ensemble! This guide will help you get started with contributing to our MCP server for Claude Code team coordination.
+Thank you for your interest in contributing to Vibe Ensemble! This guide will help you get started with contributing to our local Claude Code coordination system.
 
 ## Getting Started
 
 ### Prerequisites
 
-- **Rust 1.70+** with Cargo
+- **Rust 1.80+** with Cargo
 - **Git** for version control
-- **SQLite** for development database
-- **Claude Code** for testing agent coordination features
+- **Claude Code** for testing coordination features
 
 ### Development Setup
 
@@ -26,7 +25,7 @@ Thank you for your interest in contributing to Vibe Ensemble! This guide will he
 
 3. **Run tests** to ensure everything works:
    ```bash
-   cargo test --all
+   cargo test --workspace
    ```
 
 4. **Run code quality checks**:
@@ -40,7 +39,7 @@ Thank you for your interest in contributing to Vibe Ensemble! This guide will he
 
 ### Git Worktrees for Parallel Development
 
-This project supports and encourages the use of **git worktrees** for parallel development:
+This project supports **git worktrees** for parallel development:
 
 ```bash
 # Create a worktree for your feature
@@ -53,7 +52,7 @@ cd ../vibe-ensemble-feature
 git worktree remove ../vibe-ensemble-feature
 ```
 
-See our [Git Worktrees Guide](docs/git-worktrees.md) for detailed information on using worktrees effectively.
+See our [Git Worktrees Guide](docs/git-worktrees.md) for detailed information.
 
 ### Branch Naming Conventions
 
@@ -64,13 +63,13 @@ See our [Git Worktrees Guide](docs/git-worktrees.md) for detailed information on
 
 ### Commit Message Format
 
-Follow the **single line convenient commits convention**:
+Use **single line commit messages**:
 
 ```
 feat: implement agent registration system
 fix: resolve connection timeout in messaging
-docs: add git worktree usage guide
-refactor: simplify error handling in storage layer
+docs: add installation guide
+refactor: simplify error handling
 test: add integration tests for MCP protocol
 ```
 
@@ -81,7 +80,7 @@ test: add integration tests for MCP protocol
 ### Rust Guidelines
 
 - **Follow Rust idioms** and best practices
-- **Use ownership patterns** and lifetimes effectively
+- **Use ownership patterns** effectively
 - **Implement explicit error handling** with `Result` types
 - **Leverage async/await** for concurrent operations
 - **Write comprehensive tests** for all new functionality
@@ -89,22 +88,21 @@ test: add integration tests for MCP protocol
 
 ### Code Quality Requirements
 
-- **Test coverage** must be above 90%
-- **All clippy warnings** must be resolved
-- **Code must be formatted** with `cargo fmt`
-- **No compiler warnings** in strict mode
-- **Documentation** required for public functions and modules
+Before committing, ensure:
+
+1. **All tests pass**: `cargo test --workspace`
+2. **No clippy warnings**: `RUSTFLAGS="-D warnings" cargo clippy --all-targets --all-features`
+3. **Code formatted**: `cargo fmt`
+4. **Project builds**: `cargo build`
+
+**No exceptions** - all quality checks must pass before committing.
 
 ### Error Handling
 
-- Use `Result<T, E>` for fallible operations
-- Create custom error types when appropriate
-- Provide meaningful error messages
-- Handle errors gracefully with recovery strategies
+Use `Result<T, E>` for fallible operations:
 
-Example:
 ```rust
-pub fn register_agent(agent: Agent) -> Result<AgentId, AgentError> {
+pub fn register_agent(&self, agent: Agent) -> Result<AgentId, AgentError> {
     validate_agent(&agent)?;
     let id = self.storage.store_agent(agent)
         .map_err(AgentError::StorageFailure)?;
@@ -126,15 +124,14 @@ pub fn register_agent(agent: Agent) -> Result<AgentId, AgentError> {
    cargo test --test integration
    ```
 
-3. **End-to-End Tests**: Multi-agent scenarios
+3. **Component Tests**: Test full coordination workflows
    ```bash
-   cargo test --test e2e
+   cargo test --workspace
    ```
 
 ### Writing Tests
 
 - **Test public interfaces** thoroughly
-- **Mock external dependencies** appropriately
 - **Use descriptive test names** that explain the scenario
 - **Include both success and failure cases**
 - **Test edge cases** and boundary conditions
@@ -142,9 +139,9 @@ pub fn register_agent(agent: Agent) -> Result<AgentId, AgentError> {
 Example test:
 ```rust
 #[tokio::test]
-async fn test_agent_registration_with_valid_data() {
+async fn test_agent_registration_success() {
     let manager = AgentManager::new();
-    let agent = Agent::new("test-agent", vec!["task-execution"]);
+    let agent = Agent::new("test-agent", vec!["frontend"]);
     
     let result = manager.register_agent(agent).await;
     
@@ -159,17 +156,15 @@ async fn test_agent_registration_with_valid_data() {
 ### Documentation Requirements
 
 - **Public APIs** must have rustdoc comments
-- **Examples** should be included for complex functionality
-- **Architecture decisions** should be documented in `docs/`
-- **Configuration options** need comprehensive explanations
+- **Examples** for complex functionality
+- **Architecture decisions** documented in `docs/`
 
 ### Documentation Style
 
 ```rust
 /// Registers a new agent with the coordination system.
 ///
-/// This function validates the agent configuration, assigns a unique ID,
-/// and stores the agent in the persistent storage layer.
+/// This validates the agent configuration and stores it in SQLite.
 ///
 /// # Arguments
 ///
@@ -177,12 +172,12 @@ async fn test_agent_registration_with_valid_data() {
 ///
 /// # Returns
 ///
-/// Returns the assigned agent ID on success, or an error if registration fails.
+/// Returns the assigned agent ID on success.
 ///
 /// # Examples
 ///
 /// ```rust
-/// let agent = Agent::new("worker-1", vec!["code-review", "testing"]);
+/// let agent = Agent::new("worker-1", vec!["frontend"]);
 /// let agent_id = manager.register_agent(agent).await?;
 /// ```
 pub async fn register_agent(&self, agent: Agent) -> Result<AgentId, AgentError> {
@@ -190,46 +185,22 @@ pub async fn register_agent(&self, agent: Agent) -> Result<AgentId, AgentError> 
 }
 ```
 
-## Issue Management
-
-### Bug Reports
-
-When reporting bugs, include:
-
-- **Clear description** of the issue
-- **Steps to reproduce** the problem
-- **Expected vs. actual behavior**
-- **Environment details** (Rust version, OS, etc.)
-- **Error messages** and stack traces
-- **Minimal reproduction case** if possible
-
-### Feature Requests
-
-For new features, provide:
-
-- **Use case description** and motivation
-- **Proposed solution** or approach
-- **Alternative solutions** considered
-- **Impact assessment** on existing functionality
-- **Implementation complexity** estimate
-
 ## Pull Request Process
 
 ### Before Submitting
 
-1. **Ensure all tests pass**: `cargo test --all`
-2. **Run code quality checks**: `cargo clippy` and `cargo fmt`
-3. **Update documentation** if needed
-4. **Add tests** for new functionality
-5. **Update CHANGELOG.md** if applicable
+1. **Ensure all tests pass**: `cargo test --workspace`
+2. **Run quality checks**: `RUSTFLAGS="-D warnings" cargo clippy --all-targets --all-features`
+3. **Format code**: `cargo fmt`
+4. **Update documentation** if needed
+5. **Add tests** for new functionality
 
 ### Pull Request Guidelines
 
 - **Descriptive title** summarizing the change
 - **Detailed description** explaining what and why
 - **Link to related issues** using keywords (fixes #123)
-- **Test plan** describing how to verify the changes
-- **Breaking changes** clearly documented
+- **Test plan** describing verification steps
 
 ### PR Template
 
@@ -244,22 +215,11 @@ Brief description of changes made.
 
 ## Test Plan
 - [ ] Unit tests pass
-- [ ] Integration tests pass
-- [ ] Manual testing with Claude Code agents
-
-## Breaking Changes
-None / List any breaking changes
+- [ ] Integration tests pass  
+- [ ] Manual testing with Claude Code
 
 Fixes #123
 ```
-
-### Review Process
-
-1. **Automated checks** must pass (CI/CD)
-2. **Code review** by maintainers
-3. **Address feedback** promptly
-4. **Squash commits** if requested
-5. **Merge** after approval
 
 ## Security Guidelines
 
@@ -267,16 +227,14 @@ Fixes #123
 
 - **Never commit secrets** or sensitive data
 - **Validate all inputs** from external sources
-- **Use secure communication** protocols
-- **Implement proper authentication** and authorization
 - **Handle user data** responsibly
+- **Follow principle of least privilege**
 
 ### Reporting Security Issues
 
 - **Do not** create public issues for security vulnerabilities
-- **Email** security concerns to the maintainers
+- **Email** security concerns to maintainers privately
 - **Include** detailed description and reproduction steps
-- **Wait** for confirmation before public disclosure
 
 ## Community Guidelines
 
@@ -298,32 +256,31 @@ Fixes #123
 
 ### Resources
 
-- [High-Level Design](docs/high-level-design.md) - System architecture
-- [Implementation Plan](docs/implementation-plan.md) - Development roadmap
-- [Git Worktrees Guide](docs/git-worktrees.md) - Parallel development workflow
-- [Rust Documentation](https://doc.rust-lang.org/) - Language reference
+- [User Guide](docs/user-guide.md) - How to use Vibe Ensemble
+- [Developer Guide](docs/developer-guide.md) - Technical architecture
+- [Installation Guide](docs/installation.md) - Setup instructions
+- [Git Worktrees Guide](docs/git-worktrees.md) - Parallel development
 
 ### Questions and Support
 
-- **Check existing issues** and documentation first
+- **Check existing documentation** first
 - **Search closed issues** for similar problems
 - **Create detailed issue** if you can't find an answer
 - **Join discussions** for broader questions
 
-## Attribution
+## Release Process
 
-### Contributors
+Contributors don't need to handle releases - maintainers will:
 
-All contributors will be acknowledged in:
+1. Update version numbers
+2. Create release tags
+3. Publish to GitHub releases
+4. Update documentation
 
-- **README.md** contributor section
-- **Git commit history** (maintain authorship)
-- **Release notes** for significant contributions
-
-### Licensing
+## Licensing
 
 By contributing, you agree that your contributions will be licensed under the Apache License 2.0, the same license as the project.
 
 ---
 
-Thank you for contributing to Vibe Ensemble! Your efforts help make multi-agent coordination better for everyone.
+Thank you for contributing to Vibe Ensemble! Your efforts help make Claude Code coordination better for everyone.
