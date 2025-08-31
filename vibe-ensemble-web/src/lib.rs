@@ -5,6 +5,7 @@
 //! coordination activities.
 
 pub mod auth;
+pub mod csrf;
 pub mod error;
 pub mod handlers;
 pub mod metrics;

@@ -1,11 +1,16 @@
 //! Knowledge management handlers
 
-use crate::{Error, Result};
+use crate::{
+    csrf::{generate_csrf_token, validate_csrf_form, CsrfFormToken, CsrfToken},
+    server::AppState,
+    Error, Result,
+};
 use axum::{
     extract::{Path, Query, State},
-    response::Html,
+    response::{Html, IntoResponse},
     Form,
 };
+use axum_extra::extract::cookie::CookieJar;
 use serde::Deserialize;
 use std::sync::Arc;
 use uuid::Uuid;
@@ -21,10 +26,16 @@ pub struct KnowledgeForm {
     pub knowledge_type: String,
     pub access_level: String,
     pub tags: String, // Comma-separated tags
+    pub csrf_token: String,
 }
 
-/// List all knowledge entries
+/// List all knowledge entries (wrapper for compatibility)
 pub async fn list(State(storage): State<Arc<StorageManager>>) -> Result<Html<String>> {
+    list_internal(storage).await
+}
+
+/// List all knowledge entries (internal implementation)
+async fn list_internal(storage: Arc<StorageManager>) -> Result<Html<String>> {
     // Use list_accessible_by with a dummy UUID to get all public and team entries
     let dummy_agent_id = Uuid::new_v4();
     let knowledge_entries = storage
@@ -152,11 +163,16 @@ pub async fn list(State(storage): State<Arc<StorageManager>>) -> Result<Html<Str
     Ok(Html(html))
 }
 
-/// Show knowledge entry details
+/// Show knowledge entry details (wrapper for compatibility)
 pub async fn detail(
     State(storage): State<Arc<StorageManager>>,
     Path(id): Path<Uuid>,
 ) -> Result<Html<String>> {
+    detail_internal(storage, id).await
+}
+
+/// Show knowledge entry details (internal implementation)
+async fn detail_internal(storage: Arc<StorageManager>, id: Uuid) -> Result<Html<String>> {
     // First find the knowledge entry
     let knowledge = storage
         .knowledge()
@@ -215,13 +231,18 @@ pub async fn detail(
 }
 
 /// Show new knowledge entry form
-pub async fn new_form() -> Result<Html<String>> {
-    let html = r#"
+pub async fn new_form(State(app_state): State<AppState>) -> Result<impl IntoResponse> {
+    // Generate CSRF token
+    let (csrf_token, csrf_cookie) = generate_csrf_token(&app_state.csrf_store).await;
+
+    let html = format!(
+        r#"
         <html>
             <head><title>New Knowledge Entry</title></head>
             <body>
                 <h1>Create New Knowledge Entry</h1>
                 <form method="post" action="/knowledge">
+                    <input type="hidden" name="csrf_token" value="{}" />
                     <p>
                         <label>Title: <input type="text" name="title" required style="width: 400px;"></label>
                     </p>
@@ -263,21 +284,31 @@ pub async fn new_form() -> Result<Html<String>> {
                 </form>
             </body>
         </html>
-    "#;
+    "#,
+        csrf_token
+    );
 
-    Ok(Html(html.to_string()))
+    Ok((CookieJar::new().add(csrf_cookie), Html(html)))
 }
 
-/// Search knowledge entries
+/// Search knowledge entries (wrapper for compatibility)
 pub async fn search(
     State(storage): State<Arc<StorageManager>>,
     Query(params): Query<std::collections::HashMap<String, String>>,
+) -> Result<Html<String>> {
+    search_internal(storage, params).await
+}
+
+/// Search knowledge entries (internal implementation)
+async fn search_internal(
+    storage: Arc<StorageManager>,
+    params: std::collections::HashMap<String, String>,
 ) -> Result<Html<String>> {
     let search_term = params.get("q").cloned().unwrap_or_default();
 
     if search_term.trim().is_empty() {
         // No search term, show all entries
-        return list(State(storage)).await;
+        return list_internal(storage).await;
     }
 
     let dummy_agent_id = Uuid::new_v4();
@@ -304,14 +335,29 @@ pub async fn search(
 
     // For now, redirect to the existing simple HTML implementation
     // In a real implementation, this would show search results
-    list(State(storage)).await
+    list_internal(storage).await
 }
 
 /// Create a new knowledge entry
 pub async fn create(
-    State(storage): State<Arc<StorageManager>>,
+    State(app_state): State<AppState>,
+    cookie_token: Option<CsrfToken>,
     Form(form): Form<KnowledgeForm>,
 ) -> Result<Html<String>> {
+    // Validate CSRF token
+    let csrf_form_token = CsrfFormToken {
+        csrf_token: form.csrf_token.clone(),
+    };
+
+    if let Err(_response) = validate_csrf_form(
+        State(app_state.csrf_store.clone()),
+        csrf_form_token,
+        cookie_token,
+    )
+    .await
+    {
+        return Err(Error::Forbidden("Invalid CSRF token".to_string()));
+    }
     let knowledge_type = match form.knowledge_type.as_str() {
         "Pattern" => KnowledgeType::Pattern,
         "Practice" => KnowledgeType::Practice,
@@ -350,7 +396,11 @@ pub async fn create(
         knowledge_entry.add_tag(tag)?;
     }
 
-    storage.knowledge().create(&knowledge_entry).await?;
+    app_state
+        .storage
+        .knowledge()
+        .create(&knowledge_entry)
+        .await?;
 
     let html = format!(
         r#"

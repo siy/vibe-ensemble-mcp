@@ -1,6 +1,6 @@
 //! Web server for the Vibe Ensemble dashboard
 
-use crate::{handlers, middleware, websocket, Result};
+use crate::{csrf::CsrfStore, handlers, middleware, websocket, Result};
 use axum::{
     middleware as axum_middleware,
     routing::{delete, get, post, put},
@@ -10,6 +10,13 @@ use std::sync::Arc;
 use tower::ServiceBuilder;
 use tower_http::{cors::CorsLayer, trace::TraceLayer};
 use vibe_ensemble_storage::StorageManager;
+
+/// Shared state for web handlers
+#[derive(Clone)]
+pub struct AppState {
+    pub storage: Arc<StorageManager>,
+    pub csrf_store: Arc<CsrfStore>,
+}
 
 /// Web server configuration
 #[derive(Debug, Clone)]
@@ -34,12 +41,14 @@ pub struct WebServer {
     config: WebConfig,
     storage: Arc<StorageManager>,
     ws_manager: Arc<websocket::WebSocketManager>,
+    csrf_store: Arc<CsrfStore>,
 }
 
 impl WebServer {
     /// Create a new web server
     pub async fn new(config: WebConfig, storage: Arc<StorageManager>) -> Result<Self> {
         let ws_manager = Arc::new(websocket::WebSocketManager::new());
+        let csrf_store = Arc::new(CsrfStore::new());
 
         // Start background tasks for periodic updates
         ws_manager.start_stats_broadcaster(storage.clone()).await;
@@ -50,6 +59,7 @@ impl WebServer {
             config,
             storage,
             ws_manager,
+            csrf_store,
         };
         server.start_message_event_bridge().await?;
 
@@ -121,6 +131,11 @@ impl WebServer {
 
     /// Build the application router (internal)
     fn build_router_internal(&self) -> Router {
+        let app_state = AppState {
+            storage: self.storage.clone(),
+            csrf_store: self.csrf_store.clone(),
+        };
+
         Router::new()
             // Dashboard routes
             .route("/", get(handlers::dashboard))
@@ -183,6 +198,13 @@ impl WebServer {
             )
             // Add shared state
             .with_state(self.storage.clone())
+            // CSRF-protected routes with AppState
+            .merge(
+                Router::new()
+                    .route("/knowledge/new", get(handlers::knowledge::new_form))
+                    .route("/knowledge", post(handlers::knowledge::create))
+                    .with_state(app_state.clone()),
+            )
             // WebSocket route needs separate router with different state
             .merge(
                 Router::new()
