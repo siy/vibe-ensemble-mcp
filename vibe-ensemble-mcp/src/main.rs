@@ -277,6 +277,14 @@ async fn main() -> anyhow::Result<()> {
                 .and_then(|s| s.parse().ok())
         })
         .unwrap_or(64 * 1024); // 64KB default
+                               // Clamp to [4KB, 1MB] to prevent pathological configs
+    let message_buffer_size = message_buffer_size.clamp(4 * 1024, 1024 * 1024);
+    if message_buffer_size < 8 * 1024 {
+        warn!(
+            "message_buffer_size is very small ({} bytes); performance may degrade",
+            message_buffer_size
+        );
+    }
 
     // Handle web-only mode with signal handling
     if web_only {
@@ -433,7 +441,7 @@ fn mask_database_path(url: &str) -> String {
         }
         "sqlite:...".to_string()
     } else if url.starts_with("postgres://") || url.starts_with("postgresql://") {
-        // Mask PostgreSQL connection strings  
+        // Mask PostgreSQL connection strings
         if let Ok(parsed) = ::url::Url::parse(url) {
             format!(
                 "{}://***@{}/{}",
