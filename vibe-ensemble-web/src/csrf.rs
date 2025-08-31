@@ -121,13 +121,17 @@ pub async fn validate_csrf_form(
 pub async fn generate_csrf_token(csrf_store: &CsrfStore) -> (String, Cookie<'static>) {
     let token = csrf_store.generate_token().await;
 
-    let cookie = Cookie::build(("csrf_token", token.clone()))
+    let cookie_builder = Cookie::build(("csrf_token", token.clone()))
         .http_only(true)
         .same_site(SameSite::Strict)
-        .max_age(time::Duration::hours(1))
-        .build();
+        .path("/")
+        .max_age(time::Duration::hours(1));
 
-    (token, cookie)
+    // Conditionally set secure flag behind a feature
+    #[cfg(feature = "secure_cookies")]
+    let cookie_builder = cookie_builder.secure(true);
+
+    (token, cookie_builder.build())
 }
 
 /// HTML helper to include CSRF token in forms
