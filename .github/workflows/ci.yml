@@ -57,7 +57,7 @@ jobs:
           cargo build --release --bin vibe-ensemble
           
           # Start the server in background for link validation
-          ./target/release/vibe-ensemble --web-port 8081 &
+          ./target/release/vibe-ensemble --web-only --web-port 8081 &
           SERVER_PID=$!
           
           # Give server time to start

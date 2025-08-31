@@ -43,6 +43,10 @@ struct Cli {
     /// Maximum database connections (default: 10)
     #[arg(long)]
     max_connections: Option<u32>,
+
+    /// Run web server only (no MCP stdio transport)
+    #[arg(long)]
+    web_only: bool,
 }
 
 #[tokio::main]
@@ -123,7 +127,7 @@ async fn main() -> anyhow::Result<()> {
 
     let web_config = vibe_ensemble_web::server::WebConfig {
         enabled: true,
-        host: web_host,
+        host: web_host.clone(),
         port: web_port,
     };
 
@@ -168,6 +172,23 @@ async fn main() -> anyhow::Result<()> {
     let server = McpServer::with_coordination(coordination_services);
 
     info!("MCP server initialized successfully");
+
+    // Handle web-only mode
+    if cli.web_only {
+        info!("Running in web-only mode - MCP stdio transport disabled");
+        info!(
+            "Web dashboard is available on http://{}:{}",
+            web_host, web_port
+        );
+
+        // Wait for web server to complete (it runs indefinitely)
+        if let Err(e) = web_handle.await {
+            error!("Web server task failed: {}", e);
+        }
+
+        info!("Web-only server shutdown");
+        return Ok(());
+    }
 
     // Create stdio transport
     let mut transport = TransportFactory::stdio();
