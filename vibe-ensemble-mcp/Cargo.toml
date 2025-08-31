@@ -31,6 +31,7 @@ tracing-subscriber = { workspace = true }
 clap = { workspace = true }
 dirs = { workspace = true }
 chrono = { workspace = true }
+url = { workspace = true }
 async-trait = "0.1"
 serde_with = "3"
 
@@ -42,3 +43,5 @@ humantime = "2"
 sqlx = { workspace = true }
 fake = { version = "2.9", features = ["derive", "chrono"] }
 tempfile = "3.8"
+reqwest = { workspace = true }
+tokio-test = "0.4"
