@@ -3,6 +3,11 @@
 //! This module provides different transport mechanisms for MCP protocol
 //! communication, including WebSocket and in-memory transports.
 
+pub mod automated_runner;
+#[cfg(feature = "transport-test-cli")]
+pub mod cli;
+pub mod testing;
+
 use crate::{Error, Result};
 use futures_util::{SinkExt, StreamExt};
 use serde_json::Value;
