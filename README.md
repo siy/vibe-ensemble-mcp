@@ -30,6 +30,14 @@ curl -fsSL https://vibeensemble.dev/install.sh | bash
 iwr https://vibeensemble.dev/install.ps1 -UseBasicParsing | iex
 ```
 
+Note: Verify installer integrity (checksum/signature) before executing:
+```bash
+curl -fsSLO https://vibeensemble.dev/install.sh
+shasum -a 256 install.sh  # or sha256sum
+# Compare against the published checksum on the releases page
+bash install.sh
+```
+
 ### 2. Start the Server
 
 ```bash
@@ -38,8 +46,11 @@ vibe-ensemble
 
 This starts:
 - Local coordination server
-- Web dashboard at http://127.0.0.1:8080
-- SQLite database in `~/.vibe-ensemble/`
+- Web dashboard at <http://127.0.0.1:8080>
+- SQLite database in your platform data dir:
+  - macOS: `~/Library/Application Support/vibe-ensemble/`
+  - Linux: `~/.local/share/vibe-ensemble/`
+  - Windows: `%APPDATA%/vibe-ensemble/`
 
 ### 3. Connect Claude Code
 
@@ -106,7 +117,7 @@ Vibe Ensemble works with zero configuration, but you can customize:
 
 ```bash
 # Use custom database location
-export DATABASE_URL="sqlite:./my-project.db"
+export DATABASE_URL="sqlite://./my-project.db"
 
 # Run web dashboard on different port  
 vibe-ensemble --port=9000

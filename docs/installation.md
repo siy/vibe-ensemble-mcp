@@ -16,13 +16,19 @@ The easiest way to get started:
 ### macOS and Linux
 
 ```bash
-curl -fsSL https://vibeensemble.dev/install.sh | bash
+curl -fsSLO https://vibeensemble.dev/install.sh
+shasum -a 256 install.sh  # or sha256sum
+# Compare against published checksum, then:
+bash install.sh
 ```
 
 ### Windows
 
 ```powershell
-iwr https://vibeensemble.dev/install.ps1 -UseBasicParsing | iex
+iwr https://vibeensemble.dev/install.ps1 -UseBasicParsing -OutFile install.ps1
+Get-FileHash .\install.ps1 -Algorithm SHA256
+# Compare against published checksum, then:
+.\install.ps1
 ```
 
 The installer will:
@@ -58,7 +64,7 @@ sudo mv vibe-ensemble /usr/local/bin/
 **Windows:**
 1. Download `vibe-ensemble-windows.exe`
 2. Rename to `vibe-ensemble.exe`
-3. Move to a directory in your PATH (e.g., `C:\Windows\System32\`)
+3. Move to a user PATH entry (e.g., `%USERPROFILE%\bin\`) to avoid admin rights
 
 ## Building from Source
 
@@ -113,7 +119,10 @@ You should see:
 ```
 🚀 Vibe Ensemble started successfully
 📊 Web dashboard: http://127.0.0.1:8080
-💾 Database: ~/.vibe-ensemble/data.db
+💾 Database: (see Data Directory section)
+  - macOS: ~/Library/Application Support/vibe-ensemble/data.db
+  - Linux: ~/.local/share/vibe-ensemble/data.db
+  - Windows: %APPDATA%/vibe-ensemble/data.db
 🔧 Configuration: Default settings
 ```
 
@@ -163,14 +172,17 @@ vibe-ensemble --port=9000
 vibe-ensemble --mcp-only --transport=stdio
 
 # Use custom database location
-DATABASE_URL="sqlite:./my-project.db" vibe-ensemble
+DATABASE_URL="sqlite://./my-project.db" vibe-ensemble
 ```
 
 ### Environment Variables
 
 ```bash
-# Database location
-export DATABASE_URL="sqlite:/path/to/my-database.db"
+# Database location (file path)
+export DATABASE_URL="sqlite:///path/to/my-database.db"
+
+# In-memory database
+export DATABASE_URL="sqlite::memory:"
 
 # Server port
 export VIBE_ENSEMBLE_PORT=9000
@@ -195,7 +207,7 @@ This directory contains:
 ### Quick Update (if installed via script)
 
 ```bash
-curl -fsSL https://vibeensemble.dev/install.sh | bash
+curl -fsSL https://vibeensemble.dev/install.sh | bash  # or download + verify as above
 ```
 
 ### Manual Update

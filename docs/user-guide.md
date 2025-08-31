@@ -26,9 +26,9 @@ After [installing Vibe Ensemble](installation.md), let's set up your first coord
    ```
 
 3. **Open Claude Code** and you'll now have access to coordination tools like:
-   - `vibe/agent/register` - Register this instance as an agent
-   - `vibe/agent/list` - See all connected agents
-   - `vibe/issue/create` - Create shared tasks
+   - `vibe/agent/register` - Register this instance as an agent (deprecated, use web dashboard)
+   - `vibe/agent/list` - See all connected agents (deprecated, use web dashboard)
+   - `vibe/issue/create` - Create shared tasks (deprecated, use web dashboard)
 
 ### Multiple Agents Working Together
 

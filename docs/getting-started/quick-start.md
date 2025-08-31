@@ -32,10 +32,10 @@ vibe-ensemble
 ```
 
 You should see:
-```
+```text
 🚀 Vibe Ensemble started successfully
-📊 Web dashboard: http://127.0.0.1:8080
-💾 Database: ~/.vibe-ensemble/data.db
+📊 Web dashboard: <http://127.0.0.1:8080>
+💾 Database: see platform data dir (macOS/Linux/Windows)
 ```
 
 Leave this running in a terminal - it's your coordination server.

@@ -233,7 +233,7 @@ Fixes #123
 ### Reporting Security Issues
 
 - **Do not** create public issues for security vulnerabilities
-- **Email** security concerns to maintainers privately
+- **Email** security concerns to maintainers privately at security@vibeensemble.dev
 - **Include** detailed description and reproduction steps
 
 ## Community Guidelines
