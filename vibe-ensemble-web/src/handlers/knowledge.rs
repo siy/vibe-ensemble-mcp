@@ -157,11 +157,27 @@ pub async fn detail(
     State(storage): State<Arc<StorageManager>>,
     Path(id): Path<Uuid>,
 ) -> Result<Html<String>> {
+    // First find the knowledge entry
     let knowledge = storage
         .knowledge()
         .find_by_id(id)
         .await?
         .ok_or_else(|| Error::NotFound(format!("Knowledge entry with id {}", id)))?;
+
+    // Check access level - only allow access to Public and Team entries
+    // In a real implementation, you'd get the current user's agent ID from authentication
+    match knowledge.access_level {
+        AccessLevel::Public | AccessLevel::Team => {
+            // Access allowed
+        }
+        AccessLevel::Private => {
+            // For now, block access to private entries since we don't have authentication
+            // TODO: Implement proper authentication and check if user owns this entry
+            return Err(Error::Forbidden(
+                "Access denied to private knowledge entry".to_string(),
+            ));
+        }
+    }
 
     let html = format!(
         r#"

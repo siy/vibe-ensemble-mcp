@@ -254,6 +254,7 @@ pub struct IssueRequest {
     pub description: String,
     pub priority: String,
     pub assigned_agent_id: Option<Uuid>,
+    pub status: Option<String>,
 }
 
 /// Create issue API endpoint
@@ -353,7 +354,7 @@ pub async fn issue_update(
     Path(id): Path<Uuid>,
     Json(request): Json<IssueRequest>,
 ) -> Result<impl IntoResponse> {
-    use vibe_ensemble_core::issue::IssuePriority;
+    use vibe_ensemble_core::issue::{IssuePriority, IssueStatus};
 
     let mut issue = storage
         .issues()
@@ -373,6 +374,21 @@ pub async fn issue_update(
         _ => return Err(crate::Error::BadRequest("Invalid priority".to_string())),
     };
     issue.assigned_agent_id = request.assigned_agent_id;
+
+    // Update status if provided
+    if let Some(status_str) = request.status {
+        issue.status = match status_str.to_lowercase().as_str() {
+            "open" => IssueStatus::Open,
+            "in_progress" => IssueStatus::InProgress,
+            "blocked" => IssueStatus::Blocked {
+                reason: "Blocked via web interface".to_string(),
+            },
+            "resolved" => IssueStatus::Resolved,
+            "closed" => IssueStatus::Closed,
+            _ => return Err(crate::Error::BadRequest("Invalid status".to_string())),
+        };
+    }
+
     issue.updated_at = chrono::Utc::now();
 
     storage

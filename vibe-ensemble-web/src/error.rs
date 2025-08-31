@@ -29,6 +29,9 @@ pub enum Error {
     #[error("Not found: {0}")]
     NotFound(String),
 
+    #[error("Forbidden: {0}")]
+    Forbidden(String),
+
     #[error("IO error: {0}")]
     Io(#[from] std::io::Error),
 
@@ -44,6 +47,7 @@ impl IntoResponse for Error {
         let (status, error_message) = match self {
             Error::BadRequest(msg) => (StatusCode::BAD_REQUEST, msg),
             Error::NotFound(msg) => (StatusCode::NOT_FOUND, msg),
+            Error::Forbidden(msg) => (StatusCode::FORBIDDEN, msg),
             Error::Storage(ref err) => {
                 tracing::error!("Storage error: {}", err);
                 (
