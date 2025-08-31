@@ -94,10 +94,6 @@ impl WebServer {
             // Agent API routes
             .route("/api/agents", get(handlers::agents_list))
             .route("/api/agents/:id", get(handlers::agent_get))
-            .route(
-                "/api/agents/:id/terminate",
-                post(handlers::agents::terminate),
-            )
             // Issue API routes
             .route("/api/issues", get(handlers::issues_list))
             .route("/api/issues", post(handlers::issues_create))
@@ -141,6 +137,10 @@ impl WebServer {
                 Router::new()
                     .route("/knowledge/new", get(handlers::knowledge::new_form))
                     .route("/knowledge", post(handlers::knowledge::create))
+                    .route(
+                        "/api/agents/:id/terminate",
+                        post(handlers::agents::terminate),
+                    )
                     .with_state(app_state.clone()),
             )
             // Add middleware layers

@@ -17,6 +17,7 @@ use vibe_ensemble_storage::StorageManager;
 pub struct TerminateAgentRequest {
     pub force: Option<bool>,
     pub reason: Option<String>,
+    pub csrf_token: String,
 }
 
 /// List all agents
@@ -346,12 +347,18 @@ pub async fn detail(
 
 /// Terminate an agent
 pub async fn terminate(
-    State(storage): State<Arc<StorageManager>>,
+    State(app_state): State<crate::server::AppState>,
     Path(id): Path<Uuid>,
     Json(request): Json<TerminateAgentRequest>,
 ) -> Result<impl IntoResponse> {
+    // Validate CSRF token directly (API endpoint approach)
+    if !app_state.csrf_store.validate_token(&request.csrf_token).await {
+        return Err(Error::Forbidden("Invalid CSRF token".to_string()));
+    }
+
     // Verify agent exists
-    let agent = storage
+    let agent = app_state
+        .storage
         .agents()
         .find_by_id(id)
         .await?
@@ -359,25 +366,41 @@ pub async fn terminate(
 
     // For now, we'll mark the agent as offline since we don't have direct process control
     // TODO: Implement actual agent termination when process lifecycle is integrated
-    storage
+    app_state
+        .storage
         .agents()
         .update_status(id, &vibe_ensemble_core::agent::AgentStatus::Offline)
         .await?;
 
+    // Bound reason length for safety
+    let reason = request
+        .reason
+        .as_deref()
+        .unwrap_or("Terminated by user")
+        .chars()
+        .take(500)
+        .collect::<String>();
+
     tracing::info!(
-        "Agent {} ({}) terminated by user request (force: {})",
+        "Agent {} ({}) terminated by user request (force: {}, reason: {})",
         agent.name,
         agent.id,
-        request.force.unwrap_or(false)
+        request.force.unwrap_or(false),
+        reason
     );
 
+    use axum::http::StatusCode;
     use serde_json::json;
-    Ok(Json(json!({
-        "success": true,
-        "message": format!("Agent {} has been terminated", agent.name),
-        "agent_id": agent.id,
-        "force": request.force.unwrap_or(false),
-        "reason": request.reason.unwrap_or_else(|| "Terminated by user".to_string()),
-        "timestamp": chrono::Utc::now().to_rfc3339()
-    })))
+
+    Ok((
+        StatusCode::ACCEPTED,
+        Json(json!({
+            "success": true,
+            "message": format!("Agent {} has been terminated", agent.name),
+            "agent_id": agent.id,
+            "force": request.force.unwrap_or(false),
+            "reason": reason,
+            "timestamp": chrono::Utc::now().to_rfc3339()
+        })),
+    ))
 }
