@@ -1,190 +1,171 @@
 # Quick Start Guide
 
-Get up and running with Vibe Ensemble in 5 minutes. This guide covers setting up a personal workspace with 5-10 Claude Code agents working on 2-3 projects simultaneously.
+Get Vibe Ensemble running and coordinating your first Claude Code agents in under 5 minutes.
 
-## Prerequisites
+## What You'll Need
 
-- **Rust 1.70+** (install from https://rustup.rs)
-- **Git** for version control
-- **Claude Code** (install from https://claude.ai/code)
+- A computer running macOS, Linux, or Windows
+- Claude Code (install from [claude.ai/code](https://claude.ai/code))
+- 5 minutes to set up
 
-## Setup
+## Step 1: Install Vibe Ensemble
 
-### 1. Clone and Build
+**macOS/Linux:**
+```bash
+curl -fsSL https://vibeensemble.dev/install.sh | bash
+```
+
+**Windows:**
+```powershell
+iwr https://vibeensemble.dev/install.ps1 -UseBasicParsing | iex
+```
+
+Verify the installation:
+```bash
+vibe-ensemble --version
+```
+
+## Step 2: Start the Server
 
 ```bash
-# Clone the repository
-git clone https://github.com/siy/vibe-ensemble-mcp.git
-cd vibe-ensemble-mcp
-
-# Build the system
-cargo build --release
+vibe-ensemble
 ```
 
-### 2. Basic Configuration
+You should see:
+```text
+🚀 Vibe Ensemble started successfully
+📊 Web dashboard: <http://127.0.0.1:8080>
+💾 Database: see platform data dir (macOS/Linux/Windows)
+```
 
+Leave this running in a terminal - it's your coordination server.
+
+## Step 3: Connect Claude Code
+
+Add Vibe Ensemble as an MCP server in Claude Code:
+
+### Option A: Settings UI
+1. Open Claude Code
+2. Go to Settings (Cmd/Ctrl + ,)
+3. Navigate to "MCP Servers"
+4. Click "Add Server"
+5. Enter:
+   - **Name**: `vibe-ensemble`
+   - **Command**: `vibe-ensemble --mcp-only --transport=stdio`
+
+### Option B: Configuration File
+Add this to your Claude Code MCP settings file:
+
+```json
+{
+  "mcpServers": {
+    "vibe-ensemble": {
+      "command": "vibe-ensemble --mcp-only --transport=stdio",
+      "args": []
+    }
+  }
+}
+```
+
+## Step 4: Test the Connection
+
+In Claude Code, try using a coordination tool:
+
+```
+Can you register this instance as a frontend development agent?
+```
+
+Claude Code should now be able to use tools like:
+- `vibe/agent/register` - Register as an agent
+- `vibe/agent/list` - See all connected agents
+- `vibe/issue/create` - Create shared tasks
+
+## Step 5: Your First Multi-Agent Setup
+
+Now let's set up multiple agents working together:
+
+1. **Keep Vibe Ensemble running** in Terminal 1
+
+2. **Start Agent 1** (Frontend) in Terminal 2:
+   ```bash
+   cd ~/your-project
+   claude-code
+   ```
+   Then tell it: "Register as a frontend development agent specializing in React and TypeScript"
+
+3. **Start Agent 2** (Backend) in Terminal 3:
+   ```bash
+   cd ~/your-api-project  
+   claude-code
+   ```
+   Then tell it: "Register as a backend development agent specializing in Node.js and databases"
+
+4. **Watch them coordinate** - Agent 1 can now:
+   - Create issues that Agent 2 can see
+   - Share knowledge about API contracts
+   - Avoid conflicts when both work on the same codebase
+
+## Step 6: Monitor the Coordination
+
+Open the web dashboard: http://127.0.0.1:8080
+
+You'll see:
+- **Overview**: Active agents and recent activity
+- **Agents**: Details about each connected agent
+- **Issues**: Shared tasks and coordination
+- **Knowledge**: Insights shared between agents
+
+## Common First Use Cases
+
+### Single Project, Multiple Specializations
+- **Code Writer**: Implements features
+- **Code Reviewer**: Reviews PRs and suggests improvements
+- **Test Writer**: Adds and maintains tests
+- **Doc Writer**: Keeps documentation updated
+
+### Multiple Projects
+- **Project A Agent**: Works on your web app
+- **Project B Agent**: Works on your mobile app  
+- **Shared Agent**: Handles cross-project coordination
+
+### Team Collaboration
+- Each team member runs their own agents
+- All agents coordinate through the same Vibe Ensemble
+- Shared knowledge base and issue tracking
+
+## Quick Troubleshooting
+
+**Server won't start:**
 ```bash
-# Set database location (SQLite for single-user)
-export DATABASE_URL="sqlite:./vibe-ensemble.db"
+# Check if port 8080 is in use
+lsof -i :8080  # macOS/Linux
+netstat -ano | findstr :8080  # Windows
 
-# Optional: Enable debug logging
-export RUST_LOG="info,vibe_ensemble=debug"
+# Use different port if needed
+vibe-ensemble --port=8081
 ```
 
-### 3. Initialize Database
+**Claude Code can't connect:**
+1. Make sure Vibe Ensemble is running
+2. Check the MCP configuration is correct
+3. Restart Claude Code after adding the server
 
-```bash
-# Run migrations to set up the database
-cargo run --bin vibe-ensemble -- --migrate
-```
+**Tools not working:**
+- Verify in Claude Code: "Can you list available vibe tools?"
+- Check the web dashboard for agent connections
 
-### 4. Start the MCP Server
+## What's Next?
 
-```bash
-# Start the server (runs in background)
-cargo run --bin vibe-ensemble &
-```
+- **Explore the web dashboard** to understand how agents coordinate
+- **Try different agent specializations** for your workflow
+- **Create shared issues** to coordinate complex tasks
+- **Share knowledge** between agents to avoid repeating work
+- **Read the [User Guide](../user-guide.md)** for advanced workflows
 
-## Connect Your First Agent
+## Getting Help
 
-### 1. Create Agent Template
+- **Web Dashboard**: Check http://127.0.0.1:8080 for system status
+- **GitHub Issues**: [Report problems](https://github.com/siy/vibe-ensemble-mcp/issues)
+- **Discussions**: [Ask questions](https://github.com/siy/vibe-ensemble-mcp/discussions)
 
-Use one of the built-in templates:
-- `code-writer` - For implementing features and fixing bugs
-- `code-reviewer` - For reviewing code quality and security
-- `test-specialist` - For writing and maintaining tests
-- `docs-specialist` - For documentation tasks
-
-### 2. Start a Worker Agent
-
-```bash
-# Start Claude Code as a code-writer agent
-claude -p "You are a code writer agent for my-project. Focus on implementing features in Rust." \
-  --output-format stream-json \
-  --verbose \
-  --mcp-server http://localhost:8080
-```
-
-### 3. Verify Connection
-
-Check that your agent is connected:
-```bash
-curl http://localhost:8080/api/agents
-```
-
-## Typical Usage Pattern
-
-### For 2-3 Projects with 5-10 Agents
-
-1. **Project A** (3-4 agents):
-   - 1x code-writer (main implementation)
-   - 1x code-reviewer (quality checks)
-   - 1x test-specialist (testing)
-   - 1x docs-specialist (documentation)
-
-2. **Project B** (2-3 agents):
-   - 1x code-writer 
-   - 1x code-reviewer
-   - 1x test-specialist
-
-3. **Project C** (2-3 agents):
-   - 1x code-writer
-   - 1x code-reviewer
-   - 1x docs-specialist
-
-### Example Multi-Agent Setup
-
-```bash
-# Project A agents
-claude -p "Code writer for ProjectA using Rust" --mcp-server localhost:8080 &
-claude -p "Code reviewer for ProjectA focusing on security" --mcp-server localhost:8080 &
-claude -p "Test specialist for ProjectA using cargo test" --mcp-server localhost:8080 &
-
-# Project B agents  
-claude -p "Code writer for ProjectB using Python" --mcp-server localhost:8080 &
-claude -p "Code reviewer for ProjectB following PEP 8" --mcp-server localhost:8080 &
-
-# Documentation agent (shared across projects)
-claude -p "Documentation specialist for technical writing" --mcp-server localhost:8080 &
-```
-
-## File Structure
-
-Your workspace will look like:
-```
-your-workspace/
-├── vibe-ensemble.db          # SQLite database
-├── agent-templates/          # Agent configurations
-│   ├── code-writer/
-│   ├── code-reviewer/
-│   ├── test-specialist/
-│   └── docs-specialist/
-├── workspaces/              # Agent workspaces
-│   ├── project-a-workspace/
-│   ├── project-b-workspace/
-│   └── shared-docs/
-└── projects/                # Your actual projects
-    ├── project-a/
-    ├── project-b/
-    └── project-c/
-```
-
-## Basic Commands
-
-```bash
-# Check system health
-curl http://localhost:8080/api/health
-
-# List active agents
-curl http://localhost:8080/api/agents
-
-# View recent issues
-curl http://localhost:8080/api/issues
-
-# Check knowledge base
-curl http://localhost:8080/api/knowledge
-```
-
-## Common Workflow
-
-1. **Start your MCP server** once in the morning
-2. **Launch agents** for each project you're working on
-3. **Agents coordinate automatically** through the MCP server
-4. **Work naturally** - agents share knowledge and avoid conflicts
-5. **Stop agents** when switching contexts or done for the day
-
-## Troubleshooting
-
-### Server Won't Start
-```bash
-# Check database path is writable
-touch ./vibe-ensemble.db
-
-# Check port isn't in use
-lsof -i :8080
-```
-
-### Agent Won't Connect
-```bash
-# Verify MCP server is running
-curl http://localhost:8080/api/health
-
-# Check Claude Code version
-claude --version
-```
-
-### Performance Issues
-```bash
-# Monitor resource usage
-ps aux | grep claude
-top -p $(pgrep claude | tr '\n' ',')
-```
-
-## Next Steps
-
-- Try different agent templates for different tasks
-- Set up git worktrees for parallel development
-- Explore the knowledge sharing between agents
-- Customize agent configurations for your specific needs
-
-That's it! You now have a personal multi-agent development environment running locally.
+You now have a local AI agent coordination system running! Your Claude Code instances can work together without conflicts, share knowledge, and coordinate on complex tasks.

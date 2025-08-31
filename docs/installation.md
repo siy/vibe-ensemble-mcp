@@ -1,463 +1,296 @@
-# Vibe Ensemble MCP - Installation Guide
+# Installation Guide
 
-A comprehensive guide to installing and running the Vibe Ensemble MCP server for team coordination between multiple Claude Code instances.
-
-## Quick Install
-
-### macOS (Homebrew)
-
-```bash
-# Install via Homebrew (coming soon)
-# brew tap siy/vibe-ensemble
-# brew install vibe-ensemble-mcp
-
-# Start the server
-vibe-ensemble
-```
-
-### Linux (Package Manager)
-
-```bash
-# Ubuntu/Debian
-curl -fsSL https://vibeensemble.dev/install.sh | sudo bash
-
-# CentOS/RHEL/Fedora
-curl -fsSL https://vibeensemble.dev/install.sh | sudo bash
-```
-
-### Windows (PowerShell)
-
-```powershell
-# Install via PowerShell
-iex (irm 'https://vibeensemble.dev/install.ps1')
-
-# Or download MSI installer
-# https://github.com/siy/vibe-ensemble-mcp/releases/latest
-```
-
+This guide will help you install Vibe Ensemble on your system. Choose the method that works best for you.
 
 ## System Requirements
 
-### Minimum Requirements
-- **CPU**: 1 core, 2.0 GHz
-- **Memory**: 512 MB RAM
-- **Storage**: 100 MB available space
-- **Network**: Internet connection for initial setup
+- **Operating System**: macOS 10.15+, Linux (Ubuntu 20.04+), Windows 10+
+- **Memory**: 256 MB RAM minimum (512 MB recommended)
+- **Storage**: 100 MB free space
+- **Network**: Internet connection for installation only
 
-### Recommended Requirements
-- **CPU**: 2+ cores, 2.4 GHz
-- **Memory**: 2 GB RAM
-- **Storage**: 1 GB available space
-- **Network**: Stable internet connection
+## Quick Install (Recommended)
 
-### Platform Support
-- **macOS**: 10.15+ (Intel/Apple Silicon)
-- **Linux**: Ubuntu 20.04+, CentOS 8+, Debian 11+
-- **Windows**: Windows 10/11, Windows Server 2019+
+The easiest way to get started:
 
-## Prerequisites
+### macOS and Linux
 
-### Rust (for building from source)
 ```bash
-# Install Rust toolchain
-curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
-source ~/.cargo/env
-rustc --version  # Should be 1.80+
+curl -fsSLO https://vibeensemble.dev/install.sh
+shasum -a 256 install.sh  # or sha256sum
+# Compare against published checksum, then:
+bash install.sh
 ```
 
-### Database (Optional)
-```bash
-# SQLite (included by default)
-# No additional setup required
+### Windows
 
-# PostgreSQL (production)
-# macOS
-brew install postgresql
-brew services start postgresql
-
-# Ubuntu/Debian
-sudo apt install postgresql postgresql-contrib
-sudo systemctl start postgresql
-
-# Create database
-sudo -u postgres createdb vibe_ensemble
-sudo -u postgres createuser vibe_ensemble
+```powershell
+iwr https://vibeensemble.dev/install.ps1 -UseBasicParsing -OutFile install.ps1
+Get-FileHash .\install.ps1 -Algorithm SHA256
+# Compare against published checksum, then:
+.\install.ps1
 ```
 
-## Installation Methods
+The installer will:
+1. Download the latest binary for your platform
+2. Install it to your PATH
+3. Create the data directory at `~/.vibe-ensemble/`
+4. Verify the installation
 
-### Method 1: Pre-built Binaries (Recommended)
+## Manual Installation
 
-#### macOS
+### Download Binary
+
+Visit the [releases page](https://github.com/siy/vibe-ensemble-mcp/releases/latest) and download the binary for your platform:
+
+- `vibe-ensemble-macos` - macOS (Intel and Apple Silicon)
+- `vibe-ensemble-linux` - Linux x86_64
+- `vibe-ensemble-windows.exe` - Windows x86_64
+
+### Install the Binary
+
+**macOS/Linux:**
 ```bash
-# Download latest release
-curl -L -o vibe-ensemble-mcp.tar.gz \
-  https://github.com/siy/vibe-ensemble-mcp/releases/latest/download/vibe-ensemble-mcp-macos.tar.gz
+# Download (replace URL with the correct version)
+curl -L -o vibe-ensemble https://github.com/siy/vibe-ensemble-mcp/releases/latest/download/vibe-ensemble-macos
 
-# Extract and install
-tar -xzf vibe-ensemble-mcp.tar.gz
+# Make executable
+chmod +x vibe-ensemble
+
+# Move to PATH
 sudo mv vibe-ensemble /usr/local/bin/
-
-# Verify installation
-vibe-ensemble --version
 ```
 
-#### Linux
-```bash
-# Download latest release
-curl -L -o vibe-ensemble-mcp.tar.gz \
-  https://github.com/siy/vibe-ensemble-mcp/releases/latest/download/vibe-ensemble-mcp-linux.tar.gz
+**Windows:**
+1. Download `vibe-ensemble-windows.exe`
+2. Rename to `vibe-ensemble.exe`
+3. Move to a user PATH entry (e.g., `%USERPROFILE%\bin\`) to avoid admin rights
 
-# Extract and install
-tar -xzf vibe-ensemble-mcp.tar.gz
-sudo mv vibe-ensemble /usr/local/bin/
-sudo chmod +x /usr/local/bin/vibe-ensemble
+## Building from Source
 
-# Verify installation
-vibe-ensemble --version
-```
+If you prefer to build from source or want to contribute:
 
-#### Windows
-1. Download the MSI installer from [releases page](https://github.com/siy/vibe-ensemble-mcp/releases/latest)
-2. Run the installer as Administrator
-3. Follow the installation wizard
-4. Add to PATH if not done automatically
+### Prerequisites
 
-### Method 2: Building from Source
+- Rust 1.80 or later
+- Git
+
+### Build Steps
 
 ```bash
-# Clone repository
+# Clone the repository
 git clone https://github.com/siy/vibe-ensemble-mcp.git
 cd vibe-ensemble-mcp
 
 # Build release version
 cargo build --release
 
-# Install binaries
-sudo cp target/release/vibe-ensemble /usr/local/bin/
+# The binary is now at target/release/vibe-ensemble
+cp target/release/vibe-ensemble /usr/local/bin/  # or add to PATH
+```
 
-# Verify installation
+## Verify Installation
+
+Check that Vibe Ensemble is properly installed:
+
+```bash
 vibe-ensemble --version
 ```
 
-### Method 3: Cargo Install
+You should see output like:
+```
+vibe-ensemble 0.2.1
+```
+
+## First Run
+
+Start Vibe Ensemble for the first time:
 
 ```bash
-# Install from crates.io
-cargo install vibe-ensemble
-
-# Or install from Git
-cargo install --git https://github.com/siy/vibe-ensemble-mcp.git vibe-ensemble
+vibe-ensemble
 ```
+
+This will:
+- Create the database at `~/.vibe-ensemble/data.db`
+- Start the web server on http://127.0.0.1:8080
+- Print startup information
+
+You should see:
+```
+🚀 Vibe Ensemble started successfully
+📊 Web dashboard: http://127.0.0.1:8080
+💾 Database: (see Data Directory section)
+  - macOS: ~/Library/Application Support/vibe-ensemble/data.db
+  - Linux: ~/.local/share/vibe-ensemble/data.db
+  - Windows: %APPDATA%/vibe-ensemble/data.db
+🔧 Configuration: Default settings
+```
+
+## Connect to Claude Code
+
+### Option 1: Claude Code Settings UI
+
+1. Open Claude Code
+2. Go to Settings (Cmd/Ctrl + ,)
+3. Navigate to "MCP Servers"
+4. Click "Add Server"
+5. Enter:
+   - **Name**: `vibe-ensemble`
+   - **Command**: `vibe-ensemble --mcp-only --transport=stdio`
+
+### Option 2: Configuration File
+
+Add to your Claude Code MCP configuration file:
+
+```json
+{
+  "mcpServers": {
+    "vibe-ensemble": {
+      "command": "vibe-ensemble --mcp-only --transport=stdio",
+      "args": []
+    }
+  }
+}
+```
+
+The configuration file is typically located at:
+- **macOS**: `~/Library/Application Support/Claude Code/mcp_settings.json`
+- **Linux**: `~/.config/claude-code/mcp_settings.json`
+- **Windows**: `%APPDATA%/Claude Code/mcp_settings.json`
 
 ## Configuration
 
-### Basic Configuration
+Vibe Ensemble works with zero configuration, but you can customize it:
 
-Create a configuration directory:
+### Command Line Options
+
 ```bash
-# Linux/macOS
-mkdir -p ~/.config/vibe-ensemble
-cd ~/.config/vibe-ensemble
+# Run on different port
+vibe-ensemble --port=9000
 
-# Windows
-mkdir %APPDATA%\vibe-ensemble
-cd %APPDATA%\vibe-ensemble
-```
+# Disable web dashboard
+vibe-ensemble --mcp-only --transport=stdio
 
-Create basic configuration:
-```bash
-# Download example configuration
-curl -o config.toml \
-  https://raw.githubusercontent.com/siy/vibe-ensemble-mcp/main/config/default.toml
-
-# Edit as needed
-nano config.toml  # or your preferred editor
-```
-
-### Configuration Options
-
-**config.toml:**
-```toml
-[server]
-host = "127.0.0.1"    # Server bind address
-port = 8080           # API server port
-workers = 4           # Number of worker threads
-
-[database]
-url = "sqlite:./vibe_ensemble.db"  # Database URL
-max_connections = 10                # Max database connections
-migrate_on_startup = true          # Run migrations on startup
-
-[web]
-enabled = true        # Enable web dashboard
-host = "127.0.0.1"   # Web server bind address
-port = 8081          # Web server port
-
-[logging]
-level = "info"       # Log level (trace, debug, info, warn, error)
-format = "json"      # Log format (json, pretty)
+# Use custom database location
+DATABASE_URL="sqlite://./my-project.db" vibe-ensemble
 ```
 
 ### Environment Variables
 
-You can override any configuration value with environment variables:
 ```bash
-# Database configuration
-export VIBE_ENSEMBLE_DATABASE__URL="postgres://user:pass@localhost/db"
-export VIBE_ENSEMBLE_DATABASE__MAX_CONNECTIONS=20
+# Database location (file path)
+export DATABASE_URL="sqlite:///path/to/my-database.db"
 
-# Server configuration
-export VIBE_ENSEMBLE_SERVER__HOST="0.0.0.0"
-export VIBE_ENSEMBLE_SERVER__PORT=8080
+# In-memory database
+export DATABASE_URL="sqlite::memory:"
 
-# Web interface
-export VIBE_ENSEMBLE_WEB__ENABLED=true
-export VIBE_ENSEMBLE_WEB__PORT=3000
+# Server port
+export VIBE_ENSEMBLE_PORT=9000
+
+# Log level
+export RUST_LOG=info
 ```
 
-## Starting the Server
+## Data Directory
 
-### Development Mode
-```bash
-# Start with default configuration
-vibe-ensemble
+Vibe Ensemble stores its data in:
+- **macOS**: `~/Library/Application Support/vibe-ensemble/`
+- **Linux**: `~/.local/share/vibe-ensemble/`
+- **Windows**: `%APPDATA%/vibe-ensemble/`
 
-# Start with custom config
-vibe-ensemble --config /path/to/config.toml
-
-# Start with environment override
-VIBE_ENSEMBLE_SERVER__PORT=9000 vibe-ensemble
-```
-
-### Production Mode
-
-#### Using systemd (Linux)
-```bash
-# Create service file
-sudo tee /etc/systemd/system/vibe-ensemble.service > /dev/null << EOF
-[Unit]
-Description=Vibe Ensemble MCP Server
-After=network.target
-
-[Service]
-Type=simple
-User=vibe-ensemble
-Group=vibe-ensemble
-WorkingDirectory=/var/lib/vibe-ensemble
-ExecStart=/usr/local/bin/vibe-ensemble
-Restart=always
-RestartSec=5
-Environment=RUST_LOG=info
-
-[Install]
-WantedBy=multi-user.target
-EOF
-
-# Enable and start service
-sudo systemctl daemon-reload
-sudo systemctl enable vibe-ensemble
-sudo systemctl start vibe-ensemble
-sudo systemctl status vibe-ensemble
-```
-
-
-## Verification
-
-### Health Check
-```bash
-# Check server health
-curl http://localhost:8080/api/health
-
-# Expected response:
-# {
-#   "status": "healthy",
-#   "timestamp": "<ISO-8601 UTC>",
-#   "version": "<semver>"
-# }
-```
-
-### Web Interface
-Open your browser and navigate to:
-- **Dashboard**: <http://localhost:8081> _(or your configured `VIBE_ENSEMBLE_WEB__PORT`)_
-- **API Health**: <http://localhost:8080/api/health>
-> Note: Metrics are optional in some deployments.
-- **Metrics**: <http://localhost:9090/metrics>
-
-### MCP Tools
-Test MCP server integration:
-```bash
-# Using stdio transport
-echo '{"jsonrpc":"2.0","id":1,"method":"vibe/agent/list","params":{}}' | vibe-ensemble --mcp-only --transport=stdio
-
-# Or via HTTP:
-curl -sS -H 'Content-Type: application/json' \
-  -d '{"jsonrpc":"2.0","id":1,"method":"vibe/agent/list","params":{}}' \
-  http://localhost:8080/mcp | jq .
-```
+This directory contains:
+- `data.db` - SQLite database with agents, issues, and knowledge
+- `logs/` - Application logs (if file logging is enabled)
 
 ## Updating
 
-### Pre-built Binaries
-```bash
-# Download latest version
-curl -L -o vibe-ensemble-mcp.tar.gz \
-  https://github.com/siy/vibe-ensemble-mcp/releases/latest/download/vibe-ensemble-mcp-$(uname -s | tr '[:upper:]' '[:lower:]').tar.gz
+### Quick Update (if installed via script)
 
-# Stop service, update, and restart
-sudo systemctl stop vibe-ensemble  # if using systemd
-tar -xzf vibe-ensemble-mcp.tar.gz
-sudo mv vibe-ensemble /usr/local/bin/
-sudo systemctl start vibe-ensemble
+```bash
+curl -fsSL https://vibeensemble.dev/install.sh | bash  # or download + verify as above
 ```
 
-### Cargo Install
-```bash
-cargo install --force vibe-ensemble
-```
+### Manual Update
 
+1. Download the new binary from releases
+2. Replace the existing binary
+3. Restart Vibe Ensemble
+
+Your data and configuration will be preserved.
 
 ## Troubleshooting
 
-### Common Issues
+### Port Already in Use
 
-#### Port Already in Use
+If you see "Address already in use" error:
+
 ```bash
-# Find process using port 8080
+# Find what's using port 8080
 lsof -i :8080  # macOS/Linux
 netstat -ano | findstr :8080  # Windows
 
-# Kill the process or change port in configuration
+# Use a different port
+vibe-ensemble --port=8081
 ```
 
-#### Database Connection Issues
-```bash
-# SQLite permissions
-chmod 644 vibe_ensemble.db
-chown $(whoami) vibe_ensemble.db
+### Permission Denied
 
-# PostgreSQL connection
-pg_isready -h localhost -p 5432
-psql -U vibe_ensemble -d vibe_ensemble -h localhost
-```
-
-#### Permission Denied
+**macOS/Linux:**
 ```bash
 # Fix binary permissions
 chmod +x /usr/local/bin/vibe-ensemble
 
-# Fix config directory permissions
-chmod -R 755 ~/.config/vibe-ensemble
+# Fix data directory permissions  
+chmod -R 755 ~/.local/share/vibe-ensemble/
 ```
 
-### Log Analysis
-```bash
-# View logs (systemd)
-sudo journalctl -u vibe-ensemble -f
+**Windows:**
+- Run Command Prompt as Administrator
+- Ensure the binary is in a writable location
 
-
-# Enable debug logging
-export RUST_LOG=debug
-vibe-ensemble
-```
-
-### Performance Issues
-```bash
-# Monitor resource usage
-htop  # or top
-df -h  # disk usage
-netstat -i  # network usage
-
-# Database optimization
-ANALYZE;  -- PostgreSQL
-VACUUM;   -- PostgreSQL
-```
-
-## Integration with Claude Code
-
-### Setup MCP Server in Claude Code
-
-#### Option 1: Claude CLI (Recommended)
-
-Use the Claude Code CLI to add the MCP server. Choose the appropriate scope for your needs:
+### Database Issues
 
 ```bash
-# Local scope (current project only)
-claude mcp add vibe-ensemble -- vibe-ensemble --mcp-only --transport=stdio
+# Check database permissions
+ls -la ~/.local/share/vibe-ensemble/data.db
 
-# User scope (available across all projects)
-claude mcp add -s user vibe-ensemble -- vibe-ensemble --mcp-only --transport=stdio
-
-# Project scope (shared with team)
-claude mcp add -s project vibe-ensemble -- vibe-ensemble --mcp-only --transport=stdio
-
-# HTTP transport (server already running on 8080)
-# Connect Claude Code to the HTTP JSON-RPC endpoint:
-claude mcp add --transport http vibe-ensemble http://localhost:8080/mcp
-
-# SSE transport (event stream monitoring)
-# Connect Claude Code to the SSE endpoint for real-time events:
-claude mcp add --transport sse vibe-ensemble http://localhost:8080/mcp/events
+# Reset database (⚠️ this deletes all data)
+rm ~/.local/share/vibe-ensemble/data.db
+vibe-ensemble  # Will recreate empty database
 ```
 
-#### Option 2: Manual JSON Configuration
+### Connection Issues with Claude Code
 
-1. Open Claude Code settings
-2. Navigate to MCP servers
-3. Add new server:
-   ```json
-   {
-     "command": "vibe-ensemble",
-     "args": ["--mcp-only", "--transport=stdio"],
-     "env": {
-       "VIBE_ENSEMBLE_SERVER_URL": "http://localhost:8080"
-     }
-   }
+1. Verify Vibe Ensemble is running:
+   ```bash
+   curl http://127.0.0.1:8080/api/health
    ```
 
-### Available Tools
-- `vibe/agent/list` - List registered agents
-- `vibe/agent/register` - Register new agent
-- `vibe/issue/create` - Create new issue
-- `vibe/issue/assign` - Assign issue to agent
-- `vibe/message/send` - Send message between agents
-- `vibe/knowledge/add` - Add knowledge entry
-- `vibe/coordination/status` - Check coordination status
+2. Check Claude Code MCP configuration
+3. Restart Claude Code after adding the MCP server
 
-## Support
+## Uninstalling
 
-### Getting Help
-- **Documentation**: <https://vibeensemble.dev/docs>
-- **GitHub Issues**: <https://github.com/siy/vibe-ensemble-mcp/issues>
-- **Discussions**: <https://github.com/siy/vibe-ensemble-mcp/discussions>
+To completely remove Vibe Ensemble:
 
-### Reporting Issues
+```bash
+# Remove binary
+sudo rm /usr/local/bin/vibe-ensemble
+
+# Remove data directory
+rm -rf ~/.local/share/vibe-ensemble/
+```
+
+## Getting Help
+
+If you encounter issues:
+
+1. Check this troubleshooting section
+2. Look at [GitHub Issues](https://github.com/siy/vibe-ensemble-mcp/issues)
+3. Start a [Discussion](https://github.com/siy/vibe-ensemble-mcp/discussions)
+
 When reporting issues, please include:
-- Operating system and version
-- Installation method
-- Configuration file (sanitized)
-- Error logs
-- Steps to reproduce
-
-### Contributing
-See [CONTRIBUTING.md](../CONTRIBUTING.md) for development setup and contribution guidelines.
-
-## Security
-
-### Production Hardening
-- Use PostgreSQL instead of SQLite
-- Enable HTTPS with reverse proxy
-- Restrict network access
-- Regular security updates
-- Monitor logs for suspicious activity
-
-### Authentication
-Coming in future releases:
-- JWT authentication
-- Role-based access control
-- API key management
-- OAuth integration
-
-## License
-
-This project is licensed under the MIT License - see the [LICENSE](../LICENSE) file for details.
+- Your operating system and version
+- Installation method used
+- Error messages or logs
+- Steps to reproduce the problem
