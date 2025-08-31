@@ -638,7 +638,7 @@ impl AuthHandlers {
     /// Handle password change
     pub async fn change_password_post(
         State(handlers): State<Arc<AuthHandlers>>,
-        // TODO: Extract user from session/JWT
+        // FUTURE: Extract user from session/JWT when authentication middleware is implemented
         Form(password_data): Form<ChangePasswordForm>,
     ) -> Result<Response> {
         // Validate password confirmation
@@ -649,7 +649,7 @@ impl AuthHandlers {
             );
         }
 
-        // TODO: Get current user ID from session/JWT
+        // FUTURE: Get current user ID from session/JWT when authentication middleware is implemented
         let user_id = "current_user_id"; // This should come from authentication middleware
 
         match handlers

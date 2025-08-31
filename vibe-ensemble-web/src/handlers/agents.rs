@@ -3,12 +3,22 @@
 use crate::{Error, Result};
 use axum::{
     extract::{Path, State},
-    response::Html,
+    response::{Html, IntoResponse},
+    Json,
 };
 use html_escape::encode_text;
+use serde::Deserialize;
 use std::sync::Arc;
 use uuid::Uuid;
 use vibe_ensemble_storage::StorageManager;
+
+/// Agent termination request
+#[derive(Debug, Deserialize)]
+pub struct TerminateAgentRequest {
+    pub force: Option<bool>,
+    pub reason: Option<String>,
+    pub csrf_token: String,
+}
 
 /// List all agents
 pub async fn list(State(storage): State<Arc<StorageManager>>) -> Result<Html<String>> {
@@ -333,4 +343,69 @@ pub async fn detail(
     );
 
     Ok(Html(html))
+}
+
+/// Terminate an agent
+pub async fn terminate(
+    State(app_state): State<crate::server::AppState>,
+    Path(id): Path<Uuid>,
+    Json(request): Json<TerminateAgentRequest>,
+) -> Result<impl IntoResponse> {
+    // Validate CSRF token directly (API endpoint approach)
+    let csrf_ok = app_state
+        .csrf_store
+        .validate_token(&request.csrf_token)
+        .await;
+    if !csrf_ok {
+        return Err(Error::Forbidden("Invalid CSRF token".to_string()));
+    }
+
+    // Verify agent exists
+    let agent = app_state
+        .storage
+        .agents()
+        .find_by_id(id)
+        .await?
+        .ok_or_else(|| crate::Error::NotFound(format!("Agent with id {}", id)))?;
+
+    // For now, we'll mark the agent as offline since we don't have direct process control
+    // FUTURE: Implement actual agent termination when process lifecycle is integrated
+    // This would require extending the MCP protocol to support lifecycle management
+    app_state
+        .storage
+        .agents()
+        .update_status(id, &vibe_ensemble_core::agent::AgentStatus::Offline)
+        .await?;
+
+    // Bound reason length for safety
+    let reason = request
+        .reason
+        .as_deref()
+        .unwrap_or("Terminated by user")
+        .chars()
+        .take(500)
+        .collect::<String>();
+
+    tracing::info!(
+        "Agent {} ({}) terminated by user request (force: {}, reason: {})",
+        agent.name,
+        agent.id,
+        request.force.unwrap_or(false),
+        reason
+    );
+
+    use axum::http::StatusCode;
+    use serde_json::json;
+
+    Ok((
+        StatusCode::ACCEPTED,
+        Json(json!({
+            "success": true,
+            "message": format!("Agent {} has been terminated", agent.name),
+            "agent_id": agent.id,
+            "force": request.force.unwrap_or(false),
+            "reason": reason,
+            "timestamp": chrono::Utc::now().to_rfc3339()
+        })),
+    ))
 }

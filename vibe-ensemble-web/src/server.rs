@@ -1,7 +1,8 @@
 //! Web server for the Vibe Ensemble dashboard
 
-use crate::{csrf::CsrfStore, handlers, middleware, websocket, Result};
+use crate::{csrf::CsrfStore, handlers, middleware, Result};
 use axum::{
+    extract::FromRef,
     middleware as axum_middleware,
     routing::{delete, get, post, put},
     Router,
@@ -16,6 +17,18 @@ use vibe_ensemble_storage::StorageManager;
 pub struct AppState {
     pub storage: Arc<StorageManager>,
     pub csrf_store: Arc<CsrfStore>,
+}
+
+impl FromRef<AppState> for Arc<vibe_ensemble_storage::StorageManager> {
+    fn from_ref(app: &AppState) -> Self {
+        app.storage.clone()
+    }
+}
+
+impl FromRef<AppState> for Arc<crate::csrf::CsrfStore> {
+    fn from_ref(app: &AppState) -> Self {
+        app.csrf_store.clone()
+    }
 }
 
 /// Web server configuration
@@ -40,102 +53,31 @@ impl Default for WebConfig {
 pub struct WebServer {
     config: WebConfig,
     storage: Arc<StorageManager>,
-    ws_manager: Arc<websocket::WebSocketManager>,
     csrf_store: Arc<CsrfStore>,
 }
 
 impl WebServer {
     /// Create a new web server
     pub async fn new(config: WebConfig, storage: Arc<StorageManager>) -> Result<Self> {
-        let ws_manager = Arc::new(websocket::WebSocketManager::new());
         let csrf_store = Arc::new(CsrfStore::new());
 
-        // Start background tasks for periodic updates
-        ws_manager.start_stats_broadcaster(storage.clone()).await;
-        ws_manager.start_ping_sender().await;
-
-        // Start message event bridge
-        let server = Self {
+        Ok(Self {
             config,
             storage,
-            ws_manager,
             csrf_store,
-        };
-        server.start_message_event_bridge().await?;
-
-        Ok(server)
-    }
-
-    /// Get the WebSocket manager for external access
-    pub fn websocket_manager(&self) -> Arc<websocket::WebSocketManager> {
-        self.ws_manager.clone()
-    }
-
-    /// Start the message event bridge to forward message service events to WebSocket
-    async fn start_message_event_bridge(&self) -> Result<()> {
-        let ws_manager = self.ws_manager.clone();
-        let storage = self.storage.clone();
-
-        // Subscribe to message service events
-        let mut message_receiver = storage.message_service().subscribe().await;
-
-        tokio::spawn(async move {
-            while let Ok(message_event) = message_receiver.recv().await {
-                match message_event.event_type {
-                    vibe_ensemble_storage::services::message::MessageEventType::Sent => {
-                        if let Err(e) = ws_manager.broadcast_message_sent(
-                            message_event.message.id,
-                            message_event.message.sender_id,
-                            message_event.message.recipient_id,
-                            format!("{:?}", message_event.message.message_type),
-                            format!("{:?}", message_event.message.metadata.priority),
-                            message_event.message.content.clone(),
-                            message_event.message.metadata.correlation_id,
-                        ) {
-                            tracing::warn!("WS broadcast sent failed: {e}");
-                        }
-                    }
-                    vibe_ensemble_storage::services::message::MessageEventType::Delivered => {
-                        if let Err(e) = ws_manager.broadcast_message_delivered(
-                            message_event.message.id,
-                            message_event.message.sender_id,
-                            message_event.message.recipient_id,
-                            message_event
-                                .message
-                                .delivered_at
-                                .unwrap_or(chrono::Utc::now()),
-                        ) {
-                            tracing::warn!("WS broadcast delivered failed: {e}");
-                        }
-                    }
-                    vibe_ensemble_storage::services::message::MessageEventType::Failed => {
-                        if let Err(e) = ws_manager.broadcast_message_failed(
-                            message_event.message.id,
-                            "Message delivery failed".to_string(),
-                        ) {
-                            tracing::warn!("WS broadcast failed failed: {e}");
-                        }
-                    }
-                }
-            }
-            tracing::info!("Message event bridge stopped (subscribe channel closed)");
-        });
-
-        Ok(())
+        })
     }
 
     /// Build the application router (public for testing)
     pub fn build_router(&self) -> Router {
-        self.build_router_internal()
+        self.build_router_internal().with_state(AppState {
+            storage: self.storage.clone(),
+            csrf_store: self.csrf_store.clone(),
+        })
     }
 
     /// Build the application router (internal)
-    fn build_router_internal(&self) -> Router {
-        let app_state = AppState {
-            storage: self.storage.clone(),
-            csrf_store: self.csrf_store.clone(),
-        };
-
+    fn build_router_internal(&self) -> Router<AppState> {
         Router::new()
             // Dashboard routes
             .route("/", get(handlers::dashboard))
@@ -155,6 +97,8 @@ impl WebServer {
             .route("/knowledge", get(handlers::knowledge::list))
             .route("/knowledge/search", get(handlers::knowledge::search))
             .route("/knowledge/:id", get(handlers::knowledge::detail))
+            // Prompt management routes
+            // FUTURE: Prompt management routes will be implemented in a future update
             // API routes
             .route("/api/health", get(handlers::health))
             .route("/api/stats", get(handlers::system_stats))
@@ -180,6 +124,7 @@ impl WebServer {
                 "/api/messages/thread/:correlation_id",
                 get(handlers::messages_by_correlation),
             )
+            // FUTURE: Prompt API routes will be implemented in a future update
             // Link validation API routes
             .route(
                 "/api/links/health",
@@ -196,20 +141,16 @@ impl WebServer {
                 "/api/links/:url/repair-suggestions",
                 get(handlers::links::repair_suggestions),
             )
-            // Add shared state
-            .with_state(self.storage.clone())
+            // State will be added by build_router() method
             // CSRF-protected routes with AppState
             .merge(
                 Router::new()
                     .route("/knowledge/new", get(handlers::knowledge::new_form))
                     .route("/knowledge", post(handlers::knowledge::create))
-                    .with_state(app_state.clone()),
-            )
-            // WebSocket route needs separate router with different state
-            .merge(
-                Router::new()
-                    .route("/ws", get(websocket::websocket_handler))
-                    .with_state(self.ws_manager.clone()),
+                    .route(
+                        "/api/agents/:id/terminate",
+                        post(handlers::agents::terminate),
+                    ), // State already provided at the root; no per-subrouter state needed
             )
             // Add middleware layers
             .layer(

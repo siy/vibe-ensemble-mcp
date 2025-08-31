@@ -1,23 +1,24 @@
 use axum::{
     extract::State,
-    response::{Html, Response},
+    http::StatusCode,
+    response::{Html, IntoResponse, Response},
 };
+use html_escape::encode_text;
 use vibe_ensemble_security::Session;
 use vibe_ensemble_storage::StorageManager;
-use vibe_ensemble_web::WebSocketManager;
 
 use crate::Result;
 
 pub async fn admin_dashboard(
     session: Session,
     State(storage): State<StorageManager>,
-    State(_ws_manager): State<WebSocketManager>,
 ) -> Result<Response> {
     if !session.is_admin {
-        return Ok(Html("<h1>Access Denied</h1><p>Admin access required.</p>").into_response());
+        return Ok((StatusCode::FORBIDDEN, Html("<h1>Access Denied</h1><p>Admin access required.</p>")).into_response());
     }
 
-    let _stats = storage.stats().await?;
+    // Render stats here or remove this call:
+    // let stats = storage.stats().await?;
 
     let html = r#"
 <!DOCTYPE html>
@@ -74,7 +75,7 @@ pub async fn admin_sessions(
 </body>
 </html>"#,
         session.id,
-        session.username,
+        encode_text(&session.username),
         if session.is_admin { "Admin" } else { "User" }
     );
 

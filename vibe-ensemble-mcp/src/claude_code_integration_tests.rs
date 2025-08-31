@@ -19,13 +19,15 @@ use std::time::Duration;
 use tokio::io::{AsyncBufReadExt, AsyncReadExt, AsyncWriteExt, BufReader, BufWriter};
 use tokio::process::{Child, ChildStdin, ChildStdout, Command};
 use tokio::time::timeout;
-use tokio_tungstenite::tungstenite::Message;
-use tokio_tungstenite::{connect_async, MaybeTlsStream, WebSocketStream};
+// NOTE: WebSocket imports commented out due to architecture simplification (Phase 1)
+// use tokio_tungstenite::tungstenite::Message;
+// use tokio_tungstenite::{connect_async, MaybeTlsStream, WebSocketStream};
 
 use crate::protocol::{
     methods, ClientCapabilities, ClientInfo, InitializeParams, JsonRpcNotification, JsonRpcRequest,
 };
-use crate::transport::{SseTransport, Transport};
+// NOTE: SseTransport commented out due to architecture simplification (Phase 1)
+use crate::transport::Transport;
 use crate::{Error, Result};
 
 /// Claude Code client simulation trait
