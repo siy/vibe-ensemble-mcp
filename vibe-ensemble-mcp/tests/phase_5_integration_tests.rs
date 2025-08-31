@@ -123,44 +123,59 @@ mod lifecycle_tests {
     async fn test_web_only_mode_startup() {
         // This test verifies that the web-only mode can be invoked with proper CLI arguments
         // Instead of spawning a full process (which is slow and flaky), we test the CLI parsing
-        
+
         let temp_dir = TempDir::new().unwrap();
         let db_path = temp_dir.path().join("test.db");
-        
+
         // Test that the web-only argument is properly parsed
         let output = Command::new("cargo")
             .args([
-                "run", "--bin", "vibe-ensemble", "--",
-                "--web-only", "--help"
+                "run",
+                "--bin",
+                "vibe-ensemble",
+                "--",
+                "--web-only",
+                "--help",
             ])
             .output()
             .expect("Failed to run vibe-ensemble --web-only --help");
-        
+
         // The help should be shown and process should exit successfully
         assert!(output.status.success(), "Help command should succeed");
-        
+
         let help_text = String::from_utf8(output.stdout).unwrap();
-        assert!(help_text.contains("--web-only"), "Help should mention --web-only flag");
-        
+        assert!(
+            help_text.contains("--web-only"),
+            "Help should mention --web-only flag"
+        );
+
         // Test that CLI arguments are validated properly
         let output = Command::new("cargo")
             .args([
-                "run", "--bin", "vibe-ensemble", "--",
-                "--web-only", 
-                "--db-path", db_path.to_str().unwrap(),
-                "--web-port", "18080",
-                "--version"  // This should show version and exit before starting server
+                "run",
+                "--bin",
+                "vibe-ensemble",
+                "--",
+                "--web-only",
+                "--db-path",
+                db_path.to_str().unwrap(),
+                "--web-port",
+                "18080",
+                "--version", // This should show version and exit before starting server
             ])
             .output()
             .expect("Failed to run vibe-ensemble with version flag");
-        
+
         // Should show version and exit cleanly
         assert!(output.status.success(), "Version command should succeed");
-        
+
         // This tests that the binary can be invoked with web-only parameters
         // without the flakiness of actual server startup timing
         let version_text = String::from_utf8(output.stdout).unwrap();
-        assert!(!version_text.trim().is_empty(), "Version output should not be empty");
+        assert!(
+            !version_text.trim().is_empty(),
+            "Version output should not be empty"
+        );
     }
 
     #[tokio::test]
