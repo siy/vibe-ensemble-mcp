@@ -38,6 +38,7 @@ futures-util = { workspace = true }
 rand = { workspace = true }
 cookie = "0.18"
 urlencoding = "2.1"
+html-escape = "0.2"
 
 [dev-dependencies]
 tokio-test = "0.4"

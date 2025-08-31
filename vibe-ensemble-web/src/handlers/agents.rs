@@ -5,6 +5,7 @@ use axum::{
     extract::{Path, State},
     response::Html,
 };
+use html_escape::encode_text;
 use std::sync::Arc;
 use uuid::Uuid;
 use vibe_ensemble_storage::StorageManager;
@@ -37,19 +38,19 @@ pub async fn list(State(storage): State<Arc<StorageManager>>) -> Result<Html<Str
                     <td><a href="/agents/{}" class="btn btn-sm">View Details</a></td>
                 </tr>
                 "#,
-                    agent.name,
-                    agent.id,
-                    agent.agent_type,
+                    encode_text(&agent.name),
+                    agent.id,         // UUIDs are safe, no need to escape
+                    agent.agent_type, // Debug format is safe
                     match agent.status {
                         vibe_ensemble_core::agent::AgentStatus::Online => "online",
                         vibe_ensemble_core::agent::AgentStatus::Offline => "offline",
                         vibe_ensemble_core::agent::AgentStatus::Busy => "busy",
                         _ => "unknown",
                     },
-                    agent.status,
-                    agent.capabilities.join(", "),
-                    agent.last_seen.format("%Y-%m-%d %H:%M"),
-                    agent.id
+                    agent.status, // Debug format is safe
+                    encode_text(&agent.capabilities.join(", ")),
+                    agent.last_seen.format("%Y-%m-%d %H:%M"), // Formatted timestamp is safe
+                    agent.id                                  // UUIDs are safe, no need to escape
                 )
             })
             .collect::<Vec<_>>()
@@ -277,24 +278,24 @@ pub async fn detail(
         </body>
         </html>
         "#,
-        agent.name,
-        agent.name,
-        agent.id,
-        agent.name,
-        agent.agent_type,
+        encode_text(&agent.name), // Title
+        encode_text(&agent.name), // Header
+        agent.id,                 // UUID is safe
+        encode_text(&agent.name), // Table
+        agent.agent_type,         // Debug format is safe
         match agent.status {
             vibe_ensemble_core::agent::AgentStatus::Online => "online",
             vibe_ensemble_core::agent::AgentStatus::Offline => "offline",
             vibe_ensemble_core::agent::AgentStatus::Busy => "busy",
             _ => "unknown",
         },
-        agent.status,
-        agent.created_at.format("%Y-%m-%d %H:%M:%S"),
-        agent.last_seen.format("%Y-%m-%d %H:%M:%S"),
+        agent.status,                                 // Debug format is safe
+        agent.created_at.format("%Y-%m-%d %H:%M:%S"), // Formatted timestamp is safe
+        agent.last_seen.format("%Y-%m-%d %H:%M:%S"),  // Formatted timestamp is safe
         agent
             .capabilities
             .iter()
-            .map(|c| format!("<span class=\"tag\">{}</span>", c))
+            .map(|c| format!("<span class=\"tag\">{}</span>", encode_text(c)))
             .collect::<Vec<_>>()
             .join(" "),
         assigned_issues.len(),
@@ -303,7 +304,13 @@ pub async fn detail(
         } else {
             assigned_issues
                 .iter()
-                .map(|i| format!("<p><strong>{}</strong> - {:?}</p>", i.title, i.status))
+                .map(|i| {
+                    format!(
+                        "<p><strong>{}</strong> - {:?}</p>",
+                        encode_text(&i.title),
+                        i.status
+                    )
+                })
                 .collect::<Vec<_>>()
                 .join("")
         },
@@ -316,8 +323,8 @@ pub async fn detail(
                 .map(|m| {
                     format!(
                         "<p><strong>{:?}</strong>: {}</p>",
-                        m.message_type,
-                        m.content.chars().take(100).collect::<String>()
+                        m.message_type, // Debug format is safe
+                        encode_text(&m.content.chars().take(100).collect::<String>())
                     )
                 })
                 .collect::<Vec<_>>()

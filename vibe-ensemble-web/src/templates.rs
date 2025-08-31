@@ -225,12 +225,12 @@ impl LinkHealthTemplate {
 
 /// Askama custom filters for templates
 pub mod filters {
-    /// Truncate text to specified length
+    /// Truncate text to specified length (char-boundary safe)
     pub fn truncate(s: &str, len: usize) -> askama::Result<String> {
-        if s.len() <= len {
+        if s.chars().count() <= len {
             Ok(s.to_string())
         } else {
-            Ok(format!("{}...", &s[..len]))
+            Ok(format!("{}...", s.chars().take(len).collect::<String>()))
         }
     }
 

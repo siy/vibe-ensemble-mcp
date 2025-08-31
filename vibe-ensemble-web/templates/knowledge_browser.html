@@ -60,7 +60,7 @@
         <h4>Popular Tags</h4>
         <div class="tags-cloud" style="display: flex; flex-wrap: wrap; gap: 8px;">
             {% for tag in tags %}
-            <span class="tag-link" onclick="searchByTag('{{ tag }}')">{{ tag }}</span>
+            <a href="/knowledge/search?q={{ tag | urlencode }}" class="tag-link">{{ tag }}</a>
             {% endfor %}
         </div>
     </div>
@@ -118,7 +118,7 @@
         {% if !item.tags.is_empty() %}
         <div class="knowledge-tags" style="margin-bottom: 15px;">
             {% for tag in item.tags %}
-            <span class="tag" onclick="searchByTag('{{ tag }}')">{{ tag }}</span>
+            <a href="/knowledge/search?q={{ tag | urlencode }}" class="tag">{{ tag }}</a>
             {% endfor %}
         </div>
         {% endif %}
@@ -232,6 +232,7 @@
     }
     
     .knowledge-tags .tag {
+        text-decoration: none;
         cursor: pointer;
         transition: background-color 0.2s ease;
     }
@@ -239,6 +240,7 @@
     .knowledge-tags .tag:hover {
         background-color: var(--primary-color);
         color: white;
+        text-decoration: none;
     }
     
     .tags-cloud .tag-link {
@@ -248,12 +250,14 @@
         border-radius: 4px;
         cursor: pointer;
         font-size: 0.875rem;
+        text-decoration: none;
         transition: all 0.2s ease;
     }
     
     .tags-cloud .tag-link:hover {
         background: var(--primary-color);
         color: white;
+        text-decoration: none;
     }
     
     .text-muted { color: var(--gray-600); }
@@ -299,7 +303,5 @@ document.addEventListener('DOMContentLoaded', function() {
     if (accessFilter) accessFilter.addEventListener('change', filterKnowledge);
 });
 
-function searchByTag(tag) {
-    window.location.href = `/knowledge/search?q=${encodeURIComponent(tag)}`;
-}
+// searchByTag function removed - now using direct links for better security
 {% endblock %}

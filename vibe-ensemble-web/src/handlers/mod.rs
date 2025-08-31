@@ -22,6 +22,39 @@ use vibe_ensemble_storage::StorageManager;
 use crate::handlers::dashboard::index;
 
 use crate::Result;
+use vibe_ensemble_core::{agent::AgentStatus, agent::AgentType, issue::IssueStatus};
+
+/// Helper function to match agent status case-insensitively
+fn matches_agent_status(status: &AgentStatus, filter: &str) -> bool {
+    let filter_lower = filter.to_lowercase();
+    match status {
+        AgentStatus::Online => filter_lower == "online",
+        AgentStatus::Offline => filter_lower == "offline",
+        AgentStatus::Busy => filter_lower == "busy",
+        _ => false,
+    }
+}
+
+/// Helper function to match agent type case-insensitively
+fn matches_agent_type(agent_type: &AgentType, filter: &str) -> bool {
+    let filter_lower = filter.to_lowercase();
+    match agent_type {
+        AgentType::Worker => filter_lower == "worker",
+        AgentType::Coordinator => filter_lower == "coordinator",
+    }
+}
+
+/// Helper function to match issue status case-insensitively
+fn matches_issue_status(status: &IssueStatus, filter: &str) -> bool {
+    let filter_lower = filter.to_lowercase();
+    match status {
+        IssueStatus::Open => filter_lower == "open",
+        IssueStatus::InProgress => filter_lower == "in_progress" || filter_lower == "inprogress",
+        IssueStatus::Blocked { .. } => filter_lower == "blocked",
+        IssueStatus::Resolved => filter_lower == "resolved",
+        IssueStatus::Closed => filter_lower == "closed",
+    }
+}
 
 /// Health check endpoint
 pub async fn health(State(storage): State<Arc<StorageManager>>) -> Result<impl IntoResponse> {
@@ -154,14 +187,14 @@ pub async fn agents_list(
         .into_iter()
         .filter(|agent| {
             if let Some(status) = &query.status {
-                format!("{:?}", agent.status).to_lowercase() == status.to_lowercase()
+                matches_agent_status(&agent.status, status)
             } else {
                 true
             }
         })
         .filter(|agent| {
             if let Some(agent_type) = &query.agent_type {
-                format!("{:?}", agent.agent_type).to_lowercase() == agent_type.to_lowercase()
+                matches_agent_type(&agent.agent_type, agent_type)
             } else {
                 true
             }
@@ -212,7 +245,7 @@ pub async fn issues_list(
         .into_iter()
         .filter(|issue| {
             if let Some(status) = &query.status {
-                format!("{:?}", issue.status).to_lowercase() == status.to_lowercase()
+                matches_issue_status(&issue.status, status)
             } else {
                 true
             }

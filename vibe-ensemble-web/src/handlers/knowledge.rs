@@ -11,6 +11,7 @@ use axum::{
     Form,
 };
 use axum_extra::extract::cookie::CookieJar;
+use html_escape::encode_text;
 use serde::Deserialize;
 use std::sync::Arc;
 use uuid::Uuid;
@@ -34,17 +35,11 @@ pub async fn list(State(storage): State<Arc<StorageManager>>) -> Result<Html<Str
     list_internal(storage).await
 }
 
-/// List all knowledge entries (internal implementation)
-async fn list_internal(storage: Arc<StorageManager>) -> Result<Html<String>> {
-    // Use list_accessible_by with a dummy UUID to get all public and team entries
-    let dummy_agent_id = Uuid::new_v4();
-    let knowledge_entries = storage
-        .knowledge()
-        .list_accessible_by(dummy_agent_id)
-        .await
-        .map_err(crate::Error::Storage)?;
-
-    // Use simple HTML for now
+/// Render the knowledge list HTML
+fn render_knowledge_list_html(
+    knowledge_entries: Vec<vibe_ensemble_core::knowledge::Knowledge>,
+    search_term: Option<&str>,
+) -> Result<Html<String>> {
     let html = format!(
         r#"
         <!DOCTYPE html>
@@ -52,7 +47,7 @@ async fn list_internal(storage: Arc<StorageManager>) -> Result<Html<String>> {
         <head>
             <meta charset="UTF-8">
             <meta name="viewport" content="width=device-width, initial-scale=1.0">
-            <title>Knowledge Browser - Vibe Ensemble</title>
+            <title>Knowledge Browser{} - Vibe Ensemble</title>
             <style>
                 body {{ font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; margin: 0; padding: 20px; background-color: #f8f9fa; }}
                 .container {{ max-width: 1200px; margin: 0 auto; background: white; padding: 30px; border-radius: 8px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); }}
@@ -120,6 +115,11 @@ async fn list_internal(storage: Arc<StorageManager>) -> Result<Html<String>> {
         </body>
         </html>
         "#,
+        if let Some(term) = search_term {
+            format!(" - Search: {}", encode_text(term))
+        } else {
+            String::new()
+        },
         knowledge_entries.len(),
         if knowledge_entries.is_empty() {
             "<p>No knowledge items found. <a href='/knowledge/new' class='btn btn-primary'>Add First Knowledge Item</a></p>".to_string()
@@ -135,7 +135,7 @@ async fn list_internal(storage: Arc<StorageManager>) -> Result<Html<String>> {
                         <td>{}</td>
                         <td><a href="/knowledge/{}" class="btn">View</a></td>
                     </tr>"#,
-                    entry.title,
+                    encode_text(&entry.title),
                     match entry.knowledge_type {
                         vibe_ensemble_core::knowledge::KnowledgeType::Pattern => "pattern",
                         vibe_ensemble_core::knowledge::KnowledgeType::Practice => "practice",
@@ -143,15 +143,15 @@ async fn list_internal(storage: Arc<StorageManager>) -> Result<Html<String>> {
                         vibe_ensemble_core::knowledge::KnowledgeType::Solution => "solution",
                         vibe_ensemble_core::knowledge::KnowledgeType::Reference => "reference",
                     },
-                    entry.knowledge_type,
+                    entry.knowledge_type, // Debug format is safe
                     match entry.access_level {
                         vibe_ensemble_core::knowledge::AccessLevel::Public => "public",
                         vibe_ensemble_core::knowledge::AccessLevel::Team => "team",
                         vibe_ensemble_core::knowledge::AccessLevel::Private => "private",
                     },
-                    entry.access_level,
-                    entry.created_at.format("%Y-%m-%d %H:%M"),
-                    entry.id
+                    entry.access_level, // Debug format is safe
+                    entry.created_at.format("%Y-%m-%d %H:%M"), // Formatted timestamp is safe
+                    entry.id            // UUID is safe
                 ));
             }
 
@@ -161,6 +161,19 @@ async fn list_internal(storage: Arc<StorageManager>) -> Result<Html<String>> {
     );
 
     Ok(Html(html))
+}
+
+/// List all knowledge entries (internal implementation)
+async fn list_internal(storage: Arc<StorageManager>) -> Result<Html<String>> {
+    // Use list_accessible_by with a dummy UUID to get all public and team entries
+    let dummy_agent_id = Uuid::new_v4();
+    let knowledge_entries = storage
+        .knowledge()
+        .list_accessible_by(dummy_agent_id)
+        .await
+        .map_err(crate::Error::Storage)?;
+
+    render_knowledge_list_html(knowledge_entries, None)
 }
 
 /// Show knowledge entry details (wrapper for compatibility)
@@ -215,16 +228,16 @@ async fn detail_internal(storage: Arc<StorageManager>, id: Uuid) -> Result<Html<
             </body>
         </html>
         "#,
-        knowledge.title,
-        knowledge.title,
-        knowledge.id,
-        knowledge.knowledge_type,
-        knowledge.access_level,
-        knowledge.tags,
-        knowledge.version,
-        knowledge.created_at.format("%Y-%m-%d %H:%M:%S"),
-        knowledge.updated_at.format("%Y-%m-%d %H:%M:%S"),
-        knowledge.content
+        encode_text(&knowledge.title),                    // HTML title
+        encode_text(&knowledge.title),                    // Page header
+        knowledge.id,                                     // UUID is safe
+        knowledge.knowledge_type,                         // Debug format is safe
+        knowledge.access_level,                           // Debug format is safe
+        knowledge.tags,                                   // Debug format is safe (Vec<String>)
+        knowledge.version,                                // Number is safe
+        knowledge.created_at.format("%Y-%m-%d %H:%M:%S"), // Formatted timestamp is safe
+        knowledge.updated_at.format("%Y-%m-%d %H:%M:%S"), // Formatted timestamp is safe
+        encode_text(&knowledge.content)                   // User content needs escaping
     );
 
     Ok(Html(html))
@@ -320,12 +333,11 @@ async fn search_internal(
 
     // Basic text search
     let search_lower = search_term.to_lowercase();
-    let _matching_entries: Vec<_> = knowledge_entries
+    let matching_entries: Vec<_> = knowledge_entries
         .into_iter()
         .filter(|entry| {
             entry.title.to_lowercase().contains(&search_lower)
                 || entry.content.to_lowercase().contains(&search_lower)
-                || entry.title.to_lowercase().contains(&search_lower) // Remove category reference
                 || entry
                     .tags
                     .iter()
@@ -333,9 +345,8 @@ async fn search_internal(
         })
         .collect();
 
-    // For now, redirect to the existing simple HTML implementation
-    // In a real implementation, this would show search results
-    list_internal(storage).await
+    // Render search results with the same format as list but with filtered entries
+    render_knowledge_list_html(matching_entries, Some(&search_term))
 }
 
 /// Create a new knowledge entry
