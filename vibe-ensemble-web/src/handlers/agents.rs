@@ -352,7 +352,11 @@ pub async fn terminate(
     Json(request): Json<TerminateAgentRequest>,
 ) -> Result<impl IntoResponse> {
     // Validate CSRF token directly (API endpoint approach)
-    if !app_state.csrf_store.validate_token(&request.csrf_token).await {
+    if !app_state
+        .csrf_store
+        .validate_token(&request.csrf_token)
+        .await
+    {
         return Err(Error::Forbidden("Invalid CSRF token".to_string()));
     }
 
