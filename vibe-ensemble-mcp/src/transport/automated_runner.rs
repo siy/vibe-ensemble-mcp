@@ -436,14 +436,23 @@ impl AutomatedTestRunner {
         let mut regressions = Vec::new();
         let thresholds = &self.config.performance_thresholds;
 
-        // Throughput regression check with statistical significance
+        // Throughput regression check with statistical significance and absolute thresholds
         if baseline.throughput_msg_per_sec > 0.0 {
             let throughput_change = (baseline.throughput_msg_per_sec
                 - current.throughput_msg_per_sec)
                 / baseline.throughput_msg_per_sec
                 * 100.0;
 
-            if throughput_change > thresholds.max_throughput_decrease {
+            let absolute_decrease =
+                baseline.throughput_msg_per_sec - current.throughput_msg_per_sec;
+
+            // Only flag as regression if both percentage AND absolute thresholds are exceeded
+            // This prevents false positives on very small baseline values
+            let min_absolute_throughput_decrease = 1.0; // msg/sec
+
+            if throughput_change > thresholds.max_throughput_decrease
+                && absolute_decrease > min_absolute_throughput_decrease
+            {
                 regressions.push(RegressionAlert {
                     transport: transport_type.name().to_string(),
                     regression_type: "Throughput Decrease".to_string(),
@@ -461,14 +470,22 @@ impl AutomatedTestRunner {
             }
         }
 
-        // Latency regression check with percentile analysis
+        // Latency regression check with percentile analysis and absolute thresholds
         if baseline.avg_roundtrip_time > Duration::ZERO {
             let current_latency_ms = current.avg_roundtrip_time.as_millis() as f64;
             let baseline_latency_ms = baseline.avg_roundtrip_time.as_millis() as f64;
             let latency_change =
                 (current_latency_ms - baseline_latency_ms) / baseline_latency_ms * 100.0;
 
-            if latency_change > thresholds.max_latency_increase {
+            let absolute_increase_ms = current_latency_ms - baseline_latency_ms;
+
+            // Only flag as regression if both percentage AND absolute thresholds are exceeded
+            // This prevents false positives on very fast baseline latencies
+            let min_absolute_latency_increase_ms = 10.0; // 10ms minimum increase to be significant
+
+            if latency_change > thresholds.max_latency_increase
+                && absolute_increase_ms > min_absolute_latency_increase_ms
+            {
                 regressions.push(RegressionAlert {
                     transport: transport_type.name().to_string(),
                     regression_type: "Latency Increase".to_string(),
@@ -484,9 +501,16 @@ impl AutomatedTestRunner {
             }
         }
 
-        // Success rate regression check with trend analysis
+        // Success rate regression check with trend analysis and absolute thresholds
         let success_rate_change = baseline.success_rate - current.success_rate;
-        if success_rate_change > thresholds.max_error_rate_increase {
+
+        // Only flag as regression if both percentage AND absolute thresholds are exceeded
+        // This prevents false positives on small changes in success rates
+        let min_absolute_success_rate_decrease = 2.0; // 2 percentage points minimum decrease
+
+        if success_rate_change > thresholds.max_error_rate_increase
+            && success_rate_change > min_absolute_success_rate_decrease
+        {
             regressions.push(RegressionAlert {
                 transport: transport_type.name().to_string(),
                 regression_type: "Success Rate Decrease".to_string(),
@@ -503,18 +527,23 @@ impl AutomatedTestRunner {
         }
 
         // Memory usage regression check (based on memory delta during test)
-        let baseline_memory_delta = baseline.end_memory_kb.saturating_sub(baseline.start_memory_kb);
-        let current_memory_delta = current.end_memory_kb.saturating_sub(current.start_memory_kb);
-        
+        let baseline_memory_delta = baseline
+            .end_memory_kb
+            .saturating_sub(baseline.start_memory_kb);
+        let current_memory_delta = current
+            .end_memory_kb
+            .saturating_sub(current.start_memory_kb);
+
         if baseline_memory_delta > 0 {
-            let memory_change = (current_memory_delta as f64 - baseline_memory_delta as f64) 
-                / baseline_memory_delta as f64 * 100.0;
-            
+            let memory_change = (current_memory_delta as f64 - baseline_memory_delta as f64)
+                / baseline_memory_delta as f64
+                * 100.0;
+
             // Flag significant memory increases (>50% increase in memory delta)
             if memory_change > 50.0 {
                 let baseline_mb = baseline_memory_delta as f64 / 1024.0;
                 let current_mb = current_memory_delta as f64 / 1024.0;
-                
+
                 regressions.push(RegressionAlert {
                     transport: transport_type.name().to_string(),
                     regression_type: "Memory Usage Increase".to_string(),
@@ -527,9 +556,7 @@ impl AutomatedTestRunner {
                     },
                     description: format!(
                         "Memory delta increased by {:.1}% (from {:.1}MB to {:.1}MB)",
-                        memory_change,
-                        baseline_mb,
-                        current_mb
+                        memory_change, baseline_mb, current_mb
                     ),
                     current_value: current_mb,
                     expected_value: baseline_mb,

@@ -226,15 +226,65 @@ pub async fn execute_cli_command(cli: TransportTestCli) -> Result<()> {
                 results_directory: None,
             };
 
-            let _results = run_automated_transport_tests_with_config(config).await?;
+            let results = run_automated_transport_tests_with_config(config).await?;
+
+            // Display benchmark results summary
+            println!("\n🚀 Benchmark Results Summary:");
+            println!("═══════════════════════════════");
+            println!(
+                "Overall Success: {}",
+                if results.overall_success {
+                    "✅"
+                } else {
+                    "❌"
+                }
+            );
+            println!("Total Tests: {}", results.summary.total_scenarios);
+            println!("Tests Passed: {}", results.summary.total_passed);
+
+            if !results.summary.best_performing_transport.is_empty() {
+                println!(
+                    "🏆 Best Performance: {}",
+                    results.summary.best_performing_transport
+                );
+            }
+
+            if results.summary.avg_throughput_msg_per_sec > 0.0 {
+                println!(
+                    "📊 Average Throughput: {:.2} msg/sec",
+                    results.summary.avg_throughput_msg_per_sec
+                );
+                println!(
+                    "⏱️  Average Latency: {:.2}ms",
+                    results.summary.avg_latency_ms
+                );
+            }
         }
 
         Commands::ListTransports => {
+            use crate::transport::automated_runner::TransportType;
+
             println!("Available transport types:");
-            println!("  inmemory    - In-memory transport for testing");
-            println!("  stdio       - Standard I/O transport for command-line integration");
-            println!("  websocket   - WebSocket transport for real-time communication");
-            println!("  sse         - Server-Sent Events transport for HTTP-based communication");
+            println!(
+                "  {:12} - {}",
+                TransportType::InMemory.id(),
+                TransportType::InMemory.name()
+            );
+            println!(
+                "  {:12} - {}",
+                TransportType::Stdio.id(),
+                TransportType::Stdio.name()
+            );
+            println!(
+                "  {:12} - {}",
+                TransportType::WebSocket.id(),
+                TransportType::WebSocket.name()
+            );
+            println!(
+                "  {:12} - {}",
+                TransportType::Sse.id(),
+                TransportType::Sse.name()
+            );
         }
 
         Commands::GenerateConfig { output } => {

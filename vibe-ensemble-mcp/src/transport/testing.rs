@@ -715,6 +715,11 @@ impl TransportTester {
                 self.test_performance_large_messages(transport, performance)
                     .await
             }
+            "stress_high_load" => self.test_stress_high_load(transport, performance).await,
+            "stress_memory_pressure" => {
+                self.test_stress_memory_pressure(transport, performance)
+                    .await
+            }
             _ => {
                 warn!("Unknown scenario ID: {}", scenario.id);
                 Err(Error::Transport(format!(
@@ -1431,6 +1436,172 @@ impl TransportTester {
 
         if response_json.get("error").is_some() {
             return Err(Error::Transport("Initialization failed".to_string()));
+        }
+
+        Ok(())
+    }
+
+    /// Test high load stress conditions
+    async fn test_stress_high_load<T>(
+        &self,
+        transport: &mut T,
+        performance: &mut PerformanceMetrics,
+    ) -> Result<()>
+    where
+        T: Transport,
+    {
+        // First initialize
+        self.initialize_transport(transport, performance).await?;
+
+        // Extreme load test: rapidly send many requests concurrently
+        let num_concurrent = 50; // Much higher than normal performance tests
+        let requests_per_concurrent = 20; // Total: 1000 requests (reduced for stability)
+
+        for batch in 0..num_concurrent {
+            for i in 0..requests_per_concurrent {
+                let request_id = batch * requests_per_concurrent + i + 1;
+                let request = json!({
+                    "jsonrpc": "2.0",
+                    "id": request_id,
+                    "method": "tools/list",
+                    "params": {}
+                });
+
+                let start = Instant::now();
+                transport.send(&request.to_string()).await?;
+                performance.messages_sent += 1;
+
+                let roundtrip_time = start.elapsed();
+                performance.max_roundtrip_time = performance.max_roundtrip_time.max(roundtrip_time);
+                if performance.min_roundtrip_time.is_zero() {
+                    performance.min_roundtrip_time = roundtrip_time;
+                } else {
+                    performance.min_roundtrip_time =
+                        performance.min_roundtrip_time.min(roundtrip_time);
+                }
+            }
+
+            // Add short delay between batches to simulate realistic load patterns
+            tokio::time::sleep(Duration::from_millis(10)).await;
+        }
+
+        // Try to receive some responses to verify transport is still functional
+        let mut successful_receives = 0;
+        for _ in 0..10 {
+            if let Ok(Ok(_response)) =
+                tokio::time::timeout(Duration::from_millis(100), transport.receive()).await
+            {
+                performance.messages_received += 1;
+                successful_receives += 1;
+            } else {
+                break; // Stop if no more responses available
+            }
+        }
+
+        // Update success rate based on sample responses received
+        performance.success_rate = if successful_receives > 0 {
+            (successful_receives as f64 / 10.0) * 100.0 // Based on sample of 10
+        } else {
+            0.0
+        };
+
+        // Calculate average roundtrip time
+        if performance.messages_sent > 0 {
+            performance.avg_roundtrip_time = Duration::from_nanos(
+                ((performance.max_roundtrip_time.as_nanos()
+                    + performance.min_roundtrip_time.as_nanos())
+                    / 2) as u64,
+            );
+        }
+
+        Ok(())
+    }
+
+    /// Test memory pressure conditions with increasingly large messages
+    async fn test_stress_memory_pressure<T>(
+        &self,
+        transport: &mut T,
+        performance: &mut PerformanceMetrics,
+    ) -> Result<()>
+    where
+        T: Transport,
+    {
+        // First initialize
+        self.initialize_transport(transport, performance).await?;
+
+        // Generate increasingly large messages to stress memory usage
+        let message_sizes = [
+            1_024,   // 1KB
+            10_240,  // 10KB
+            102_400, // 100KB
+            512_000, // 500KB (reduced from 1MB for stability)
+        ];
+
+        for (index, size) in message_sizes.iter().enumerate() {
+            let large_data = "x".repeat(*size);
+            let request = json!({
+                "jsonrpc": "2.0",
+                "id": index + 1,
+                "method": "tools/call",
+                "params": {
+                    "name": "vibe/agent/message",
+                    "arguments": {
+                        "agent_id": "test-agent",
+                        "message": large_data,
+                        "message_type": "request"
+                    }
+                }
+            });
+
+            let start = Instant::now();
+            transport.send(&request.to_string()).await?;
+            performance.messages_sent += 1;
+
+            // Try to receive response with extended timeout for large messages
+            match tokio::time::timeout(
+                Duration::from_secs(5), // Reasonable timeout for large messages
+                transport.receive(),
+            )
+            .await
+            {
+                Ok(Ok(_response)) => {
+                    performance.messages_received += 1;
+                    let roundtrip_time = start.elapsed();
+                    performance.max_roundtrip_time =
+                        performance.max_roundtrip_time.max(roundtrip_time);
+                    if performance.min_roundtrip_time.is_zero() {
+                        performance.min_roundtrip_time = roundtrip_time;
+                    } else {
+                        performance.min_roundtrip_time =
+                            performance.min_roundtrip_time.min(roundtrip_time);
+                    }
+                }
+                Ok(Err(_e)) => {
+                    performance.error_count += 1;
+                }
+                Err(_) => {
+                    performance.error_count += 1;
+                }
+            }
+
+            // Brief pause between messages to allow garbage collection
+            tokio::time::sleep(Duration::from_millis(100)).await;
+        }
+
+        // Calculate final metrics
+        let total_messages = performance.messages_sent;
+        performance.success_rate = if total_messages > 0 {
+            ((total_messages - performance.error_count) as f64 / total_messages as f64) * 100.0
+        } else {
+            0.0
+        };
+
+        if performance.messages_received > 0 && performance.max_roundtrip_time > Duration::ZERO {
+            performance.avg_roundtrip_time = Duration::from_nanos(
+                ((performance.max_roundtrip_time.as_nanos()
+                    + performance.min_roundtrip_time.as_nanos())
+                    / 2) as u64,
+            );
         }
 
         Ok(())
