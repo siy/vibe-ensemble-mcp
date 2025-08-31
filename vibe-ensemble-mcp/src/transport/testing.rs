@@ -17,7 +17,25 @@ use std::time::{Duration, Instant};
 use tokio::time::timeout;
 use tracing::{debug, info, warn};
 
-// Performance test parameters
+/// Performance test parameters (configurable)
+#[derive(Clone, Debug)]
+pub struct TestParameters {
+    pub throughput_test_message_count: u32,
+    pub min_acceptable_throughput: f64, // messages per second
+    pub large_message_size_bytes: usize,
+}
+
+impl Default for TestParameters {
+    fn default() -> Self {
+        Self {
+            throughput_test_message_count: 50,
+            min_acceptable_throughput: 10.0, // messages per second
+            large_message_size_bytes: 10_000,
+        }
+    }
+}
+
+// Default test parameters (for backward compatibility)
 const THROUGHPUT_TEST_MESSAGE_COUNT: u32 = 50;
 const MIN_ACCEPTABLE_THROUGHPUT: f64 = 10.0; // messages per second
 const LARGE_MESSAGE_SIZE_BYTES: usize = 10_000;
@@ -275,21 +293,27 @@ pub struct TransportTester {
     scenarios: Vec<TestScenario>,
     /// Performance baseline for comparison
     performance_baseline: Option<PerformanceMetrics>,
+    /// Configurable test parameters
+    #[allow(dead_code)] // TODO: Wire this to actual test execution
+    test_parameters: TestParameters,
 }
 
 impl TransportTester {
-    /// Create a new transport tester with default scenarios
+    /// Create a new transport tester with core scenarios only
     pub fn new() -> Self {
         let mut tester = Self {
             scenarios: Vec::new(),
             performance_baseline: None,
+            test_parameters: TestParameters::default(),
         };
 
-        tester.add_standard_scenarios();
+        // Default to core scenarios only; runners/builders add perf/error/stress as needed
+        tester.add_core_mcp_scenarios();
         tester
     }
 
     /// Add standard MCP protocol test scenarios
+    #[allow(dead_code)]
     fn add_standard_scenarios(&mut self) {
         self.add_core_mcp_scenarios();
         self.add_error_scenarios();
@@ -522,6 +546,7 @@ impl TransportTester {
         T: Transport,
     {
         info!("Starting transport testing for: {}", transport_name);
+        let start_timestamp = chrono::Utc::now(); // Capture start time accurately
         let suite_start = Instant::now();
         let mut test_results = Vec::new();
         let mut passed_count = 0;
@@ -566,14 +591,16 @@ impl TransportTester {
                 aggregate_performance.messages_sent as f64 / total_duration.as_secs_f64();
         }
 
-        // Calculate average roundtrip time
-        let total_roundtrip_nanos: u128 = test_results
+        // Calculate average roundtrip time (only for scenarios that recorded any response)
+        let (sum_nanos, count) = test_results
             .iter()
-            .map(|r| r.performance.avg_roundtrip_time.as_nanos())
-            .sum();
-        if !test_results.is_empty() {
+            .filter(|r| r.performance.messages_received > 0)
+            .fold((0u128, 0u128), |(sum, cnt), r| {
+                (sum + r.performance.avg_roundtrip_time.as_nanos(), cnt + 1)
+            });
+        if count > 0 {
             aggregate_performance.avg_roundtrip_time =
-                Duration::from_nanos((total_roundtrip_nanos / test_results.len() as u128) as u64);
+                Duration::from_nanos((sum_nanos / count) as u64);
         }
 
         aggregate_performance.duration = total_duration;
@@ -581,7 +608,7 @@ impl TransportTester {
         let mut metadata = HashMap::new();
         metadata.insert(
             "test_start".to_string(),
-            json!(chrono::Utc::now().to_rfc3339()),
+            json!(start_timestamp.to_rfc3339()),
         );
         metadata.insert("transport_type".to_string(), json!(transport_name));
 
@@ -1661,6 +1688,7 @@ impl TransportTestBuilder {
             tester: TransportTester {
                 scenarios: Vec::new(),
                 performance_baseline: None,
+                test_parameters: TestParameters::default(),
             },
         }
     }

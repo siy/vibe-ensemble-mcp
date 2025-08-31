@@ -180,12 +180,13 @@ pub async fn execute_cli_command(cli: TransportTestCli) -> Result<()> {
                 performance_thresholds: PerformanceThresholds {
                     max_throughput_decrease,
                     max_latency_increase,
-                    min_success_rate,
+                    min_success_rate, // Use same value for consistency
                     max_error_rate_increase,
                 },
-                output_format: output_format.into(),
+                output_format: output_format.clone().into(),
                 save_detailed_results: save_results.is_some(),
                 results_directory: save_results,
+                concurrency: None, // Use default concurrency for regular tests
             };
 
             let results = run_automated_transport_tests_with_config(config).await?;
@@ -221,43 +222,49 @@ pub async fn execute_cli_command(cli: TransportTestCli) -> Result<()> {
                 include_error_tests: false,
                 min_success_rate: 0.0, // Don't fail on success rate for benchmarks
                 performance_thresholds: PerformanceThresholds::default(),
-                output_format: output_format.into(),
+                output_format: output_format.clone().into(),
                 save_detailed_results: false,
                 results_directory: None,
+                concurrency: Some(concurrency), // Use CLI-specified concurrency
             };
 
             let results = run_automated_transport_tests_with_config(config).await?;
 
-            // Display benchmark results summary
-            println!("\n🚀 Benchmark Results Summary:");
-            println!("═══════════════════════════════");
-            println!(
-                "Overall Success: {}",
-                if results.overall_success {
-                    "✅"
-                } else {
-                    "❌"
+            // Display benchmark results summary only for console-friendly formats
+            if matches!(
+                output_format,
+                CliOutputFormat::Console | CliOutputFormat::Both
+            ) {
+                println!("\n🚀 Benchmark Results Summary:");
+                println!("═══════════════════════════════");
+                println!(
+                    "Overall Success: {}",
+                    if results.overall_success {
+                        "✅"
+                    } else {
+                        "❌"
+                    }
+                );
+                println!("Total Tests: {}", results.summary.total_scenarios);
+                println!("Tests Passed: {}", results.summary.total_passed);
+
+                if !results.summary.best_performing_transport.is_empty() {
+                    println!(
+                        "🏆 Best Performance: {}",
+                        results.summary.best_performing_transport
+                    );
                 }
-            );
-            println!("Total Tests: {}", results.summary.total_scenarios);
-            println!("Tests Passed: {}", results.summary.total_passed);
 
-            if !results.summary.best_performing_transport.is_empty() {
-                println!(
-                    "🏆 Best Performance: {}",
-                    results.summary.best_performing_transport
-                );
-            }
-
-            if results.summary.avg_throughput_msg_per_sec > 0.0 {
-                println!(
-                    "📊 Average Throughput: {:.2} msg/sec",
-                    results.summary.avg_throughput_msg_per_sec
-                );
-                println!(
-                    "⏱️  Average Latency: {:.2}ms",
-                    results.summary.avg_latency_ms
-                );
+                if results.summary.avg_throughput_msg_per_sec > 0.0 {
+                    println!(
+                        "📊 Average Throughput: {:.2} msg/sec",
+                        results.summary.avg_throughput_msg_per_sec
+                    );
+                    println!(
+                        "⏱️  Average Latency: {:.2}ms",
+                        results.summary.avg_latency_ms
+                    );
+                }
             }
         }
 

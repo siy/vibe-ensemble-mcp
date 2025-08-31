@@ -52,6 +52,8 @@ pub struct AutomatedTestConfig {
     pub save_detailed_results: bool,
     /// Directory to save results (if save_detailed_results is true)
     pub results_directory: Option<String>,
+    /// Number of concurrent operations for performance tests
+    pub concurrency: Option<usize>,
 }
 
 /// Transport types available for testing
@@ -137,6 +139,7 @@ impl Default for AutomatedTestConfig {
             output_format: OutputFormat::Console,
             save_detailed_results: false,
             results_directory: None,
+            concurrency: None, // Use default concurrency unless specified
         }
     }
 }
