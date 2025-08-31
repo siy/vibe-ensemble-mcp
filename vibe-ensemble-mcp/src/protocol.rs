@@ -81,26 +81,56 @@ pub mod methods {
     pub const VIBE_COORDINATION: &str = "vibe/coordination";
 
     // Legacy method constants for backward compatibility - deprecated
-    #[deprecated(since = "0.3.0", note = "Use VIBE_AGENT with operation parameter. Removed in 0.4.0")]
+    #[deprecated(
+        since = "0.3.0",
+        note = "Use VIBE_AGENT with operation parameter. Removed in 0.4.0"
+    )]
     pub const AGENT_REGISTER: &str = "vibe/agent/register";
-    #[deprecated(since = "0.3.0", note = "Use VIBE_AGENT with operation parameter. Removed in 0.4.0")]
+    #[deprecated(
+        since = "0.3.0",
+        note = "Use VIBE_AGENT with operation parameter. Removed in 0.4.0"
+    )]
     pub const AGENT_STATUS: &str = "vibe/agent/status";
-    #[deprecated(since = "0.3.0", note = "Use VIBE_AGENT with operation parameter. Removed in 0.4.0")]
+    #[deprecated(
+        since = "0.3.0",
+        note = "Use VIBE_AGENT with operation parameter. Removed in 0.4.0"
+    )]
     pub const AGENT_LIST: &str = "vibe/agent/list";
-    #[deprecated(since = "0.3.0", note = "Use VIBE_AGENT with operation parameter. Removed in 0.4.0")]
+    #[deprecated(
+        since = "0.3.0",
+        note = "Use VIBE_AGENT with operation parameter. Removed in 0.4.0"
+    )]
     pub const AGENT_DEREGISTER: &str = "vibe/agent/deregister";
-    #[deprecated(since = "0.3.0", note = "Use VIBE_AGENT with operation parameter. Removed in 0.4.0")]
+    #[deprecated(
+        since = "0.3.0",
+        note = "Use VIBE_AGENT with operation parameter. Removed in 0.4.0"
+    )]
     pub const AGENT_CAPABILITIES: &str = "vibe/agent/capabilities";
 
-    #[deprecated(since = "0.3.0", note = "Use VIBE_ISSUE with operation parameter. Removed in 0.4.0")]
+    #[deprecated(
+        since = "0.3.0",
+        note = "Use VIBE_ISSUE with operation parameter. Removed in 0.4.0"
+    )]
     pub const ISSUE_CREATE: &str = "vibe/issue/create";
-    #[deprecated(since = "0.3.0", note = "Use VIBE_ISSUE with operation parameter. Removed in 0.4.0")]
+    #[deprecated(
+        since = "0.3.0",
+        note = "Use VIBE_ISSUE with operation parameter. Removed in 0.4.0"
+    )]
     pub const ISSUE_LIST: &str = "vibe/issue/list";
-    #[deprecated(since = "0.3.0", note = "Use VIBE_ISSUE with operation parameter. Removed in 0.4.0")]
+    #[deprecated(
+        since = "0.3.0",
+        note = "Use VIBE_ISSUE with operation parameter. Removed in 0.4.0"
+    )]
     pub const ISSUE_ASSIGN: &str = "vibe/issue/assign";
-    #[deprecated(since = "0.3.0", note = "Use VIBE_ISSUE with operation parameter. Removed in 0.4.0")]
+    #[deprecated(
+        since = "0.3.0",
+        note = "Use VIBE_ISSUE with operation parameter. Removed in 0.4.0"
+    )]
     pub const ISSUE_UPDATE: &str = "vibe/issue/update";
-    #[deprecated(since = "0.3.0", note = "Use VIBE_ISSUE with operation parameter. Removed in 0.4.0")]
+    #[deprecated(
+        since = "0.3.0",
+        note = "Use VIBE_ISSUE with operation parameter. Removed in 0.4.0"
+    )]
     pub const ISSUE_CLOSE: &str = "vibe/issue/close";
 
     #[deprecated(
