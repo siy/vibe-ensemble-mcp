@@ -49,7 +49,7 @@ pub enum Commands {
         include_errors: bool,
 
         /// Minimum success rate required (0-100)
-        #[arg(long, default_value = "80.0")]
+        #[arg(long, default_value_t = 80.0)]
         min_success_rate: f64,
 
         /// Output format
@@ -69,6 +69,10 @@ pub enum Commands {
 
         #[arg(long, default_value = "5.0")]
         max_error_rate_increase: f64,
+
+        /// Optional concurrency for test runs
+        #[arg(long)]
+        concurrency: Option<usize>,
     },
 
     /// Benchmark specific transport types
@@ -163,6 +167,7 @@ pub async fn execute_cli_command(cli: TransportTestCli) -> Result<()> {
             max_throughput_decrease,
             max_latency_increase,
             max_error_rate_increase,
+            concurrency,
         } => {
             let transport_types = transports
                 .unwrap_or_else(|| vec![CliTransportType::InMemory])
@@ -186,14 +191,14 @@ pub async fn execute_cli_command(cli: TransportTestCli) -> Result<()> {
                 output_format: output_format.clone().into(),
                 save_detailed_results: save_results.is_some(),
                 results_directory: save_results,
-                concurrency: None, // Use default concurrency for regular tests
+                concurrency, // Honor CLI value if provided
             };
 
             let results = run_automated_transport_tests_with_config(config).await?;
 
-            // Exit with appropriate code for CI integration
+            // Return error for non-zero exit in library context
             if !results.overall_success {
-                std::process::exit(1);
+                return Err(crate::Error::Transport("transport tests failed".into()));
             }
         }
 
@@ -319,9 +324,9 @@ pub async fn execute_cli_command(cli: TransportTestCli) -> Result<()> {
 
             let results = run_automated_transport_tests_with_config(test_config).await?;
 
-            // Exit with appropriate code for CI integration
+            // Return error for non-zero exit in library context
             if !results.overall_success {
-                std::process::exit(1);
+                return Err(crate::Error::Transport("transport tests failed".into()));
             }
         }
     }

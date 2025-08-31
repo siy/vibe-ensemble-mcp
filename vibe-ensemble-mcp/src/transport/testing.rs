@@ -23,6 +23,7 @@ pub struct TestParameters {
     pub throughput_test_message_count: u32,
     pub min_acceptable_throughput: f64, // messages per second
     pub large_message_size_bytes: usize,
+    pub concurrency: Option<usize>, // concurrent operations for performance tests
 }
 
 impl Default for TestParameters {
@@ -31,14 +32,12 @@ impl Default for TestParameters {
             throughput_test_message_count: 50,
             min_acceptable_throughput: 10.0, // messages per second
             large_message_size_bytes: 10_000,
+            concurrency: None, // Use default concurrency
         }
     }
 }
 
-// Default test parameters (for backward compatibility)
-const THROUGHPUT_TEST_MESSAGE_COUNT: u32 = 50;
-const MIN_ACCEPTABLE_THROUGHPUT: f64 = 10.0; // messages per second
-const LARGE_MESSAGE_SIZE_BYTES: usize = 10_000;
+// Threshold still used for timeouts
 const LARGE_MESSAGE_TIMEOUT_SECS: u64 = 5;
 
 /// Transport test scenario configuration
@@ -291,10 +290,7 @@ impl fmt::Display for TestSuiteResult {
 pub struct TransportTester {
     /// Collection of test scenarios to execute
     scenarios: Vec<TestScenario>,
-    /// Performance baseline for comparison
-    performance_baseline: Option<PerformanceMetrics>,
     /// Configurable test parameters
-    #[allow(dead_code)] // TODO: Wire this to actual test execution
     test_parameters: TestParameters,
 }
 
@@ -303,7 +299,6 @@ impl TransportTester {
     pub fn new() -> Self {
         let mut tester = Self {
             scenarios: Vec::new(),
-            performance_baseline: None,
             test_parameters: TestParameters::default(),
         };
 
@@ -533,11 +528,6 @@ impl TransportTester {
     /// Add a custom test scenario
     pub fn add_scenario(&mut self, scenario: TestScenario) {
         self.scenarios.push(scenario);
-    }
-
-    /// Set performance baseline for comparison
-    pub fn set_performance_baseline(&mut self, baseline: PerformanceMetrics) {
-        self.performance_baseline = Some(baseline);
     }
 
     /// Execute all test scenarios against a transport
@@ -1337,7 +1327,7 @@ impl TransportTester {
         self.initialize_transport(transport, performance).await?;
 
         let start_time = Instant::now();
-        let message_count = THROUGHPUT_TEST_MESSAGE_COUNT;
+        let message_count = self.test_parameters.throughput_test_message_count;
         let mut total_roundtrip_time = Duration::ZERO;
 
         for i in 0..message_count {
@@ -1366,10 +1356,10 @@ impl TransportTester {
         performance.throughput_msg_per_sec = message_count as f64 / total_duration.as_secs_f64();
 
         // Require minimum acceptable throughput
-        if performance.throughput_msg_per_sec < MIN_ACCEPTABLE_THROUGHPUT {
+        if performance.throughput_msg_per_sec < self.test_parameters.min_acceptable_throughput {
             return Err(Error::Transport(format!(
                 "Throughput too low: {:.2} msg/sec (minimum required: {:.2})",
-                performance.throughput_msg_per_sec, MIN_ACCEPTABLE_THROUGHPUT
+                performance.throughput_msg_per_sec, self.test_parameters.min_acceptable_throughput
             )));
         }
 
@@ -1388,7 +1378,7 @@ impl TransportTester {
         self.initialize_transport(transport, performance).await?;
 
         // Create a large message
-        let large_data = "x".repeat(LARGE_MESSAGE_SIZE_BYTES);
+        let large_data = "x".repeat(self.test_parameters.large_message_size_bytes);
         let request = json!({
             "jsonrpc": "2.0",
             "id": 200,
@@ -1687,7 +1677,6 @@ impl TransportTestBuilder {
         Self {
             tester: TransportTester {
                 scenarios: Vec::new(),
-                performance_baseline: None,
                 test_parameters: TestParameters::default(),
             },
         }
@@ -1729,9 +1718,9 @@ impl TransportTestBuilder {
         self
     }
 
-    /// Set performance baseline
-    pub fn with_baseline(mut self, baseline: PerformanceMetrics) -> Self {
-        self.tester.set_performance_baseline(baseline);
+    /// Override test parameters (throughput counts, sizes, thresholds, concurrency)
+    pub fn with_test_parameters(mut self, params: TestParameters) -> Self {
+        self.tester.test_parameters = params;
         self
     }
 

@@ -12,6 +12,7 @@ use crate::transport::Transport;
 use crate::{Error, Result};
 
 use serde::{Deserialize, Serialize};
+use serde_with::{serde_as, DurationMilliSeconds};
 use std::collections::HashMap;
 use std::time::{Duration, Instant};
 use tokio::fs;
@@ -30,11 +31,13 @@ const LOW_LATENCY_THRESHOLD_MS: u64 = 50;
 const HIGH_RELIABILITY_THRESHOLD: f64 = 95.0; // percentage
 
 /// Configuration for automated test execution
+#[serde_as]
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct AutomatedTestConfig {
     /// List of transport types to test
     pub transport_types: Vec<TransportType>,
     /// Maximum duration for the entire test suite
+    #[serde_as(as = "DurationMilliSeconds")]
     pub max_suite_duration: Duration,
     /// Whether to run performance benchmarks
     pub include_performance_tests: bool,
@@ -145,11 +148,13 @@ impl Default for AutomatedTestConfig {
 }
 
 /// Comprehensive test execution results
+#[serde_as]
 #[derive(Clone, Debug, Serialize)]
 pub struct AutomatedTestResults {
     /// Timestamp when tests were executed
     pub timestamp: String,
     /// Total duration of all tests
+    #[serde_as(as = "DurationMilliSeconds")]
     pub total_duration: Duration,
     /// Results for each transport type tested
     pub transport_results: HashMap<String, TestSuiteResult>,
@@ -364,7 +369,7 @@ impl AutomatedTestRunner {
     }
 
     /// Build appropriate tester configuration for transport type
-    fn build_tester_for_transport(&self, transport_type: &TransportType) -> TransportTester {
+    fn build_tester_for_transport(&self, _transport_type: &TransportType) -> TransportTester {
         let mut builder = TransportTestBuilder::new();
 
         // Always include core MCP scenarios
@@ -384,11 +389,13 @@ impl AutomatedTestRunner {
             builder = builder.with_error_scenarios();
         }
 
-        // Set baseline if available
-        if let Some(baseline_map) = &self.baseline_metrics {
-            if let Some(baseline) = baseline_map.get(transport_type.id()) {
-                builder = builder.with_baseline(baseline.clone());
-            }
+        // Set test parameters with concurrency from config
+        if let Some(concurrency) = self.config.concurrency {
+            let params = crate::transport::testing::TestParameters {
+                concurrency: Some(concurrency),
+                ..Default::default()
+            };
+            builder = builder.with_test_parameters(params);
         }
 
         builder.build()
@@ -628,18 +635,18 @@ impl AutomatedTestRunner {
         let mut total_latency_ms = 0.0;
         let mut valid_results = 0;
 
-        for (transport_id, result) in results {
+        for result in results.values() {
             total_scenarios += result.total_scenarios;
             total_passed += result.passed_scenarios;
 
             let throughput = result.aggregate_performance.throughput_msg_per_sec;
             if throughput > best_throughput {
                 best_throughput = throughput;
-                best_transport = transport_id.clone();
+                best_transport = result.transport_name.clone();
             }
             if throughput < worst_throughput && throughput > 0.0 {
                 worst_throughput = throughput;
-                worst_transport = transport_id.clone();
+                worst_transport = result.transport_name.clone();
             }
 
             if throughput > 0.0 {
@@ -958,6 +965,12 @@ impl AutomatedTestRunner {
                         Ok(v) => v,
                         Err(e) => {
                             warn!("Failed to parse JSON in mock MCP peer: {}", e);
+                            let parse_err = json!({
+                                "jsonrpc": "2.0",
+                                "id": null,
+                                "error": { "code": -32700, "message": "Parse error" }
+                            });
+                            let _ = transport.send(&parse_err.to_string()).await;
                             continue;
                         }
                     };
@@ -1091,12 +1104,17 @@ impl AutomatedTestRunner {
                         }
                         None => {
                             warn!("Received message without method field");
-                            continue;
+                            json!({
+                                "jsonrpc": "2.0",
+                                "id": parsed.get("id").cloned().unwrap_or(json!(null)),
+                                "error": { "code": -32600, "message": "Invalid Request" }
+                            })
                         }
                     };
 
-                    // Send response if we have one and it's not a notification
-                    if parsed.get("id").is_some() {
+                    // Send response unless it's a valid notification (method present, no id)
+                    let is_notification = method.is_some() && parsed.get("id").is_none();
+                    if !is_notification {
                         let response_str = response.to_string();
                         if let Err(e) = transport.send(&response_str).await {
                             warn!("Failed to send mock MCP response: {}", e);
