@@ -125,7 +125,7 @@ mod tests {
         let (_, worker1_id, worker2_id) = create_test_agents(&agent_service).await;
 
         let request = JsonRpcRequest::new(
-            methods::WORKER_MESSAGE,
+            "vibe/coordination",
             Some(json!({
                 "recipientAgentId": worker2_id.to_string(),
                 "messageContent": "Hey, can you help me with the API integration?",
@@ -161,7 +161,7 @@ mod tests {
         let nonexistent_agent_id = Uuid::new_v4();
 
         let request = JsonRpcRequest::new(
-            methods::WORKER_MESSAGE,
+            "vibe/coordination",
             Some(json!({
                 "recipientAgentId": nonexistent_agent_id.to_string(),
                 "messageContent": "This should fail",
@@ -191,7 +191,7 @@ mod tests {
         let (_, worker1_id, worker2_id) = create_test_agents(&agent_service).await;
 
         let request = JsonRpcRequest::new(
-            methods::WORKER_MESSAGE,
+            "vibe/coordination",
             Some(json!({
                 "recipientAgentId": worker2_id.to_string(),
                 "messageContent": "Test message",
@@ -222,7 +222,7 @@ mod tests {
         let deadline = Utc::now() + chrono::Duration::hours(2);
 
         let request = JsonRpcRequest::new(
-            methods::WORKER_REQUEST,
+            "vibe/coordination",
             Some(json!({
                 "targetAgentId": worker2_id.to_string(),
                 "requestType": "update_api_interface",
@@ -262,7 +262,7 @@ mod tests {
         let (_, worker1_id, _) = create_test_agents(&agent_service).await;
 
         let request = JsonRpcRequest::new(
-            methods::WORKER_REQUEST,
+            "vibe/coordination",
             Some(json!({
                 "requestType": "test_request",
                 "requestDetails": {"key": "value"},
@@ -289,7 +289,7 @@ mod tests {
         let (coordinator_id, worker1_id, worker2_id) = create_test_agents(&agent_service).await;
 
         let request = JsonRpcRequest::new(
-            methods::WORKER_COORDINATE,
+            "vibe/coordination",
             Some(json!({
                 "coordinationType": "merge_preparation",
                 "involvedAgents": [worker1_id.to_string(), worker2_id.to_string()],
@@ -338,7 +338,7 @@ mod tests {
         let (coordinator_id, _, _) = create_test_agents(&agent_service).await;
 
         let request = JsonRpcRequest::new(
-            methods::WORKER_COORDINATE,
+            "vibe/coordination",
             Some(json!({
                 "coordinationType": "test_coordination",
                 "involvedAgents": [],
@@ -370,7 +370,7 @@ mod tests {
         let (_, worker1_id, _) = create_test_agents(&agent_service).await;
 
         let request = JsonRpcRequest::new(
-            methods::PROJECT_LOCK,
+            "vibe/coordination",
             Some(json!({
                 "projectId": "test-project",
                 "resourcePath": "src/database/migrations",
@@ -408,7 +408,7 @@ mod tests {
         let (_, worker1_id, _) = create_test_agents(&agent_service).await;
 
         let request = JsonRpcRequest::new(
-            methods::PROJECT_LOCK,
+            "vibe/coordination",
             Some(json!({
                 "resourcePath": "src/test.rs",
                 "lockType": "InvalidLockType",
@@ -437,7 +437,7 @@ mod tests {
         let (_, worker1_id, _) = create_test_agents(&agent_service).await;
 
         let request = JsonRpcRequest::new(
-            methods::PROJECT_LOCK,
+            "vibe/coordination",
             Some(json!({
                 "resourcePath": "config/settings.toml",
                 "lockType": "Shared",
@@ -470,7 +470,7 @@ mod tests {
         let nonexistent_agent_id = Uuid::new_v4();
 
         let request = JsonRpcRequest::new(
-            methods::PROJECT_LOCK,
+            "vibe/coordination",
             Some(json!({
                 "resourcePath": "src/main.rs",
                 "lockType": "Exclusive",
@@ -533,7 +533,7 @@ mod tests {
         let message_types = ["Info", "Request", "Coordination", "Alert"];
         for msg_type in &message_types {
             let request = JsonRpcRequest::new(
-                methods::WORKER_MESSAGE,
+                "vibe/coordination",
                 Some(json!({
                     "recipientAgentId": worker2_id.to_string(),
                     "messageContent": format!("Test {} message", msg_type),
@@ -561,7 +561,7 @@ mod tests {
         let priorities = ["Low", "Normal", "High", "Urgent"];
         for priority in &priorities {
             let request = JsonRpcRequest::new(
-                methods::WORKER_MESSAGE,
+                "vibe/coordination",
                 Some(json!({
                     "recipientAgentId": worker2_id.to_string(),
                     "messageContent": format!("Test {} priority message", priority),
@@ -595,7 +595,7 @@ mod tests {
         let lock_types = ["Exclusive", "Shared", "Coordination"];
         for lock_type in &lock_types {
             let request = JsonRpcRequest::new(
-                methods::PROJECT_LOCK,
+                "vibe/coordination",
                 Some(json!({
                     "resourcePath": format!("test/{}.rs", lock_type.to_lowercase()),
                     "lockType": lock_type,

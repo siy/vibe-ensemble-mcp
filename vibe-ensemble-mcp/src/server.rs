@@ -217,51 +217,6 @@ impl McpServer {
             methods::VIBE_ISSUE => self.handle_vibe_issue(request).await,
             methods::VIBE_COORDINATION => self.handle_vibe_coordination(request).await,
 
-            // Legacy method support (backward compatibility through consolidated handlers)
-            #[allow(deprecated)]
-            methods::AGENT_REGISTER
-            | methods::AGENT_STATUS
-            | methods::AGENT_LIST
-            | methods::AGENT_DEREGISTER
-            | methods::AGENT_CAPABILITIES => {
-                // Route legacy agent methods to consolidated handler
-                self.handle_vibe_agent_legacy(request).await
-            }
-
-            #[allow(deprecated)]
-            methods::ISSUE_CREATE
-            | methods::ISSUE_LIST
-            | methods::ISSUE_ASSIGN
-            | methods::ISSUE_UPDATE
-            | methods::ISSUE_CLOSE => {
-                // Route legacy issue methods to consolidated handler
-                self.handle_vibe_issue_legacy(request).await
-            }
-
-            #[allow(deprecated)]
-            methods::MESSAGE_SEND
-            | methods::MESSAGE_BROADCAST
-            | methods::WORKER_MESSAGE
-            | methods::WORKER_REQUEST
-            | methods::WORKER_COORDINATE
-            | methods::PROJECT_LOCK
-            | methods::DEPENDENCY_DECLARE
-            | methods::COORDINATOR_REQUEST_WORKER
-            | methods::WORK_COORDINATE
-            | methods::CONFLICT_RESOLVE
-            | methods::SCHEDULE_COORDINATE
-            | methods::CONFLICT_PREDICT
-            | methods::RESOURCE_RESERVE
-            | methods::MERGE_COORDINATE
-            | methods::KNOWLEDGE_QUERY
-            | methods::KNOWLEDGE_SUBMIT
-            | methods::KNOWLEDGE_QUERY_COORDINATION
-            | methods::PATTERN_SUGGEST
-            | methods::GUIDELINE_ENFORCE
-            | methods::LEARNING_CAPTURE => {
-                // Route legacy coordination methods to consolidated handler
-                self.handle_vibe_coordination_legacy(request).await
-            }
 
             _ => {
                 warn!("Unknown method: {}", request.method);
@@ -5497,10 +5452,9 @@ impl McpServer {
                     .map_err(|e| Error::InvalidParams {
                         message: format!("Invalid register parameters: {}", e),
                     })?;
-                #[allow(deprecated)]
                 let register_request = JsonRpcRequest::new_with_id(
                     request.id.clone(),
-                    methods::AGENT_REGISTER,
+                    "vibe/agent/register",
                     Some(serde_json::to_value(agent_params)?),
                 );
                 self.handle_agent_register(register_request).await
@@ -5509,7 +5463,7 @@ impl McpServer {
                 // Agent status supports both reporting status (with agentId) and querying system statistics (without agentId)
                 let status_request = JsonRpcRequest::new_with_id(
                     request.id.clone(),
-                    methods::AGENT_STATUS,
+                    "vibe/agent/status",
                     Some(params.params),
                 );
                 self.handle_agent_status(status_request).await
@@ -5521,7 +5475,7 @@ impl McpServer {
                     })?;
                 let list_request = JsonRpcRequest::new_with_id(
                     request.id.clone(),
-                    methods::AGENT_LIST,
+                    "vibe/agent/list",
                     Some(serde_json::to_value(list_params)?),
                 );
                 self.handle_agent_list(list_request).await
@@ -5533,7 +5487,7 @@ impl McpServer {
                     })?;
                 let deregister_request = JsonRpcRequest::new_with_id(
                     request.id.clone(),
-                    methods::AGENT_DEREGISTER,
+                    "vibe/agent/deregister",
                     Some(serde_json::to_value(deregister_params)?),
                 );
                 self.handle_agent_deregister(deregister_request).await
@@ -5578,7 +5532,7 @@ impl McpServer {
                     })?;
                 let create_request = JsonRpcRequest::new_with_id(
                     request.id.clone(),
-                    methods::ISSUE_CREATE,
+                    "vibe/issue/create",
                     Some(serde_json::to_value(create_params)?),
                 );
                 self.handle_issue_create_new(create_request).await
@@ -5590,7 +5544,7 @@ impl McpServer {
                     })?;
                 let list_request = JsonRpcRequest::new_with_id(
                     request.id.clone(),
-                    methods::ISSUE_LIST,
+                    "vibe/issue/list",
                     Some(serde_json::to_value(list_params)?),
                 );
                 self.handle_issue_list_new(list_request).await
@@ -5602,7 +5556,7 @@ impl McpServer {
                     })?;
                 let assign_request = JsonRpcRequest::new_with_id(
                     request.id.clone(),
-                    methods::ISSUE_ASSIGN,
+                    "vibe/issue/assign",
                     Some(serde_json::to_value(assign_params)?),
                 );
                 self.handle_issue_assign(assign_request).await
@@ -5614,7 +5568,7 @@ impl McpServer {
                     })?;
                 let update_request = JsonRpcRequest::new_with_id(
                     request.id.clone(),
-                    methods::ISSUE_UPDATE,
+                    "vibe/issue/update",
                     Some(serde_json::to_value(update_params)?),
                 );
                 self.handle_issue_update_new(update_request).await
@@ -5626,7 +5580,7 @@ impl McpServer {
                     })?;
                 let close_request = JsonRpcRequest::new_with_id(
                     request.id.clone(),
-                    methods::ISSUE_CLOSE,
+                    "vibe/issue/close",
                     Some(serde_json::to_value(close_params)?),
                 );
                 self.handle_issue_close(close_request).await
@@ -6243,137 +6197,6 @@ impl McpServer {
         self.handle_learning_capture(request).await
     }
 
-    // Legacy adapter methods for backward compatibility
-
-    /// Route legacy agent methods to consolidated vibe/agent handler
-    async fn handle_vibe_agent_legacy(
-        &self,
-        request: JsonRpcRequest,
-    ) -> Result<Option<JsonRpcResponse>> {
-        let operation = match request.method.as_str() {
-            "vibe/agent/register" => "register",
-            "vibe/agent/status" => "status",
-            "vibe/agent/list" => "list",
-            "vibe/agent/deregister" => "deregister",
-            "vibe/agent/capabilities" => "capabilities",
-            _ => {
-                return Ok(Some(JsonRpcResponse::error(
-                    request.id,
-                    JsonRpcError {
-                        code: error_codes::METHOD_NOT_FOUND,
-                        message: format!("Unknown legacy agent method: {}", request.method),
-                        data: None,
-                    },
-                )))
-            }
-        };
-
-        // For backward compatibility, directly call the old handlers to preserve exact behavior
-        match request.method.as_str() {
-            "vibe/agent/register" => self.handle_agent_register(request).await,
-            "vibe/agent/status" => self.handle_agent_status(request).await,
-            "vibe/agent/list" => self.handle_agent_list(request).await,
-            "vibe/agent/deregister" => self.handle_agent_deregister(request).await,
-            "vibe/agent/capabilities" => Ok(Some(JsonRpcResponse::success(
-                request.id,
-                serde_json::to_value(self.capabilities.clone())?,
-            ))),
-            _ => {
-                // Fallback to consolidated handler for unknown operations
-                let vibe_params = VibeOperationParams {
-                    operation: operation.to_string(),
-                    params: request
-                        .params
-                        .unwrap_or(serde_json::Value::Object(serde_json::Map::new())),
-                };
-
-                let vibe_request = JsonRpcRequest::new_with_id(
-                    request.id,
-                    methods::VIBE_AGENT,
-                    Some(serde_json::to_value(vibe_params)?),
-                );
-
-                self.handle_vibe_agent(vibe_request).await
-            }
-        }
-    }
-
-    /// Route legacy issue methods to consolidated vibe/issue handler
-    async fn handle_vibe_issue_legacy(
-        &self,
-        request: JsonRpcRequest,
-    ) -> Result<Option<JsonRpcResponse>> {
-        // For backward compatibility, directly call the old handlers to preserve exact behavior
-        match request.method.as_str() {
-            "vibe/issue/create" => self.handle_issue_create_new(request).await,
-            "vibe/issue/list" => self.handle_issue_list_new(request).await,
-            "vibe/issue/assign" => self.handle_issue_assign(request).await,
-            "vibe/issue/update" => self.handle_issue_update_new(request).await,
-            "vibe/issue/close" => self.handle_issue_close(request).await,
-            _ => Ok(Some(JsonRpcResponse::error(
-                request.id,
-                JsonRpcError {
-                    code: error_codes::METHOD_NOT_FOUND,
-                    message: format!("Unknown legacy issue method: {}", request.method),
-                    data: None,
-                },
-            ))),
-        }
-    }
-
-    /// Route legacy coordination methods to consolidated vibe/coordination handler
-    async fn handle_vibe_coordination_legacy(
-        &self,
-        request: JsonRpcRequest,
-    ) -> Result<Option<JsonRpcResponse>> {
-        // For backward compatibility, directly call the existing legacy handlers to preserve exact behavior
-        match request.method.as_str() {
-            // Messaging operations
-            "vibe/message/send" => self.handle_message_send(request).await,
-            "vibe/message/broadcast" => self.handle_message_broadcast(request).await,
-            "vibe/worker/message" => self.handle_legacy_worker_message(request).await,
-
-            // Worker coordination operations
-            "vibe/worker/request" => self.handle_legacy_worker_request(request).await,
-            "vibe/worker/coordinate" => self.handle_legacy_worker_coordinate(request).await,
-
-            // Resource operations
-            "vibe/project/lock" => self.handle_legacy_project_lock(request).await,
-            "vibe/resource/reserve" => self.handle_legacy_resource_reserve(request).await,
-
-            // Cross-project dependency operations
-            "vibe/dependency/declare" => self.handle_legacy_dependency_declare(request).await,
-            "vibe/coordinator/request_worker" => {
-                self.handle_legacy_coordinator_request_worker(request).await
-            }
-            "vibe/work/coordinate" => self.handle_legacy_work_coordinate(request).await,
-            "vibe/conflict/resolve" => self.handle_legacy_conflict_resolve(request).await,
-
-            // Workflow orchestration operations
-            "vibe/schedule/coordinate" => self.handle_legacy_schedule_coordinate(request).await,
-            "vibe/conflict/predict" => self.handle_legacy_conflict_predict(request).await,
-            "vibe/merge/coordinate" => self.handle_legacy_merge_coordinate(request).await,
-
-            // Knowledge operations
-            "vibe/knowledge/query" => self.handle_knowledge_query(request).await,
-            "vibe/knowledge/query/coordination" => {
-                self.handle_legacy_knowledge_query_coordination(request)
-                    .await
-            }
-            "vibe/pattern/suggest" => self.handle_legacy_pattern_suggest(request).await,
-            "vibe/guideline/enforce" => self.handle_legacy_guideline_enforce(request).await,
-            "vibe/learning/capture" => self.handle_legacy_learning_capture(request).await,
-
-            _ => Ok(Some(JsonRpcResponse::error(
-                request.id,
-                JsonRpcError {
-                    code: error_codes::METHOD_NOT_FOUND,
-                    message: format!("Unknown legacy coordination method: {}", request.method),
-                    data: None,
-                },
-            ))),
-        }
-    }
 
     /// Handle workspace operations for git worktree management
     #[tracing::instrument(skip(self, arguments), fields(op = %operation_path))]
