@@ -3,12 +3,21 @@
 use crate::{Error, Result};
 use axum::{
     extract::{Path, State},
-    response::Html,
+    response::{Html, IntoResponse},
+    Json,
 };
 use html_escape::encode_text;
+use serde::Deserialize;
 use std::sync::Arc;
 use uuid::Uuid;
 use vibe_ensemble_storage::StorageManager;
+
+/// Agent termination request
+#[derive(Debug, Deserialize)]
+pub struct TerminateAgentRequest {
+    pub force: Option<bool>,
+    pub reason: Option<String>,
+}
 
 /// List all agents
 pub async fn list(State(storage): State<Arc<StorageManager>>) -> Result<Html<String>> {
@@ -333,4 +342,42 @@ pub async fn detail(
     );
 
     Ok(Html(html))
+}
+
+/// Terminate an agent
+pub async fn terminate(
+    State(storage): State<Arc<StorageManager>>,
+    Path(id): Path<Uuid>,
+    Json(request): Json<TerminateAgentRequest>,
+) -> Result<impl IntoResponse> {
+    // Verify agent exists
+    let agent = storage
+        .agents()
+        .find_by_id(id)
+        .await?
+        .ok_or_else(|| crate::Error::NotFound(format!("Agent with id {}", id)))?;
+
+    // For now, we'll mark the agent as offline since we don't have direct process control
+    // TODO: Implement actual agent termination when process lifecycle is integrated
+    storage
+        .agents()
+        .update_status(id, &vibe_ensemble_core::agent::AgentStatus::Offline)
+        .await?;
+
+    tracing::info!(
+        "Agent {} ({}) terminated by user request (force: {})",
+        agent.name,
+        agent.id,
+        request.force.unwrap_or(false)
+    );
+
+    use serde_json::json;
+    Ok(Json(json!({
+        "success": true,
+        "message": format!("Agent {} has been terminated", agent.name),
+        "agent_id": agent.id,
+        "force": request.force.unwrap_or(false),
+        "reason": request.reason.unwrap_or_else(|| "Terminated by user".to_string()),
+        "timestamp": chrono::Utc::now().to_rfc3339()
+    })))
 }

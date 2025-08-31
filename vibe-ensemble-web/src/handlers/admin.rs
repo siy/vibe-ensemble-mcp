@@ -1,17 +1,15 @@
 use axum::{
     extract::State,
-    response::{Html, Response},
+    response::{Html, IntoResponse, Response},
 };
 use vibe_ensemble_security::Session;
 use vibe_ensemble_storage::StorageManager;
-use vibe_ensemble_web::WebSocketManager;
 
 use crate::Result;
 
 pub async fn admin_dashboard(
     session: Session,
     State(storage): State<StorageManager>,
-    State(_ws_manager): State<WebSocketManager>,
 ) -> Result<Response> {
     if !session.is_admin {
         return Ok(Html("<h1>Access Denied</h1><p>Admin access required.</p>").into_response());

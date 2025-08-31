@@ -1,3 +1,7 @@
+[[bin]]
+name = "vibe-ensemble"
+path = "src/main.rs"
+
 [package]
 name = "vibe-ensemble-mcp"
 version.workspace = true
@@ -5,17 +9,17 @@ edition.workspace = true
 authors.workspace = true
 license.workspace = true
 repository.workspace = true
-description = "MCP protocol implementation for Vibe Ensemble"
+description = "MCP server for coordinating multiple Claude Code instances"
 rust-version.workspace = true
 publish = false
 
 [features]
 test-support = []
-transport-test-cli = ["clap"]
 
 [dependencies]
 vibe-ensemble-core = { path = "../vibe-ensemble-core" }
 vibe-ensemble-storage = { path = "../vibe-ensemble-storage" }
+vibe-ensemble-web = { path = "../vibe-ensemble-web" }
 tokio = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
@@ -23,22 +27,18 @@ uuid = { workspace = true }
 thiserror = { workspace = true }
 anyhow = { workspace = true }
 tracing = { workspace = true }
-axum = { workspace = true }
-tower = { workspace = true }
-tokio-tungstenite = { workspace = true }
-futures-util = { workspace = true }
-async-trait = "0.1"
+tracing-subscriber = { workspace = true }
+clap = { workspace = true }
+dirs = { workspace = true }
 chrono = { workspace = true }
-tracing-subscriber = "0.3"
-reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls", "stream"] }
-humantime = "2"
-clap = { workspace = true, optional = true }
+async-trait = "0.1"
 serde_with = "3"
+
+# Required for transport functionality
+futures-util = { workspace = true }
+humantime = "2"
 
 [dev-dependencies]
 sqlx = { workspace = true }
 fake = { version = "2.9", features = ["derive", "chrono"] }
 tempfile = "3.8"
-
-# Binary removed - functionality consolidated into vibe-ensemble
-# Use: vibe-ensemble --mcp-only --transport=stdio

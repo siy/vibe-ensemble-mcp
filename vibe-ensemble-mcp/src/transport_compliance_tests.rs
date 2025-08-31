@@ -13,7 +13,7 @@ use crate::{
     client::McpClient,
     protocol::*,
     server::McpServer,
-    transport::{SseTransport, StdioTransport, Transport, TransportFactory, WebSocketTransport},
+    transport::{StdioTransport, Transport, TransportFactory},
     Error,
 };
 use serde_json::{json, Value};
@@ -59,24 +59,21 @@ mod tests {
     /// - JSON message format preservation
     /// - Session management and recovery
     /// - Error handling for network issues
-    #[tokio::test]
-    async fn test_sse_protocol_compliance() {
-        info!("Starting SSE transport protocol compliance test");
-
-        // Test SSE transport initialization
-        test_sse_initialization().await;
-
-        // Test bidirectional communication patterns
-        test_sse_bidirectional_communication().await;
-
-        // Test session recovery capabilities
-        test_sse_session_recovery().await;
-
-        // Test error conditions and resilience
-        test_sse_error_resilience().await;
-
-        info!("SSE transport protocol compliance test completed successfully");
-    }
+    // NOTE: SSE transport tests commented out due to architecture simplification (Phase 1)
+    // SSE transport implementation was removed in favor of stdio-only MCP protocol
+    // #[tokio::test]
+    // async fn test_sse_protocol_compliance() {
+    //     info!("Starting SSE transport protocol compliance test");
+    //     // Test SSE transport initialization
+    //     test_sse_initialization().await;
+    //     // Test bidirectional communication patterns
+    //     test_sse_bidirectional_communication().await;
+    //     // Test session recovery capabilities
+    //     test_sse_session_recovery().await;
+    //     // Test error conditions and resilience
+    //     test_sse_error_resilience().await;
+    //     info!("SSE transport protocol compliance test completed successfully");
+    // }
 
     /// Test HTTP transport compliance with MCP 2024-11-05 specification
     ///
@@ -322,38 +319,30 @@ mod tests {
     }
 
     // ============================================================================
-    // SSE Transport Compliance Tests
+    // SSE Transport Compliance Tests (COMMENTED OUT - Architecture Simplification)
     // ============================================================================
+    // NOTE: SSE transport implementation was removed in Phase 1 architecture overhaul
 
-    async fn test_sse_initialization() {
-        info!("Testing SSE transport initialization");
-
-        let mut transport = SseTransport::new("http://localhost:8080");
-        // Note: session_id is private, so we test behavior through public interface
-
-        // Test connection establishment (would normally contact real server)
-        // For testing, we simulate the successful connection
-        let session_result = transport.connect().await;
-
-        // In test mode, connect should succeed with generated session ID
-        match session_result {
-            Ok(session_id) => {
-                assert!(!session_id.is_empty(), "Session ID should not be empty");
-                assert!(
-                    session_id.starts_with("sse-"),
-                    "Session ID should have sse- prefix"
-                );
-                info!(
-                    "SSE initialization test passed with session ID: {}",
-                    session_id
-                );
-            }
-            Err(e) => {
-                // In test environment, this might fail due to no server running
-                warn!("SSE initialization failed (expected in test env): {}", e);
-            }
-        }
-    }
+    // async fn test_sse_initialization() {
+    //     info!("Testing SSE transport initialization");
+    //     let mut transport = SseTransport::new("http://localhost:8080");
+    //     // Note: session_id is private, so we test behavior through public interface
+    //     // Test connection establishment (would normally contact real server)
+    //     // For testing, we simulate the successful connection
+    //     let session_result = transport.connect().await;
+    //     // In test mode, connect should succeed with generated session ID
+    //     match session_result {
+    //         Ok(session_id) => {
+    //             assert!(!session_id.is_empty(), "Session ID should not be empty");
+    //             assert!(session_id.starts_with("sse-"), "Session ID should have sse- prefix");
+    //             info!("SSE initialization test passed with session ID: {}", session_id);
+    //         }
+    //         Err(e) => {
+    //             // In test environment, this might fail due to no server running
+    //             warn!("SSE initialization failed (expected in test env): {}", e);
+    //         }
+    //     }
+    // }
 
     async fn test_sse_bidirectional_communication() {
         info!("Testing SSE bidirectional communication patterns");
