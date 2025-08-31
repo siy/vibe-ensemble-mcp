@@ -490,7 +490,7 @@ impl TokenHandlers {
         State(handlers): State<Arc<TokenHandlers>>,
         Json(request): Json<CreateAgentTokenRequest>,
     ) -> Result<(StatusCode, Json<TokenResponse>)> {
-        // TODO: Get current user from authentication middleware
+        // FUTURE: Get current user from authentication middleware when implemented
         let current_user_id = "admin_user_001"; // This should come from auth
 
         // Validate agent exists
@@ -689,7 +689,7 @@ impl TokenHandlers {
         &self,
         request: CreateAgentTokenRequest,
     ) -> Result<(TokenResponse, String)> {
-        // TODO: Get current user from authentication middleware
+        // FUTURE: Get current user from authentication middleware when implemented
         let current_user_id = "admin_user_001";
 
         // Generate JWT token

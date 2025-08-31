@@ -2,6 +2,7 @@
 
 use crate::{csrf::CsrfStore, handlers, middleware, Result};
 use axum::{
+    extract::FromRef,
     middleware as axum_middleware,
     routing::{delete, get, post, put},
     Router,
@@ -16,6 +17,18 @@ use vibe_ensemble_storage::StorageManager;
 pub struct AppState {
     pub storage: Arc<StorageManager>,
     pub csrf_store: Arc<CsrfStore>,
+}
+
+impl FromRef<AppState> for Arc<vibe_ensemble_storage::StorageManager> {
+    fn from_ref(app: &AppState) -> Self {
+        app.storage.clone()
+    }
+}
+
+impl FromRef<AppState> for Arc<crate::csrf::CsrfStore> {
+    fn from_ref(app: &AppState) -> Self {
+        app.csrf_store.clone()
+    }
 }
 
 /// Web server configuration
@@ -57,16 +70,14 @@ impl WebServer {
 
     /// Build the application router (public for testing)
     pub fn build_router(&self) -> Router {
-        self.build_router_internal()
+        self.build_router_internal().with_state(AppState {
+            storage: self.storage.clone(),
+            csrf_store: self.csrf_store.clone(),
+        })
     }
 
     /// Build the application router (internal)
-    fn build_router_internal(&self) -> Router {
-        let app_state = AppState {
-            storage: self.storage.clone(),
-            csrf_store: self.csrf_store.clone(),
-        };
-
+    fn build_router_internal(&self) -> Router<AppState> {
         Router::new()
             // Dashboard routes
             .route("/", get(handlers::dashboard))
@@ -87,7 +98,7 @@ impl WebServer {
             .route("/knowledge/search", get(handlers::knowledge::search))
             .route("/knowledge/:id", get(handlers::knowledge::detail))
             // Prompt management routes
-            // TODO: Prompt management routes will be implemented in a future update
+            // FUTURE: Prompt management routes will be implemented in a future update
             // API routes
             .route("/api/health", get(handlers::health))
             .route("/api/stats", get(handlers::system_stats))
@@ -113,7 +124,7 @@ impl WebServer {
                 "/api/messages/thread/:correlation_id",
                 get(handlers::messages_by_correlation),
             )
-            // TODO: Prompt API routes will be implemented in a future update
+            // FUTURE: Prompt API routes will be implemented in a future update
             // Link validation API routes
             .route(
                 "/api/links/health",
@@ -130,8 +141,7 @@ impl WebServer {
                 "/api/links/:url/repair-suggestions",
                 get(handlers::links::repair_suggestions),
             )
-            // Add shared state
-            .with_state(self.storage.clone())
+            // State will be added by build_router() method
             // CSRF-protected routes with AppState
             .merge(
                 Router::new()
@@ -140,8 +150,7 @@ impl WebServer {
                     .route(
                         "/api/agents/:id/terminate",
                         post(handlers::agents::terminate),
-                    )
-                    .with_state(app_state.clone()),
+                    ), // State already provided at the root; no per-subrouter state needed
             )
             // Add middleware layers
             .layer(

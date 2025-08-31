@@ -352,11 +352,11 @@ pub async fn terminate(
     Json(request): Json<TerminateAgentRequest>,
 ) -> Result<impl IntoResponse> {
     // Validate CSRF token directly (API endpoint approach)
-    if !app_state
+    let csrf_ok = app_state
         .csrf_store
         .validate_token(&request.csrf_token)
-        .await
-    {
+        .await;
+    if !csrf_ok {
         return Err(Error::Forbidden("Invalid CSRF token".to_string()));
     }
 
@@ -369,7 +369,8 @@ pub async fn terminate(
         .ok_or_else(|| crate::Error::NotFound(format!("Agent with id {}", id)))?;
 
     // For now, we'll mark the agent as offline since we don't have direct process control
-    // TODO: Implement actual agent termination when process lifecycle is integrated
+    // FUTURE: Implement actual agent termination when process lifecycle is integrated
+    // This would require extending the MCP protocol to support lifecycle management
     app_state
         .storage
         .agents()

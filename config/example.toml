@@ -4,7 +4,8 @@
 
 # Database configuration - SQLite only
 [database]
-# Database file path (default: ~/.vibe-ensemble/data.db)
+# Database file path (default: $HOME/.vibe-ensemble/data.db)
+# Note: Tilde (~) expansion is handled by the application
 path = "~/.vibe-ensemble/data.db"
 # Maximum database connections (default: 10)
 max_connections = 10

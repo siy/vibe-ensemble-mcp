@@ -34,7 +34,7 @@ impl MetricsCollector {
             disk_usage_mb: disk_info.0,
             disk_total_mb: disk_info.1,
             uptime_seconds,
-            active_connections: 0, // TODO: Track actual connections
+            active_connections: 0, // FUTURE: Track actual MCP connections via server state
         }
     }
 
@@ -48,8 +48,8 @@ impl MetricsCollector {
 
                 StorageMetrics {
                     database_size_mb: database_size,
-                    total_queries: 0, // TODO: Add query counter to storage manager
-                    avg_query_time_ms: 0, // TODO: Add query timing to storage manager
+                    total_queries: 0, // FUTURE: Add query counter to storage manager
+                    avg_query_time_ms: 0, // FUTURE: Add query timing to storage manager
                     active_connections: 1, // Simple estimation for SQLite
                     max_connections: 10, // From default config
                 }

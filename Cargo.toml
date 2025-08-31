@@ -8,6 +8,7 @@ members = [
 ]
 # Using explicit members list for workspace configuration
 resolver = "2"
+default-members = ["vibe-ensemble-mcp"]
 
 [workspace.package]
 version = "0.3.0"
