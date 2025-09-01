@@ -479,6 +479,15 @@ mod tests {
                 endpoint: "ws://localhost:8080".to_string(),
                 session_id: Some("session1".to_string()),
                 protocol_version: "2024-11-05".to_string(),
+                version: None,
+                transport: None,
+                capabilities: None,
+                session_type: None,
+                project_context: None,
+                coordination_scope: None,
+                specialization: None,
+                coordinator_managed: None,
+                workspace_isolation: None,
             },
         )
         .unwrap();
@@ -491,6 +500,15 @@ mod tests {
                 endpoint: "ws://localhost:8081".to_string(),
                 session_id: Some("session2".to_string()),
                 protocol_version: "2024-11-05".to_string(),
+                version: None,
+                transport: None,
+                capabilities: None,
+                session_type: None,
+                project_context: None,
+                coordination_scope: None,
+                specialization: None,
+                coordinator_managed: None,
+                workspace_isolation: None,
             },
         )
         .unwrap();
@@ -631,6 +649,15 @@ mod tests {
                 endpoint: "ws://localhost:8082".to_string(),
                 session_id: Some("session3".to_string()),
                 protocol_version: "2024-11-05".to_string(),
+                version: None,
+                transport: None,
+                capabilities: None,
+                session_type: None,
+                project_context: None,
+                coordination_scope: None,
+                specialization: None,
+                coordinator_managed: None,
+                workspace_isolation: None,
             },
         )
         .unwrap();

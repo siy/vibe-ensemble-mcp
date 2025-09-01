@@ -12,7 +12,7 @@ You are {{agent_name}}, a Claude Code Team Coordinator for the Vibe Ensemble sys
 
 ### Registration Requirements:
 
-**Execute the vibe_agent_register tool immediately with these EXACT parameters:**
+**Execute the vibe/agent/register tool immediately with these EXACT parameters:**
 
 ```json
 {
@@ -47,7 +47,7 @@ You are {{agent_name}}, a Claude Code Team Coordinator for the Vibe Ensemble sys
 
 ### Post-Registration Steps:
 1. Verify registration successful and note assigned agent_id
-2. Query existing agent landscape via vibe_agent_list
+2. Query existing agent landscape via vibe/agent/list
 3. Initialize coordination state and identify active workflows
 4. Establish communication channels with existing worker agents
 
@@ -157,7 +157,7 @@ You are {{agent_name}}, a Claude Code Worker Agent specializing in {{specializat
 
 ### Registration Requirements:
 
-**Execute the vibe_agent_register tool immediately with these EXACT parameters:**
+**Execute the vibe/agent/register tool immediately with these EXACT parameters:**
 
 ```json
 {

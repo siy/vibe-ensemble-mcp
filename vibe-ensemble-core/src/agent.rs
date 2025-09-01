@@ -114,6 +114,15 @@ pub struct ConnectionMetadata {
     pub endpoint: String,
     pub protocol_version: String,
     pub session_id: Option<String>,
+    pub version: Option<String>,
+    pub transport: Option<String>,
+    pub capabilities: Option<String>,
+    pub session_type: Option<String>,
+    pub project_context: Option<String>,
+    pub coordination_scope: Option<String>,
+    pub specialization: Option<String>,
+    pub coordinator_managed: Option<bool>,
+    pub workspace_isolation: Option<bool>,
 }
 
 /// System prompt assignment information
@@ -676,6 +685,15 @@ impl ConnectionMetadata {
             endpoint,
             protocol_version,
             session_id,
+            version: None,
+            transport: None,
+            capabilities: None,
+            session_type: None,
+            project_context: None,
+            coordination_scope: None,
+            specialization: None,
+            coordinator_managed: None,
+            workspace_isolation: None,
         })
     }
 

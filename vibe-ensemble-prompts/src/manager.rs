@@ -625,6 +625,15 @@ impl PromptManager {
                     endpoint: "system://localhost".to_string(),
                     protocol_version: "1.0".to_string(),
                     session_id: Some("system".to_string()),
+                    version: None,
+                    transport: None,
+                    capabilities: None,
+                    session_type: None,
+                    project_context: None,
+                    coordination_scope: None,
+                    specialization: None,
+                    coordinator_managed: None,
+                    workspace_isolation: None,
                 })
                 .build()
                 .map_err(|e| Error::Validation {
@@ -828,6 +837,15 @@ mod tests {
                 endpoint: "system://localhost".to_string(),
                 protocol_version: "1.0".to_string(),
                 session_id: Some("system".to_string()),
+                version: None,
+                transport: None,
+                capabilities: None,
+                session_type: None,
+                project_context: None,
+                coordination_scope: None,
+                specialization: None,
+                coordinator_managed: None,
+                workspace_isolation: None,
             })
             .build()
             .unwrap();

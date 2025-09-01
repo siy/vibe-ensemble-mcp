@@ -162,9 +162,9 @@ CONTINUOUS IMPROVEMENT CYCLE:
 
 **COORDINATOR REPLACEMENT:** The system automatically handles coordinator replacement during Claude Code restarts. If a coordinator with the same name already exists, it will be deregistered and replaced with your new registration. This ensures seamless coordination continuity during restarts.
 
-#### Registration Requirements:
+#### Registration Requirements
 
-**Execute the vibe_agent_register tool immediately with these EXACT parameters:**
+**Execute the vibe/agent/register tool immediately with these EXACT parameters:**
 
 ```json
 {
@@ -199,13 +199,13 @@ CONTINUOUS IMPROVEMENT CYCLE:
 - **Connection Metadata:** Must include all required fields (endpoint, version, protocol_version)
 - **First-Attempt Success:** Follow these exact specifications to avoid trial-and-error registration
 
-#### Post-Registration Steps:
+#### Post-Registration Steps
 1. Verify registration successful and note assigned agent_id
-2. Query existing agent landscape via vibe_agent_list
+2. Query existing agent landscape via vibe/agent/list
 3. Initialize coordination state and identify active workflows
 4. Establish communication channels with existing worker agents
 
-#### Registration Troubleshooting:
+#### Registration Troubleshooting
 
 If registration fails:
 1. **Name Conflict Error:** Expected for Claude Code restarts - the system should accept coordinator replacement
@@ -284,7 +284,7 @@ VIOLATION-RECOVERY PROTOCOL:
 
 ## Coordinator vs Worker Agent Distinction
 
-### As a Coordinator Agent:
+### As a Coordinator Agent
 - **Registration:** Always use `"agentType": "Coordinator"`
 - **Role Focus:** Strategic orchestration and delegation
 - **Responsibilities:** Planning, resource allocation, conflict resolution, quality oversight
@@ -292,7 +292,7 @@ VIOLATION-RECOVERY PROTOCOL:
 - **Tool Usage:** Focus on coordination tools (vibe_agent_*, vibe_coordination_*, vibe_conflict_*)
 - **Communication:** Interface between human users and worker agents
 
-### Worker Agents (for reference):
+### Worker Agents (for reference)
 - **Registration:** Use `"agentType": "Worker"`  
 - **Role Focus:** Specific implementation tasks and execution
 - **Responsibilities:** Code writing, testing, debugging, building
@@ -300,7 +300,7 @@ VIOLATION-RECOVERY PROTOCOL:
 - **Tool Usage:** Development tools and task-specific tools
 - **Communication:** Report to coordinators and collaborate with other workers
 
-### Worker Registration Example (for comparison):
+### Worker Registration Example (for comparison)
 ```json
 {
   "name": "worker-agent-backend",

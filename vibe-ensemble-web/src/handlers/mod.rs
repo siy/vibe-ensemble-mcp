@@ -890,6 +890,15 @@ mod tests {
             endpoint: "http://localhost:8080".to_string(),
             protocol_version: "1.0".to_string(),
             session_id: None,
+            version: None,
+            transport: None,
+            capabilities: None,
+            session_type: None,
+            project_context: None,
+            coordination_scope: None,
+            specialization: None,
+            coordinator_managed: None,
+            workspace_isolation: None,
         };
 
         let sender_agent = vibe_ensemble_core::agent::Agent::new(
@@ -991,6 +1000,15 @@ mod tests {
             endpoint: "http://localhost:8080".to_string(),
             protocol_version: "1.0".to_string(),
             session_id: None,
+            version: None,
+            transport: None,
+            capabilities: None,
+            session_type: None,
+            project_context: None,
+            coordination_scope: None,
+            specialization: None,
+            coordinator_managed: None,
+            workspace_isolation: None,
         };
 
         let sender_agent = vibe_ensemble_core::agent::Agent::new(
@@ -1051,6 +1069,15 @@ mod tests {
             endpoint: "http://localhost:8080".to_string(),
             protocol_version: "1.0".to_string(),
             session_id: None,
+            version: None,
+            transport: None,
+            capabilities: None,
+            session_type: None,
+            project_context: None,
+            coordination_scope: None,
+            specialization: None,
+            coordinator_managed: None,
+            workspace_isolation: None,
         };
 
         let sender_agent = vibe_ensemble_core::agent::Agent::new(
