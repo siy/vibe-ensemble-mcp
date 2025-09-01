@@ -83,7 +83,6 @@ impl WebServer {
             .route("/", get(handlers::dashboard))
             .route("/dashboard", get(handlers::dashboard))
             .route("/messages", get(handlers::messages_page))
-            .route("/link-health", get(handlers::links::link_health_page))
             // Web UI routes
             .route("/agents", get(handlers::agents::list))
             .route("/agents/:id", get(handlers::agents::detail))
@@ -125,22 +124,7 @@ impl WebServer {
                 get(handlers::messages_by_correlation),
             )
             // FUTURE: Prompt API routes will be implemented in a future update
-            // Link validation API routes
-            .route(
-                "/api/links/health",
-                get(handlers::links::link_health_summary),
-            )
-            .route(
-                "/api/links/status",
-                get(handlers::links::link_status_details),
-            )
-            .route("/api/links/validate", get(handlers::links::validate_links))
-            .route("/api/links/analytics", get(handlers::links::link_analytics))
-            .route("/api/links/auto-repair", get(handlers::links::auto_repair))
-            .route(
-                "/api/links/:url/repair-suggestions",
-                get(handlers::links::repair_suggestions),
-            )
+            // Link validation API routes removed
             // State will be added by build_router() method
             // CSRF-protected routes with AppState
             .merge(

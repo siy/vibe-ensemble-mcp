@@ -1,18 +1,8 @@
 //! Askama templates for the web dashboard
 
 use askama::Template;
-use serde::{Deserialize, Serialize};
+use serde::Serialize;
 use vibe_ensemble_core::issue::Issue;
-
-/// Link health summary
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct LinkHealthSummary {
-    pub total_links: usize,
-    pub healthy_links: usize,
-    pub broken_links: usize,
-    pub warning_links: usize,
-    pub last_validation: Option<chrono::DateTime<chrono::Utc>>,
-}
 
 /// Activity entry for the dashboard
 #[derive(Debug, Serialize)]
@@ -196,27 +186,6 @@ impl MessagesTemplate {
 impl Default for MessagesTemplate {
     fn default() -> Self {
         Self::new(serde_json::json!({}), 0)
-    }
-}
-
-/// Link Health template
-#[derive(Template)]
-#[template(path = "link-health.html")]
-pub struct LinkHealthTemplate {
-    pub title: String,
-    pub current_page: String,
-    pub summary: LinkHealthSummary,
-    pub discovered_links: Vec<String>,
-}
-
-impl LinkHealthTemplate {
-    pub fn new(summary: LinkHealthSummary, discovered_links: Vec<String>) -> Self {
-        Self {
-            title: "Link Health - Vibe Ensemble".to_string(),
-            current_page: "link-health".to_string(),
-            summary,
-            discovered_links,
-        }
     }
 }
 
