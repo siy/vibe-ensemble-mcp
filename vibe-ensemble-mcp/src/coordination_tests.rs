@@ -381,8 +381,24 @@ mod tests {
         );
         let result = server.handle_request(request).await;
 
-        // Should return an error for missing parameters
-        assert!(result.is_err());
+        // TODO: Server should return JSON-RPC error response instead of transport error
+        // Currently returns Protocol error due to parameter validation happening deep in the handler
+        // This should be fixed to validate parameters earlier and return proper JSON-RPC errors
+        match result {
+            Ok(Some(response)) => {
+                // If we get a response, it should be an error response
+                assert!(response.error.is_some());
+                assert!(response.result.is_none());
+            }
+            Ok(None) => {
+                // Notification - no response expected, shouldn't happen for this request
+                panic!("Expected error response or transport error, got None");
+            }
+            Err(_) => {
+                // Currently this is what happens - a transport-level error
+                // This should be changed to return a proper JSON-RPC error response
+            }
+        }
     }
 
     // Integration Tests for Coordination Workflows
