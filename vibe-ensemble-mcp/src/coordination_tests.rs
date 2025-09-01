@@ -43,7 +43,10 @@ mod tests {
             "resourceRequirements": {"cpu": 2, "memory": "4gb"}
         });
 
-        let request = create_test_request("vibe/schedule/coordinate", params);
+        let request = create_test_request(
+            "vibe/coordination",
+            json!({"operation": "schedule_coordinate", "params": params}),
+        );
         let result = server.handle_request(request).await;
 
         assert!(result.is_ok());
@@ -70,7 +73,10 @@ mod tests {
             "resourceMap": {"files": ["src/main.rs", "src/lib.rs"]}
         });
 
-        let request = create_test_request("vibe/conflict/predict", params);
+        let request = create_test_request(
+            "vibe/coordination",
+            json!({"operation": "conflict_predict", "params": params}),
+        );
         let result = server.handle_request(request).await;
 
         assert!(result.is_ok());
@@ -102,7 +108,10 @@ mod tests {
             "justification": "Critical file modifications for feature implementation"
         });
 
-        let request = create_test_request("vibe/resource/reserve", params);
+        let request = create_test_request(
+            "vibe/coordination",
+            json!({"operation": "resource_reserve", "params": params}),
+        );
         let result = server.handle_request(request).await;
 
         assert!(result.is_ok());
@@ -134,7 +143,10 @@ mod tests {
             "conflictResolutionStrategy": "MANUAL"
         });
 
-        let request = create_test_request("vibe/merge/coordinate", params);
+        let request = create_test_request(
+            "vibe/coordination",
+            json!({"operation": "merge_coordinate", "params": params}),
+        );
         let result = server.handle_request(request).await;
 
         assert!(result.is_ok());
@@ -165,7 +177,10 @@ mod tests {
             "searchScope": ["patterns", "practices", "guidelines"]
         });
 
-        let request = create_test_request("vibe/knowledge/query/coordination", params);
+        let request = create_test_request(
+            "vibe/coordination",
+            json!({"operation": "knowledge_query_coordination", "params": params}),
+        );
         let result = server.handle_request(request).await;
 
         assert!(result.is_ok());
@@ -198,7 +213,10 @@ mod tests {
             "excludePatterns": []
         });
 
-        let request = create_test_request("vibe/pattern/suggest", params);
+        let request = create_test_request(
+            "vibe/coordination",
+            json!({"operation": "pattern_suggest", "params": params}),
+        );
         let result = server.handle_request(request).await;
 
         match result {
@@ -239,7 +257,10 @@ mod tests {
             "allowExceptions": true
         });
 
-        let request = create_test_request("vibe/guideline/enforce", params);
+        let request = create_test_request(
+            "vibe/coordination",
+            json!({"operation": "guideline_enforce", "params": params}),
+        );
         let result = server.handle_request(request).await;
 
         assert!(result.is_ok());
@@ -287,7 +308,10 @@ mod tests {
             ]
         });
 
-        let request = create_test_request("vibe/learning/capture", params);
+        let request = create_test_request(
+            "vibe/coordination",
+            json!({"operation": "learning_capture", "params": params}),
+        );
         let result = server.handle_request(request).await;
 
         assert!(result.is_ok());
@@ -319,7 +343,10 @@ mod tests {
             "resourceRequirements": {}
         });
 
-        let request = create_test_request("vibe/schedule/coordinate", params);
+        let request = create_test_request(
+            "vibe/coordination",
+            json!({"operation": "schedule_coordinate", "params": params}),
+        );
         let result = server.handle_request(request).await;
 
         match result {
@@ -348,11 +375,38 @@ mod tests {
             // Missing required parameters
         });
 
-        let request = create_test_request("vibe/conflict/predict", params);
+        let request = create_test_request(
+            "vibe/coordination",
+            json!({"operation": "conflict_predict", "params": params}),
+        );
         let result = server.handle_request(request).await;
 
-        // Should return an error for missing parameters
-        assert!(result.is_err());
+        // Server should return JSON-RPC error response for invalid parameters
+        match result {
+            Ok(Some(response)) => {
+                // Should be an error response with proper JSON-RPC error structure
+                assert!(response.error.is_some());
+                assert!(response.result.is_none());
+
+                // Verify error details
+                let error = response.error.unwrap();
+                assert_eq!(error.code, -32602); // INVALID_PARAMS error code
+                assert!(
+                    error.message.contains("missing field") || error.message.contains("Missing")
+                );
+            }
+            Ok(None) => {
+                // Notification - no response expected, shouldn't happen for this request
+                panic!("Expected JSON-RPC error response, got None");
+            }
+            Err(e) => {
+                // Should not be a transport-level error anymore
+                panic!(
+                    "Expected JSON-RPC error response, got transport error: {:?}",
+                    e
+                );
+            }
+        }
     }
 
     // Integration Tests for Coordination Workflows
@@ -370,7 +424,10 @@ mod tests {
             "resourceMap": {"files": ["src/main.rs"]}
         });
 
-        let request = create_test_request("vibe/conflict/predict", conflict_predict_params);
+        let request = create_test_request(
+            "vibe/coordination",
+            json!({"operation": "conflict_predict", "params": conflict_predict_params}),
+        );
         let result = server.handle_request(request).await;
         assert!(result.is_ok());
 
@@ -385,7 +442,10 @@ mod tests {
             "justification": "Implementing new feature"
         });
 
-        let request = create_test_request("vibe/resource/reserve", resource_reserve_params);
+        let request = create_test_request(
+            "vibe/coordination",
+            json!({"operation": "resource_reserve", "params": resource_reserve_params}),
+        );
         let result = server.handle_request(request).await;
         assert!(result.is_ok());
 
@@ -399,7 +459,10 @@ mod tests {
             "improvementOpportunities": ["Faster resource reservation"]
         });
 
-        let request = create_test_request("vibe/learning/capture", learning_capture_params);
+        let request = create_test_request(
+            "vibe/coordination",
+            json!({"operation": "learning_capture", "params": learning_capture_params}),
+        );
         let result = server.handle_request(request).await;
         assert!(result.is_ok());
     }

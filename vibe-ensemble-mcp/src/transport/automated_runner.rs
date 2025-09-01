@@ -851,11 +851,11 @@ impl AutomatedTestRunner {
 
     /// Output console-friendly results
     async fn output_console_results(&self, results: &AutomatedTestResults) -> Result<()> {
-        println!("\n🎯 COMPREHENSIVE TRANSPORT TEST RESULTS");
-        println!("========================================");
-        println!("Timestamp: {}", results.timestamp);
-        println!("Total Duration: {:?}", results.total_duration);
-        println!(
+        eprintln!("\n🎯 COMPREHENSIVE TRANSPORT TEST RESULTS");
+        eprintln!("========================================");
+        eprintln!("Timestamp: {}", results.timestamp);
+        eprintln!("Total Duration: {:?}", results.total_duration);
+        eprintln!(
             "Overall Success: {}",
             if results.overall_success {
                 "✅ PASS"
@@ -864,44 +864,44 @@ impl AutomatedTestRunner {
             }
         );
 
-        println!("\n📊 SUMMARY");
-        println!("-----------");
-        println!("Total Scenarios: {}", results.summary.total_scenarios);
-        println!("Total Passed: {}", results.summary.total_passed);
-        println!(
+        eprintln!("\n📊 SUMMARY");
+        eprintln!("-----------");
+        eprintln!("Total Scenarios: {}", results.summary.total_scenarios);
+        eprintln!("Total Passed: {}", results.summary.total_passed);
+        eprintln!(
             "Overall Success Rate: {:.2}%",
             results.summary.overall_success_rate
         );
-        println!(
+        eprintln!(
             "Best Performing: {}",
             results.summary.best_performing_transport
         );
-        println!(
+        eprintln!(
             "Worst Performing: {}",
             results.summary.worst_performing_transport
         );
-        println!(
+        eprintln!(
             "Average Throughput: {:.2} msg/sec",
             results.summary.avg_throughput_msg_per_sec
         );
-        println!("Average Latency: {:.2} ms", results.summary.avg_latency_ms);
+        eprintln!("Average Latency: {:.2} ms", results.summary.avg_latency_ms);
 
-        println!("\n🏆 PERFORMANCE RANKINGS");
-        println!("-----------------------");
+        eprintln!("\n🏆 PERFORMANCE RANKINGS");
+        eprintln!("-----------------------");
         for ranking in &results.performance_comparison.performance_rankings {
-            println!(
+            eprintln!(
                 "{}. {} (Score: {:.2})",
                 ranking.rank, ranking.transport, ranking.score
             );
-            println!("   Strengths: {}", ranking.strengths.join(", "));
+            eprintln!("   Strengths: {}", ranking.strengths.join(", "));
             if !ranking.weaknesses.is_empty() {
-                println!("   Weaknesses: {}", ranking.weaknesses.join(", "));
+                eprintln!("   Weaknesses: {}", ranking.weaknesses.join(", "));
             }
         }
 
         if !results.regressions_detected.is_empty() {
-            println!("\n⚠️ REGRESSIONS DETECTED");
-            println!("-----------------------");
+            eprintln!("\n⚠️ REGRESSIONS DETECTED");
+            eprintln!("-----------------------");
             for regression in &results.regressions_detected {
                 let severity_icon = match regression.severity {
                     Severity::Critical => "🔴",
@@ -909,7 +909,7 @@ impl AutomatedTestRunner {
                     Severity::Medium => "🟡",
                     Severity::Low => "🟢",
                 };
-                println!(
+                eprintln!(
                     "{} {} - {}: {}",
                     severity_icon,
                     regression.transport,
@@ -919,15 +919,15 @@ impl AutomatedTestRunner {
             }
         }
 
-        println!("\n📈 DETAILED TRANSPORT RESULTS");
-        println!("==============================");
+        eprintln!("\n📈 DETAILED TRANSPORT RESULTS");
+        eprintln!("==============================");
         for (transport_id, result) in &results.transport_results {
-            println!("\n{} ({})", result.transport_name, transport_id);
-            println!(
+            eprintln!("\n{} ({})", result.transport_name, transport_id);
+            eprintln!(
                 "{}",
                 "=".repeat(result.transport_name.len() + transport_id.len() + 3)
             );
-            println!("{}", result);
+            eprintln!("{}", result);
         }
 
         Ok(())
@@ -937,7 +937,7 @@ impl AutomatedTestRunner {
     async fn output_json_results(&self, results: &AutomatedTestResults) -> Result<()> {
         let json_output = serde_json::to_string_pretty(results)
             .map_err(|e| Error::Transport(format!("Failed to serialize JSON results: {}", e)))?;
-        println!("{}", json_output);
+        eprintln!("{}", json_output);
         Ok(())
     }
 

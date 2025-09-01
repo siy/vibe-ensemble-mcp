@@ -240,9 +240,9 @@ pub async fn execute_cli_command(cli: TransportTestCli) -> Result<()> {
                 output_format,
                 CliOutputFormat::Console | CliOutputFormat::Both
             ) {
-                println!("\n🚀 Benchmark Results Summary:");
-                println!("═══════════════════════════════");
-                println!(
+                eprintln!("\n🚀 Benchmark Results Summary:");
+                eprintln!("═══════════════════════════════");
+                eprintln!(
                     "Overall Success: {}",
                     if results.overall_success {
                         "✅"
@@ -250,22 +250,22 @@ pub async fn execute_cli_command(cli: TransportTestCli) -> Result<()> {
                         "❌"
                     }
                 );
-                println!("Total Tests: {}", results.summary.total_scenarios);
-                println!("Tests Passed: {}", results.summary.total_passed);
+                eprintln!("Total Tests: {}", results.summary.total_scenarios);
+                eprintln!("Tests Passed: {}", results.summary.total_passed);
 
                 if !results.summary.best_performing_transport.is_empty() {
-                    println!(
+                    eprintln!(
                         "🏆 Best Performance: {}",
                         results.summary.best_performing_transport
                     );
                 }
 
                 if results.summary.avg_throughput_msg_per_sec > 0.0 {
-                    println!(
+                    eprintln!(
                         "📊 Average Throughput: {:.2} msg/sec",
                         results.summary.avg_throughput_msg_per_sec
                     );
-                    println!(
+                    eprintln!(
                         "⏱️  Average Latency: {:.2}ms",
                         results.summary.avg_latency_ms
                     );
@@ -276,23 +276,23 @@ pub async fn execute_cli_command(cli: TransportTestCli) -> Result<()> {
         Commands::ListTransports => {
             use crate::transport::automated_runner::TransportType;
 
-            println!("Available transport types:");
-            println!(
+            eprintln!("Available transport types:");
+            eprintln!(
                 "  {:12} - {}",
                 TransportType::InMemory.id(),
                 TransportType::InMemory.name()
             );
-            println!(
+            eprintln!(
                 "  {:12} - {}",
                 TransportType::Stdio.id(),
                 TransportType::Stdio.name()
             );
-            println!(
+            eprintln!(
                 "  {:12} - {}",
                 TransportType::WebSocket.id(),
                 TransportType::WebSocket.name()
             );
-            println!(
+            eprintln!(
                 "  {:12} - {}",
                 TransportType::Sse.id(),
                 TransportType::Sse.name()
@@ -309,7 +309,7 @@ pub async fn execute_cli_command(cli: TransportTestCli) -> Result<()> {
                 crate::Error::Transport(format!("Failed to write config file: {}", e))
             })?;
 
-            println!("Sample configuration written to: {}", output);
+            eprintln!("Sample configuration written to: {}", output);
         }
 
         Commands::RunConfig { config } => {
