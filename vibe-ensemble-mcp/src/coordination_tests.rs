@@ -391,7 +391,9 @@ mod tests {
                 // Verify error details
                 let error = response.error.unwrap();
                 assert_eq!(error.code, -32602); // INVALID_PARAMS error code
-                assert!(error.message.contains("missing field") || error.message.contains("Missing"));
+                assert!(
+                    error.message.contains("missing field") || error.message.contains("Missing")
+                );
             }
             Ok(None) => {
                 // Notification - no response expected, shouldn't happen for this request
