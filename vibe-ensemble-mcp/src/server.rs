@@ -3783,20 +3783,44 @@ impl McpServer {
 
         // Parse request parameters
         let params: ConflictPredictParams = if let Some(params) = request.params {
-            serde_json::from_value(params).map_err(|e| Error::Protocol {
-                message: format!("Invalid conflict prediction parameters: {}", e),
-            })?
+            match serde_json::from_value(params) {
+                Ok(p) => p,
+                Err(e) => {
+                    return Ok(Some(JsonRpcResponse::error(
+                        request.id,
+                        JsonRpcError {
+                            code: error_codes::INVALID_PARAMS,
+                            message: format!("Invalid conflict prediction parameters: {}", e),
+                            data: None,
+                        },
+                    )));
+                }
+            }
         } else {
-            return Err(Error::Protocol {
-                message: "Missing conflict prediction parameters".to_string(),
-            });
+            return Ok(Some(JsonRpcResponse::error(
+                request.id,
+                JsonRpcError {
+                    code: error_codes::INVALID_PARAMS,
+                    message: "Missing conflict prediction parameters".to_string(),
+                    data: None,
+                },
+            )));
         };
 
         // Parse analyzer agent ID
-        let analyzer_id =
-            Uuid::parse_str(&params.analyzer_agent_id).map_err(|e| Error::Protocol {
-                message: format!("Invalid analyzer agent ID: {}", e),
-            })?;
+        let analyzer_id = match Uuid::parse_str(&params.analyzer_agent_id) {
+            Ok(id) => id,
+            Err(e) => {
+                return Ok(Some(JsonRpcResponse::error(
+                    request.id,
+                    JsonRpcError {
+                        code: error_codes::INVALID_PARAMS,
+                        message: format!("Invalid analyzer agent ID: {}", e),
+                        data: None,
+                    },
+                )));
+            }
+        };
 
         // Verify analyzer agent exists
         if let Some(agent_service) = &self.agent_service {
