@@ -673,7 +673,7 @@ mod tests {
 
         let parsed_response: JsonRpcResponse = serde_json::from_str(&response).unwrap();
         if parsed_response.error.is_none() {
-            println!(
+            eprintln!(
                 "Expected error but got result: {:?}",
                 parsed_response.result
             );
@@ -851,7 +851,7 @@ mod tests {
 
         let parsed_response: JsonRpcResponse = serde_json::from_str(&response).unwrap();
         if parsed_response.error.is_some() {
-            println!("Agent registration error: {:?}", parsed_response.error);
+            eprintln!("Agent registration error: {:?}", parsed_response.error);
         }
         assert!(parsed_response.result.is_some());
         let result = parsed_response.result.unwrap();
@@ -956,7 +956,7 @@ mod tests {
 
         let parsed_response: JsonRpcResponse = serde_json::from_str(&response).unwrap();
         if parsed_response.error.is_some() {
-            println!("Issue update error: {:?}", parsed_response.error);
+            eprintln!("Issue update error: {:?}", parsed_response.error);
         }
         assert!(parsed_response.result.is_some());
 
@@ -1272,7 +1272,7 @@ mod tests {
         let response = server.handle_message(&request_json).await.unwrap().unwrap();
         let parsed_response: JsonRpcResponse = serde_json::from_str(&response).unwrap();
         if parsed_response.error.is_some() {
-            println!("Workflow update error: {:?}", parsed_response.error);
+            eprintln!("Workflow update error: {:?}", parsed_response.error);
         }
         assert!(parsed_response.result.is_some());
 
