@@ -108,6 +108,15 @@ impl CoordinatorWorkerTestFramework {
                 endpoint: "test://localhost:8080".to_string(),
                 protocol_version: "1.0".to_string(),
                 session_id: Some(Uuid::new_v4().to_string()),
+                version: None,
+                transport: None,
+                capabilities: None,
+                session_type: None,
+                project_context: None,
+                coordination_scope: None,
+                specialization: None,
+                coordinator_managed: None,
+                workspace_isolation: None,
             });
 
         // Add capabilities using builder pattern

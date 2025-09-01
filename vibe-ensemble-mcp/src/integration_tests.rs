@@ -479,6 +479,15 @@ mod tests {
                 endpoint: "ws://localhost:8080".to_string(),
                 session_id: Some("session1".to_string()),
                 protocol_version: "2024-11-05".to_string(),
+                version: None,
+                transport: None,
+                capabilities: None,
+                session_type: None,
+                project_context: None,
+                coordination_scope: None,
+                specialization: None,
+                coordinator_managed: None,
+                workspace_isolation: None,
             },
         )
         .unwrap();
@@ -491,6 +500,15 @@ mod tests {
                 endpoint: "ws://localhost:8081".to_string(),
                 session_id: Some("session2".to_string()),
                 protocol_version: "2024-11-05".to_string(),
+                version: None,
+                transport: None,
+                capabilities: None,
+                session_type: None,
+                project_context: None,
+                coordination_scope: None,
+                specialization: None,
+                coordinator_managed: None,
+                workspace_isolation: None,
             },
         )
         .unwrap();
@@ -631,6 +649,15 @@ mod tests {
                 endpoint: "ws://localhost:8082".to_string(),
                 session_id: Some("session3".to_string()),
                 protocol_version: "2024-11-05".to_string(),
+                version: None,
+                transport: None,
+                capabilities: None,
+                session_type: None,
+                project_context: None,
+                coordination_scope: None,
+                specialization: None,
+                coordinator_managed: None,
+                workspace_isolation: None,
             },
         )
         .unwrap();
@@ -1464,5 +1491,34 @@ mod tests {
         // Verify it's not treated as system stats query (no total_agents field)
         assert!(result.get("total_agents").is_none());
         assert!(result.get("online_agents").is_none());
+    }
+
+    /// Test handling of JSON-RPC notifications (no response expected)
+    #[tokio::test]
+    async fn test_notification_handling() {
+        let (server, _agent_repo) = setup_coordination_server().await;
+
+        // Test notifications/initialized notification
+        let notification_json = r#"{"method":"notifications/initialized","jsonrpc":"2.0"}"#;
+        let response = server.handle_message(notification_json).await.unwrap();
+
+        // Notifications should not return a response
+        assert!(
+            response.is_none(),
+            "Notifications should not return a response"
+        );
+
+        // Test unknown notification
+        let unknown_notification_json = r#"{"method":"notifications/unknown","jsonrpc":"2.0"}"#;
+        let response = server
+            .handle_message(unknown_notification_json)
+            .await
+            .unwrap();
+
+        // Unknown notifications should also not return a response
+        assert!(
+            response.is_none(),
+            "Unknown notifications should not return a response"
+        );
     }
 }

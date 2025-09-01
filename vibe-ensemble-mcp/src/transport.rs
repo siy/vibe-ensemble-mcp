@@ -136,8 +136,8 @@ pub struct StdioTransport {
 }
 
 impl StdioTransport {
-    /// Default read timeout for stdio operations (30 seconds)
-    pub const DEFAULT_READ_TIMEOUT: Duration = Duration::from_secs(30);
+    /// Default read timeout for stdio operations (72 hours - covers weekend inactivity)
+    pub const DEFAULT_READ_TIMEOUT: Duration = Duration::from_secs(72 * 60 * 60);
 
     /// Default write timeout for stdio operations (10 seconds)
     pub const DEFAULT_WRITE_TIMEOUT: Duration = Duration::from_secs(10);
@@ -829,7 +829,7 @@ mod tests {
         // Verify default constants are reasonable
         assert_eq!(
             StdioTransport::DEFAULT_READ_TIMEOUT,
-            Duration::from_secs(30)
+            Duration::from_secs(72 * 60 * 60)
         );
         assert_eq!(
             StdioTransport::DEFAULT_WRITE_TIMEOUT,

@@ -166,15 +166,7 @@ async fn main() -> anyhow::Result<()> {
 
     info!("Database connection established");
 
-    // Run migrations if enabled
-    if db_config.migrate_on_startup {
-        info!("Running database migrations...");
-        storage_manager.migrate().await.map_err(|e| {
-            error!("Failed to run database migrations: {}", e);
-            e
-        })?;
-        info!("Database migrations completed");
-    }
+    // Note: Migrations are now handled in StorageManager::new() if migrate_on_startup is true
 
     // Start embedded web dashboard with environment variable support
     let web_host = cli

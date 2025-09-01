@@ -46,6 +46,7 @@ vibe-ensemble-mcp/
 ├── vibe-ensemble-mcp/          # MCP protocol implementation
 ├── vibe-ensemble-web/          # Web dashboard
 ├── vibe-ensemble-server/       # Main server application
+├── agent-templates/            # Filesystem-based prompt templates
 └── docs/                       # Documentation
 ```
 
@@ -234,6 +235,173 @@ RUST_LOG=debug cargo run --bin vibe-ensemble
 echo '{"jsonrpc":"2.0","id":1,"method":"vibe/agent/list","params":{}}' | \
   vibe-ensemble --mcp-only --transport=stdio
 ```
+
+## Agent Prompt System Architecture
+
+Vibe Ensemble provides a sophisticated dual-layer prompt system that combines built-in defaults with filesystem-based customization.
+
+### System Overview
+
+The prompt system has **two layers** that work together:
+
+1. **Built-in Templates** (Compiled into Binary)
+2. **Filesystem Templates** (Runtime Customizable)
+
+### Layer 1: Built-in Templates
+
+**Location**: `vibe-ensemble-prompts/src/templates.rs`
+
+Built-in templates are compiled directly into the binary as string constants:
+
+```rust
+pub const COORDINATOR_TEMPLATE: &str = r#"
+You are {{agent_name}}, a Claude Code Team Coordinator...
+"#;
+
+pub const WORKER_TEMPLATE: &str = r#"
+You are {{agent_name}}, a specialized Claude Code Worker Agent...
+"#;
+```
+
+**Benefits**:
+- ✅ Always available (no external dependencies)  
+- ✅ Fast loading (no filesystem I/O)
+- ✅ Version controlled with codebase
+- ✅ Immediate effect after `cargo build`
+
+### Layer 2: Filesystem Templates
+
+**Location**: `agent-templates/` directory structure
+
+```
+agent-templates/
+├── coordinator/
+│   ├── template.json          # Metadata and variables
+│   ├── agent-config.md        # Agent configuration template
+│   └── prompts/
+│       ├── system.md          # System prompt override
+│       ├── instructions.md    # Additional instructions
+│       └── examples.md        # Usage examples
+└── worker/
+    ├── template.json
+    ├── agent-config.md
+    └── prompts/
+        └── system.md
+```
+
+**Benefits**:
+- ✅ Runtime customizable (no recompilation needed)
+- ✅ Hot-swappable templates
+- ✅ Environment-specific customization
+- ✅ User-specific prompt modifications
+
+### Template Priority & Override System
+
+1. **Default**: Built-in templates are used initially
+2. **Override**: Filesystem templates override defaults when present
+3. **Fallback**: If filesystem template fails to load, falls back to built-in
+
+### Agent Registration Requirements
+
+Both template layers include comprehensive registration specifications to ensure first-attempt success:
+
+#### Coordinator Registration Template:
+```json
+{
+  "name": "coordinator-agent",
+  "agentType": "Coordinator",
+  "capabilities": [
+    "cross_project_coordination",
+    "dependency_management", 
+    "conflict_resolution",
+    "resource_allocation",
+    "workflow_orchestration"
+  ],
+  "connectionMetadata": {
+    "endpoint": "mcp://claude-code-coordinator",
+    "version": "2024-11-05",
+    "protocol_version": "2024-11-05",
+    "transport": "stdio",
+    "capabilities": "full_coordination",
+    "session_type": "coordinator_primary"
+  }
+}
+```
+
+#### Worker Registration Template:
+```json
+{
+  "name": "worker-agent-{{specialization}}",
+  "agentType": "Worker", 
+  "capabilities": [
+    "code_implementation",
+    "testing",
+    "debugging",
+    "refactoring"
+  ],
+  "connectionMetadata": {
+    "endpoint": "mcp://claude-code-worker",
+    "version": "2024-11-05", 
+    "protocol_version": "2024-11-05",
+    "specialization": "{{specialization}}",
+    "coordinator_managed": true
+  }
+}
+```
+
+### Template Management
+
+The `PromptManager` in `vibe-ensemble-prompts` handles:
+
+- Loading built-in templates at startup
+- Scanning filesystem for override templates  
+- Template rendering with Handlebars
+- Caching and hot-reload capabilities
+- Validation and error handling
+
+### Development Workflow
+
+#### For Built-in Template Changes:
+```bash
+# 1. Edit templates.rs
+vim vibe-ensemble-prompts/src/templates.rs
+
+# 2. Rebuild binary  
+cargo build --release
+
+# 3. Templates are immediately active
+./target/release/vibe-ensemble
+```
+
+#### For Filesystem Template Development:
+```bash
+# 1. Create/edit filesystem templates
+vim agent-templates/coordinator/prompts/system.md
+
+# 2. No rebuild needed - changes are live
+# Templates reload automatically or on server restart
+```
+
+### Testing Templates
+
+```bash
+# Test built-in template loading
+cargo test --package vibe-ensemble-prompts test_builtin_templates
+
+# Test filesystem template loading
+cargo test --package vibe-ensemble-prompts test_filesystem_templates
+
+# Test template rendering with variables
+cargo test --package vibe-ensemble-prompts test_template_rendering
+```
+
+### Troubleshooting
+
+**Common Issues:**
+1. **Registration failures**: Ensure all `connectionMetadata` fields are present
+2. **Template not found**: Check filesystem permissions and file paths
+3. **Invalid template syntax**: Validate Handlebars template syntax
+4. **Variable substitution errors**: Verify all required template variables are provided
 
 ## Adding New Features
 

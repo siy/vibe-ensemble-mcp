@@ -154,48 +154,79 @@ impl McpServer {
     pub async fn handle_message(&self, message: &str) -> Result<Option<String>> {
         debug!("Handling raw message: {}", message);
 
-        // Parse the JSON-RPC message
-        let parsed_message: JsonRpcRequest = serde_json::from_str(message).map_err(|e| {
+        // Parse the JSON-RPC message - could be request or notification
+        let parsed_message: JsonRpcMessage = serde_json::from_str(message).map_err(|e| {
             error!("Failed to parse JSON-RPC message: {}", e);
             Error::Protocol {
                 message: format!("Invalid JSON-RPC message: {}", e),
             }
         })?;
 
-        debug!("Parsed JSON-RPC request: {}", parsed_message.method);
+        match parsed_message {
+            JsonRpcMessage::Request(request) => {
+                debug!("Parsed JSON-RPC request: {}", request.method);
 
-        // Handle the request and generate response
-        let request_id = parsed_message.id.clone();
-        match self.handle_request(parsed_message).await {
-            Ok(Some(response)) => {
-                let response_json =
-                    serde_json::to_string(&response).map_err(Error::Serialization)?;
-                Ok(Some(response_json))
+                // Handle the request and generate response
+                let request_id = request.id.clone();
+                match self.handle_request(request).await {
+                    Ok(Some(response)) => {
+                        let response_json =
+                            serde_json::to_string(&response).map_err(Error::Serialization)?;
+                        Ok(Some(response_json))
+                    }
+                    Ok(None) => Ok(None), // No response needed
+                    Err(e) => {
+                        error!("Error handling request: {}", e);
+
+                        // Convert error to JSON-RPC error response
+                        let error_code = match &e {
+                            Error::Protocol { .. } => error_codes::INVALID_PARAMS,
+                            Error::InvalidParams { .. } => error_codes::INVALID_PARAMS,
+                            Error::Configuration { .. } => error_codes::INTERNAL_ERROR,
+                            _ => error_codes::INTERNAL_ERROR,
+                        };
+
+                        let error_response = JsonRpcResponse::error(
+                            request_id,
+                            JsonRpcError {
+                                code: error_code,
+                                message: e.to_string(),
+                                data: None,
+                            },
+                        );
+
+                        let response_json =
+                            serde_json::to_string(&error_response).map_err(Error::Serialization)?;
+                        Ok(Some(response_json))
+                    }
+                }
             }
-            Ok(None) => Ok(None), // No response needed (notification)
-            Err(e) => {
-                error!("Error handling request: {}", e);
+            JsonRpcMessage::Notification(notification) => {
+                debug!("Parsed JSON-RPC notification: {}", notification.method);
 
-                // Convert error to JSON-RPC error response
-                let error_code = match &e {
-                    Error::Protocol { .. } => error_codes::INVALID_PARAMS,
-                    Error::InvalidParams { .. } => error_codes::INVALID_PARAMS,
-                    Error::Configuration { .. } => error_codes::INTERNAL_ERROR,
-                    _ => error_codes::INTERNAL_ERROR,
-                };
+                // Handle notification (no response expected)
+                self.handle_notification(notification).await?;
+                Ok(None)
+            }
+            JsonRpcMessage::Response(_) => {
+                // We don't expect to receive responses as a server
+                warn!("Received unexpected JSON-RPC response message");
+                Ok(None)
+            }
+        }
+    }
 
-                let error_response = JsonRpcResponse::error(
-                    request_id,
-                    JsonRpcError {
-                        code: error_code,
-                        message: e.to_string(),
-                        data: None,
-                    },
-                );
-
-                let response_json =
-                    serde_json::to_string(&error_response).map_err(Error::Serialization)?;
-                Ok(Some(response_json))
+    /// Handle a JSON-RPC notification (no response expected)
+    pub async fn handle_notification(&self, notification: JsonRpcNotification) -> Result<()> {
+        match notification.method.as_str() {
+            "notifications/initialized" => {
+                debug!("Client sent initialization confirmation");
+                // Client has finished initialization, no action needed
+                Ok(())
+            }
+            _ => {
+                debug!("Ignoring unknown notification: {}", notification.method);
+                Ok(())
             }
         }
     }
@@ -1287,6 +1318,35 @@ impl McpServer {
             serde_json::Value::Number(n) => n.to_string(),
             _ => Uuid::new_v4().to_string(),
         };
+
+        // Handle coordinator replacement for Claude Code restarts
+        if agent_type == vibe_ensemble_core::agent::AgentType::Coordinator {
+            // Check for existing coordinator with the same name
+            if let Ok(Some(existing_agent)) = agent_service.get_agent_by_name(&params.name).await {
+                if matches!(
+                    existing_agent.agent_type,
+                    vibe_ensemble_core::agent::AgentType::Coordinator
+                ) {
+                    info!(
+                        "Found existing coordinator '{}' ({}), deregistering for replacement",
+                        existing_agent.name, existing_agent.id
+                    );
+                    // Deregister the existing coordinator
+                    if let Err(e) = agent_service.deregister_agent(existing_agent.id).await {
+                        warn!(
+                            "Failed to deregister existing coordinator {}: {}",
+                            existing_agent.id, e
+                        );
+                        // Continue with registration attempt anyway
+                    }
+                } else {
+                    debug!(
+                        "Agent with same name '{}' exists but is not a Coordinator; skipping replacement.",
+                        existing_agent.name
+                    );
+                }
+            }
+        }
 
         // Register the agent using the agent service
         match agent_service
