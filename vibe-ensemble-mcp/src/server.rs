@@ -1293,12 +1293,15 @@ impl McpServer {
             // Check for existing coordinator with the same name
             if let Ok(Some(existing_agent)) = agent_service.get_agent_by_name(&params.name).await {
                 info!(
-                    "Found existing coordinator '{}' ({}), deregistering for replacement", 
+                    "Found existing coordinator '{}' ({}), deregistering for replacement",
                     existing_agent.name, existing_agent.id
                 );
                 // Deregister the existing coordinator
                 if let Err(e) = agent_service.deregister_agent(existing_agent.id).await {
-                    warn!("Failed to deregister existing coordinator {}: {}", existing_agent.id, e);
+                    warn!(
+                        "Failed to deregister existing coordinator {}: {}",
+                        existing_agent.id, e
+                    );
                     // Continue with registration attempt anyway
                 }
             }
