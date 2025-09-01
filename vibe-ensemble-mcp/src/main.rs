@@ -308,8 +308,8 @@ async fn main() -> anyhow::Result<()> {
 
     // Create stdio transport with configurable buffer size
     let mut transport = TransportFactory::stdio_with_config(
-        std::time::Duration::from_secs(30), // Read timeout
-        std::time::Duration::from_secs(10), // Write timeout
+        vibe_ensemble_mcp::transport::StdioTransport::DEFAULT_READ_TIMEOUT, // 72 hours - covers weekend inactivity
+        vibe_ensemble_mcp::transport::StdioTransport::DEFAULT_WRITE_TIMEOUT, // 10 seconds
         message_buffer_size,
     );
     info!(
