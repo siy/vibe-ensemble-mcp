@@ -92,8 +92,13 @@ impl McpClient {
         &mut self,
         params: AgentRegisterParams,
     ) -> Result<AgentRegisterResult> {
-        let request =
-            JsonRpcRequest::new("vibe/agent/register", Some(serde_json::to_value(params)?));
+        let request = JsonRpcRequest::new(
+            "vibe/agent",
+            Some(serde_json::json!({
+                "operation": "register",
+                "params": serde_json::to_value(params)?
+            })),
+        );
 
         let response = self.send_request(request).await?;
 

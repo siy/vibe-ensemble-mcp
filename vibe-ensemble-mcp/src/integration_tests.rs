@@ -428,7 +428,10 @@ mod tests {
         let (server, _agent_repo) = setup_coordination_server().await;
 
         // Test status query (no parameters)
-        let status_request = JsonRpcRequest::new("vibe/agent/status", None);
+        let status_request = JsonRpcRequest::new(
+            "vibe/agent",
+            Some(json!({"operation": "status", "params": {}})),
+        );
         let request_json = serde_json::to_string(&status_request).unwrap();
         let response = server.handle_message(&request_json).await.unwrap().unwrap();
 
@@ -447,7 +450,10 @@ mod tests {
             "progress": 0.5
         });
 
-        let status_update_request = JsonRpcRequest::new("vibe/agent/status", Some(status_params));
+        let status_update_request = JsonRpcRequest::new(
+            "vibe/agent",
+            Some(json!({"operation": "status", "params": status_params})),
+        );
         let request_json = serde_json::to_string(&status_update_request).unwrap();
         let response = server.handle_message(&request_json).await.unwrap().unwrap();
 
@@ -493,7 +499,10 @@ mod tests {
         agent_repo.create(&test_agent2).await.unwrap();
 
         // Test list all agents
-        let list_request = JsonRpcRequest::new("vibe/agent/list", None);
+        let list_request = JsonRpcRequest::new(
+            "vibe/agent",
+            Some(json!({"operation": "list", "params": {}})),
+        );
         let request_json = serde_json::to_string(&list_request).unwrap();
         let response = server.handle_message(&request_json).await.unwrap().unwrap();
 
@@ -509,7 +518,10 @@ mod tests {
             "agentType": "Coordinator"
         });
 
-        let filtered_request = JsonRpcRequest::new("vibe/agent/list", Some(filter_params));
+        let filtered_request = JsonRpcRequest::new(
+            "vibe/agent",
+            Some(json!({"operation": "list", "params": filter_params})),
+        );
         let request_json = serde_json::to_string(&filtered_request).unwrap();
         let response = server.handle_message(&request_json).await.unwrap().unwrap();
 
@@ -524,7 +536,10 @@ mod tests {
             "capability": "code-review"
         });
 
-        let capability_request = JsonRpcRequest::new("vibe/agent/list", Some(capability_params));
+        let capability_request = JsonRpcRequest::new(
+            "vibe/agent",
+            Some(json!({"operation": "list", "params": capability_params})),
+        );
         let request_json = serde_json::to_string(&capability_request).unwrap();
         let response = server.handle_message(&request_json).await.unwrap().unwrap();
 
@@ -544,7 +559,10 @@ mod tests {
             "limit": 1
         });
 
-        let limit_request = JsonRpcRequest::new("vibe/agent/list", Some(limit_params));
+        let limit_request = JsonRpcRequest::new(
+            "vibe/agent",
+            Some(json!({"operation": "list", "params": limit_params})),
+        );
         let request_json = serde_json::to_string(&limit_request).unwrap();
         let response = server.handle_message(&request_json).await.unwrap().unwrap();
 
@@ -626,8 +644,10 @@ mod tests {
             "shutdownReason": "Test completion"
         });
 
-        let deregister_request =
-            JsonRpcRequest::new("vibe/agent/deregister", Some(deregister_params));
+        let deregister_request = JsonRpcRequest::new(
+            "vibe/agent",
+            Some(json!({"operation": "deregister", "params": deregister_params})),
+        );
         let request_json = serde_json::to_string(&deregister_request).unwrap();
         let response = server.handle_message(&request_json).await.unwrap().unwrap();
 
@@ -643,7 +663,10 @@ mod tests {
             "agentId": "550e8400-e29b-41d4-a716-446655440000"
         });
 
-        let invalid_request = JsonRpcRequest::new("vibe/agent/deregister", Some(invalid_params));
+        let invalid_request = JsonRpcRequest::new(
+            "vibe/agent",
+            Some(json!({"operation": "deregister", "params": invalid_params})),
+        );
         let request_json = serde_json::to_string(&invalid_request).unwrap();
         let response = server.handle_message(&request_json).await.unwrap().unwrap();
 
@@ -666,7 +689,10 @@ mod tests {
             "status": "Online"
         });
 
-        let status_request = JsonRpcRequest::new("vibe/agent/status", Some(invalid_status_params));
+        let status_request = JsonRpcRequest::new(
+            "vibe/agent",
+            Some(json!({"operation": "status", "params": invalid_status_params})),
+        );
         let request_json = serde_json::to_string(&status_request).unwrap();
         let response = server.handle_message(&request_json).await.unwrap().unwrap();
 
@@ -684,7 +710,10 @@ mod tests {
             "agentType": "InvalidType"
         });
 
-        let list_request = JsonRpcRequest::new("vibe/agent/list", Some(invalid_list_params));
+        let list_request = JsonRpcRequest::new(
+            "vibe/agent",
+            Some(json!({"operation": "list", "params": invalid_list_params})),
+        );
         let request_json = serde_json::to_string(&list_request).unwrap();
         let response = server.handle_message(&request_json).await.unwrap().unwrap();
 
@@ -696,7 +725,10 @@ mod tests {
             "shutdownReason": "Test"
         });
 
-        let deregister_request = JsonRpcRequest::new("vibe/agent/deregister", Some(missing_params));
+        let deregister_request = JsonRpcRequest::new(
+            "vibe/agent",
+            Some(json!({"operation": "deregister", "params": missing_params})),
+        );
         let request_json = serde_json::to_string(&deregister_request).unwrap();
         let response = server.handle_message(&request_json).await.unwrap().unwrap();
 
@@ -725,7 +757,10 @@ mod tests {
             }
         });
 
-        let register_request = JsonRpcRequest::new("vibe/agent/register", Some(register_params));
+        let register_request = JsonRpcRequest::new(
+            "vibe/agent",
+            Some(json!({"operation": "register", "params": register_params})),
+        );
         let request_json = serde_json::to_string(&register_request).unwrap();
         let response = server.handle_message(&request_json).await.unwrap().unwrap();
 
@@ -743,7 +778,10 @@ mod tests {
             "progress": 0.75
         });
 
-        let status_request = JsonRpcRequest::new("vibe/agent/status", Some(status_params));
+        let status_request = JsonRpcRequest::new(
+            "vibe/agent",
+            Some(json!({"operation": "status", "params": status_params})),
+        );
         let request_json = serde_json::to_string(&status_request).unwrap();
         let response = server.handle_message(&request_json).await.unwrap().unwrap();
 
@@ -751,7 +789,10 @@ mod tests {
         assert!(parsed_response.result.is_some());
 
         // 3. List agents and verify presence
-        let list_request = JsonRpcRequest::new("vibe/agent/list", None);
+        let list_request = JsonRpcRequest::new(
+            "vibe/agent",
+            Some(json!({"operation": "list", "params": {}})),
+        );
         let request_json = serde_json::to_string(&list_request).unwrap();
         let response = server.handle_message(&request_json).await.unwrap().unwrap();
 
@@ -770,8 +811,10 @@ mod tests {
             "shutdownReason": "Lifecycle test complete"
         });
 
-        let deregister_request =
-            JsonRpcRequest::new("vibe/agent/deregister", Some(deregister_params));
+        let deregister_request = JsonRpcRequest::new(
+            "vibe/agent",
+            Some(json!({"operation": "deregister", "params": deregister_params})),
+        );
         let request_json = serde_json::to_string(&deregister_request).unwrap();
         let response = server.handle_message(&request_json).await.unwrap().unwrap();
 
@@ -843,7 +886,10 @@ mod tests {
             }
         });
 
-        let register_request = JsonRpcRequest::new("vibe/agent/register", Some(register_params));
+        let register_request = JsonRpcRequest::new(
+            "vibe/agent",
+            Some(json!({"operation": "register", "params": register_params})),
+        );
         let request_json = serde_json::to_string(&register_request).unwrap();
         let response = server.handle_message(&request_json).await.unwrap().unwrap();
 
@@ -866,7 +912,10 @@ mod tests {
             "labels": ["coordination", "cross-project", "urgent"]
         });
 
-        let create_request = JsonRpcRequest::new("vibe/issue/create", Some(create_params));
+        let create_request = JsonRpcRequest::new(
+            "vibe/issue",
+            Some(json!({"operation": "create", "params": create_params})),
+        );
         let request_json = serde_json::to_string(&create_request).unwrap();
         let response = server.handle_message(&request_json).await.unwrap().unwrap();
 
@@ -888,7 +937,10 @@ mod tests {
             "limit": 10
         });
 
-        let list_request = JsonRpcRequest::new("vibe/issue/list", Some(list_params));
+        let list_request = JsonRpcRequest::new(
+            "vibe/issue",
+            Some(json!({"operation": "list", "params": list_params})),
+        );
         let request_json = serde_json::to_string(&list_request).unwrap();
         let response = server.handle_message(&request_json).await.unwrap().unwrap();
 
@@ -918,7 +970,10 @@ mod tests {
             "reason": "Agent has the required coordination capabilities"
         });
 
-        let assign_request = JsonRpcRequest::new("vibe/issue/assign", Some(assign_params));
+        let assign_request = JsonRpcRequest::new(
+            "vibe/issue",
+            Some(json!({"operation": "assign", "params": assign_params})),
+        );
         let request_json = serde_json::to_string(&assign_request).unwrap();
         let response = server.handle_message(&request_json).await.unwrap().unwrap();
 
@@ -948,7 +1003,10 @@ mod tests {
             "comment": "Work completed on coordinating the changes"
         });
 
-        let update_request = JsonRpcRequest::new("vibe/issue/update", Some(update_params));
+        let update_request = JsonRpcRequest::new(
+            "vibe/issue",
+            Some(json!({"operation": "update", "params": update_params})),
+        );
         let request_json = serde_json::to_string(&update_request).unwrap();
         let response = server.handle_message(&request_json).await.unwrap().unwrap();
 
@@ -973,8 +1031,10 @@ mod tests {
             "status": "Resolved"
         });
 
-        let assigned_list_request =
-            JsonRpcRequest::new("vibe/issue/list", Some(assigned_list_params));
+        let assigned_list_request = JsonRpcRequest::new(
+            "vibe/issue",
+            Some(json!({"operation": "list", "params": assigned_list_params})),
+        );
         let request_json = serde_json::to_string(&assigned_list_request).unwrap();
         let response = server.handle_message(&request_json).await.unwrap().unwrap();
 
@@ -995,7 +1055,10 @@ mod tests {
             "closeReason": "Task completed successfully"
         });
 
-        let close_request = JsonRpcRequest::new("vibe/issue/close", Some(close_params));
+        let close_request = JsonRpcRequest::new(
+            "vibe/issue",
+            Some(json!({"operation": "close", "params": close_params})),
+        );
         let request_json = serde_json::to_string(&close_request).unwrap();
         let response = server.handle_message(&request_json).await.unwrap().unwrap();
 
@@ -1068,7 +1131,10 @@ mod tests {
             // Missing description and createdByAgentId
         });
 
-        let create_request = JsonRpcRequest::new("vibe/issue/create", Some(invalid_create_params));
+        let create_request = JsonRpcRequest::new(
+            "vibe/issue",
+            Some(json!({"operation": "create", "params": invalid_create_params})),
+        );
         let request_json = serde_json::to_string(&create_request).unwrap();
         let response = server.handle_message(&request_json).await.unwrap().unwrap();
 
@@ -1086,7 +1152,10 @@ mod tests {
             "assignedByAgentId": "550e8400-e29b-41d4-a716-446655440001"
         });
 
-        let assign_request = JsonRpcRequest::new("vibe/issue/assign", Some(invalid_assign_params));
+        let assign_request = JsonRpcRequest::new(
+            "vibe/issue",
+            Some(json!({"operation": "assign", "params": invalid_assign_params})),
+        );
         let request_json = serde_json::to_string(&assign_request).unwrap();
         let response = server.handle_message(&request_json).await.unwrap().unwrap();
 
@@ -1104,7 +1173,10 @@ mod tests {
             "updatedByAgentId": "550e8400-e29b-41d4-a716-446655440001"
         });
 
-        let update_request = JsonRpcRequest::new("vibe/issue/update", Some(invalid_update_params));
+        let update_request = JsonRpcRequest::new(
+            "vibe/issue",
+            Some(json!({"operation": "update", "params": invalid_update_params})),
+        );
         let request_json = serde_json::to_string(&update_request).unwrap();
         let response = server.handle_message(&request_json).await.unwrap().unwrap();
 
@@ -1120,7 +1192,10 @@ mod tests {
             "priority": "InvalidPriority"
         });
 
-        let list_request = JsonRpcRequest::new("vibe/issue/list", Some(invalid_list_params));
+        let list_request = JsonRpcRequest::new(
+            "vibe/issue",
+            Some(json!({"operation": "list", "params": invalid_list_params})),
+        );
         let request_json = serde_json::to_string(&list_request).unwrap();
         let response = server.handle_message(&request_json).await.unwrap().unwrap();
 
@@ -1191,7 +1266,10 @@ mod tests {
             }
         });
 
-        let register_request = JsonRpcRequest::new("vibe/agent/register", Some(coordinator_params));
+        let register_request = JsonRpcRequest::new(
+            "vibe/agent",
+            Some(json!({"operation": "register", "params": coordinator_params})),
+        );
         let request_json = serde_json::to_string(&register_request).unwrap();
         let response = server.handle_message(&request_json).await.unwrap().unwrap();
         let parsed_response: JsonRpcResponse = serde_json::from_str(&response).unwrap();
@@ -1215,7 +1293,10 @@ mod tests {
             }
         });
 
-        let register_request = JsonRpcRequest::new("vibe/agent/register", Some(worker_params));
+        let register_request = JsonRpcRequest::new(
+            "vibe/agent",
+            Some(json!({"operation": "register", "params": worker_params})),
+        );
         let request_json = serde_json::to_string(&register_request).unwrap();
         let response = server.handle_message(&request_json).await.unwrap().unwrap();
         let parsed_response: JsonRpcResponse = serde_json::from_str(&response).unwrap();
@@ -1240,7 +1321,10 @@ mod tests {
             "assignee": worker_id
         });
 
-        let create_request = JsonRpcRequest::new("vibe/issue/create", Some(create_params));
+        let create_request = JsonRpcRequest::new(
+            "vibe/issue",
+            Some(json!({"operation": "create", "params": create_params})),
+        );
         let request_json = serde_json::to_string(&create_request).unwrap();
         let response = server.handle_message(&request_json).await.unwrap().unwrap();
         let parsed_response: JsonRpcResponse = serde_json::from_str(&response).unwrap();
@@ -1261,7 +1345,10 @@ mod tests {
             "comment": "Completed initial work on testing coordination implementation"
         });
 
-        let update_request = JsonRpcRequest::new("vibe/issue/update", Some(update_params));
+        let update_request = JsonRpcRequest::new(
+            "vibe/issue",
+            Some(json!({"operation": "update", "params": update_params})),
+        );
         let request_json = serde_json::to_string(&update_request).unwrap();
         let response = server.handle_message(&request_json).await.unwrap().unwrap();
         let parsed_response: JsonRpcResponse = serde_json::from_str(&response).unwrap();
@@ -1276,7 +1363,10 @@ mod tests {
             "status": "Resolved"
         });
 
-        let list_request = JsonRpcRequest::new("vibe/issue/list", Some(list_params));
+        let list_request = JsonRpcRequest::new(
+            "vibe/issue",
+            Some(json!({"operation": "list", "params": list_params})),
+        );
         let request_json = serde_json::to_string(&list_request).unwrap();
         let response = server.handle_message(&request_json).await.unwrap().unwrap();
         let parsed_response: JsonRpcResponse = serde_json::from_str(&response).unwrap();
@@ -1292,7 +1382,10 @@ mod tests {
             "closeReason": "Feature implemented and tested successfully"
         });
 
-        let close_request = JsonRpcRequest::new("vibe/issue/close", Some(close_params));
+        let close_request = JsonRpcRequest::new(
+            "vibe/issue",
+            Some(json!({"operation": "close", "params": close_params})),
+        );
         let request_json = serde_json::to_string(&close_request).unwrap();
         let response = server.handle_message(&request_json).await.unwrap().unwrap();
         let parsed_response: JsonRpcResponse = serde_json::from_str(&response).unwrap();
@@ -1307,7 +1400,10 @@ mod tests {
             "status": "Closed"
         });
 
-        let closed_list_request = JsonRpcRequest::new("vibe/issue/list", Some(closed_list_params));
+        let closed_list_request = JsonRpcRequest::new(
+            "vibe/issue",
+            Some(json!({"operation": "list", "params": closed_list_params})),
+        );
         let request_json = serde_json::to_string(&closed_list_request).unwrap();
         let response = server.handle_message(&request_json).await.unwrap().unwrap();
         let parsed_response: JsonRpcResponse = serde_json::from_str(&response).unwrap();
@@ -1335,14 +1431,17 @@ mod tests {
 
         // Test with snake_case agent_id (should be treated as status update)
         let status_request = JsonRpcRequest::new(
-            "vibe/agent/status",
+            "vibe/agent",
             Some(json!({
-                "agent_id": agent_id,  // Using snake_case instead of camelCase
-                "status": "online",
-                "capabilities": ["coordination", "task_execution"],
-                "metadata": {
-                    "version": "1.0.0",
-                    "transport": "stdio"
+                "operation": "status",
+                "params": {
+                    "agent_id": agent_id,  // Using snake_case instead of camelCase
+                    "status": "online",
+                    "capabilities": ["coordination", "task_execution"],
+                    "metadata": {
+                        "version": "1.0.0",
+                        "transport": "stdio"
+                    }
                 }
             })),
         );

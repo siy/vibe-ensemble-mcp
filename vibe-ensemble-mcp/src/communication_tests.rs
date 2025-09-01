@@ -127,12 +127,15 @@ mod tests {
         let request = JsonRpcRequest::new(
             "vibe/coordination",
             Some(json!({
-                "recipientAgentId": worker2_id.to_string(),
-                "messageContent": "Hey, can you help me with the API integration?",
-                "messageType": "Request",
-                "senderAgentId": worker1_id.to_string(),
-                "priority": "High",
-                "metadata": {"project": "test-project"}
+                "operation": "worker_message",
+                "params": {
+                    "recipientAgentId": worker2_id.to_string(),
+                    "messageContent": "Hey, can you help me with the API integration?",
+                    "messageType": "Request",
+                    "senderAgentId": worker1_id.to_string(),
+                    "priority": "High",
+                    "metadata": {"project": "test-project"}
+                }
             })),
         );
 
@@ -163,11 +166,14 @@ mod tests {
         let request = JsonRpcRequest::new(
             "vibe/coordination",
             Some(json!({
-                "recipientAgentId": nonexistent_agent_id.to_string(),
-                "messageContent": "This should fail",
-                "messageType": "Info",
-                "senderAgentId": worker1_id.to_string(),
-                "priority": "Normal"
+                "operation": "worker_message",
+                "params": {
+                    "recipientAgentId": nonexistent_agent_id.to_string(),
+                    "messageContent": "This should fail",
+                    "messageType": "Info",
+                    "senderAgentId": worker1_id.to_string(),
+                    "priority": "Normal"
+                }
             })),
         );
 
@@ -193,11 +199,14 @@ mod tests {
         let request = JsonRpcRequest::new(
             "vibe/coordination",
             Some(json!({
-                "recipientAgentId": worker2_id.to_string(),
-                "messageContent": "Test message",
-                "messageType": "InvalidType",
-                "senderAgentId": worker1_id.to_string(),
-                "priority": "Normal"
+                "operation": "worker_message",
+                "params": {
+                    "recipientAgentId": worker2_id.to_string(),
+                    "messageContent": "Test message",
+                    "messageType": "InvalidType",
+                    "senderAgentId": worker1_id.to_string(),
+                    "priority": "Normal"
+                }
             })),
         );
 
@@ -224,15 +233,18 @@ mod tests {
         let request = JsonRpcRequest::new(
             "vibe/coordination",
             Some(json!({
-                "targetAgentId": worker2_id.to_string(),
-                "requestType": "update_api_interface",
-                "requestDetails": {
-                    "endpoint": "/api/users",
-                    "changes": ["add_pagination", "update_schema"]
-                },
-                "requestedByAgentId": worker1_id.to_string(),
-                "deadline": deadline.to_rfc3339(),
-                "priority": "Urgent"
+                "operation": "worker_request",
+                "params": {
+                    "targetAgentId": worker2_id.to_string(),
+                    "requestType": "update_api_interface",
+                    "requestDetails": {
+                        "endpoint": "/api/users",
+                        "changes": ["add_pagination", "update_schema"]
+                    },
+                    "requestedByAgentId": worker1_id.to_string(),
+                    "deadline": deadline.to_rfc3339(),
+                    "priority": "Urgent"
+                }
             })),
         );
 
@@ -264,9 +276,12 @@ mod tests {
         let request = JsonRpcRequest::new(
             "vibe/coordination",
             Some(json!({
-                "requestType": "test_request",
-                "requestDetails": {"key": "value"},
-                "requestedByAgentId": worker1_id.to_string()
+                "operation": "worker_request",
+                "params": {
+                    "requestType": "test_request",
+                    "requestDetails": {"key": "value"},
+                    "requestedByAgentId": worker1_id.to_string()
+                }
             })),
         );
 
@@ -291,18 +306,21 @@ mod tests {
         let request = JsonRpcRequest::new(
             "vibe/coordination",
             Some(json!({
-                "coordinationType": "merge_preparation",
-                "involvedAgents": [worker1_id.to_string(), worker2_id.to_string()],
-                "scope": {
-                    "files": ["src/api/users.rs", "frontend/components/UserList.tsx"],
-                    "modules": ["user_management"],
-                    "project": "main"
-                },
-                "coordinatorAgentId": coordinator_id.to_string(),
-                "details": {
-                    "reason": "Upcoming merge conflict resolution",
-                    "timeline": "next_2_hours",
-                    "requirements": ["backup_changes", "sync_branches"]
+                "operation": "worker_coordinate",
+                "params": {
+                    "coordinationType": "merge_preparation",
+                    "involvedAgents": [worker1_id.to_string(), worker2_id.to_string()],
+                    "scope": {
+                        "files": ["src/api/users.rs", "frontend/components/UserList.tsx"],
+                        "modules": ["user_management"],
+                        "project": "main"
+                    },
+                    "coordinatorAgentId": coordinator_id.to_string(),
+                    "details": {
+                        "reason": "Upcoming merge conflict resolution",
+                        "timeline": "next_2_hours",
+                        "requirements": ["backup_changes", "sync_branches"]
+                    }
                 }
             })),
         );
@@ -340,11 +358,14 @@ mod tests {
         let request = JsonRpcRequest::new(
             "vibe/coordination",
             Some(json!({
-                "coordinationType": "test_coordination",
-                "involvedAgents": [],
-                "scope": {"project": "test"},
-                "coordinatorAgentId": coordinator_id.to_string(),
-                "details": {"reason": "test"}
+                "operation": "worker_coordinate",
+                "params": {
+                    "coordinationType": "test_coordination",
+                    "involvedAgents": [],
+                    "scope": {"project": "test"},
+                    "coordinatorAgentId": coordinator_id.to_string(),
+                    "details": {"reason": "test"}
+                }
             })),
         );
 
@@ -372,12 +393,15 @@ mod tests {
         let request = JsonRpcRequest::new(
             "vibe/coordination",
             Some(json!({
-                "projectId": "test-project",
-                "resourcePath": "src/database/migrations",
-                "lockType": "Exclusive",
-                "lockHolderAgentId": worker1_id.to_string(),
-                "duration": 3600, // 1 hour
-                "reason": "Database schema migration in progress"
+                "operation": "project_lock",
+                "params": {
+                    "projectId": "test-project",
+                    "resourcePath": "src/database/migrations",
+                    "lockType": "Exclusive",
+                    "lockHolderAgentId": worker1_id.to_string(),
+                    "duration": 3600, // 1 hour
+                    "reason": "Database schema migration in progress"
+                }
             })),
         );
 
@@ -410,10 +434,13 @@ mod tests {
         let request = JsonRpcRequest::new(
             "vibe/coordination",
             Some(json!({
-                "resourcePath": "src/test.rs",
-                "lockType": "InvalidLockType",
-                "lockHolderAgentId": worker1_id.to_string(),
-                "reason": "Testing invalid lock type"
+                "operation": "project_lock",
+                "params": {
+                    "resourcePath": "src/test.rs",
+                    "lockType": "InvalidLockType",
+                    "lockHolderAgentId": worker1_id.to_string(),
+                    "reason": "Testing invalid lock type"
+                }
             })),
         );
 
@@ -439,10 +466,13 @@ mod tests {
         let request = JsonRpcRequest::new(
             "vibe/coordination",
             Some(json!({
-                "resourcePath": "config/settings.toml",
-                "lockType": "Shared",
-                "lockHolderAgentId": worker1_id.to_string(),
-                "reason": "Reading configuration"
+                "operation": "project_lock",
+                "params": {
+                    "resourcePath": "config/settings.toml",
+                    "lockType": "Shared",
+                    "lockHolderAgentId": worker1_id.to_string(),
+                    "reason": "Reading configuration"
+                }
             })),
         );
 
@@ -472,10 +502,13 @@ mod tests {
         let request = JsonRpcRequest::new(
             "vibe/coordination",
             Some(json!({
-                "resourcePath": "src/main.rs",
-                "lockType": "Exclusive",
-                "lockHolderAgentId": nonexistent_agent_id.to_string(),
-                "reason": "Testing with nonexistent agent"
+                "operation": "project_lock",
+                "params": {
+                    "resourcePath": "src/main.rs",
+                    "lockType": "Exclusive",
+                    "lockHolderAgentId": nonexistent_agent_id.to_string(),
+                    "reason": "Testing with nonexistent agent"
+                }
             })),
         );
 
@@ -535,11 +568,14 @@ mod tests {
             let request = JsonRpcRequest::new(
                 "vibe/coordination",
                 Some(json!({
-                    "recipientAgentId": worker2_id.to_string(),
-                    "messageContent": format!("Test {} message", msg_type),
-                    "messageType": msg_type,
-                    "senderAgentId": worker1_id.to_string(),
-                    "priority": "Normal"
+                    "operation": "worker_message",
+                    "params": {
+                        "recipientAgentId": worker2_id.to_string(),
+                        "messageContent": format!("Test {} message", msg_type),
+                        "messageType": msg_type,
+                        "senderAgentId": worker1_id.to_string(),
+                        "priority": "Normal"
+                    }
                 })),
             );
 
@@ -563,11 +599,14 @@ mod tests {
             let request = JsonRpcRequest::new(
                 "vibe/coordination",
                 Some(json!({
-                    "recipientAgentId": worker2_id.to_string(),
-                    "messageContent": format!("Test {} priority message", priority),
-                    "messageType": "Info",
-                    "senderAgentId": worker1_id.to_string(),
-                    "priority": priority
+                    "operation": "worker_message",
+                    "params": {
+                        "recipientAgentId": worker2_id.to_string(),
+                        "messageContent": format!("Test {} priority message", priority),
+                        "messageType": "Info",
+                        "senderAgentId": worker1_id.to_string(),
+                        "priority": priority
+                    }
                 })),
             );
 
@@ -597,10 +636,13 @@ mod tests {
             let request = JsonRpcRequest::new(
                 "vibe/coordination",
                 Some(json!({
-                    "resourcePath": format!("test/{}.rs", lock_type.to_lowercase()),
-                    "lockType": lock_type,
-                    "lockHolderAgentId": worker1_id.to_string(),
-                    "reason": format!("Testing {} lock", lock_type)
+                    "operation": "project_lock",
+                    "params": {
+                        "resourcePath": format!("test/{}.rs", lock_type.to_lowercase()),
+                        "lockType": lock_type,
+                        "lockHolderAgentId": worker1_id.to_string(),
+                        "reason": format!("Testing {} lock", lock_type)
+                    }
                 })),
             );
 
