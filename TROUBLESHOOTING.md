@@ -18,7 +18,7 @@ Error: Storage(Database(Database(SqliteError { code: 14, message: "unable to ope
 **Solutions:**
 
 #### Option 1: Update to Latest Version (Recommended)
-The latest version (v0.2.2+) automatically uses platform-appropriate directories:
+The latest version (v0.4.0+) automatically uses platform-appropriate directories:
 - **macOS**: `~/Library/Application Support/vibe-ensemble/`
 - **Linux**: `~/.local/share/vibe-ensemble/`
 - **Windows**: `%APPDATA%\vibe-ensemble\`
@@ -140,7 +140,7 @@ curl http://127.0.0.1:8080/api/health
 
 Expected response:
 ```json
-{"status":"healthy","timestamp":"...","version":"0.2.2"}
+{"status":"healthy","timestamp":"...","version":"0.4.0"}
 ```
 
 ## Web Dashboard

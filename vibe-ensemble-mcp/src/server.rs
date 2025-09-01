@@ -217,7 +217,6 @@ impl McpServer {
             methods::VIBE_ISSUE => self.handle_vibe_issue(request).await,
             methods::VIBE_COORDINATION => self.handle_vibe_coordination(request).await,
 
-
             _ => {
                 warn!("Unknown method: {}", request.method);
                 Ok(Some(JsonRpcResponse::error(
@@ -6196,7 +6195,6 @@ impl McpServer {
     ) -> Result<Option<JsonRpcResponse>> {
         self.handle_learning_capture(request).await
     }
-
 
     /// Handle workspace operations for git worktree management
     #[tracing::instrument(skip(self, arguments), fields(op = %operation_path))]

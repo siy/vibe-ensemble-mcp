@@ -666,8 +666,7 @@ mod tests {
             "status": "Online"
         });
 
-        let status_request =
-            JsonRpcRequest::new("vibe/agent/status", Some(invalid_status_params));
+        let status_request = JsonRpcRequest::new("vibe/agent/status", Some(invalid_status_params));
         let request_json = serde_json::to_string(&status_request).unwrap();
         let response = server.handle_message(&request_json).await.unwrap().unwrap();
 
@@ -697,8 +696,7 @@ mod tests {
             "shutdownReason": "Test"
         });
 
-        let deregister_request =
-            JsonRpcRequest::new("vibe/agent/deregister", Some(missing_params));
+        let deregister_request = JsonRpcRequest::new("vibe/agent/deregister", Some(missing_params));
         let request_json = serde_json::to_string(&deregister_request).unwrap();
         let response = server.handle_message(&request_json).await.unwrap().unwrap();
 
@@ -1070,8 +1068,7 @@ mod tests {
             // Missing description and createdByAgentId
         });
 
-        let create_request =
-            JsonRpcRequest::new("vibe/issue/create", Some(invalid_create_params));
+        let create_request = JsonRpcRequest::new("vibe/issue/create", Some(invalid_create_params));
         let request_json = serde_json::to_string(&create_request).unwrap();
         let response = server.handle_message(&request_json).await.unwrap().unwrap();
 
@@ -1089,8 +1086,7 @@ mod tests {
             "assignedByAgentId": "550e8400-e29b-41d4-a716-446655440001"
         });
 
-        let assign_request =
-            JsonRpcRequest::new("vibe/issue/assign", Some(invalid_assign_params));
+        let assign_request = JsonRpcRequest::new("vibe/issue/assign", Some(invalid_assign_params));
         let request_json = serde_json::to_string(&assign_request).unwrap();
         let response = server.handle_message(&request_json).await.unwrap().unwrap();
 
@@ -1108,8 +1104,7 @@ mod tests {
             "updatedByAgentId": "550e8400-e29b-41d4-a716-446655440001"
         });
 
-        let update_request =
-            JsonRpcRequest::new("vibe/issue/update", Some(invalid_update_params));
+        let update_request = JsonRpcRequest::new("vibe/issue/update", Some(invalid_update_params));
         let request_json = serde_json::to_string(&update_request).unwrap();
         let response = server.handle_message(&request_json).await.unwrap().unwrap();
 
@@ -1196,8 +1191,7 @@ mod tests {
             }
         });
 
-        let register_request =
-            JsonRpcRequest::new("vibe/agent/register", Some(coordinator_params));
+        let register_request = JsonRpcRequest::new("vibe/agent/register", Some(coordinator_params));
         let request_json = serde_json::to_string(&register_request).unwrap();
         let response = server.handle_message(&request_json).await.unwrap().unwrap();
         let parsed_response: JsonRpcResponse = serde_json::from_str(&response).unwrap();
@@ -1313,8 +1307,7 @@ mod tests {
             "status": "Closed"
         });
 
-        let closed_list_request =
-            JsonRpcRequest::new("vibe/issue/list", Some(closed_list_params));
+        let closed_list_request = JsonRpcRequest::new("vibe/issue/list", Some(closed_list_params));
         let request_json = serde_json::to_string(&closed_list_request).unwrap();
         let response = server.handle_message(&request_json).await.unwrap().unwrap();
         let parsed_response: JsonRpcResponse = serde_json::from_str(&response).unwrap();
