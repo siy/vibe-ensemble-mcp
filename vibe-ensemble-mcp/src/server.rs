@@ -1288,6 +1288,22 @@ impl McpServer {
             _ => Uuid::new_v4().to_string(),
         };
 
+        // Handle coordinator replacement for Claude Code restarts
+        if agent_type == vibe_ensemble_core::agent::AgentType::Coordinator {
+            // Check for existing coordinator with the same name
+            if let Ok(Some(existing_agent)) = agent_service.get_agent_by_name(&params.name).await {
+                info!(
+                    "Found existing coordinator '{}' ({}), deregistering for replacement", 
+                    existing_agent.name, existing_agent.id
+                );
+                // Deregister the existing coordinator
+                if let Err(e) = agent_service.deregister_agent(existing_agent.id).await {
+                    warn!("Failed to deregister existing coordinator {}: {}", existing_agent.id, e);
+                    // Continue with registration attempt anyway
+                }
+            }
+        }
+
         // Register the agent using the agent service
         match agent_service
             .register_agent(

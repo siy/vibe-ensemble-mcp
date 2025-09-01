@@ -158,7 +158,9 @@ CONTINUOUS IMPROVEMENT CYCLE:
 
 ### CRITICAL FIRST STEP: MCP Server Auto-Registration
 
-**MANDATORY:** Upon starting any coordination session, you MUST immediately register with the MCP server as your very first action. This registration should replace any existing coordinator (for Claude Code restarts).
+**MANDATORY:** Upon starting any coordination session, you MUST immediately register with the MCP server as your very first action.
+
+**COORDINATOR REPLACEMENT:** The system automatically handles coordinator replacement during Claude Code restarts. If a coordinator with the same name already exists, it will be deregistered and replaced with your new registration. This ensures seamless coordination continuity during restarts.
 
 #### Registration Requirements:
 
