@@ -155,6 +155,7 @@ impl Agent {
     ) -> Result<Self> {
         Self::validate_name(&name)?;
         Self::validate_capabilities(&capabilities)?;
+        connection_metadata.validate()?;
 
         let now = Utc::now();
         Ok(Self {
@@ -681,20 +682,17 @@ impl ConnectionMetadata {
         Self::validate_endpoint(&endpoint)?;
         Self::validate_protocol_version(&protocol_version)?;
 
-        Ok(Self {
-            endpoint,
-            protocol_version,
-            session_id,
-            version: None,
-            transport: None,
-            capabilities: None,
-            session_type: None,
-            project_context: None,
-            coordination_scope: None,
-            specialization: None,
-            coordinator_managed: None,
-            workspace_isolation: None,
-        })
+        let builder = ConnectionMetadataBuilder::new()
+            .endpoint(endpoint)
+            .protocol_version(protocol_version);
+
+        let builder = if let Some(id) = session_id {
+            builder.session_id(id)
+        } else {
+            builder
+        };
+
+        builder.build()
     }
 
     /// Validate endpoint URL
@@ -702,10 +700,16 @@ impl ConnectionMetadata {
         if endpoint.trim().is_empty() {
             return Err(Error::validation("Endpoint cannot be empty"));
         }
-        // Basic URL validation - should start with http:// or https://
-        if !endpoint.starts_with("http://") && !endpoint.starts_with("https://") {
+        // Support multiple URL schemes: http, https, ws, wss, system, test
+        if !endpoint.starts_with("http://")
+            && !endpoint.starts_with("https://")
+            && !endpoint.starts_with("ws://")
+            && !endpoint.starts_with("wss://")
+            && !endpoint.starts_with("system://")
+            && !endpoint.starts_with("test://")
+        {
             return Err(Error::validation(
-                "Endpoint must be a valid HTTP or HTTPS URL",
+                "Endpoint must be a valid URL with supported scheme (http, https, ws, wss, system, test)",
             ));
         }
         if endpoint.len() > 500 {
@@ -730,6 +734,13 @@ impl ConnectionMetadata {
         }
         Ok(())
     }
+
+    /// Validate all connection metadata fields
+    pub fn validate(&self) -> Result<()> {
+        Self::validate_endpoint(&self.endpoint)?;
+        Self::validate_protocol_version(&self.protocol_version)?;
+        Ok(())
+    }
 }
 
 /// Builder for constructing ConnectionMetadata instances
@@ -738,6 +749,15 @@ pub struct ConnectionMetadataBuilder {
     endpoint: Option<String>,
     protocol_version: Option<String>,
     session_id: Option<String>,
+    version: Option<String>,
+    transport: Option<String>,
+    capabilities: Option<String>,
+    session_type: Option<String>,
+    project_context: Option<String>,
+    coordination_scope: Option<String>,
+    specialization: Option<String>,
+    coordinator_managed: Option<bool>,
+    workspace_isolation: Option<bool>,
 }
 
 impl ConnectionMetadataBuilder {
@@ -747,6 +767,15 @@ impl ConnectionMetadataBuilder {
             endpoint: None,
             protocol_version: None,
             session_id: None,
+            version: None,
+            transport: None,
+            capabilities: None,
+            session_type: None,
+            project_context: None,
+            coordination_scope: None,
+            specialization: None,
+            coordinator_managed: None,
+            workspace_isolation: None,
         }
     }
 
@@ -768,6 +797,60 @@ impl ConnectionMetadataBuilder {
         self
     }
 
+    /// Set the version
+    pub fn version<S: Into<String>>(mut self, version: S) -> Self {
+        self.version = Some(version.into());
+        self
+    }
+
+    /// Set the transport
+    pub fn transport<S: Into<String>>(mut self, transport: S) -> Self {
+        self.transport = Some(transport.into());
+        self
+    }
+
+    /// Set the capabilities
+    pub fn capabilities<S: Into<String>>(mut self, capabilities: S) -> Self {
+        self.capabilities = Some(capabilities.into());
+        self
+    }
+
+    /// Set the session type
+    pub fn session_type<S: Into<String>>(mut self, session_type: S) -> Self {
+        self.session_type = Some(session_type.into());
+        self
+    }
+
+    /// Set the project context
+    pub fn project_context<S: Into<String>>(mut self, project_context: S) -> Self {
+        self.project_context = Some(project_context.into());
+        self
+    }
+
+    /// Set the coordination scope
+    pub fn coordination_scope<S: Into<String>>(mut self, coordination_scope: S) -> Self {
+        self.coordination_scope = Some(coordination_scope.into());
+        self
+    }
+
+    /// Set the specialization
+    pub fn specialization<S: Into<String>>(mut self, specialization: S) -> Self {
+        self.specialization = Some(specialization.into());
+        self
+    }
+
+    /// Set the coordinator managed flag
+    pub fn coordinator_managed(mut self, coordinator_managed: bool) -> Self {
+        self.coordinator_managed = Some(coordinator_managed);
+        self
+    }
+
+    /// Set the workspace isolation flag
+    pub fn workspace_isolation(mut self, workspace_isolation: bool) -> Self {
+        self.workspace_isolation = Some(workspace_isolation);
+        self
+    }
+
     /// Build the ConnectionMetadata instance
     pub fn build(self) -> Result<ConnectionMetadata> {
         let endpoint = self
@@ -777,7 +860,24 @@ impl ConnectionMetadataBuilder {
             .protocol_version
             .ok_or_else(|| Error::validation("Protocol version is required"))?;
 
-        ConnectionMetadata::new(endpoint, protocol_version, self.session_id)
+        // Validate the endpoint and protocol version before building
+        ConnectionMetadata::validate_endpoint(&endpoint)?;
+        ConnectionMetadata::validate_protocol_version(&protocol_version)?;
+
+        Ok(ConnectionMetadata {
+            endpoint,
+            protocol_version,
+            session_id: self.session_id,
+            version: self.version,
+            transport: self.transport,
+            capabilities: self.capabilities,
+            session_type: self.session_type,
+            project_context: self.project_context,
+            coordination_scope: self.coordination_scope,
+            specialization: self.specialization,
+            coordinator_managed: self.coordinator_managed,
+            workspace_isolation: self.workspace_isolation,
+        })
     }
 }
 
