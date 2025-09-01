@@ -1492,4 +1492,33 @@ mod tests {
         assert!(result.get("total_agents").is_none());
         assert!(result.get("online_agents").is_none());
     }
+
+    /// Test handling of JSON-RPC notifications (no response expected)
+    #[tokio::test]
+    async fn test_notification_handling() {
+        let (server, _agent_repo) = setup_coordination_server().await;
+
+        // Test notifications/initialized notification
+        let notification_json = r#"{"method":"notifications/initialized","jsonrpc":"2.0"}"#;
+        let response = server.handle_message(notification_json).await.unwrap();
+
+        // Notifications should not return a response
+        assert!(
+            response.is_none(),
+            "Notifications should not return a response"
+        );
+
+        // Test unknown notification
+        let unknown_notification_json = r#"{"method":"notifications/unknown","jsonrpc":"2.0"}"#;
+        let response = server
+            .handle_message(unknown_notification_json)
+            .await
+            .unwrap();
+
+        // Unknown notifications should also not return a response
+        assert!(
+            response.is_none(),
+            "Unknown notifications should not return a response"
+        );
+    }
 }
