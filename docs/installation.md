@@ -34,7 +34,7 @@ Get-FileHash .\install.ps1 -Algorithm SHA256
 The installer will:
 1. Download the latest binary for your platform
 2. Install it to your PATH
-3. Create the data directory at `~/.vibe-ensemble/`
+3. Create the data directory at `./.vibe-ensemble/` (current directory)
 4. Verify the installation
 
 ## Manual Installation
@@ -111,7 +111,7 @@ vibe-ensemble
 ```
 
 This will:
-- Create the database at `~/.vibe-ensemble/data.db`
+- Create the database at `./.vibe-ensemble/data.db` (current directory)
 - Start the web server on http://127.0.0.1:8080
 - Print startup information
 
@@ -119,10 +119,7 @@ You should see:
 ```
 🚀 Vibe Ensemble started successfully
 📊 Web dashboard: http://127.0.0.1:8080
-💾 Database: (see Data Directory section)
-  - macOS: ~/Library/Application Support/vibe-ensemble/data.db
-  - Linux: ~/.local/share/vibe-ensemble/data.db
-  - Windows: %APPDATA%/vibe-ensemble/data.db
+💾 Database: ./.vibe-ensemble/data.db (current directory)
 🔧 Configuration: Default settings
 ```
 
@@ -193,14 +190,13 @@ export RUST_LOG=info
 
 ## Data Directory
 
-Vibe Ensemble stores its data in:
-- **macOS**: `~/Library/Application Support/vibe-ensemble/`
-- **Linux**: `~/.local/share/vibe-ensemble/`
-- **Windows**: `%APPDATA%/vibe-ensemble/`
+Vibe Ensemble stores its data in `./.vibe-ensemble/` directory relative to your current working directory.
 
 This directory contains:
 - `data.db` - SQLite database with agents, issues, and knowledge
 - `logs/` - Application logs (if file logging is enabled)
+
+This approach ensures each project has its own coordination database, making project-scoped coordination more logical and organized.
 
 ## Updating
 
@@ -252,10 +248,10 @@ chmod -R 755 ~/.local/share/vibe-ensemble/
 
 ```bash
 # Check database permissions
-ls -la ~/.local/share/vibe-ensemble/data.db
+ls -la ./.vibe-ensemble/data.db
 
 # Reset database (⚠️ this deletes all data)
-rm ~/.local/share/vibe-ensemble/data.db
+rm ./.vibe-ensemble/data.db
 vibe-ensemble  # Will recreate empty database
 ```
 

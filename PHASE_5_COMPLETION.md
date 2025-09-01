@@ -17,7 +17,7 @@ This document summarizes the completion of Phase 5: Process Lifecycle Integratio
 vibe-ensemble [OPTIONS]
 
 OPTIONS:
-    --db-path <PATH>              Database file path [default: ~/.vibe-ensemble/data.db]
+    --db-path <PATH>              Database file path [default: .vibe-ensemble/data.db]
     --web-host <HOST>             Web dashboard host [default: 127.0.0.1]
     --web-port <PORT>             Web dashboard port [default: 8080]  
     --message-buffer-size <SIZE>  Message buffer size [default: 64KB]

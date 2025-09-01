@@ -20,7 +20,7 @@ use vibe_ensemble_mcp::{
 #[command(about = "MCP server for coordinating multiple Claude Code instances")]
 #[command(version)]
 struct Cli {
-    /// Database file path (default: ~/.vibe-ensemble/data.db)
+    /// Database file path (default: .vibe-ensemble/data.db)
     /// Environment variable: VIBE_ENSEMBLE_DB_PATH
     #[arg(long = "db-path")]
     db_path: Option<String>,
@@ -115,11 +115,11 @@ async fn main() -> anyhow::Result<()> {
         .or(cli.database) // Backward compatibility
         .or_else(|| env::var("DATABASE_URL").ok()) // Legacy support
         .unwrap_or_else(|| {
-            // Default to ~/.vibe-ensemble/data.db
-            let home_dir = dirs::home_dir().expect("Could not determine home directory");
-            let vibe_dir = home_dir.join(".vibe-ensemble");
-            std::fs::create_dir_all(&vibe_dir)
-                .expect("Could not create ~/.vibe-ensemble directory");
+            // Default to ./.vibe-ensemble/data.db (current directory)
+            let current_dir =
+                std::env::current_dir().expect("Could not determine current directory");
+            let vibe_dir = current_dir.join(".vibe-ensemble");
+            std::fs::create_dir_all(&vibe_dir).expect("Could not create .vibe-ensemble directory");
             format!("sqlite:{}", vibe_dir.join("data.db").display())
         });
 

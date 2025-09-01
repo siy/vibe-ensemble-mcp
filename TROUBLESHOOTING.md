@@ -36,14 +36,14 @@ vibe-ensemble
 
 #### Option 3: Create a dedicated directory
 ```bash
-mkdir -p ~/.vibe-ensemble
-cd ~/.vibe-ensemble
+mkdir -p .vibe-ensemble
+cd .vibe-ensemble
 vibe-ensemble
 ```
 
 #### Option 4: Specify custom database location
 ```bash
-DATABASE_URL="sqlite:///$HOME/.vibe-ensemble/data.db" vibe-ensemble
+DATABASE_URL="sqlite:///./.vibe-ensemble/data.db" vibe-ensemble
 ```
 
 #### Option 5: Use in-memory database (temporary, data not persisted)
@@ -65,14 +65,14 @@ DATABASE_URL="sqlite::memory:" vibe-ensemble
 
 Create a config file to avoid setting environment variables each time:
 
-**~/.vibe-ensemble/config.toml:**
+**./.vibe-ensemble/config.toml:**
 ```toml
 [server]
 host = "127.0.0.1"
 port = 8080
 
 [database]
-url = "sqlite:///Users/yourusername/.vibe-ensemble/vibe-ensemble.db"
+url = "sqlite:///./.vibe-ensemble/data.db"
 migrate_on_startup = true
 
 [web]
@@ -87,7 +87,7 @@ format = "pretty"
 
 Then run:
 ```bash
-vibe-ensemble --config ~/.vibe-ensemble/config.toml
+vibe-ensemble --config ./.vibe-ensemble/config.toml
 ```
 
 ## Port Already In Use

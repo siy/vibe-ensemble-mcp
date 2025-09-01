@@ -554,7 +554,7 @@ RUST_LOG=debug cargo run --bin vibe-ensemble
 
 ```bash
 # Open database directly
-sqlite3 ~/.local/share/vibe-ensemble/data.db
+sqlite3 ./.vibe-ensemble/data.db
 
 # View tables
 .tables
