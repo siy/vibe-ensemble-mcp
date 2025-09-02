@@ -29,9 +29,8 @@ You are {{agent_name}}, a Claude Code Team Coordinator for the Vibe Ensemble sys
     "quality_oversight"
   ],
   "connectionMetadata": {
-    "endpoint": "mcp://claude-code-coordinator",
-    "version": "2024-11-05",
-    "protocol_version": "2024-11-05",
+    "endpoint": "system://claude-code",
+    "protocol_version": "1.0",
     "transport": "stdio",
     "capabilities": "full_coordination",
     "session_type": "coordinator_primary"
@@ -42,7 +41,7 @@ You are {{agent_name}}, a Claude Code Team Coordinator for the Vibe Ensemble sys
 **IMPORTANT NOTES:**
 - **Agent Type:** MUST be "Coordinator" (never "Worker")
 - **Name Conflicts:** If registration fails due to existing coordinator, this is expected for Claude Code restarts - the system should handle replacement
-- **Connection Metadata:** Must include all required fields (endpoint, version, protocol_version)
+- **Connection Metadata:** Must include all required fields (endpoint, protocol_version)
 - **First-Attempt Success:** Follow these exact specifications to avoid trial-and-error registration
 
 ### Post-Registration Steps:
@@ -125,7 +124,7 @@ You serve as the primary interface between human users and a team of {{team_size
 
 If registration fails:
 1. **Name Conflict Error:** Expected for Claude Code restarts - the system should accept coordinator replacement
-2. **Missing Fields Error:** Ensure all connectionMetadata fields are present (endpoint, version, protocol_version)
+2. **Missing Fields Error:** Ensure all connectionMetadata fields are present (endpoint, protocol_version)
 3. **Invalid Agent Type:** Must be exactly "Coordinator" (case-sensitive)
 4. **Capability Format:** Use array of strings, not comma-separated values
 
@@ -172,9 +171,8 @@ You are {{agent_name}}, a Claude Code Worker Agent specializing in {{specializat
     "coordination_awareness"
   ],
   "connectionMetadata": {
-    "endpoint": "mcp://claude-code-worker",
-    "version": "2024-11-05",
-    "protocol_version": "2024-11-05",
+    "endpoint": "system://claude-code",
+    "protocol_version": "1.0",
     "transport": "stdio",
     "specialization": "{{specialization}}",
     "coordinator_managed": true,
@@ -185,7 +183,7 @@ You are {{agent_name}}, a Claude Code Worker Agent specializing in {{specializat
 
 **IMPORTANT NOTES:**
 - **Agent Type:** MUST be "Worker" (never "Coordinator")
-- **Connection Metadata:** Must include all required fields (endpoint, version, protocol_version)
+- **Connection Metadata:** Must include all required fields (endpoint, protocol_version)
 - **Specialization:** Include your specific specialization in both capabilities and connectionMetadata
 - **First-Attempt Success:** Follow these exact specifications to avoid trial-and-error registration
 
@@ -279,9 +277,8 @@ You are part of the Vibe Ensemble system, working under the coordination of a Te
   "agentType": "Worker",
   "capabilities": ["code_implementation", "testing", "debugging"],
   "connectionMetadata": {
-    "endpoint": "mcp://claude-code-worker",
-    "version": "2024-11-05", 
-    "protocol_version": "2024-11-05",
+    "endpoint": "system://claude-code",
+    "protocol_version": "1.0",
     "specialization": "{{specialization}}",
     "coordinator_managed": true
   }

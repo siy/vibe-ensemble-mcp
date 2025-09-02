@@ -5,8 +5,7 @@
 
 use clap::Parser;
 use std::env;
-use std::fs;
-use std::path::Path;
+use std::path::PathBuf;
 use std::sync::Arc;
 use tracing::{debug, error, info, warn};
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
@@ -46,6 +45,11 @@ struct Cli {
     /// Environment variable: VIBE_ENSEMBLE_LOG_LEVEL
     #[arg(long)]
     log_level: Option<String>,
+
+    /// Path to log files directory (default: ./.vibe-ensemble/logs/)
+    /// Environment variable: VIBE_ENSEMBLE_LOG_PATH
+    #[arg(long)]
+    log_path: Option<String>,
 
     /// Maximum database connections (default: 10)
     /// Environment variable: VIBE_ENSEMBLE_MAX_CONNECTIONS
@@ -145,32 +149,61 @@ async fn main() -> anyhow::Result<()> {
         }
     };
 
-    // Set up file logging alongside stderr
-    let log_file = log_dir.join("vibe-ensemble.log");
-    let file_appender = tracing_appender::rolling::never(log_dir, "vibe-ensemble.log");
-    let (file_writer, _guard) = tracing_appender::non_blocking(file_appender);
+    // Determine log path with precedence: CLI > env > default
+    let log_path = cli
+        .log_path
+        .or_else(|| env::var("VIBE_ENSEMBLE_LOG_PATH").ok())
+        .unwrap_or_else(|| "./.vibe-ensemble/logs".to_string());
 
-    // Keep guard alive for the duration of the program
-    let _log_guard = Box::leak(Box::new(_guard));
+    let log_path = PathBuf::from(&log_path);
 
-    tracing_subscriber::registry()
-        .with(
-            tracing_subscriber::EnvFilter::try_from_default_env()
-                .unwrap_or_else(|_| log_filter.into()),
-        )
-        .with(
-            tracing_subscriber::fmt::layer()
-                .with_writer(std::io::stderr)
-                .with_target(false),
-        )
-        .with(
-            tracing_subscriber::fmt::layer()
-                .with_writer(file_writer)
-                .with_target(false)
-                .with_ansi(false),
-        )
-        .init();
+    // Create log directory if it doesn't exist
+    if let Err(e) = std::fs::create_dir_all(&log_path) {
+        eprintln!(
+            "Warning: Failed to create log directory '{}': {}",
+            log_path.display(),
+            e
+        );
+        eprintln!("Falling back to stderr-only logging");
 
+        // Fallback to stderr-only logging
+        tracing_subscriber::registry()
+            .with(
+                tracing_subscriber::EnvFilter::try_from_default_env()
+                    .unwrap_or_else(|_| log_filter.into()),
+            )
+            .with(tracing_subscriber::fmt::layer().with_writer(std::io::stderr))
+            .init();
+    } else {
+        // Setup dual logging: file + stderr
+        let log_file = log_path.join("vibe-ensemble.log");
+        let file_appender = tracing_appender::rolling::daily(&log_path, "vibe-ensemble.log");
+        let (file_writer, _guard) = tracing_appender::non_blocking(file_appender);
+
+        // Keep the guard alive for the duration of the program
+        std::mem::forget(_guard);
+
+        tracing_subscriber::registry()
+            .with(
+                tracing_subscriber::EnvFilter::try_from_default_env()
+                    .unwrap_or_else(|_| log_filter.into()),
+            )
+            .with(
+                tracing_subscriber::fmt::layer()
+                    .with_writer(std::io::stderr)
+                    .with_target(false),
+            )
+            .with(
+                tracing_subscriber::fmt::layer()
+                    .with_writer(file_writer)
+                    .with_target(false)
+                    .with_ansi(false),
+            )
+            .init();
+
+        info!("Logging to file: {}", log_file.display());
+    }
+  
     info!("Logging to file: {}", log_file.display());
 
     info!("Starting Vibe Ensemble MCP Server - Claude Code Companion");

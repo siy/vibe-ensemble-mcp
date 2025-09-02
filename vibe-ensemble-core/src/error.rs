@@ -8,6 +8,9 @@ pub enum Error {
     #[error("Validation error: {message}")]
     Validation { message: String },
 
+    #[error("Multiple validation errors:\n{}", .errors.iter().enumerate().map(|(i, e)| format!("{}. {}", i + 1, e)).collect::<Vec<_>>().join("\n"))]
+    MultipleValidationErrors { errors: Vec<String> },
+
     #[error("Entity not found: {entity_type} with id {id}")]
     NotFound { entity_type: String, id: String },
 
@@ -92,6 +95,11 @@ impl Error {
         Self::Validation {
             message: message.into(),
         }
+    }
+
+    /// Create a multiple validation errors from a vector of error messages
+    pub fn multiple_validation_errors(errors: Vec<String>) -> Self {
+        Self::MultipleValidationErrors { errors }
     }
 
     /// Create a not found error for a specific entity type and ID
@@ -200,7 +208,10 @@ impl Error {
 
     /// Check if this error is a validation error
     pub fn is_validation(&self) -> bool {
-        matches!(self, Error::Validation { .. })
+        matches!(
+            self,
+            Error::Validation { .. } | Error::MultipleValidationErrors { .. }
+        )
     }
 
     /// Check if this error is a not found error
@@ -225,6 +236,7 @@ impl Error {
     pub fn category(&self) -> &'static str {
         match self {
             Error::Validation { .. } => "validation",
+            Error::MultipleValidationErrors { .. } => "validation",
             Error::NotFound { .. } => "not_found",
             Error::Serialization(_) => "serialization",
             Error::UuidParse(_) => "uuid_parse",
@@ -247,6 +259,68 @@ impl Error {
 
 /// Convenience result type for core operations
 pub type Result<T> = std::result::Result<T, Error>;
+
+/// Validation error accumulator for collecting multiple validation errors
+#[derive(Debug, Default)]
+pub struct ValidationErrors {
+    errors: Vec<String>,
+}
+
+impl ValidationErrors {
+    /// Create a new validation error accumulator
+    pub fn new() -> Self {
+        Self { errors: Vec::new() }
+    }
+
+    /// Add a validation error message
+    pub fn add<S: Into<String>>(&mut self, error: S) {
+        self.errors.push(error.into());
+    }
+
+    /// Add a result, collecting any validation errors
+    pub fn add_result<T>(&mut self, result: Result<T>) -> Option<T> {
+        match result {
+            Ok(value) => Some(value),
+            Err(error) => {
+                self.add(error.to_string());
+                None
+            }
+        }
+    }
+
+    /// Check if there are any validation errors
+    pub fn is_empty(&self) -> bool {
+        self.errors.is_empty()
+    }
+
+    /// Get the number of validation errors
+    pub fn len(&self) -> usize {
+        self.errors.len()
+    }
+
+    /// Convert to a result, returning an error if there are any validation issues
+    pub fn into_result<T>(self, success_value: T) -> Result<T> {
+        if self.errors.is_empty() {
+            Ok(success_value)
+        } else {
+            Err(Error::multiple_validation_errors(self.errors))
+        }
+    }
+
+    /// Convert to an error if there are validation issues
+    pub fn into_error(self) -> Option<Error> {
+        if self.errors.is_empty() {
+            None
+        } else {
+            Some(Error::multiple_validation_errors(self.errors))
+        }
+    }
+
+    /// Get all error messages
+    pub fn messages(&self) -> &[String] {
+        &self.errors
+    }
+}
 
 #[cfg(test)]
 mod tests {
@@ -315,5 +389,56 @@ mod tests {
             Error::already_exists("Agent", "123").category(),
             "already_exists"
         );
+    }
+
+    #[test]
+    fn test_multiple_validation_errors() {
+        let errors = vec![
+            "Field 'name' is required".to_string(),
+            "Field 'endpoint' is invalid".to_string(),
+        ];
+        let multi_error = Error::multiple_validation_errors(errors);
+
+        assert!(multi_error.is_validation());
+        assert_eq!(multi_error.category(), "validation");
+
+        let display_str = format!("{}", multi_error);
+        assert!(display_str.contains("Multiple validation errors"));
+        assert!(display_str.contains("1. Field 'name' is required"));
+        assert!(display_str.contains("2. Field 'endpoint' is invalid"));
+    }
+
+    #[test]
+    fn test_validation_errors_accumulator() {
+        let mut validator = ValidationErrors::new();
+        assert!(validator.is_empty());
+        assert_eq!(validator.len(), 0);
+
+        validator.add("First error");
+        validator.add("Second error");
+        assert!(!validator.is_empty());
+        assert_eq!(validator.len(), 2);
+
+        // Test converting to error
+        let error = validator.into_error().unwrap();
+        assert!(error.is_validation());
+    }
+
+    #[test]
+    fn test_validation_errors_with_results() {
+        let mut validator = ValidationErrors::new();
+
+        // Add successful result
+        let success_result: Result<String> = Ok("success".to_string());
+        let value = validator.add_result(success_result);
+        assert_eq!(value, Some("success".to_string()));
+
+        // Add failed result
+        let failed_result: Result<String> = Err(Error::validation("test error"));
+        let value = validator.add_result(failed_result);
+        assert_eq!(value, None);
+
+        assert_eq!(validator.len(), 1);
+        assert_eq!(validator.messages()[0], "Validation error: test error");
     }
 }

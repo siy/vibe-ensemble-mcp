@@ -95,7 +95,7 @@ pub mod message;
 pub mod orchestration;
 pub mod prompt;
 
-pub use error::{Error, Result};
+pub use error::{Error, Result, ValidationErrors};
 
 /// Common result type used throughout the core library
 pub type CoreResult<T> = std::result::Result<T, Error>;
