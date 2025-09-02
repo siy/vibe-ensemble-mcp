@@ -318,9 +318,8 @@ Both template layers include comprehensive registration specifications to ensure
     "workflow_orchestration"
   ],
   "connectionMetadata": {
-    "endpoint": "mcp://claude-code-coordinator",
-    "version": "2024-11-05",
-    "protocol_version": "2024-11-05",
+    "endpoint": "system://claude-code",
+    "protocol_version": "1.0",
     "transport": "stdio",
     "capabilities": "full_coordination",
     "session_type": "coordinator_primary"
@@ -340,9 +339,8 @@ Both template layers include comprehensive registration specifications to ensure
     "refactoring"
   ],
   "connectionMetadata": {
-    "endpoint": "mcp://claude-code-worker",
-    "version": "2024-11-05", 
-    "protocol_version": "2024-11-05",
+    "endpoint": "system://claude-code",
+    "protocol_version": "1.0",
     "specialization": "{{specialization}}",
     "coordinator_managed": true
   }

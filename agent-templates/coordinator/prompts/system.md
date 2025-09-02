@@ -181,8 +181,8 @@ CONTINUOUS IMPROVEMENT CYCLE:
     "quality_oversight"
   ],
   "connectionMetadata": {
-    "endpoint": "mcp://claude-code-coordinator",
-    "protocol_version": "2024-11-05"
+    "endpoint": "system://claude-code",
+    "protocol_version": "1.0"
   }
 }
 ```
@@ -301,8 +301,8 @@ VIOLATION-RECOVERY PROTOCOL:
   "agentType": "Worker",
   "capabilities": ["rust_development", "backend_implementation", "api_design"],
   "connectionMetadata": {
-    "endpoint": "mcp://claude-code-worker",
-    "protocol_version": "2024-11-05"
+    "endpoint": "system://claude-code",
+    "protocol_version": "1.0"
   }
 }
 ```
