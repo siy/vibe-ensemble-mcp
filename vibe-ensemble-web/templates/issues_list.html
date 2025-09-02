@@ -65,37 +65,32 @@
             </thead>
             <tbody>
                 {% for issue in issues %}
-                <tr class="issue-row" data-priority="{{ issue.priority | format("{:?}") | lower }}" data-status="{{ issue.status | format("{:?}") | lower }}">
+                <tr class="issue-row">
                     <td>
                         <strong>{{ issue.title }}</strong>
-                        {% if issue.description.len() > 80 %}
-                        <br><small class="text-muted">{{ issue.description | truncate(80) }}...</small>
-                        {% else %}
                         <br><small class="text-muted">{{ issue.description }}</small>
+                    </td>
+                    <td>
+                        <span class="priority-medium">
+                            {{ issue.priority }}
+                        </span>
+                    </td>
+                    <td>
+                        <span class="status status-open">
+                            {{ issue.status }}
+                        </span>
+                    </td>
+                    <td>
+                        {% if issue.assigned_agent_id.is_some() %}
+                        <span class="assigned-agent">
+                            <a href="/agents/{{ issue.assigned_agent_id.unwrap() }}">{{ issue.assigned_agent_id.unwrap() }}</a>
+                        </span>
+                        {% else %}
+                        <span class="text-muted">Unassigned</span>
                         {% endif %}
                     </td>
-                    <td>
-                        <span class="priority-{{ issue.priority | format("{:?}") | lower }}">
-                            {{ issue.priority | format("{:?}") }}
-                        </span>
-                    </td>
-                    <td>
-                        <span class="status status-{{ issue.status | format("{:?}") | lower | replace("_", "-") }}">
-                            {{ issue.status | format("{:?}") | replace("_", " ") }}
-                        </span>
-                    </td>
-                    <td>
-                        {% match issue.assigned_agent_id %}
-                        {% when Some with (agent_id) %}
-                        <span class="assigned-agent">
-                            <a href="/agents/{{ agent_id }}">{{ agent_id }}</a>
-                        </span>
-                        {% when None %}
-                        <span class="text-muted">Unassigned</span>
-                        {% endmatch %}
-                    </td>
-                    <td>{{ issue.created_at | relative_time }}</td>
-                    <td>{{ issue.updated_at | relative_time }}</td>
+                    <td>{{ issue.created_at.format("%Y-%m-%d %H:%M") }}</td>
+                    <td>{{ issue.updated_at.format("%Y-%m-%d %H:%M") }}</td>
                     <td>
                         <div style="display: flex; gap: 5px;">
                             <a href="/issues/{{ issue.id }}" class="btn btn-sm btn-primary">View</a>

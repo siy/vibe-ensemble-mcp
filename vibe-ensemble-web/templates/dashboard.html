@@ -34,32 +34,20 @@
     {% endmatch %}
 </div>
 
-<div class="grid grid-2">
-    <div class="card">
-        <h3>Recent Activity</h3>
-        {% if self.has_recent_activity() %}
-            <ul style="margin: 0; padding-left: 20px;" aria-live="polite" role="status" aria-atomic="false">
-                {% for activity in recent_activity %}
-                <li><strong>{{ activity.timestamp }}</strong>: {{ activity.message }}</li>
-                {% endfor %}
-            </ul>
-        {% else %}
-            <div class="alert alert-info">
-                <strong>Welcome to Vibe Ensemble Dashboard!</strong><br>
-                This is your coordination command center for managing multiple Claude Code agents.
-            </div>
-        {% endif %}
-    </div>
-
-    <div class="card">
-        <h3>Quick Actions</h3>
-        <div style="margin-top: 15px;">
-            <a href="/api/agents" class="btn btn-primary" style="margin-right: 10px; margin-bottom: 10px;">View Agents</a>
-            <a href="/api/issues" class="btn btn-secondary" style="margin-right: 10px; margin-bottom: 10px;">View Issues</a>
-            <a href="/api/stats" class="btn btn-primary" style="margin-right: 10px; margin-bottom: 10px;">System Stats</a>
-            <a href="/api/health" class="btn btn-secondary" style="margin-bottom: 10px;">Health Check</a>
+<div class="card">
+    <h3>Recent Activity</h3>
+    {% if self.has_recent_activity() %}
+        <ul style="margin: 0; padding-left: 20px;" aria-live="polite" role="status" aria-atomic="false">
+            {% for activity in recent_activity %}
+            <li><strong>{{ activity.timestamp }}</strong>: {{ activity.message }}</li>
+            {% endfor %}
+        </ul>
+    {% else %}
+        <div class="alert alert-info">
+            <strong>Welcome to Vibe Ensemble Dashboard!</strong><br>
+            This is your coordination command center for managing multiple Claude Code agents.
         </div>
-    </div>
+    {% endif %}
 </div>
 
 {% match system_metrics %}
@@ -117,50 +105,7 @@
 {% when None %}
 {% endmatch %}
 
-<div class="card">
-    <h3>System Overview</h3>
-    <div class="grid grid-3">
-        <div>
-            <h4 style="margin-bottom: 10px; color: var(--gray-700);">Agent Coordination</h4>
-            <ul style="margin: 0; padding-left: 20px; color: var(--gray-600);">
-                <li>Rich set of MCP coordination tools</li>
-                <li>Cross-project dependency tracking</li>
-                <li>Real-time worker communication</li>
-                <li>Intelligent conflict prevention</li>
-            </ul>
-        </div>
-        <div>
-            <h4 style="margin-bottom: 10px; color: var(--gray-700);">Issue Management</h4>
-            <ul style="margin: 0; padding-left: 20px; color: var(--gray-600);">
-                <li>Persistent task tracking</li>
-                <li>Priority-based workflows</li>
-                <li>Agent assignment system</li>
-                <li>Automated lifecycle management</li>
-            </ul>
-        </div>
-        <div>
-            <h4 style="margin-bottom: 10px; color: var(--gray-700);">Knowledge Repository</h4>
-            <ul style="margin: 0; padding-left: 20px; color: var(--gray-600);">
-                <li>Development pattern storage</li>
-                <li>Intelligent prompt management</li>
-                <li>A/B testing framework</li>
-                <li>Coordination specialists</li>
-            </ul>
-        </div>
-    </div>
-</div>
 
-<div class="card">
-    <h3>Web Dashboard Features</h3>
-    <div class="alert alert-success">
-        <strong>🎯 Implementation Status</strong><br>
-        ✅ REST API endpoints for all coordination operations<br>
-        ✅ Real-time system statistics and monitoring<br>
-        ✅ Modern responsive interface with Askama templates<br>
-        🚧 WebSocket integration for live updates (coming soon)<br>
-        🚧 Advanced filtering and search capabilities (coming soon)
-    </div>
-</div>
 
 {% endblock %}
 

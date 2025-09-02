@@ -421,46 +421,262 @@ body {
     color: #2563eb;
 }
 
-/* Coordination Tools */
-.coordination-tools {
+/* Problem Statement Section */
+.problem-statement {
+    padding: 100px 0;
+    background: #fef3c7;
+}
+
+.problem-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+    gap: 2rem;
+}
+
+.problem-card {
+    background: white;
+    padding: 2rem;
+    border-radius: 12px;
+    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.05);
+    text-align: center;
+    border: 2px solid #fbbf24;
+}
+
+.problem-icon {
+    font-size: 3rem;
+    margin-bottom: 1rem;
+}
+
+.problem-card h3 {
+    font-size: 1.3rem;
+    font-weight: 600;
+    margin-bottom: 1rem;
+    color: #d97706;
+}
+
+.problem-card p {
+    color: #6b7280;
+    line-height: 1.6;
+}
+
+/* Use Cases Section */
+.use-cases {
     padding: 100px 0;
     background: white;
 }
 
-.tools-grid {
+.use-case-grid {
     display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+    grid-template-columns: repeat(auto-fit, minmax(400px, 1fr));
     gap: 2rem;
 }
 
-.tool-category {
-    background: #f8fafc;
+.use-case-card {
+    background: #f9fafb;
     padding: 2rem;
     border-radius: 12px;
-    border-left: 4px solid #2563eb;
+    border: 1px solid #e5e7eb;
 }
 
-.tool-category h4 {
+.use-case-card h3 {
     font-size: 1.2rem;
     font-weight: 600;
-    margin-bottom: 1rem;
+    margin-bottom: 1.5rem;
     color: #1f2937;
 }
 
-.tool-category ul {
-    list-style: none;
+.before-after {
+    display: grid;
+    gap: 1rem;
 }
 
-.tool-category li {
+.before, .after {
+    padding: 1rem;
+    border-radius: 8px;
+}
+
+.before {
+    background: #fee2e2;
+    border-left: 4px solid #ef4444;
+}
+
+.after {
+    background: #d1fae5;
+    border-left: 4px solid #10b981;
+}
+
+.before h4, .after h4 {
+    font-size: 0.9rem;
+    font-weight: 600;
     margin-bottom: 0.5rem;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
 }
 
-.tool-category code {
+.before h4 {
+    color: #dc2626;
+}
+
+.after h4 {
+    color: #059669;
+}
+
+.before p, .after p {
+    font-size: 0.9rem;
+    line-height: 1.5;
+    color: #374151;
+}
+
+/* Setup Section Enhancements */
+.setup-highlight {
+    margin-bottom: 3rem;
+}
+
+.auto-setup-card {
+    background: linear-gradient(135deg, #10b981, #059669);
+    color: white;
+    padding: 2rem;
+    border-radius: 12px;
+    text-align: center;
+    box-shadow: 0 10px 25px rgba(16, 185, 129, 0.2);
+}
+
+.auto-setup-card h3 {
+    font-size: 1.5rem;
+    font-weight: 600;
+    margin-bottom: 1rem;
+}
+
+.auto-setup-card p {
+    font-size: 1.1rem;
+    opacity: 0.9;
+}
+
+.coordination-list {
+    list-style: none;
+    padding: 0;
+}
+
+.coordination-list li {
+    background: #f3f4f6;
+    padding: 0.75rem;
+    margin-bottom: 0.5rem;
+    border-radius: 6px;
+    border-left: 3px solid #2563eb;
+}
+
+.coordination-list code {
     background: #e5e7eb;
     padding: 0.25rem 0.5rem;
     border-radius: 4px;
     font-size: 0.9rem;
     color: #374151;
+    font-weight: 600;
+}
+
+.install-note {
+    margin-top: 1rem;
+    font-size: 0.9rem;
+    color: #6b7280;
+    font-style: italic;
+}
+
+.install-note a {
+    color: #2563eb;
+    text-decoration: none;
+}
+
+.install-note a:hover {
+    text-decoration: underline;
+}
+
+/* Coordination Tools */
+.coordination-tools {
+    padding: 100px 0;
+    background: #f9fafb;
+}
+
+.tools-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+    gap: 2rem;
+}
+
+.tool-category {
+    background: white;
+    padding: 2rem;
+    border-radius: 12px;
+    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.05);
+    text-align: center;
+    transition: all 0.3s ease;
+}
+
+.tool-category:hover {
+    transform: translateY(-5px);
+    box-shadow: 0 20px 40px rgba(0, 0, 0, 0.1);
+}
+
+.tool-icon {
+    font-size: 3rem;
+    margin-bottom: 1rem;
+}
+
+.tool-category h4 {
+    font-size: 1.3rem;
+    font-weight: 600;
+    margin-bottom: 1rem;
+    color: #2563eb;
+    font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
+}
+
+.tool-category p {
+    color: #6b7280;
+    line-height: 1.6;
+    margin-bottom: 1rem;
+}
+
+.tool-example {
+    background: #f3f4f6;
+    padding: 1rem;
+    border-radius: 8px;
+    margin-top: 1rem;
+}
+
+.tool-example em {
+    color: #059669;
+    font-style: italic;
+    font-size: 0.9rem;
+}
+
+.coordination-benefits {
+    margin-top: 3rem;
+    background: white;
+    padding: 2rem;
+    border-radius: 12px;
+    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.05);
+}
+
+.coordination-benefits h3 {
+    text-align: center;
+    font-size: 1.5rem;
+    font-weight: 600;
+    margin-bottom: 1.5rem;
+    color: #1f2937;
+}
+
+.benefits-list {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+    gap: 1rem;
+}
+
+.benefit {
+    background: #d1fae5;
+    color: #065f46;
+    padding: 1rem;
+    border-radius: 8px;
+    border-left: 4px solid #10b981;
+    font-weight: 500;
 }
 
 /* Footer */
@@ -571,5 +787,30 @@ body {
     .footer-content {
         flex-direction: column;
         text-align: center;
+    }
+    
+    .problem-grid {
+        grid-template-columns: 1fr;
+    }
+    
+    .use-case-grid {
+        grid-template-columns: 1fr;
+    }
+    
+    .use-case-card h3 {
+        font-size: 1.1rem;
+    }
+    
+    .before-after {
+        gap: 0.5rem;
+    }
+    
+    .benefits-list {
+        grid-template-columns: 1fr;
+    }
+    
+    .coordination-benefits {
+        margin-top: 2rem;
+        padding: 1.5rem;
     }
 }

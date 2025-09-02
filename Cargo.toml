@@ -11,7 +11,7 @@ resolver = "2"
 default-members = ["vibe-ensemble-mcp"]
 
 [workspace.package]
-version = "0.4.0"
+version = "0.4.1"
 edition = "2021"
 authors = ["Vibe Ensemble Team"]
 license = "Apache-2.0"
@@ -36,6 +36,7 @@ chrono = { version = "0.4", features = ["serde"] }
 # Logging and observability
 tracing = "0.1"
 tracing-subscriber = "0.3"
+tracing-appender = "0.2"
 
 # Error handling
 anyhow = "1.0"

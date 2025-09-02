@@ -189,6 +189,47 @@ impl Default for MessagesTemplate {
     }
 }
 
+/// Issues list template
+#[derive(Template)]
+#[template(path = "issues_list.html")]
+pub struct IssuesListTemplate {
+    pub title: String,
+    pub issues: Vec<Issue>,
+    pub total_count: usize,
+    pub open_count: usize,
+    pub high_priority_count: usize,
+    pub current_page: String,
+}
+
+impl IssuesListTemplate {
+    pub fn new(issues: Vec<Issue>) -> Self {
+        let total_count = issues.len();
+        let open_count = issues
+            .iter()
+            .filter(|i| matches!(i.status, vibe_ensemble_core::issue::IssueStatus::Open))
+            .count();
+        let high_priority_count = issues
+            .iter()
+            .filter(|i| {
+                matches!(
+                    i.priority,
+                    vibe_ensemble_core::issue::IssuePriority::High
+                        | vibe_ensemble_core::issue::IssuePriority::Critical
+                )
+            })
+            .count();
+
+        Self {
+            title: "Issues - Vibe Ensemble".to_string(),
+            issues,
+            total_count,
+            open_count,
+            high_priority_count,
+            current_page: "issues".to_string(),
+        }
+    }
+}
+
 // Removed complex template structures to avoid Askama compilation issues
 // Templates are now handled with simple HTML in handlers for better compatibility
 

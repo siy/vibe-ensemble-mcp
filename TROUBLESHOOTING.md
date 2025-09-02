@@ -18,7 +18,7 @@ Error: Storage(Database(Database(SqliteError { code: 14, message: "unable to ope
 **Solutions:**
 
 #### Option 1: Update to Latest Version (Recommended)
-The latest version (v0.4.0+) automatically uses platform-appropriate directories:
+The latest version (v0.4.1+) automatically uses platform-appropriate directories:
 - **macOS**: `~/Library/Application Support/vibe-ensemble/`
 - **Linux**: `~/.local/share/vibe-ensemble/`
 - **Windows**: `%APPDATA%\vibe-ensemble\`
@@ -36,14 +36,14 @@ vibe-ensemble
 
 #### Option 3: Create a dedicated directory
 ```bash
-mkdir -p ~/.vibe-ensemble
-cd ~/.vibe-ensemble
+mkdir -p .vibe-ensemble
+cd .vibe-ensemble
 vibe-ensemble
 ```
 
 #### Option 4: Specify custom database location
 ```bash
-DATABASE_URL="sqlite:///$HOME/.vibe-ensemble/data.db" vibe-ensemble
+DATABASE_URL="sqlite:///./.vibe-ensemble/data.db" vibe-ensemble
 ```
 
 #### Option 5: Use in-memory database (temporary, data not persisted)
@@ -65,14 +65,14 @@ DATABASE_URL="sqlite::memory:" vibe-ensemble
 
 Create a config file to avoid setting environment variables each time:
 
-**~/.vibe-ensemble/config.toml:**
+**./.vibe-ensemble/config.toml:**
 ```toml
 [server]
 host = "127.0.0.1"
 port = 8080
 
 [database]
-url = "sqlite:///Users/yourusername/.vibe-ensemble/vibe-ensemble.db"
+url = "sqlite:///./.vibe-ensemble/data.db"
 migrate_on_startup = true
 
 [web]
@@ -87,7 +87,7 @@ format = "pretty"
 
 Then run:
 ```bash
-vibe-ensemble --config ~/.vibe-ensemble/config.toml
+vibe-ensemble --config ./.vibe-ensemble/config.toml
 ```
 
 ## Port Already In Use
@@ -140,7 +140,7 @@ curl http://127.0.0.1:8080/api/health
 
 Expected response:
 ```json
-{"status":"healthy","timestamp":"...","version":"0.4.0"}
+{"status":"healthy","timestamp":"...","version":"0.4.1"}
 ```
 
 ## Web Dashboard

@@ -188,6 +188,180 @@ pub struct AgentRegisterParams {
     pub connection_metadata: serde_json::Value,
 }
 
+impl AgentRegisterParams {
+    /// Create AgentRegisterParams with intelligent defaults for common coordination patterns
+    pub fn from_json_with_defaults(value: serde_json::Value) -> Result<Self, serde_json::Error> {
+        // Try normal deserialization first
+        if let Ok(params) = serde_json::from_value::<AgentRegisterParams>(value.clone()) {
+            return Ok(params);
+        }
+
+        // If that fails, apply intelligent defaults based on partial data
+        let obj = value.as_object().ok_or_else(|| {
+            serde_json::Error::io(std::io::Error::new(
+                std::io::ErrorKind::InvalidData,
+                "Registration parameters must be an object",
+            ))
+        })?;
+
+        // Extract or default the name
+        let name = obj
+            .get("name")
+            .and_then(|v| v.as_str())
+            .map(|s| s.to_string())
+            .unwrap_or_else(|| "claude-code-coordinator".to_string());
+
+        // Extract or default the agent type
+        let agent_type = obj
+            .get("agentType")
+            .or_else(|| obj.get("agent_type"))
+            .and_then(|v| v.as_str())
+            .map(|s| s.to_string())
+            .unwrap_or_else(|| {
+                // Intelligent default based on name pattern
+                if name.contains("coordinator") {
+                    "Coordinator".to_string()
+                } else {
+                    "Worker".to_string()
+                }
+            });
+
+        // Extract or default capabilities
+        let capabilities = obj
+            .get("capabilities")
+            .and_then(|v| v.as_array())
+            .map(|arr| {
+                arr.iter()
+                    .filter_map(|v| v.as_str().map(|s| s.to_string()))
+                    .collect()
+            })
+            .unwrap_or_else(|| {
+                // Intelligent default based on agent type
+                if agent_type == "Coordinator" {
+                    vec![
+                        "cross_project_coordination".to_string(),
+                        "dependency_management".to_string(),
+                        "conflict_resolution".to_string(),
+                        "resource_allocation".to_string(),
+                        "workflow_orchestration".to_string(),
+                        "strategic_planning".to_string(),
+                        "quality_oversight".to_string(),
+                    ]
+                } else {
+                    vec![
+                        "task_execution".to_string(),
+                        "code_implementation".to_string(),
+                        "testing".to_string(),
+                    ]
+                }
+            });
+
+        // Extract or default connection metadata
+        let connection_metadata = obj
+            .get("connectionMetadata")
+            .or_else(|| obj.get("connection_metadata"))
+            .cloned()
+            .unwrap_or_else(|| {
+                // Intelligent default connection metadata
+                let endpoint = format!("system://{}", name);
+                serde_json::json!({
+                    "endpoint": endpoint,
+                    "protocol_version": "2024-11-05"
+                })
+            });
+
+        Ok(AgentRegisterParams {
+            name,
+            agent_type,
+            capabilities,
+            connection_metadata,
+        })
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use serde_json::json;
+
+    #[test]
+    fn test_intelligent_registration_defaults_empty() {
+        let empty_params = json!({});
+        let result = AgentRegisterParams::from_json_with_defaults(empty_params);
+        assert!(result.is_ok());
+
+        let params = result.unwrap();
+        assert_eq!(params.name, "claude-code-coordinator");
+        assert_eq!(params.agent_type, "Coordinator");
+        assert!(!params.capabilities.is_empty());
+        assert!(params
+            .capabilities
+            .contains(&"cross_project_coordination".to_string()));
+    }
+
+    #[test]
+    fn test_intelligent_registration_defaults_partial() {
+        let partial_params = json!({
+            "name": "test-worker"
+        });
+        let result = AgentRegisterParams::from_json_with_defaults(partial_params);
+        assert!(result.is_ok());
+
+        let params = result.unwrap();
+        assert_eq!(params.name, "test-worker");
+        assert_eq!(params.agent_type, "Worker");
+        assert!(params.capabilities.contains(&"task_execution".to_string()));
+
+        // Verify connection metadata has defaults
+        let metadata = params.connection_metadata.as_object().unwrap();
+        assert!(metadata.contains_key("endpoint"));
+        assert!(metadata.contains_key("protocol_version"));
+        assert_eq!(metadata["protocol_version"], "2024-11-05");
+    }
+
+    #[test]
+    fn test_intelligent_registration_coordinator_detection() {
+        let coordinator_params = json!({
+            "name": "my-coordinator-agent"
+        });
+        let result = AgentRegisterParams::from_json_with_defaults(coordinator_params);
+        assert!(result.is_ok());
+
+        let params = result.unwrap();
+        assert_eq!(params.name, "my-coordinator-agent");
+        assert_eq!(params.agent_type, "Coordinator");
+        assert!(params
+            .capabilities
+            .contains(&"conflict_resolution".to_string()));
+        assert!(params
+            .capabilities
+            .contains(&"workflow_orchestration".to_string()));
+    }
+
+    #[test]
+    fn test_full_registration_passthrough() {
+        let full_params = json!({
+            "name": "full-agent",
+            "agentType": "Worker",
+            "capabilities": ["custom_capability"],
+            "connectionMetadata": {
+                "endpoint": "custom://endpoint",
+                "protocol_version": "2024-11-05"
+            }
+        });
+        let result = AgentRegisterParams::from_json_with_defaults(full_params);
+        assert!(result.is_ok());
+
+        let params = result.unwrap();
+        assert_eq!(params.name, "full-agent");
+        assert_eq!(params.agent_type, "Worker");
+        assert_eq!(params.capabilities, vec!["custom_capability"]);
+
+        let metadata = params.connection_metadata.as_object().unwrap();
+        assert_eq!(metadata["endpoint"], "custom://endpoint");
+    }
+}
+
 /// Agent registration result
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AgentRegisterResult {

@@ -554,7 +554,7 @@ RUST_LOG=debug cargo run --bin vibe-ensemble
 
 ```bash
 # Open database directly
-sqlite3 ~/.local/share/vibe-ensemble/data.db
+sqlite3 ./.vibe-ensemble/data.db
 
 # View tables
 .tables
@@ -630,7 +630,7 @@ The web dashboard provides:
 2. **Update CHANGELOG.md** with new features and fixes
 3. **Run full test suite**: `cargo test --workspace`
 4. **Build release**: `cargo build --release`
-5. **Create git tag**: `git tag -a v0.4.0 -m "Release v0.4.0"`
+5. **Create git tag**: `git tag -a v0.4.1 -m "Release v0.4.1"`
 6. **Push changes**: `git push origin main --tags`
 7. **GitHub release**: CI will create release automatically
 
