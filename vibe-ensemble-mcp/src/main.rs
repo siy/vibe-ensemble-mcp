@@ -254,6 +254,11 @@ async fn main() -> anyhow::Result<()> {
             .map(|s| s == "true" || s == "1")
             .unwrap_or(false);
 
+    if web_only && mcp_only {
+        eprintln!("Cannot enable both --web-only and --mcp-only.");
+        return Err(anyhow::anyhow!("conflicting flags: web-only and mcp-only"));
+    }
+
     // Determine MCP WebSocket server configuration
     let mcp_host = cli
         .mcp_host

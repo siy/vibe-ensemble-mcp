@@ -903,7 +903,8 @@ async fn handle_websocket_connection(
 ) -> std::result::Result<Box<dyn Transport>, Error> {
     debug!("Handling WebSocket connection from {}", remote_addr);
 
-    // Accept the WebSocket connection directly
+    // Accept the WebSocket connection
+    // Note: For now using basic accept_async - subprotocol negotiation can be added later
     let websocket = accept_async(stream).await.map_err(|e| {
         error!(
             "Failed to accept WebSocket connection from {}: {}",

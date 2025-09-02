@@ -3534,6 +3534,7 @@ dependencies = [
  "dirs",
  "fake",
  "futures-util",
+ "http",
  "humantime",
  "hyper",
  "hyper-util",
