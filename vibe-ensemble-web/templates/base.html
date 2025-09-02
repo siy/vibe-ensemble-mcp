@@ -313,27 +313,6 @@
             color: #0c5460;
         }
 
-        /* WebSocket Status Indicator */
-        .ws-status {
-            position: fixed;
-            top: 20px;
-            right: 20px;
-            padding: 8px 12px;
-            border-radius: var(--border-radius);
-            font-size: 0.75rem;
-            font-weight: 600;
-            z-index: 1000;
-        }
-
-        .ws-connected {
-            background-color: var(--success-color);
-            color: white;
-        }
-
-        .ws-disconnected {
-            background-color: var(--danger-color);
-            color: white;
-        }
 
         /* Responsive Design */
         @media (max-width: 768px) {
@@ -414,10 +393,6 @@
     {% block extra_head %}{% endblock %}
 </head>
 <body>
-    <div class="ws-status" id="wsStatus" style="display: none;">
-        <span id="wsStatusText">Connecting...</span>
-    </div>
-
     <div class="header">
         <div class="container">
             <h1>{% block page_title %}Vibe Ensemble MCP Server{% endblock %}</h1>
@@ -428,11 +403,8 @@
                 <a href="/agents" {% if current_page == "agents" %}class="active" aria-current="page"{% endif %}>Agents</a>
                 <a href="/issues" {% if current_page == "issues" %}class="active" aria-current="page"{% endif %}>Issues</a>
                 <a href="/messages" {% if current_page == "messages" %}class="active" aria-current="page"{% endif %}>Messages</a>
-                <a href="/link-health" {% if current_page == "link-health" %}class="active" aria-current="page"{% endif %}>Link Health</a>
                 <a href="/knowledge" {% if current_page == "knowledge" %}class="active" aria-current="page"{% endif %}>Knowledge</a>
-                <a href="/admin" {% if current_page == "admin" %}class="active" aria-current="page"{% endif %}>Admin</a>
                 <a href="/api/health">API</a>
-                <a href="/logout">Logout</a>
             </nav>
         </div>
     </div>
@@ -441,145 +413,7 @@
         {% block content %}{% endblock %}
     </div>
 
-    <!-- WebSocket connection for real-time updates -->
     <script>
-        // WebSocket connection for real-time updates
-        let ws = null;
-        let wsReconnectAttempts = 0;
-        const maxReconnectAttempts = 5;
-        const wsStatusEl = document.getElementById('wsStatus');
-        const wsStatusTextEl = document.getElementById('wsStatusText');
-
-        function connectWebSocket() {
-            const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-            const wsUrl = `${protocol}//${window.location.host}/ws`;
-            
-            ws = new WebSocket(wsUrl);
-            
-            ws.onopen = function() {
-                console.log('WebSocket connected');
-                wsReconnectAttempts = 0;
-                updateWSStatus('connected', 'Live');
-            };
-            
-            ws.onmessage = function(event) {
-                try {
-                    const message = JSON.parse(event.data);
-                    handleWebSocketMessage(message);
-                } catch (e) {
-                    console.error('Error parsing WebSocket message:', e);
-                }
-            };
-            
-            ws.onclose = function() {
-                console.log('WebSocket disconnected');
-                updateWSStatus('disconnected', 'Offline');
-                
-                // Attempt to reconnect
-                if (wsReconnectAttempts < maxReconnectAttempts) {
-                    wsReconnectAttempts++;
-                    setTimeout(connectWebSocket, 2000 * wsReconnectAttempts);
-                }
-            };
-            
-            ws.onerror = function(error) {
-                console.error('WebSocket error:', error);
-                updateWSStatus('disconnected', 'Error');
-            };
-        }
-
-        function updateWSStatus(status, text) {
-            wsStatusEl.style.display = 'block';
-            wsStatusEl.className = `ws-status ws-${status}`;
-            wsStatusTextEl.textContent = text;
-            
-            if (status === 'connected') {
-                setTimeout(() => {
-                    wsStatusEl.style.display = 'none';
-                }, 3000);
-            }
-        }
-
-        function handleWebSocketMessage(message) {
-            console.log('WebSocket message:', message);
-            
-            switch (message.type) {
-                case 'StatsUpdate':
-                    updateStats(message.data);
-                    break;
-                case 'AgentStatusUpdate':
-                    updateAgentStatus(message.data);
-                    break;
-                case 'IssueCreated':
-                case 'IssueStatusUpdate':
-                    updateIssuesList();
-                    break;
-                case 'KnowledgeAdded':
-                    updateKnowledgeList();
-                    break;
-                case 'Ping':
-                    // Respond with pong
-                    if (ws && ws.readyState === WebSocket.OPEN) {
-                        ws.send(JSON.stringify({
-                            type: 'Pong',
-                            data: { timestamp: new Date().toISOString() }
-                        }));
-                    }
-                    break;
-                default:
-                    console.log('Unhandled message type:', message.type);
-            }
-        }
-
-        function updateStats(data) {
-            // Update statistics displays if present on page
-            const statElements = {
-                'agents-count': data.agents_count,
-                'issues-count': data.issues_count,
-                'messages-count': data.messages_count,
-                'knowledge-count': data.knowledge_count,
-                'prompts-count': data.prompts_count
-            };
-            
-            Object.entries(statElements).forEach(([id, value]) => {
-                const element = document.getElementById(id);
-                if (element) {
-                    element.textContent = value;
-                }
-            });
-        }
-
-        function updateAgentStatus(data) {
-            // Update agent status displays if present on page
-            const agentRows = document.querySelectorAll(`[data-agent-id="${data.agent_id}"]`);
-            agentRows.forEach(row => {
-                const statusEl = row.querySelector('.agent-status');
-                if (statusEl) {
-                    statusEl.textContent = data.status;
-                    statusEl.className = `status status-${data.status.toLowerCase()}`;
-                }
-            });
-        }
-
-        function updateIssuesList() {
-            // Refresh issues list if on issues page
-            if (window.location.pathname.startsWith('/issues')) {
-                setTimeout(() => window.location.reload(), 1000);
-            }
-        }
-
-        function updateKnowledgeList() {
-            // Refresh knowledge list if on knowledge page
-            if (window.location.pathname.startsWith('/knowledge')) {
-                setTimeout(() => window.location.reload(), 1000);
-            }
-        }
-
-        // Initialize WebSocket connection when page loads
-        document.addEventListener('DOMContentLoaded', function() {
-            connectWebSocket();
-        });
-
         {% block extra_script %}{% endblock %}
     </script>
 </body>

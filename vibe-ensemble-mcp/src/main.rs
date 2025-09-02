@@ -5,6 +5,8 @@
 
 use clap::Parser;
 use std::env;
+use std::fs;
+use std::path::Path;
 use std::sync::Arc;
 use tracing::{debug, error, info, warn};
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
@@ -67,11 +69,56 @@ struct Cli {
     /// Deprecated: Use --db-path instead
     #[arg(long, hide = true)]
     database: Option<String>,
+
+    /// Log file path (default: .vibe-ensemble/logs/)
+    /// Environment variable: VIBE_ENSEMBLE_LOG_PATH
+    #[arg(long)]
+    log_path: Option<String>,
+
+    /// Enable worker output logging to files
+    /// Environment variable: VIBE_ENSEMBLE_LOG_WORKER_OUTPUT
+    #[arg(long)]
+    log_worker_output: bool,
 }
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
     let cli = Cli::parse();
+
+    // Determine log path with precedence: CLI > env > default
+    let log_path = cli
+        .log_path
+        .or_else(|| env::var("VIBE_ENSEMBLE_LOG_PATH").ok())
+        .unwrap_or_else(|| {
+            // Default to ./.vibe-ensemble/logs/ (current directory)
+            let current_dir =
+                std::env::current_dir().expect("Could not determine current directory");
+            let log_dir = current_dir.join(".vibe-ensemble").join("logs");
+            log_dir.display().to_string()
+        });
+
+    // Create log directory if it doesn't exist
+    let log_dir = Path::new(&log_path);
+    if let Err(e) = fs::create_dir_all(log_dir) {
+        eprintln!(
+            "Warning: Could not create log directory {}: {}",
+            log_dir.display(),
+            e
+        );
+    }
+
+    // Determine worker output logging
+    let log_worker_output = cli.log_worker_output
+        || env::var("VIBE_ENSEMBLE_LOG_WORKER_OUTPUT")
+            .map(|s| s == "true" || s == "1")
+            .unwrap_or(false);
+
+    if log_worker_output {
+        info!(
+            "Worker output logging enabled - outputs will be saved to {}",
+            log_dir.display()
+        );
+    }
 
     // Determine log level with precedence: CLI > env > default
     let log_level = cli
@@ -98,15 +145,41 @@ async fn main() -> anyhow::Result<()> {
         }
     };
 
+    // Set up file logging alongside stderr
+    let log_file = log_dir.join("vibe-ensemble.log");
+    let file_appender = tracing_appender::rolling::never(log_dir, "vibe-ensemble.log");
+    let (file_writer, _guard) = tracing_appender::non_blocking(file_appender);
+
+    // Keep guard alive for the duration of the program
+    let _log_guard = Box::leak(Box::new(_guard));
+
     tracing_subscriber::registry()
         .with(
             tracing_subscriber::EnvFilter::try_from_default_env()
                 .unwrap_or_else(|_| log_filter.into()),
         )
-        .with(tracing_subscriber::fmt::layer().with_writer(std::io::stderr))
+        .with(
+            tracing_subscriber::fmt::layer()
+                .with_writer(std::io::stderr)
+                .with_target(false),
+        )
+        .with(
+            tracing_subscriber::fmt::layer()
+                .with_writer(file_writer)
+                .with_target(false)
+                .with_ansi(false),
+        )
         .init();
 
+    info!("Logging to file: {}", log_file.display());
+
     info!("Starting Vibe Ensemble MCP Server - Claude Code Companion");
+    info!("Log directory: {}", log_dir.display());
+    if log_worker_output {
+        info!("Worker output logging: enabled");
+    } else {
+        info!("Worker output logging: disabled (use --log-worker-output to enable)");
+    }
 
     // Determine database path with precedence: CLI > env var > deprecated CLI > legacy env > default
     let database_url = cli
