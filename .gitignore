@@ -30,6 +30,7 @@ Thumbs.db
 
 # Log files
 *.log
+.vibe-ensemble/
 
 .claude/
 !agent-templates/**/.claude/
