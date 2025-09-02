@@ -3,17 +3,33 @@
 //! Simplified MCP server for coordinating multiple Claude Code instances.
 //! Features stdio-only transport, SQLite database, and local web dashboard.
 
-use clap::Parser;
+use clap::{Parser, ValueEnum};
 use std::env;
-use std::path::PathBuf;
+use std::fs;
+use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use tracing::{debug, error, info, warn};
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 use vibe_ensemble_mcp::{
     server::{CoordinationServices, McpServer},
-    transport::TransportFactory,
+    transport::{TransportFactory, WebSocketServer},
     Error,
 };
+
+/// Transport type for MCP communication
+#[derive(Debug, Clone, ValueEnum)]
+enum TransportType {
+    /// Standard input/output transport (for Claude Code integration)
+    Stdio,
+    /// WebSocket transport (for multiple agent coordination)
+    Websocket,
+}
+
+impl Default for TransportType {
+    fn default() -> Self {
+        Self::Stdio
+    }
+}
 
 /// CLI for Vibe Ensemble MCP Server - Claude Code Companion
 #[derive(Parser)]
@@ -61,10 +77,30 @@ struct Cli {
     #[arg(long)]
     no_migrate: bool,
 
-    /// Run web server only (no MCP stdio transport)
+    /// Run web server only (no MCP transport)
     /// Environment variable: VIBE_ENSEMBLE_WEB_ONLY
     #[arg(long)]
     web_only: bool,
+
+    /// Run MCP server only (no web dashboard)
+    /// Environment variable: VIBE_ENSEMBLE_MCP_ONLY
+    #[arg(long)]
+    mcp_only: bool,
+
+    /// Transport type: stdio or websocket (default: stdio)
+    /// Environment variable: VIBE_ENSEMBLE_TRANSPORT
+    #[arg(long, value_enum)]
+    transport: Option<TransportType>,
+
+    /// WebSocket MCP server host (default: 127.0.0.1)
+    /// Environment variable: VIBE_ENSEMBLE_MCP_HOST
+    #[arg(long)]
+    mcp_host: Option<String>,
+
+    /// WebSocket MCP server port (default: 8081)
+    /// Environment variable: VIBE_ENSEMBLE_MCP_PORT
+    #[arg(long)]
+    mcp_port: Option<u16>,
 
     /// Deprecated: Use --log-level=debug instead
     #[arg(long, hide = true)]
@@ -73,11 +109,6 @@ struct Cli {
     /// Deprecated: Use --db-path instead
     #[arg(long, hide = true)]
     database: Option<String>,
-
-    /// Log file path (default: .vibe-ensemble/logs/)
-    /// Environment variable: VIBE_ENSEMBLE_LOG_PATH
-    #[arg(long)]
-    log_path: Option<String>,
 
     /// Enable worker output logging to files
     /// Environment variable: VIBE_ENSEMBLE_LOG_WORKER_OUTPUT
@@ -149,12 +180,6 @@ async fn main() -> anyhow::Result<()> {
         }
     };
 
-    // Determine log path with precedence: CLI > env > default
-    let log_path = cli
-        .log_path
-        .or_else(|| env::var("VIBE_ENSEMBLE_LOG_PATH").ok())
-        .unwrap_or_else(|| "./.vibe-ensemble/logs".to_string());
-
     let log_path = PathBuf::from(&log_path);
 
     // Create log directory if it doesn't exist
@@ -203,8 +228,6 @@ async fn main() -> anyhow::Result<()> {
 
         info!("Logging to file: {}", log_file.display());
     }
-  
-    info!("Logging to file: {}", log_file.display());
 
     info!("Starting Vibe Ensemble MCP Server - Claude Code Companion");
     info!("Log directory: {}", log_dir.display());
@@ -250,6 +273,48 @@ async fn main() -> anyhow::Result<()> {
         || env::var("VIBE_ENSEMBLE_WEB_ONLY")
             .map(|s| s == "true" || s == "1")
             .unwrap_or(false);
+
+    let mcp_only = cli.mcp_only
+        || env::var("VIBE_ENSEMBLE_MCP_ONLY")
+            .map(|s| s == "true" || s == "1")
+            .unwrap_or(false);
+
+    // Determine transport type with environment variable support
+    let transport_type = cli
+        .transport
+        .or_else(|| {
+            env::var("VIBE_ENSEMBLE_TRANSPORT")
+                .ok()
+                .and_then(|s| match s.to_lowercase().as_str() {
+                    "stdio" => Some(TransportType::Stdio),
+                    "websocket" => Some(TransportType::Websocket),
+                    _ => {
+                        warn!("Invalid transport type '{}', using stdio", s);
+                        None
+                    }
+                })
+        })
+        .unwrap_or_default();
+
+    // Determine MCP WebSocket server configuration
+    let mcp_host = cli
+        .mcp_host
+        .or_else(|| env::var("VIBE_ENSEMBLE_MCP_HOST").ok())
+        .unwrap_or_else(|| "127.0.0.1".to_string());
+
+    let mcp_port = cli
+        .mcp_port
+        .or_else(|| {
+            env::var("VIBE_ENSEMBLE_MCP_PORT")
+                .ok()
+                .and_then(|s| s.parse().ok())
+        })
+        .unwrap_or(WebSocketServer::DEFAULT_PORT);
+
+    info!(
+        "Transport configuration: type={:?}, websocket={}:{}",
+        transport_type, mcp_host, mcp_port
+    );
 
     // Create database configuration with smart defaults
     let db_config = vibe_ensemble_storage::manager::DatabaseConfig {
@@ -386,7 +451,7 @@ async fn main() -> anyhow::Result<()> {
 
     // Handle web-only mode with signal handling
     if web_only {
-        info!("Running in web-only mode - MCP stdio transport disabled");
+        info!("Running in web-only mode - MCP transport disabled");
         info!(
             "Web dashboard is available on http://{}:{}",
             web_host, web_port
@@ -412,18 +477,59 @@ async fn main() -> anyhow::Result<()> {
         return Ok(());
     }
 
+    // Handle MCP-only mode
+    if mcp_only {
+        info!("Running in MCP-only mode - web dashboard disabled");
+        web_handle.abort(); // Stop web server since we don't need it
+    }
+
+    // Start MCP transport based on configuration
+    match transport_type {
+        TransportType::Stdio => {
+            info!("Starting MCP server with stdio transport");
+            run_stdio_transport(server, message_buffer_size, &mut web_handle, mcp_only).await?;
+        }
+        TransportType::Websocket => {
+            info!(
+                "Starting MCP server with WebSocket transport on {}:{}",
+                mcp_host, mcp_port
+            );
+            run_websocket_transport(server, mcp_host, mcp_port, &mut web_handle, mcp_only).await?;
+        }
+    }
+
+    // Step 2: Shutdown web server gracefully
+    info!("Shutting down web dashboard...");
+    web_handle.abort();
+
+    // Give web server time to shut down gracefully
+    tokio::time::sleep(std::time::Duration::from_millis(500)).await;
+
+    // Step 3: Final cleanup and status
+    info!("All services shut down successfully");
+    info!("Vibe Ensemble MCP Server shutdown completed");
+    Ok(())
+}
+
+/// Run MCP server with stdio transport (single-agent mode)
+async fn run_stdio_transport(
+    server: McpServer,
+    message_buffer_size: usize,
+    _web_handle: &mut tokio::task::JoinHandle<()>,
+    _mcp_only: bool,
+) -> anyhow::Result<()> {
+    use vibe_ensemble_mcp::transport::StdioTransport;
+
     // Create stdio transport with configurable buffer size
     let mut transport = TransportFactory::stdio_with_config(
-        vibe_ensemble_mcp::transport::StdioTransport::DEFAULT_READ_TIMEOUT, // 72 hours - covers weekend inactivity
-        vibe_ensemble_mcp::transport::StdioTransport::DEFAULT_WRITE_TIMEOUT, // 10 seconds
+        StdioTransport::DEFAULT_READ_TIMEOUT, // 72 hours - covers weekend inactivity
+        StdioTransport::DEFAULT_WRITE_TIMEOUT, // 10 seconds
         message_buffer_size,
     );
     info!(
         "MCP server ready to accept connections via stdio (buffer: {}KB)",
         message_buffer_size / 1024
     );
-
-    // Note: Real-time WebSocket updates removed - dashboard uses request/response pattern
 
     info!("Starting MCP stdio transport loop");
 
@@ -516,16 +622,156 @@ async fn main() -> anyhow::Result<()> {
         warn!("Error closing transport: {}", e);
     }
 
-    // Step 2: Shutdown web server gracefully
-    info!("Shutting down web dashboard...");
-    web_handle.abort();
+    Ok(())
+}
 
-    // Give web server time to shut down gracefully
-    tokio::time::sleep(std::time::Duration::from_millis(500)).await;
+/// Run MCP server with WebSocket transport (multi-agent mode)
+async fn run_websocket_transport(
+    server: McpServer,
+    mcp_host: String,
+    mcp_port: u16,
+    _web_handle: &mut tokio::task::JoinHandle<()>,
+    _mcp_only: bool,
+) -> anyhow::Result<()> {
+    // Create WebSocket server
+    let ws_server = WebSocketServer::new(mcp_host, mcp_port);
+    let bind_address = ws_server.bind_address();
 
-    // Step 3: Final cleanup and status
-    info!("All services shut down successfully");
-    info!("Vibe Ensemble MCP Server shutdown completed");
+    // Check for port conflicts
+    if let Err(e) = tokio::net::TcpListener::bind(&bind_address).await {
+        match e.kind() {
+            std::io::ErrorKind::AddrInUse => {
+                error!("MCP port {} is already in use. Please choose a different port with --mcp-port or stop the conflicting service.", mcp_port);
+                return Err(anyhow::anyhow!("MCP port {} already in use", mcp_port));
+            }
+            std::io::ErrorKind::PermissionDenied => {
+                error!("Permission denied binding to MCP {}. Try using a port above 1024 or run with appropriate privileges.", bind_address);
+                return Err(anyhow::anyhow!(
+                    "Permission denied for MCP address {}",
+                    bind_address
+                ));
+            }
+            _ => {
+                error!("Failed to bind to MCP address {}: {}", bind_address, e);
+                return Err(anyhow::anyhow!(
+                    "Failed to bind to MCP {}: {}",
+                    bind_address,
+                    e
+                ));
+            }
+        }
+    }
+
+    info!("WebSocket MCP server listening on {}", bind_address);
+
+    // Start WebSocket server and handle connections
+    let mut connection_rx = ws_server
+        .start()
+        .await
+        .map_err(|e| anyhow::anyhow!("Failed to start WebSocket server: {}", e))?;
+
+    let mut active_connections = 0u64;
+    let server_start = std::time::Instant::now();
+    info!("WebSocket MCP server running - Press Ctrl+C to stop");
+
+    // Main WebSocket server loop
+    loop {
+        tokio::select! {
+            connection_result = connection_rx.recv() => {
+                match connection_result {
+                    Some(Ok(mut transport)) => {
+                        active_connections += 1;
+                        let connection_id = active_connections;
+                        info!("New WebSocket connection #{} established", connection_id);
+
+                        // Clone server for this connection
+                        let connection_server = server.clone();
+
+                        // Handle this connection in a separate task
+                        tokio::spawn(async move {
+                            let mut message_count = 0u64;
+                            loop {
+                                match transport.receive().await {
+                                    Ok(message) => {
+                                        message_count += 1;
+                                        debug!(
+                                            "Connection #{} received message {}: {} bytes",
+                                            connection_id,
+                                            message_count,
+                                            message.len()
+                                        );
+
+                                        // Process the message through MCP server
+                                        match connection_server.handle_message(&message).await {
+                                            Ok(Some(response)) => {
+                                                debug!(
+                                                    "Connection #{} sending response {}: {} bytes",
+                                                    connection_id,
+                                                    message_count,
+                                                    response.len()
+                                                );
+                                                if let Err(e) = transport.send(&response).await {
+                                                    error!("Connection #{} failed to send response: {} - closing connection", connection_id, e);
+                                                    break;
+                                                }
+                                            }
+                                            Ok(None) => {
+                                                debug!("Connection #{} no response required for message {}", connection_id, message_count);
+                                            }
+                                            Err(e) => {
+                                                error!("Connection #{} error processing message {}: {}", connection_id, message_count, e);
+                                                warn!("Connection #{} continuing message processing despite error", connection_id);
+                                            }
+                                        }
+                                    }
+                                    Err(e) => match e {
+                                        Error::Connection(msg) => {
+                                            info!("Connection #{} closed gracefully: {}", connection_id, msg);
+                                            break;
+                                        }
+                                        Error::Transport(msg) => {
+                                            error!("Connection #{} transport error: {} - closing connection", connection_id, msg);
+                                            break;
+                                        }
+                                        _ => {
+                                            error!("Connection #{} unexpected error: {} - closing connection", connection_id, e);
+                                            break;
+                                        }
+                                    }
+                                }
+                            }
+
+                            // Connection cleanup
+                            info!("Connection #{} closed after {} messages", connection_id, message_count);
+                            if let Err(e) = transport.close().await {
+                                warn!("Error closing connection #{}: {}", connection_id, e);
+                            }
+                        });
+                    }
+                    Some(Err(e)) => {
+                        error!("Error accepting WebSocket connection: {}", e);
+                        // Continue accepting other connections
+                    }
+                    None => {
+                        info!("WebSocket server ended - no more connections");
+                        break;
+                    }
+                }
+            }
+            _ = tokio::signal::ctrl_c() => {
+                info!("Received Ctrl+C signal - initiating graceful shutdown");
+                break;
+            }
+        }
+    }
+
+    // Graceful shutdown
+    let uptime = server_start.elapsed();
+    info!(
+        "Shutting down WebSocket MCP server (handled {} connections, uptime: {:?})",
+        active_connections, uptime
+    );
+
     Ok(())
 }
 

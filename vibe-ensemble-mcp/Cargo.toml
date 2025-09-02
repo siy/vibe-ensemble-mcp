@@ -40,6 +40,14 @@ serde_with = "3"
 futures-util = { workspace = true }
 humantime = "2"
 
+# WebSocket transport dependencies
+tokio-tungstenite = { workspace = true }
+hyper = { workspace = true }
+hyper-util = "0.1"
+async-stream = { workspace = true }
+base64 = { workspace = true }
+sha1 = "0.10"
+
 [dev-dependencies]
 sqlx = { workspace = true }
 fake = { version = "2.9", features = ["derive", "chrono"] }
