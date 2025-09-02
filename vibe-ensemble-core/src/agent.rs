@@ -27,7 +27,7 @@
 //!     .unwrap();
 //! ```
 
-use crate::{Error, Result};
+use crate::{Error, Result, ValidationErrors};
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
@@ -153,9 +153,17 @@ impl Agent {
         capabilities: Vec<String>,
         connection_metadata: ConnectionMetadata,
     ) -> Result<Self> {
-        Self::validate_name(&name)?;
-        Self::validate_capabilities(&capabilities)?;
-        connection_metadata.validate()?;
+        let mut validation_errors = ValidationErrors::new();
+
+        // Collect all validation errors instead of short-circuiting
+        validation_errors.add_result(Self::validate_name(&name));
+        validation_errors.add_result(Self::validate_capabilities(&capabilities));
+        validation_errors.add_result(connection_metadata.validate());
+
+        // If there are validation errors, return them all at once
+        if !validation_errors.is_empty() {
+            return Err(validation_errors.into_error().unwrap());
+        }
 
         let now = Utc::now();
         Ok(Self {
@@ -737,9 +745,14 @@ impl ConnectionMetadata {
 
     /// Validate all connection metadata fields
     pub fn validate(&self) -> Result<()> {
-        Self::validate_endpoint(&self.endpoint)?;
-        Self::validate_protocol_version(&self.protocol_version)?;
-        Ok(())
+        let mut validation_errors = ValidationErrors::new();
+
+        // Collect all validation errors instead of short-circuiting
+        validation_errors.add_result(Self::validate_endpoint(&self.endpoint));
+        validation_errors.add_result(Self::validate_protocol_version(&self.protocol_version));
+
+        // Convert to result - either success or comprehensive error list
+        validation_errors.into_result(())
     }
 }
 
@@ -853,16 +866,50 @@ impl ConnectionMetadataBuilder {
 
     /// Build the ConnectionMetadata instance
     pub fn build(self) -> Result<ConnectionMetadata> {
-        let endpoint = self
-            .endpoint
-            .ok_or_else(|| Error::validation("Endpoint is required"))?;
-        let protocol_version = self
-            .protocol_version
-            .ok_or_else(|| Error::validation("Protocol version is required"))?;
+        let mut validation_errors = ValidationErrors::new();
 
-        // Validate the endpoint and protocol version before building
-        ConnectionMetadata::validate_endpoint(&endpoint)?;
-        ConnectionMetadata::validate_protocol_version(&protocol_version)?;
+        // Check required fields and validate them
+        let endpoint = match self.endpoint {
+            Some(endpoint) => {
+                validation_errors.add_result(ConnectionMetadata::validate_endpoint(&endpoint));
+                endpoint
+            }
+            None => {
+                validation_errors.add("Connection metadata: missing required field 'endpoint'");
+                String::new() // placeholder
+            }
+        };
+
+        let protocol_version = match self.protocol_version {
+            Some(protocol_version) => {
+                validation_errors.add_result(ConnectionMetadata::validate_protocol_version(
+                    &protocol_version,
+                ));
+                protocol_version
+            }
+            None => {
+                validation_errors
+                    .add("Connection metadata: missing required field 'protocol_version'");
+                String::new() // placeholder
+            }
+        };
+
+        // If there are validation errors, return them all
+        if !validation_errors.is_empty() {
+            // Add guidance about required fields
+            let mut errors_with_guidance = validation_errors.messages().to_vec();
+            if validation_errors.len() > 1 {
+                errors_with_guidance.push(String::new()); // blank line
+                errors_with_guidance.push("Required fields for connection metadata:".to_string());
+                errors_with_guidance.push(
+                    "- endpoint: Valid URL with scheme (http, https, ws, wss, system, test)"
+                        .to_string(),
+                );
+                errors_with_guidance
+                    .push("- protocol_version: Version string (e.g., \"1.0\")".to_string());
+            }
+            return Err(Error::multiple_validation_errors(errors_with_guidance));
+        }
 
         Ok(ConnectionMetadata {
             endpoint,
@@ -1385,5 +1432,84 @@ mod tests {
             .protocol_version(long_version)
             .build();
         assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_comprehensive_validation_errors() {
+        // Test that all validation errors are collected and reported at once
+        let result = Agent::new(
+            "".to_string(), // Invalid: empty name
+            AgentType::Worker,
+            vec![], // Invalid: no capabilities
+            ConnectionMetadata {
+                endpoint: "invalid-url".to_string(), // Invalid: bad URL format
+                protocol_version: "".to_string(),    // Invalid: empty version
+                session_id: None,
+                version: None,
+                transport: None,
+                capabilities: None,
+                session_type: None,
+                project_context: None,
+                coordination_scope: None,
+                specialization: None,
+                coordinator_managed: None,
+                workspace_isolation: None,
+            },
+        );
+
+        assert!(result.is_err());
+        let error = result.unwrap_err();
+        assert!(error.is_validation());
+
+        // Check that the error contains multiple validation issues
+        let error_message = format!("{}", error);
+        assert!(error_message.contains("Multiple validation errors"));
+
+        // Should contain errors for all the invalid fields
+        assert!(
+            error_message.contains("Agent name cannot be empty") || error_message.contains("name")
+        );
+        assert!(
+            error_message.contains("at least one capability")
+                || error_message.contains("capabilities")
+        );
+        assert!(error_message.contains("valid URL") || error_message.contains("endpoint"));
+        assert!(
+            error_message.contains("Protocol version cannot be empty")
+                || error_message.contains("protocol_version")
+        );
+    }
+
+    #[test]
+    fn test_connection_metadata_comprehensive_validation() {
+        // Test that ConnectionMetadata builder collects all validation errors
+        let result = ConnectionMetadata::builder().build();
+
+        assert!(result.is_err());
+        let error = result.unwrap_err();
+        assert!(error.is_validation());
+
+        let error_message = format!("{}", error);
+        assert!(error_message.contains("Multiple validation errors"));
+        assert!(error_message.contains("missing required field 'endpoint'"));
+        assert!(error_message.contains("missing required field 'protocol_version'"));
+        assert!(error_message.contains("Required fields for connection metadata"));
+    }
+
+    #[test]
+    fn test_connection_metadata_partial_validation() {
+        // Test with one valid field and one invalid
+        let result = ConnectionMetadata::builder()
+            .endpoint("system://local") // Valid
+            .build(); // Missing protocol_version
+
+        assert!(result.is_err());
+        let error = result.unwrap_err();
+        assert!(error.is_validation());
+
+        let error_message = format!("{}", error);
+        assert!(error_message.contains("missing required field 'protocol_version'"));
+        // Should not contain endpoint error since that was valid
+        assert!(!error_message.contains("endpoint"));
     }
 }

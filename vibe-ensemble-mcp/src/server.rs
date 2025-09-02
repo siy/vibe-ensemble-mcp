@@ -1306,11 +1306,56 @@ impl McpServer {
             }
         };
 
-        // Parse connection metadata
-        let connection_metadata: ConnectionMetadata =
-            serde_json::from_value(params.connection_metadata).map_err(|e| Error::Protocol {
-                message: format!("Invalid connection metadata: {}", e),
-            })?;
+        // Parse connection metadata with comprehensive error handling
+        let connection_metadata: ConnectionMetadata = match serde_json::from_value::<
+            ConnectionMetadata,
+        >(
+            params.connection_metadata.clone()
+        ) {
+            Ok(metadata) => metadata,
+            Err(serde_error) => {
+                // If JSON deserialization fails, try to provide comprehensive validation
+                // by attempting to build ConnectionMetadata from individual fields
+                if let serde_json::Value::Object(obj) = &params.connection_metadata {
+                    let mut builder = ConnectionMetadata::builder();
+
+                    // Extract fields if present
+                    if let Some(serde_json::Value::String(endpoint)) = obj.get("endpoint") {
+                        builder = builder.endpoint(endpoint);
+                    }
+                    if let Some(serde_json::Value::String(protocol_version)) = obj
+                        .get("protocol_version")
+                        .or_else(|| obj.get("protocolVersion"))
+                    {
+                        builder = builder.protocol_version(protocol_version);
+                    }
+
+                    // Try to build and return comprehensive errors if validation fails
+                    match builder.build() {
+                        Ok(metadata) => metadata,
+                        Err(comprehensive_error) => {
+                            // Return the comprehensive validation error instead of the serde error
+                            return Ok(Some(JsonRpcResponse::error(
+                                request.id,
+                                JsonRpcError {
+                                    code: error_codes::INVALID_PARAMS,
+                                    message: format!(
+                                        "Agent registration failed:\n{}",
+                                        comprehensive_error
+                                    ),
+                                    data: None,
+                                },
+                            )));
+                        }
+                    }
+                } else {
+                    // Not a JSON object, return original serde error
+                    return Err(Error::Protocol {
+                        message: format!("Invalid connection metadata: {}", serde_error),
+                    });
+                }
+            }
+        };
 
         // Generate session ID for this registration
         let session_id = match &request.id {
@@ -1382,11 +1427,25 @@ impl McpServer {
             }
             Err(e) => {
                 error!("Failed to register agent {}: {}", params.name, e);
+
+                // Check if this is a validation error and provide better formatting
+                let error_message = match &e {
+                    vibe_ensemble_storage::Error::Core(core_error)
+                        if core_error.is_validation() =>
+                    {
+                        format!("Agent registration failed:\n{}", e)
+                    }
+                    vibe_ensemble_storage::Error::Validation { .. } => {
+                        format!("Agent registration failed:\n{}", e)
+                    }
+                    _ => format!("Agent registration failed: {}", e),
+                };
+
                 Ok(Some(JsonRpcResponse::error(
                     request.id,
                     JsonRpcError {
                         code: error_codes::AGENT_REGISTRATION_FAILED,
-                        message: format!("Agent registration failed: {}", e),
+                        message: error_message,
                         data: None,
                     },
                 )))
