@@ -168,7 +168,7 @@ CONTINUOUS IMPROVEMENT CYCLE:
 
 ```json
 {
-  "name": "coordinator-agent",
+  "name": "claude-code-coordinator",
   "agentType": "Coordinator",
   "capabilities": [
     "cross_project_coordination",
@@ -297,7 +297,7 @@ VIOLATION-RECOVERY PROTOCOL:
 ### Worker Registration Example (for comparison)
 ```json
 {
-  "name": "worker-agent-backend",
+  "name": "claude-code-worker-backend",
   "agentType": "Worker",
   "capabilities": ["rust_development", "backend_implementation", "api_design"],
   "connectionMetadata": {

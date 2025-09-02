@@ -12,8 +12,9 @@ use std::collections::HashMap;
 use std::path::PathBuf;
 use std::process::Stdio;
 use tokio::fs;
-use tokio::io::{AsyncBufReadExt, BufReader};
+use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
 use tokio::process::Command;
+use tracing::{info, trace};
 use uuid::Uuid;
 
 /// Event types from Claude Code's JSON stream output
@@ -177,6 +178,8 @@ pub struct ExecutionConfig {
     pub deploy_shared_settings: bool,
     /// Path to shared settings template (defaults to agent-templates/shared/.claude/settings.json)
     pub shared_settings_template_path: Option<PathBuf>,
+    /// Optional path to log worker output to a file
+    pub worker_output_log_path: Option<PathBuf>,
 }
 
 impl Default for ExecutionConfig {
@@ -189,6 +192,7 @@ impl Default for ExecutionConfig {
             output_format: "stream-json".to_string(),
             deploy_shared_settings: true,
             shared_settings_template_path: None,
+            worker_output_log_path: None,
         }
     }
 }
@@ -302,10 +306,22 @@ impl HeadlessClaudeExecutor {
             .env("CLAUDE_WORKSPACE_NAME", &workspace.name)
             .env("CLAUDE_TEMPLATE_NAME", &workspace.template_name);
 
+        // Log the full command line at TRACE level
+        trace!(
+            "Spawning Claude Code process: {} {}",
+            self.claude_binary_path,
+            cmd.as_std().get_args().collect::<Vec<_>>().iter().map(|arg| arg.to_string_lossy()).collect::<Vec<_>>().join(" ")
+        );
+
         // Execute command
         let mut child = cmd.spawn().map_err(|e| Error::Execution {
             message: format!("Failed to spawn Claude Code process: {}", e),
         })?;
+
+        // Log the process ID at INFO level
+        if let Some(pid) = child.id() {
+            info!("Claude Code worker process started with PID: {}", pid);
+        }
 
         let stdout = child.stdout.take().ok_or_else(|| Error::Execution {
             message: "Failed to capture stdout".to_string(),
@@ -318,7 +334,7 @@ impl HeadlessClaudeExecutor {
         // Setup timeout
         let timeout = tokio::time::timeout(
             std::time::Duration::from_secs(config.timeout_seconds),
-            self.process_stream(stdout, stderr),
+            self.process_stream(stdout, stderr, config.worker_output_log_path.as_ref()),
         );
 
         let (events, success, content, error_msg) = match timeout.await {
@@ -378,6 +394,7 @@ impl HeadlessClaudeExecutor {
         &self,
         stdout: tokio::process::ChildStdout,
         stderr: tokio::process::ChildStderr,
+        log_file_path: Option<&PathBuf>,
     ) -> Result<(Vec<ClaudeStreamEvent>, bool, String, Option<String>)> {
         let mut events = Vec::new();
         let mut success = true;
@@ -390,12 +407,53 @@ impl HeadlessClaudeExecutor {
         let stderr_reader = BufReader::new(stderr);
         let mut stderr_lines = stderr_reader.lines();
 
+        // Setup optional file logging
+        let mut log_file = if let Some(log_path) = log_file_path {
+            // Create parent directories if they don't exist
+            if let Some(parent) = log_path.parent() {
+                fs::create_dir_all(parent).await.map_err(|e| Error::Execution {
+                    message: format!("Failed to create log directory: {}", e),
+                })?;
+            }
+            
+            Some(
+                fs::OpenOptions::new()
+                    .create(true)
+                    .append(true)
+                    .open(log_path)
+                    .await
+                    .map_err(|e| Error::Execution {
+                        message: format!("Failed to open worker log file: {}", e),
+                    })?
+            )
+        } else {
+            None
+        };
+
+        // Helper macro to log to file  
+        macro_rules! log_to_file {
+            ($prefix:expr, $content:expr) => {
+                if let Some(ref mut file) = log_file {
+                    let timestamp = chrono::Utc::now().format("%Y-%m-%d %H:%M:%S%.3f UTC");
+                    let log_line = format!("[{}] {}: {}\n", timestamp, $prefix, $content);
+                    if let Err(e) = file.write_all(log_line.as_bytes()).await {
+                        eprintln!("Warning: Failed to write to worker log file: {}", e);
+                    }
+                    if let Err(e) = file.flush().await {
+                        eprintln!("Warning: Failed to flush worker log file: {}", e);
+                    }
+                }
+            };
+        }
+
         // Read from both stdout and stderr concurrently
         loop {
             tokio::select! {
                 stdout_line = stdout_lines.next_line() => {
                     match stdout_line {
                         Ok(Some(line)) => {
+                            // Log to file if enabled
+                            log_to_file!("STDOUT", &line);
                             if let Some(event) = self.parse_stream_event(&line)? {
                                 // Extract content from assistant messages
                                 if let ClaudeStreamEvent::Assistant { message, .. } = &event {
@@ -432,6 +490,8 @@ impl HeadlessClaudeExecutor {
                     match stderr_line {
                         Ok(Some(line)) => {
                             eprintln!("Claude Code stderr: {}", line);
+                            // Log to file if enabled
+                            log_to_file!("STDERR", &line);
                             // Only treat stderr as error if it contains error indicators
                             let lower_line = line.to_lowercase();
                             if error_message.is_none() &&
@@ -829,6 +889,7 @@ mod tests {
         assert!(config.verbose);
         assert!(config.deploy_shared_settings);
         assert!(config.shared_settings_template_path.is_none());
+        assert!(config.worker_output_log_path.is_none());
     }
 
     #[test]
@@ -1288,6 +1349,7 @@ mod tests {
         // Test deployment
         let config = ExecutionConfig {
             deploy_shared_settings: true,
+            worker_output_log_path: None,
             ..Default::default()
         };
 

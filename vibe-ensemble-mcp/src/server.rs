@@ -1251,8 +1251,14 @@ impl McpServer {
         debug!("Handling agent registration request");
 
         let params: AgentRegisterParams = if let Some(params) = request.params {
-            serde_json::from_value(params).map_err(|e| Error::Protocol {
-                message: format!("Invalid agent registration parameters: {}", e),
+            serde_json::from_value(params).map_err(|e| {
+                // Provide helpful error message based on the specific validation failure
+                let error_msg = if e.to_string().contains("missing field") {
+                    format!("Registration failed - {}. Required format: {{\"name\": \"agent-name-with-hyphens\", \"agentType\": \"Coordinator\", \"capabilities\": [\"capability1\"], \"connectionMetadata\": {{\"endpoint\": \"system://your-endpoint\", \"protocol_version\": \"2024-11-05\"}}}}", e)
+                } else {
+                    format!("Invalid agent registration parameters: {}", e)
+                };
+                Error::Protocol { message: error_msg }
             })?
         } else {
             return Ok(Some(JsonRpcResponse::error(

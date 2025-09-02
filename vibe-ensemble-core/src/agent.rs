@@ -153,9 +153,29 @@ impl Agent {
         capabilities: Vec<String>,
         connection_metadata: ConnectionMetadata,
     ) -> Result<Self> {
-        Self::validate_name(&name)?;
-        Self::validate_capabilities(&capabilities)?;
-        connection_metadata.validate()?;
+        // Collect all validation errors
+        let mut errors = Vec::new();
+        
+        if let Err(e) = Self::validate_name(&name) {
+            errors.push(format!("Name validation: {}", e));
+        }
+        
+        if let Err(e) = Self::validate_capabilities(&capabilities) {
+            errors.push(format!("Capabilities validation: {}", e));
+        }
+        
+        if let Err(e) = connection_metadata.validate() {
+            errors.push(format!("Connection metadata validation: {}", e));
+        }
+        
+        // If there are any errors, return them all at once
+        if !errors.is_empty() {
+            return Err(Error::validation(&format!(
+                "Agent validation failed with {} error(s): {}",
+                errors.len(),
+                errors.join("; ")
+            )));
+        }
 
         let now = Utc::now();
         Ok(Self {
