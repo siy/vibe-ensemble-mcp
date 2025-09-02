@@ -31,7 +31,6 @@ mod configuration_tests {
         assert!(help_text.contains("--db-path"));
         assert!(help_text.contains("--web-host"));
         assert!(help_text.contains("--web-port"));
-        assert!(help_text.contains("--message-buffer-size"));
         assert!(help_text.contains("--log-level"));
         assert!(help_text.contains("--max-connections"));
         assert!(help_text.contains("--no-migrate"));
@@ -60,7 +59,6 @@ mod configuration_tests {
         env_vars.insert("VIBE_ENSEMBLE_DB_PATH", db_path.to_str().unwrap());
         env_vars.insert("VIBE_ENSEMBLE_WEB_PORT", "9999");
         env_vars.insert("VIBE_ENSEMBLE_LOG_LEVEL", "debug");
-        env_vars.insert("VIBE_ENSEMBLE_MESSAGE_BUFFER_SIZE", "32768");
         env_vars.insert("VIBE_ENSEMBLE_MAX_CONNECTIONS", "20");
 
         // This test would need to run the binary with environment variables
@@ -417,8 +415,6 @@ mod claude_code_integration_tests {
                 "--",
                 "--db-path",
                 db_path.to_str().unwrap(),
-                "--message-buffer-size",
-                "32768", // 32KB buffer
                 "--log-level",
                 "debug",
             ])

@@ -63,11 +63,7 @@ pub struct AutomatedTestConfig {
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
 pub enum TransportType {
     InMemory,
-    Stdio,
-    #[allow(dead_code)]
     WebSocket,
-    #[allow(dead_code)]
-    Sse,
 }
 
 impl TransportType {
@@ -75,9 +71,7 @@ impl TransportType {
     pub fn name(&self) -> &'static str {
         match self {
             TransportType::InMemory => "In-Memory Transport",
-            TransportType::Stdio => "Standard I/O Transport",
             TransportType::WebSocket => "WebSocket Transport",
-            TransportType::Sse => "Server-Sent Events Transport",
         }
     }
 
@@ -85,9 +79,7 @@ impl TransportType {
     pub fn id(&self) -> &'static str {
         match self {
             TransportType::InMemory => "inmemory",
-            TransportType::Stdio => "stdio",
             TransportType::WebSocket => "websocket",
-            TransportType::Sse => "sse",
         }
     }
 }
@@ -347,22 +339,10 @@ impl AutomatedTestRunner {
                     .test_transport(transport, transport_type.name())
                     .await)
             }
-            TransportType::Stdio => {
-                // For Stdio, we can't easily test without stdin/stdout, so skip for now
-                Err(Error::Transport(
-                    "Stdio testing requires stdin/stdout setup".to_string(),
-                ))
-            }
             TransportType::WebSocket => {
                 // For now, return a placeholder - would need actual WebSocket server setup
                 Err(Error::Transport(
                     "WebSocket testing not yet implemented".to_string(),
-                ))
-            }
-            TransportType::Sse => {
-                // For now, return a placeholder - would need actual SSE server setup
-                Err(Error::Transport(
-                    "SSE testing not yet implemented".to_string(),
                 ))
             }
         }

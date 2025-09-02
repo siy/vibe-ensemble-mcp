@@ -1,9 +1,9 @@
 //! Vibe Ensemble MCP Server - Claude Code Companion
 //!
-//! Simplified MCP server for coordinating multiple Claude Code instances.
-//! Features stdio-only transport, SQLite database, and local web dashboard.
+//! WebSocket MCP server for coordinating multiple Claude Code instances.
+//! Features WebSocket transport, SQLite database, and local web dashboard.
 
-use clap::{Parser, ValueEnum};
+use clap::Parser;
 use std::env;
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -12,24 +12,9 @@ use tracing::{debug, error, info, warn};
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 use vibe_ensemble_mcp::{
     server::{CoordinationServices, McpServer},
-    transport::{TransportFactory, WebSocketServer},
+    transport::WebSocketServer,
     Error,
 };
-
-/// Transport type for MCP communication
-#[derive(Debug, Clone, ValueEnum)]
-enum TransportType {
-    /// Standard input/output transport (for Claude Code integration)
-    Stdio,
-    /// WebSocket transport (for multiple agent coordination)
-    Websocket,
-}
-
-impl Default for TransportType {
-    fn default() -> Self {
-        Self::Stdio
-    }
-}
 
 /// CLI for Vibe Ensemble MCP Server - Claude Code Companion
 #[derive(Parser)]
@@ -51,11 +36,6 @@ struct Cli {
     /// Environment variable: VIBE_ENSEMBLE_WEB_PORT
     #[arg(long)]
     web_port: Option<u16>,
-
-    /// Message buffer size for transport layer (default: 64KB)
-    /// Environment variable: VIBE_ENSEMBLE_MESSAGE_BUFFER_SIZE
-    #[arg(long)]
-    message_buffer_size: Option<usize>,
 
     /// Logging level: trace, debug, info, warn, error (default: info)
     /// Environment variable: VIBE_ENSEMBLE_LOG_LEVEL
@@ -86,11 +66,6 @@ struct Cli {
     /// Environment variable: VIBE_ENSEMBLE_MCP_ONLY
     #[arg(long)]
     mcp_only: bool,
-
-    /// Transport type: stdio or websocket (default: stdio)
-    /// Environment variable: VIBE_ENSEMBLE_TRANSPORT
-    #[arg(long, value_enum)]
-    transport: Option<TransportType>,
 
     /// WebSocket MCP server host (default: 127.0.0.1)
     /// Environment variable: VIBE_ENSEMBLE_MCP_HOST
@@ -279,23 +254,6 @@ async fn main() -> anyhow::Result<()> {
             .map(|s| s == "true" || s == "1")
             .unwrap_or(false);
 
-    // Determine transport type with environment variable support
-    let transport_type = cli
-        .transport
-        .or_else(|| {
-            env::var("VIBE_ENSEMBLE_TRANSPORT")
-                .ok()
-                .and_then(|s| match s.to_lowercase().as_str() {
-                    "stdio" => Some(TransportType::Stdio),
-                    "websocket" => Some(TransportType::Websocket),
-                    _ => {
-                        warn!("Invalid transport type '{}', using stdio", s);
-                        None
-                    }
-                })
-        })
-        .unwrap_or_default();
-
     // Determine MCP WebSocket server configuration
     let mcp_host = cli
         .mcp_host
@@ -312,8 +270,8 @@ async fn main() -> anyhow::Result<()> {
         .unwrap_or(WebSocketServer::DEFAULT_PORT);
 
     info!(
-        "Transport configuration: type={:?}, websocket={}:{}",
-        transport_type, mcp_host, mcp_port
+        "Transport configuration: websocket={}:{}",
+        mcp_host, mcp_port
     );
 
     // Create database configuration with smart defaults
@@ -431,23 +389,8 @@ async fn main() -> anyhow::Result<()> {
 
     info!("MCP server initialized successfully");
 
-    // Determine transport buffer size with environment variable support
-    let message_buffer_size = cli
-        .message_buffer_size
-        .or_else(|| {
-            env::var("VIBE_ENSEMBLE_MESSAGE_BUFFER_SIZE")
-                .ok()
-                .and_then(|s| s.parse().ok())
-        })
-        .unwrap_or(64 * 1024); // 64KB default
-                               // Clamp to [4KB, 1MB] to prevent pathological configs
-    let message_buffer_size = message_buffer_size.clamp(4 * 1024, 1024 * 1024);
-    if message_buffer_size < 8 * 1024 {
-        warn!(
-            "message_buffer_size is very small ({} bytes); performance may degrade",
-            message_buffer_size
-        );
-    }
+    // Note: message_buffer_size was used for stdio transport only
+    // WebSocket transport uses its own internal buffering
 
     // Handle web-only mode with signal handling
     if web_only {
@@ -483,20 +426,12 @@ async fn main() -> anyhow::Result<()> {
         web_handle.abort(); // Stop web server since we don't need it
     }
 
-    // Start MCP transport based on configuration
-    match transport_type {
-        TransportType::Stdio => {
-            info!("Starting MCP server with stdio transport");
-            run_stdio_transport(server, message_buffer_size, &mut web_handle, mcp_only).await?;
-        }
-        TransportType::Websocket => {
-            info!(
-                "Starting MCP server with WebSocket transport on {}:{}",
-                mcp_host, mcp_port
-            );
-            run_websocket_transport(server, mcp_host, mcp_port, &mut web_handle, mcp_only).await?;
-        }
-    }
+    // Start MCP transport with WebSocket
+    info!(
+        "Starting MCP server with WebSocket transport on {}:{}",
+        mcp_host, mcp_port
+    );
+    run_websocket_transport(server, mcp_host, mcp_port, &mut web_handle, mcp_only).await?;
 
     // Step 2: Shutdown web server gracefully
     info!("Shutting down web dashboard...");
@@ -508,120 +443,6 @@ async fn main() -> anyhow::Result<()> {
     // Step 3: Final cleanup and status
     info!("All services shut down successfully");
     info!("Vibe Ensemble MCP Server shutdown completed");
-    Ok(())
-}
-
-/// Run MCP server with stdio transport (single-agent mode)
-async fn run_stdio_transport(
-    server: McpServer,
-    message_buffer_size: usize,
-    _web_handle: &mut tokio::task::JoinHandle<()>,
-    _mcp_only: bool,
-) -> anyhow::Result<()> {
-    use vibe_ensemble_mcp::transport::StdioTransport;
-
-    // Create stdio transport with configurable buffer size
-    let mut transport = TransportFactory::stdio_with_config(
-        StdioTransport::DEFAULT_READ_TIMEOUT, // 72 hours - covers weekend inactivity
-        StdioTransport::DEFAULT_WRITE_TIMEOUT, // 10 seconds
-        message_buffer_size,
-    );
-    info!(
-        "MCP server ready to accept connections via stdio (buffer: {}KB)",
-        message_buffer_size / 1024
-    );
-
-    info!("Starting MCP stdio transport loop");
-
-    // Main server loop with enhanced signal handling
-    let mut loop_count = 0u64;
-    let server_start = std::time::Instant::now();
-    info!("MCP server running - Press Ctrl+C to stop");
-
-    loop {
-        loop_count += 1;
-
-        // Log progress periodically for monitoring
-        if loop_count % 100 == 0 {
-            let uptime = server_start.elapsed();
-            debug!(
-                "Processing loop iteration {} (uptime: {:?}) - connection active",
-                loop_count, uptime
-            );
-        }
-
-        // Add graceful shutdown check with signal handling
-        tokio::select! {
-            message_result = transport.receive() => {
-                match message_result {
-                    Ok(message) => {
-                        debug!(
-                            "Received message (loop {}): {} bytes",
-                            loop_count,
-                            message.len()
-                        );
-
-                        // Process the message through MCP server
-                        match server.handle_message(&message).await {
-                            Ok(Some(response)) => {
-                                debug!(
-                                    "Sending response (loop {}): {} bytes",
-                                    loop_count,
-                                    response.len()
-                                );
-                                if let Err(e) = transport.send(&response).await {
-                                    error!("Failed to send response: {} - closing connection", e);
-                                    break;
-                                }
-                            }
-                            Ok(None) => {
-                                debug!("No response required for message (loop {})", loop_count);
-                            }
-                            Err(e) => {
-                                error!("Error processing message (loop {}): {}", loop_count, e);
-                                warn!("Continuing message processing despite error");
-                            }
-                        }
-                    }
-                    Err(e) => match e {
-                        Error::Connection(msg) => {
-                            info!("Connection closed gracefully: {}", msg);
-                            break;
-                        }
-                        Error::Transport(msg) => {
-                            error!("Transport error: {} - closing connection", msg);
-                            break;
-                        }
-                        _ => {
-                            error!(
-                                "Unexpected error in transport loop: {} - closing connection",
-                                e
-                            );
-                            break;
-                        }
-                    },
-                }
-            }
-            _ = tokio::signal::ctrl_c() => {
-                info!("Received Ctrl+C signal - initiating graceful shutdown");
-                break;
-            }
-        }
-    }
-
-    // Graceful shutdown sequence
-    let uptime = server_start.elapsed();
-    info!(
-        "Shutting down MCP server after {} loop iterations (uptime: {:?})",
-        loop_count, uptime
-    );
-
-    // Step 1: Close transport gracefully
-    info!("Closing MCP transport...");
-    if let Err(e) = transport.close().await {
-        warn!("Error closing transport: {}", e);
-    }
-
     Ok(())
 }
 
