@@ -310,7 +310,13 @@ impl HeadlessClaudeExecutor {
         trace!(
             "Spawning Claude Code process: {} {}",
             self.claude_binary_path,
-            cmd.as_std().get_args().collect::<Vec<_>>().iter().map(|arg| arg.to_string_lossy()).collect::<Vec<_>>().join(" ")
+            cmd.as_std()
+                .get_args()
+                .collect::<Vec<_>>()
+                .iter()
+                .map(|arg| arg.to_string_lossy())
+                .collect::<Vec<_>>()
+                .join(" ")
         );
 
         // Execute command
@@ -411,11 +417,13 @@ impl HeadlessClaudeExecutor {
         let mut log_file = if let Some(log_path) = log_file_path {
             // Create parent directories if they don't exist
             if let Some(parent) = log_path.parent() {
-                fs::create_dir_all(parent).await.map_err(|e| Error::Execution {
-                    message: format!("Failed to create log directory: {}", e),
-                })?;
+                fs::create_dir_all(parent)
+                    .await
+                    .map_err(|e| Error::Execution {
+                        message: format!("Failed to create log directory: {}", e),
+                    })?;
             }
-            
+
             Some(
                 fs::OpenOptions::new()
                     .create(true)
@@ -424,13 +432,13 @@ impl HeadlessClaudeExecutor {
                     .await
                     .map_err(|e| Error::Execution {
                         message: format!("Failed to open worker log file: {}", e),
-                    })?
+                    })?,
             )
         } else {
             None
         };
 
-        // Helper macro to log to file  
+        // Helper macro to log to file
         macro_rules! log_to_file {
             ($prefix:expr, $content:expr) => {
                 if let Some(ref mut file) = log_file {

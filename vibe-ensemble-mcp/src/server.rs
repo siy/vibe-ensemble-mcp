@@ -1250,25 +1250,33 @@ impl McpServer {
     ) -> Result<Option<JsonRpcResponse>> {
         debug!("Handling agent registration request");
 
-        let params: AgentRegisterParams = if let Some(params) = request.params {
-            serde_json::from_value(params).map_err(|e| {
-                // Provide helpful error message based on the specific validation failure
-                let error_msg = if e.to_string().contains("missing field") {
-                    format!("Registration failed - {}. Required format: {{\"name\": \"agent-name-with-hyphens\", \"agentType\": \"Coordinator\", \"capabilities\": [\"capability1\"], \"connectionMetadata\": {{\"endpoint\": \"system://your-endpoint\", \"protocol_version\": \"2024-11-05\"}}}}", e)
-                } else {
-                    format!("Invalid agent registration parameters: {}", e)
-                };
-                Error::Protocol { message: error_msg }
+        let params: AgentRegisterParams = if let Some(params_value) = request.params {
+            // Use intelligent defaults for missing or invalid fields
+            AgentRegisterParams::from_json_with_defaults(params_value).map_err(|e| {
+                Error::Protocol {
+                    message: format!("Agent registration failed: {}", e),
+                }
             })?
         } else {
-            return Ok(Some(JsonRpcResponse::error(
-                request.id,
-                JsonRpcError {
-                    code: error_codes::INVALID_PARAMS,
-                    message: "Missing agent registration parameters".to_string(),
-                    data: None,
-                },
-            )));
+            // Provide complete default registration for coordinator
+            info!("No registration parameters provided - using intelligent coordinator defaults");
+            AgentRegisterParams {
+                name: "claude-code-coordinator".to_string(),
+                agent_type: "Coordinator".to_string(),
+                capabilities: vec![
+                    "cross_project_coordination".to_string(),
+                    "dependency_management".to_string(),
+                    "conflict_resolution".to_string(),
+                    "resource_allocation".to_string(),
+                    "workflow_orchestration".to_string(),
+                    "strategic_planning".to_string(),
+                    "quality_oversight".to_string(),
+                ],
+                connection_metadata: serde_json::json!({
+                    "endpoint": "system://claude-code-coordinator",
+                    "protocol_version": "2024-11-05"
+                }),
+            }
         };
 
         info!(
