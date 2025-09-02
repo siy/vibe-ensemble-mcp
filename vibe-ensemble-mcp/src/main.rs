@@ -21,7 +21,7 @@ use vibe_ensemble_mcp::{
 #[command(about = "MCP server for coordinating multiple Claude Code instances")]
 #[command(version)]
 struct Cli {
-    /// Database file path (default: ~/.vibe-ensemble/data.db)
+    /// Database file path (default: .vibe-ensemble/data.db)
     /// Environment variable: VIBE_ENSEMBLE_DB_PATH
     #[arg(long = "db-path")]
     db_path: Option<String>,
@@ -73,11 +73,56 @@ struct Cli {
     /// Deprecated: Use --db-path instead
     #[arg(long, hide = true)]
     database: Option<String>,
+
+    /// Log file path (default: .vibe-ensemble/logs/)
+    /// Environment variable: VIBE_ENSEMBLE_LOG_PATH
+    #[arg(long)]
+    log_path: Option<String>,
+
+    /// Enable worker output logging to files
+    /// Environment variable: VIBE_ENSEMBLE_LOG_WORKER_OUTPUT
+    #[arg(long)]
+    log_worker_output: bool,
 }
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
     let cli = Cli::parse();
+
+    // Determine log path with precedence: CLI > env > default
+    let log_path = cli
+        .log_path
+        .or_else(|| env::var("VIBE_ENSEMBLE_LOG_PATH").ok())
+        .unwrap_or_else(|| {
+            // Default to ./.vibe-ensemble/logs/ (current directory)
+            let current_dir =
+                std::env::current_dir().expect("Could not determine current directory");
+            let log_dir = current_dir.join(".vibe-ensemble").join("logs");
+            log_dir.display().to_string()
+        });
+
+    // Create log directory if it doesn't exist
+    let log_dir = Path::new(&log_path);
+    if let Err(e) = fs::create_dir_all(log_dir) {
+        eprintln!(
+            "Warning: Could not create log directory {}: {}",
+            log_dir.display(),
+            e
+        );
+    }
+
+    // Determine worker output logging
+    let log_worker_output = cli.log_worker_output
+        || env::var("VIBE_ENSEMBLE_LOG_WORKER_OUTPUT")
+            .map(|s| s == "true" || s == "1")
+            .unwrap_or(false);
+
+    if log_worker_output {
+        info!(
+            "Worker output logging enabled - outputs will be saved to {}",
+            log_dir.display()
+        );
+    }
 
     // Determine log level with precedence: CLI > env > default
     let log_level = cli
@@ -158,8 +203,16 @@ async fn main() -> anyhow::Result<()> {
 
         info!("Logging to file: {}", log_file.display());
     }
+  
+    info!("Logging to file: {}", log_file.display());
 
     info!("Starting Vibe Ensemble MCP Server - Claude Code Companion");
+    info!("Log directory: {}", log_dir.display());
+    if log_worker_output {
+        info!("Worker output logging: enabled");
+    } else {
+        info!("Worker output logging: disabled (use --log-worker-output to enable)");
+    }
 
     // Determine database path with precedence: CLI > env var > deprecated CLI > legacy env > default
     let database_url = cli
@@ -168,11 +221,11 @@ async fn main() -> anyhow::Result<()> {
         .or(cli.database) // Backward compatibility
         .or_else(|| env::var("DATABASE_URL").ok()) // Legacy support
         .unwrap_or_else(|| {
-            // Default to ~/.vibe-ensemble/data.db
-            let home_dir = dirs::home_dir().expect("Could not determine home directory");
-            let vibe_dir = home_dir.join(".vibe-ensemble");
-            std::fs::create_dir_all(&vibe_dir)
-                .expect("Could not create ~/.vibe-ensemble directory");
+            // Default to ./.vibe-ensemble/data.db (current directory)
+            let current_dir =
+                std::env::current_dir().expect("Could not determine current directory");
+            let vibe_dir = current_dir.join(".vibe-ensemble");
+            std::fs::create_dir_all(&vibe_dir).expect("Could not create .vibe-ensemble directory");
             format!("sqlite:{}", vibe_dir.join("data.db").display())
         });
 

@@ -69,6 +69,29 @@ pub enum IssuePriority {
     Critical,
 }
 
+impl std::fmt::Display for IssuePriority {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            IssuePriority::Low => write!(f, "Low"),
+            IssuePriority::Medium => write!(f, "Medium"),
+            IssuePriority::High => write!(f, "High"),
+            IssuePriority::Critical => write!(f, "Critical"),
+        }
+    }
+}
+
+impl std::fmt::Display for IssueStatus {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            IssueStatus::Open => write!(f, "Open"),
+            IssueStatus::InProgress => write!(f, "In Progress"),
+            IssueStatus::Blocked { reason } => write!(f, "Blocked: {}", reason),
+            IssueStatus::Resolved => write!(f, "Resolved"),
+            IssueStatus::Closed => write!(f, "Closed"),
+        }
+    }
+}
+
 impl Issue {
     /// Create a new issue with validation
     pub fn new(title: String, description: String, priority: IssuePriority) -> Result<Self> {

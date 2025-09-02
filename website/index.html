@@ -3,13 +3,13 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Vibe Ensemble - Claude Code Coordination System</title>
-    <meta name="description" content="Lightweight coordination system for Claude Code with persistent storage, issue tracking, and intelligent messaging - production ready.">
+    <title>Vibe Ensemble - Stop Claude Code Conflicts</title>
+    <meta name="description" content="Prevent Claude Code conflicts and coordinate multiple AI agents automatically. Zero-config setup with powerful coordination tools.">
     <link rel="stylesheet" href="static/styles.css">
     <link rel="icon" href="static/favicon.ico" type="image/x-icon">
     <!-- Open Graph -->
-    <meta property="og:title" content="Vibe Ensemble - Claude Code Coordination System">
-    <meta property="og:description" content="Lightweight coordination system for Claude Code with persistent storage, issue tracking, and intelligent messaging - production ready.">
+    <meta property="og:title" content="Vibe Ensemble - Stop Claude Code Conflicts">
+    <meta property="og:description" content="Prevent Claude Code conflicts and coordinate multiple AI agents automatically. Zero-config setup with powerful coordination tools.">
     <meta property="og:type" content="website">
     <meta property="og:url" content="https://vibeensemble.dev">
 </head>
@@ -32,10 +32,10 @@
     <header class="hero">
         <div class="hero-container">
             <div class="hero-content">
-                <h1 class="hero-title">Coordination System for <span class="highlight">Claude Code</span></h1>
+                <h1 class="hero-title">Stop <span class="highlight">Claude Code Conflicts</span></h1>
                 <p class="hero-subtitle">
-                    Lightweight MCP server providing persistent storage, issue tracking, 
-                    and intelligent messaging for Claude Code workflows.
+                    Multiple Claude Code instances stepping on each other? Vibe Ensemble provides 
+                    automatic coordination with zero configuration - just add it as an MCP server.
                 </p>
                 <div class="hero-buttons">
                     <a href="#installation" class="btn btn-primary">Get Started</a>
@@ -45,21 +45,104 @@
                 </div>
                 <div class="hero-stats">
                     <div class="stat">
-                        <span class="stat-number">357+</span>
-                        <span class="stat-label">Tests Passing</span>
+                        <span class="stat-number">Zero</span>
+                        <span class="stat-label">Configuration</span>
                     </div>
                     <div class="stat">
-                        <span class="stat-number">3</span>
-                        <span class="stat-label">Core Tools</span>
+                        <span class="stat-number">Local</span>
+                        <span class="stat-label">First</span>
                     </div>
                     <div class="stat">
-                        <span class="stat-number">Production</span>
-                        <span class="stat-label">Ready</span>
+                        <span class="stat-number">Auto</span>
+                        <span class="stat-label">Coordination</span>
                     </div>
                 </div>
             </div>
         </div>
     </header>
+
+    <section class="problem-statement">
+        <div class="container">
+            <h2 class="section-title">The Problem with Multiple Claude Code Instances</h2>
+            <div class="problem-grid">
+                <div class="problem-card">
+                    <div class="problem-icon">⚠️</div>
+                    <h3>Conflicts & Overwrites</h3>
+                    <p>Multiple Claude Code instances working on the same project step on each other, overwriting changes and creating confusion.</p>
+                </div>
+                <div class="problem-card">
+                    <div class="problem-icon">🤔</div>
+                    <h3>Knowledge Silos</h3>
+                    <p>Each Claude instance starts from scratch, unable to learn from what others have discovered about your codebase.</p>
+                </div>
+                <div class="problem-card">
+                    <div class="problem-icon">🔄</div>
+                    <h3>Duplicated Work</h3>
+                    <p>Without coordination, agents repeat the same analysis and make the same discoveries independently.</p>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <section class="use-cases">
+        <div class="container">
+            <h2 class="section-title">Real-World Use Cases</h2>
+            <div class="use-case-grid">
+                <div class="use-case-card">
+                    <h3>🎯 Frontend + Backend Coordination</h3>
+                    <div class="before-after">
+                        <div class="before">
+                            <h4>Before:</h4>
+                            <p>Frontend Claude creates an API endpoint, backend Claude overwrites it with different parameters</p>
+                        </div>
+                        <div class="after">
+                            <h4>After:</h4>
+                            <p>Agents coordinate API design, share requirements, and avoid conflicts automatically</p>
+                        </div>
+                    </div>
+                </div>
+                <div class="use-case-card">
+                    <h3>📝 Code Review Automation</h3>
+                    <div class="before-after">
+                        <div class="before">
+                            <h4>Before:</h4>
+                            <p>One Claude writes code, another reviews it without context about the reasoning</p>
+                        </div>
+                        <div class="after">
+                            <h4>After:</h4>
+                            <p>Writer documents decisions, reviewer has full context, both learn from feedback</p>
+                        </div>
+                    </div>
+                </div>
+                <div class="use-case-card">
+                    <h3>🏢 Small Team Coordination</h3>
+                    <div class="before-after">
+                        <div class="before">
+                            <h4>Before:</h4>
+                            <p>Team members' Claude instances work in isolation, missing shared insights</p>
+                        </div>
+                        <div class="after">
+                            <h4>After:</h4>
+                            <p>Shared knowledge base, coordinated workflows, and automatic conflict prevention</p>
+                        </div>
+                    </div>
+                </div>
+                <div class="use-case-card">
+                    <h3>🔬 Specialized Agent Roles</h3>
+                    <div class="before-after">
+                        <div class="before">
+                            <h4>Before:</h4>
+                            <p>Generic Claude instances handling everything poorly</p>
+                        </div>
+                        <div class="after">
+                            <h4>After:</h4>
+                            <p>Dedicated testing agent, security reviewer, documentation writer - each specialized</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
 
     <section id="features" class="features">
         <div class="container">
@@ -194,32 +277,40 @@ claude mcp add vibe-ensemble /path/to/vibe-ensemble-mcp/target/release/vibe-ense
 
     <section class="coordination-tools">
         <div class="container">
-            <h2 class="section-title">Available MCP Tools</h2>
-            <p class="section-subtitle">3 streamlined tools providing comprehensive coordination capabilities</p>
+            <h2 class="section-title">Three Simple Tools, Powerful Coordination</h2>
             <div class="tools-grid">
                 <div class="tool-category">
-                    <h4>Agent Operations</h4>
-                    <p>Complete agent lifecycle management</p>
-                    <ul>
-                        <li><code>vibe/agent</code></li>
-                        <li><em>Operations:</em> register, list, status, deregister, capabilities</li>
-                    </ul>
+                    <div class="tool-icon">🤖</div>
+                    <h4>vibe/agent</h4>
+                    <p><strong>Who's Working?</strong> Register your role, share capabilities, track what everyone's doing</p>
+                    <div class="tool-example">
+                        <em>"I'm a frontend specialist working on the React components"</em>
+                    </div>
                 </div>
                 <div class="tool-category">
-                    <h4>Issue Management</h4>
-                    <p>Full issue tracking and workflow</p>
-                    <ul>
-                        <li><code>vibe/issue</code></li>
-                        <li><em>Operations:</em> create, list, assign, update, close</li>
-                    </ul>
+                    <div class="tool-icon">📋</div>
+                    <h4>vibe/issue</h4>
+                    <p><strong>What Needs Doing?</strong> Create tasks, assign work, track progress, avoid duplication</p>
+                    <div class="tool-example">
+                        <em>"Need API endpoint for user auth - assigned to backend agent"</em>
+                    </div>
                 </div>
                 <div class="tool-category">
-                    <h4>Coordination Hub</h4>
-                    <p>Messaging, knowledge, and workflow coordination</p>
-                    <ul>
-                        <li><code>vibe/coordination</code></li>
-                        <li><em>Operations:</em> messaging, knowledge, dependencies, workflows</li>
-                    </ul>
+                    <div class="tool-icon">🧠</div>
+                    <h4>vibe/coordination</h4>
+                    <p><strong>Share Everything</strong> Knowledge, dependencies, discoveries, patterns - nothing gets lost</p>
+                    <div class="tool-example">
+                        <em>"Found the auth bug - updating knowledge base for everyone"</em>
+                    </div>
+                </div>
+            </div>
+            <div class="coordination-benefits">
+                <h3>The Result?</h3>
+                <div class="benefits-list">
+                    <div class="benefit">✓ No more conflicts between Claude instances</div>
+                    <div class="benefit">✓ Accumulated knowledge across all interactions</div>
+                    <div class="benefit">✓ Specialized agents working together seamlessly</div>
+                    <div class="benefit">✓ Automatic coordination with zero manual effort</div>
                 </div>
             </div>
         </div>

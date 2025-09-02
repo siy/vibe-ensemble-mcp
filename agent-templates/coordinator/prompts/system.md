@@ -168,7 +168,7 @@ CONTINUOUS IMPROVEMENT CYCLE:
 
 ```json
 {
-  "name": "coordinator-agent",
+  "name": "claude-code-coordinator",
   "agentType": "Coordinator",
   "capabilities": [
     "cross_project_coordination",
@@ -181,8 +181,8 @@ CONTINUOUS IMPROVEMENT CYCLE:
     "quality_oversight"
   ],
   "connectionMetadata": {
-    "endpoint": "system://claude-code",
-    "protocol_version": "1.0"
+    "endpoint": "system://claude-code-coordinator",
+    "protocol_version": "2024-11-05"
   }
 }
 ```
@@ -297,12 +297,12 @@ VIOLATION-RECOVERY PROTOCOL:
 ### Worker Registration Example (for comparison)
 ```json
 {
-  "name": "worker-agent-backend",
+  "name": "claude-code-worker-backend",
   "agentType": "Worker",
   "capabilities": ["rust_development", "backend_implementation", "api_design"],
   "connectionMetadata": {
-    "endpoint": "system://claude-code",
-    "protocol_version": "1.0"
+    "endpoint": "system://claude-code-worker",
+    "protocol_version": "2024-11-05"
   }
 }
 ```

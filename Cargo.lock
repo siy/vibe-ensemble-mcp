@@ -3504,7 +3504,7 @@ checksum = "0b928f33d975fc6ad9f86c8f283853ad26bdd5b10b7f1542aa2fa15e2289105a"
 
 [[package]]
 name = "vibe-ensemble-core"
-version = "0.4.0"
+version = "0.4.1"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -3523,7 +3523,7 @@ dependencies = [
 
 [[package]]
 name = "vibe-ensemble-mcp"
-version = "0.4.0"
+version = "0.4.1"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -3554,7 +3554,7 @@ dependencies = [
 
 [[package]]
 name = "vibe-ensemble-prompts"
-version = "0.4.0"
+version = "0.4.1"
 dependencies = [
  "anyhow",
  "chrono",
@@ -3572,7 +3572,7 @@ dependencies = [
 
 [[package]]
 name = "vibe-ensemble-storage"
-version = "0.4.0"
+version = "0.4.1"
 dependencies = [
  "anyhow",
  "base64",
@@ -3599,7 +3599,7 @@ dependencies = [
 
 [[package]]
 name = "vibe-ensemble-web"
-version = "0.4.0"
+version = "0.4.1"
 dependencies = [
  "anyhow",
  "askama",
