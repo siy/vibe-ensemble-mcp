@@ -10,9 +10,9 @@ use std::collections::HashMap;
 use std::path::PathBuf;
 use std::process::Stdio;
 use std::sync::Arc;
-use tokio::io::{AsyncBufReadExt, BufReader};
+use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
 use tokio::process::{Child, Command};
-use tokio::sync::{mpsc, Mutex, RwLock};
+use tokio::sync::{broadcast, mpsc, Mutex, RwLock};
 use tokio::time::{timeout, Duration};
 use tracing::{debug, error, info, warn};
 use uuid::Uuid;
@@ -38,8 +38,8 @@ pub struct WorkerManager {
     connections: Arc<RwLock<HashMap<String, Uuid>>>,
     /// Reverse connection mapping (worker_id -> connection_id)
     worker_connections: Arc<RwLock<HashMap<Uuid, String>>>,
-    /// Output stream senders for real-time dashboard updates
-    output_senders: Arc<RwLock<HashMap<Uuid, mpsc::UnboundedSender<WorkerOutput>>>>,
+    /// Output broadcast channels for real-time dashboard updates
+    output_channels: Arc<RwLock<HashMap<Uuid, broadcast::Sender<WorkerOutput>>>>,
     /// MCP server configuration
     mcp_config: McpServerConfig,
     /// Worker output logging configuration
@@ -53,7 +53,7 @@ impl WorkerManager {
             workers: Arc::new(RwLock::new(HashMap::new())),
             connections: Arc::new(RwLock::new(HashMap::new())),
             worker_connections: Arc::new(RwLock::new(HashMap::new())),
-            output_senders: Arc::new(RwLock::new(HashMap::new())),
+            output_channels: Arc::new(RwLock::new(HashMap::new())),
             mcp_config,
             output_logging,
         }
@@ -113,12 +113,15 @@ impl WorkerManager {
             worker_id, process_id
         );
 
-        // Setup output capture
-        let (output_sender, output_receiver) = mpsc::unbounded_channel();
-        self.output_senders
+        // Setup output capture with broadcast channel for multiple subscribers
+        let (broadcast_sender, _) = broadcast::channel(1000);
+        self.output_channels
             .write()
             .await
-            .insert(worker_id, output_sender.clone());
+            .insert(worker_id, broadcast_sender.clone());
+
+        // Create internal channel for output processing
+        let (output_sender, output_receiver) = mpsc::unbounded_channel();
 
         // Capture stdout
         let stdout = child
@@ -156,6 +159,9 @@ impl WorkerManager {
         // Start output processing task
         self.start_output_processing(worker_id, output_receiver)
             .await;
+
+        // Start process exit watcher
+        self.start_process_exit_watcher(worker_id).await;
 
         info!("Worker {} initialization completed", worker_id);
         Ok(worker_id)
@@ -248,16 +254,18 @@ impl WorkerManager {
     pub async fn subscribe_to_output(
         &self,
         worker_id: &Uuid,
-    ) -> Option<mpsc::UnboundedReceiver<WorkerOutput>> {
-        let (_sender, receiver) = mpsc::unbounded_channel();
-        if let Some(existing_sender) = self.output_senders.read().await.get(worker_id) {
-            // Clone the existing output to the new subscriber
-            let _ = existing_sender.send(WorkerOutput {
+    ) -> Option<broadcast::Receiver<WorkerOutput>> {
+        if let Some(broadcast_sender) = self.output_channels.read().await.get(worker_id) {
+            let receiver = broadcast_sender.subscribe();
+
+            // Send subscription notification
+            let _ = broadcast_sender.send(WorkerOutput {
                 worker_id: *worker_id,
                 output_type: OutputType::Info,
                 content: "Subscribed to worker output stream".to_string(),
                 timestamp: Utc::now(),
             });
+
             Some(receiver)
         } else {
             None
@@ -312,6 +320,16 @@ impl WorkerManager {
                         )));
                     }
 
+                    // Wait for the killed process to be reaped to avoid zombies
+                    if let Ok(status) = worker.child.wait().await {
+                        info!(
+                            "Worker {} force killed and reaped with status: {:?}",
+                            worker_id, status
+                        );
+                    } else {
+                        warn!("Worker {} force killed but reaping failed", worker_id);
+                    }
+
                     info!("Worker {} force terminated", worker_id);
                 }
             }
@@ -321,7 +339,7 @@ impl WorkerManager {
                 self.connections.write().await.remove(connection_id);
             }
             self.worker_connections.write().await.remove(worker_id);
-            self.output_senders.write().await.remove(worker_id);
+            self.output_channels.write().await.remove(worker_id);
 
             info!("Worker {} cleanup completed", worker_id);
             Ok(())
@@ -409,11 +427,15 @@ impl WorkerManager {
                 // Log to file if enabled
                 if stdout_config.enabled {
                     if let Some(ref log_dir) = stdout_config.log_directory {
-                        let _ = tokio::fs::write(
-                            log_dir.join(format!("worker-{}-stdout.log", worker_id)),
-                            &line,
-                        )
-                        .await;
+                        let log_path = log_dir.join(format!("worker-{}-stdout.log", worker_id));
+                        if let Ok(mut file) = tokio::fs::OpenOptions::new()
+                            .create(true)
+                            .append(true)
+                            .open(&log_path)
+                            .await
+                        {
+                            let _ = file.write_all(line.as_bytes()).await;
+                        }
                     }
                 }
 
@@ -450,11 +472,15 @@ impl WorkerManager {
                 // Log to file if enabled
                 if worker_output_config.enabled {
                     if let Some(ref log_dir) = worker_output_config.log_directory {
-                        let _ = tokio::fs::write(
-                            log_dir.join(format!("worker-{}-stderr.log", worker_id)),
-                            &line,
-                        )
-                        .await;
+                        let log_path = log_dir.join(format!("worker-{}-stderr.log", worker_id));
+                        if let Ok(mut file) = tokio::fs::OpenOptions::new()
+                            .create(true)
+                            .append(true)
+                            .open(&log_path)
+                            .await
+                        {
+                            let _ = file.write_all(line.as_bytes()).await;
+                        }
                     }
                 }
 
@@ -471,6 +497,7 @@ impl WorkerManager {
         mut output_receiver: mpsc::UnboundedReceiver<WorkerOutput>,
     ) {
         let workers = self.workers.clone();
+        let output_channels = self.output_channels.clone();
 
         tokio::spawn(async move {
             while let Some(output) = output_receiver.recv().await {
@@ -483,6 +510,12 @@ impl WorkerManager {
                     });
                 }
 
+                // Broadcast to all subscribers
+                if let Some(broadcast_sender) = output_channels.read().await.get(&worker_id) {
+                    // Ignore send errors (no subscribers)
+                    let _ = broadcast_sender.send(output.clone());
+                }
+
                 debug!(
                     "Worker {} output: {} - {}",
                     worker_id,
@@ -491,6 +524,72 @@ impl WorkerManager {
                 );
             }
             debug!("Output processing ended for worker {}", worker_id);
+        });
+    }
+
+    /// Start process exit watcher for a worker
+    async fn start_process_exit_watcher(&self, worker_id: Uuid) {
+        let workers = self.workers.clone();
+        let connections = self.connections.clone();
+        let worker_connections = self.worker_connections.clone();
+        let output_channels = self.output_channels.clone();
+
+        tokio::spawn(async move {
+            // Wait for the process to exit
+            let mut child_exit = None;
+
+            // Extract the child handle for waiting
+            if let Some(worker) = workers.write().await.get_mut(&worker_id) {
+                // We can't move the child out while it's in the HashMap, so we'll use try_wait instead
+                loop {
+                    match worker.child.try_wait() {
+                        Ok(Some(status)) => {
+                            child_exit = Some(status);
+                            break;
+                        }
+                        Ok(None) => {
+                            // Process is still running, wait a bit and check again
+                            tokio::time::sleep(Duration::from_millis(100)).await;
+                        }
+                        Err(e) => {
+                            error!("Error checking worker {} exit status: {}", worker_id, e);
+                            break;
+                        }
+                    }
+
+                    // Check if the worker still exists (might have been shut down)
+                    if workers.read().await.get(&worker_id).is_none() {
+                        debug!("Worker {} was removed during exit watching", worker_id);
+                        return;
+                    }
+                }
+            }
+
+            if let Some(exit_status) = child_exit {
+                info!("Worker {} exited with status: {:?}", worker_id, exit_status);
+
+                // Update worker status to stopped
+                if let Some(worker) = workers.write().await.get_mut(&worker_id) {
+                    worker.status = WorkerStatus::Stopped;
+
+                    // Send final output message
+                    if let Some(broadcast_sender) = output_channels.read().await.get(&worker_id) {
+                        let _ = broadcast_sender.send(WorkerOutput {
+                            worker_id,
+                            output_type: OutputType::Info,
+                            content: format!("Process exited with status: {:?}", exit_status),
+                            timestamp: Utc::now(),
+                        });
+                    }
+                }
+
+                // Clean up connection mappings if worker was connected
+                if let Some(connection_id) = worker_connections.read().await.get(&worker_id) {
+                    connections.write().await.remove(connection_id);
+                    worker_connections.write().await.remove(&worker_id);
+                    info!("Cleaned up connection mappings for worker {}", worker_id);
+                }
+            }
         });
     }
 }
