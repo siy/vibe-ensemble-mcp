@@ -19,10 +19,13 @@
 //! use uuid::Uuid;
 //!
 //! // Worker declares a dependency on another project
+//! let source_project_id = Uuid::new_v4();
+//! let target_project_id = Uuid::new_v4();
+//!
 //! let dependency = CrossProjectDependency::builder()
 //!     .declaring_agent_id(Uuid::new_v4())
-//!     .source_project("frontend-app")
-//!     .target_project("api-server")
+//!     .source_project(source_project_id)
+//!     .target_project(target_project_id)
 //!     .dependency_type(DependencyType::ApiChange)
 //!     .description("Need API endpoint for user preferences")
 //!     .impact(DependencyImpact::Blocker)
@@ -33,7 +36,7 @@
 //! // Worker requests coordinator spawn a new worker
 //! let request = WorkerSpawnRequest::builder()
 //!     .requesting_agent_id(Uuid::new_v4())
-//!     .target_project("api-server")
+//!     .target_project(target_project_id)
 //!     .required_capabilities(vec!["backend-development", "api-design"])
 //!     .priority(SpawnPriority::High)
 //!     .task_description("Implement user preferences API endpoints")
@@ -52,8 +55,8 @@ use uuid::Uuid;
 pub struct CrossProjectDependency {
     pub id: Uuid,
     pub declaring_agent_id: Uuid,
-    pub source_project: String,
-    pub target_project: String,
+    pub source_project: Uuid,
+    pub target_project: Uuid,
     pub dependency_type: DependencyType,
     pub description: String,
     pub impact: DependencyImpact,
@@ -162,7 +165,7 @@ pub struct RequiredAction {
     pub action_type: ActionType,
     pub description: String,
     pub assigned_agent_id: Option<Uuid>,
-    pub target_project: String,
+    pub target_project: Uuid,
     pub affected_resources: Vec<String>,
     pub estimated_effort: Option<String>,
     pub dependencies: Vec<Uuid>, // Other actions this depends on
@@ -234,7 +237,7 @@ pub enum MilestoneStatus {
 pub struct WorkerSpawnRequest {
     pub id: Uuid,
     pub requesting_agent_id: Uuid,
-    pub target_project: String,
+    pub target_project: Uuid,
     pub required_capabilities: Vec<String>,
     pub priority: SpawnPriority,
     pub task_description: String,
@@ -563,8 +566,8 @@ impl ConflictResolutionCase {
 #[derive(Debug, Default)]
 pub struct CrossProjectDependencyBuilder {
     declaring_agent_id: Option<Uuid>,
-    source_project: Option<String>,
-    target_project: Option<String>,
+    source_project: Option<Uuid>,
+    target_project: Option<Uuid>,
     dependency_type: Option<DependencyType>,
     description: Option<String>,
     impact: Option<DependencyImpact>,
@@ -583,13 +586,13 @@ impl CrossProjectDependencyBuilder {
         self
     }
 
-    pub fn source_project<S: Into<String>>(mut self, project: S) -> Self {
-        self.source_project = Some(project.into());
+    pub fn source_project(mut self, project: Uuid) -> Self {
+        self.source_project = Some(project);
         self
     }
 
-    pub fn target_project<S: Into<String>>(mut self, project: S) -> Self {
-        self.target_project = Some(project.into());
+    pub fn target_project(mut self, project: Uuid) -> Self {
+        self.target_project = Some(project);
         self
     }
 
@@ -672,7 +675,7 @@ impl CrossProjectDependencyBuilder {
 #[derive(Debug, Default)]
 pub struct WorkerSpawnRequestBuilder {
     requesting_agent_id: Option<Uuid>,
-    target_project: Option<String>,
+    target_project: Option<Uuid>,
     required_capabilities: Vec<String>,
     priority: Option<SpawnPriority>,
     task_description: Option<String>,
@@ -690,8 +693,8 @@ impl WorkerSpawnRequestBuilder {
         self
     }
 
-    pub fn target_project<S: Into<String>>(mut self, project: S) -> Self {
-        self.target_project = Some(project.into());
+    pub fn target_project(mut self, project: Uuid) -> Self {
+        self.target_project = Some(project);
         self
     }
 
@@ -880,10 +883,13 @@ mod tests {
 
     #[test]
     fn test_cross_project_dependency_builder() {
+        let source_project_id = Uuid::new_v4();
+        let target_project_id = Uuid::new_v4();
+
         let dependency = CrossProjectDependency::builder()
             .declaring_agent_id(Uuid::new_v4())
-            .source_project("frontend-app")
-            .target_project("api-server")
+            .source_project(source_project_id)
+            .target_project(target_project_id)
             .dependency_type(DependencyType::ApiChange)
             .description("Need API endpoint for user preferences")
             .impact(DependencyImpact::Blocker)
@@ -893,8 +899,8 @@ mod tests {
             .build()
             .unwrap();
 
-        assert_eq!(dependency.source_project, "frontend-app");
-        assert_eq!(dependency.target_project, "api-server");
+        assert_eq!(dependency.source_project, source_project_id);
+        assert_eq!(dependency.target_project, target_project_id);
         assert_eq!(dependency.dependency_type, DependencyType::ApiChange);
         assert_eq!(dependency.impact, DependencyImpact::Blocker);
         assert_eq!(dependency.urgency, DependencyUrgency::High);
@@ -908,9 +914,11 @@ mod tests {
 
     #[test]
     fn test_worker_spawn_request_builder() {
+        let target_project_id = Uuid::new_v4();
+
         let request = WorkerSpawnRequest::builder()
             .requesting_agent_id(Uuid::new_v4())
-            .target_project("api-server")
+            .target_project(target_project_id)
             .required_capabilities(vec!["backend-development", "api-design"])
             .priority(SpawnPriority::High)
             .task_description("Implement user preferences API endpoints")
@@ -918,7 +926,7 @@ mod tests {
             .build()
             .unwrap();
 
-        assert_eq!(request.target_project, "api-server");
+        assert_eq!(request.target_project, target_project_id);
         assert_eq!(request.required_capabilities.len(), 2);
         assert_eq!(request.priority, SpawnPriority::High);
         assert_eq!(request.status, SpawnRequestStatus::Pending);

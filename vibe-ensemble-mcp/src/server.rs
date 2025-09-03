@@ -3458,6 +3458,12 @@ impl McpServer {
         let declaring_agent_id = Uuid::parse_str(&params.declaring_agent_id)
             .map_err(|_| Error::validation("Invalid declaring_agent_id UUID"))?;
 
+        // Parse project UUIDs from strings
+        let source_project = Uuid::parse_str(&params.source_project)
+            .map_err(|_| Error::validation("Invalid source_project UUID"))?;
+        let target_project = Uuid::parse_str(&params.target_project)
+            .map_err(|_| Error::validation("Invalid target_project UUID"))?;
+
         // Parse dependency type
         let dependency_type = match params.dependency_type.as_str() {
             "API_CHANGE" => vibe_ensemble_core::coordination::DependencyType::ApiChange,
@@ -3498,8 +3504,8 @@ impl McpServer {
         let (dependency, coordination_plan, issue) = coordination_service
             .declare_dependency(
                 declaring_agent_id,
-                params.source_project,
-                params.target_project,
+                source_project,
+                target_project,
                 dependency_type,
                 params.description,
                 impact,
@@ -3566,6 +3572,10 @@ impl McpServer {
         let requesting_agent_id = Uuid::parse_str(&params.requesting_agent_id)
             .map_err(|_| Error::validation("Invalid requesting_agent_id UUID"))?;
 
+        // Parse project UUID from string
+        let target_project = Uuid::parse_str(&params.target_project)
+            .map_err(|_| Error::validation("Invalid target_project UUID"))?;
+
         // Parse priority
         let priority = match params.priority.as_str() {
             "CRITICAL" => vibe_ensemble_core::coordination::SpawnPriority::Critical,
@@ -3595,7 +3605,7 @@ impl McpServer {
         let spawn_request = coordination_service
             .request_worker_spawn(
                 requesting_agent_id,
-                params.target_project,
+                target_project,
                 params.required_capabilities.clone(),
                 priority,
                 params.task_description,

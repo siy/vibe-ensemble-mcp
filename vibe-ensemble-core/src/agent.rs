@@ -118,7 +118,7 @@ pub struct ConnectionMetadata {
     pub transport: Option<String>,
     pub capabilities: Option<String>,
     pub session_type: Option<String>,
-    pub project_context: Option<String>,
+    pub project_id: Option<Uuid>,
     pub coordination_scope: Option<String>,
     pub specialization: Option<String>,
     pub coordinator_managed: Option<bool>,
@@ -766,7 +766,7 @@ pub struct ConnectionMetadataBuilder {
     transport: Option<String>,
     capabilities: Option<String>,
     session_type: Option<String>,
-    project_context: Option<String>,
+    project_id: Option<Uuid>,
     coordination_scope: Option<String>,
     specialization: Option<String>,
     coordinator_managed: Option<bool>,
@@ -784,7 +784,7 @@ impl ConnectionMetadataBuilder {
             transport: None,
             capabilities: None,
             session_type: None,
-            project_context: None,
+            project_id: None,
             coordination_scope: None,
             specialization: None,
             coordinator_managed: None,
@@ -834,9 +834,9 @@ impl ConnectionMetadataBuilder {
         self
     }
 
-    /// Set the project context
-    pub fn project_context<S: Into<String>>(mut self, project_context: S) -> Self {
-        self.project_context = Some(project_context.into());
+    /// Set the project ID
+    pub fn project_id(mut self, project_id: Uuid) -> Self {
+        self.project_id = Some(project_id);
         self
     }
 
@@ -919,7 +919,7 @@ impl ConnectionMetadataBuilder {
             transport: self.transport,
             capabilities: self.capabilities,
             session_type: self.session_type,
-            project_context: self.project_context,
+            project_id: self.project_id,
             coordination_scope: self.coordination_scope,
             specialization: self.specialization,
             coordinator_managed: self.coordinator_managed,
@@ -1449,7 +1449,7 @@ mod tests {
                 transport: None,
                 capabilities: None,
                 session_type: None,
-                project_context: None,
+                project_id: None,
                 coordination_scope: None,
                 specialization: None,
                 coordinator_managed: None,
