@@ -183,6 +183,24 @@ impl TaskPromptGenerator {
         variables.insert("task_priority".to_string(), issue.priority.to_string());
         variables.insert("task_tags".to_string(), issue.tags.join(", "));
 
+        // Add priority boolean flags for Handlebars conditionals
+        variables.insert(
+            "task_priority_critical".to_string(),
+            (issue.priority == IssuePriority::Critical).to_string(),
+        );
+        variables.insert(
+            "task_priority_high".to_string(),
+            (issue.priority == IssuePriority::High).to_string(),
+        );
+        variables.insert(
+            "task_priority_medium".to_string(),
+            (issue.priority == IssuePriority::Medium).to_string(),
+        );
+        variables.insert(
+            "task_priority_low".to_string(),
+            (issue.priority == IssuePriority::Low).to_string(),
+        );
+
         // Determine required capabilities from tags
         let capabilities = self.determine_capabilities(issue);
         variables.insert("task_capabilities".to_string(), capabilities.join(", "));
@@ -244,11 +262,11 @@ impl TaskPromptGenerator {
         }
 
         // Add priority-based capabilities
-        match issue.priority {
-            IssuePriority::Critical | IssuePriority::High => {
-                capabilities.push("high-priority-handling".to_string());
-            }
-            _ => {}
+        if matches!(
+            issue.priority,
+            IssuePriority::Critical | IssuePriority::High
+        ) {
+            capabilities.push("high-priority-handling".to_string());
         }
 
         capabilities
@@ -282,13 +300,16 @@ As a task worker, your primary responsibilities are:
 - Handle errors gracefully and report issues promptly
 
 # Priority Guidelines
-{{#if (eq task_priority "Critical")}}
+{{#if task_priority_critical}}
 ⚠️ **CRITICAL PRIORITY**: This task requires immediate attention and exceptional care. Prioritize accuracy and completeness.
-{{else if (eq task_priority "High")}}
+{{/if}}
+{{#if task_priority_high}}
 🔴 **HIGH PRIORITY**: Complete this task promptly while maintaining quality standards.
-{{else if (eq task_priority "Medium")}}
+{{/if}}
+{{#if task_priority_medium}}
 🟡 **MEDIUM PRIORITY**: Standard task completion timeline and quality expectations apply.
-{{else}}
+{{/if}}
+{{#if task_priority_low}}
 🟢 **LOW PRIORITY**: Take time to ensure thorough completion without rushing.
 {{/if}}
 
@@ -342,7 +363,7 @@ Provide your review as a structured report with:
 - Minor issues and suggestions
 - Overall assessment and recommendation
 
-{{#if (eq task_priority "Critical")}}
+{{#if task_priority_critical}}
 ⚠️ **CRITICAL REVIEW**: This code review is high-priority. Be extra thorough in your analysis.
 {{/if}}
 
@@ -465,6 +486,7 @@ impl TaskWorkerOrchestrator {
                         task_id,
                         e
                     );
+                    // Continue with cleanup even if worker shutdown fails
                 }
             }
 
@@ -700,10 +722,10 @@ impl TaskWorkerOrchestrator {
             average_retry_count: 0.0,
         };
 
-        let mut total_retries = 0;
+        let mut total_retries: u32 = 0;
 
         for mapping in mappings.values() {
-            total_retries += mapping.retry_count;
+            total_retries = total_retries.saturating_add(mapping.retry_count);
 
             match mapping.status {
                 TaskWorkerStatus::Spawning | TaskWorkerStatus::Active => stats.active_tasks += 1,
