@@ -1,7 +1,7 @@
 //! Storage manager for coordinating database operations
 
 use crate::{migrations::Migrations, performance::*, repositories::*, services::*, Error, Result};
-use sqlx::{Pool, Sqlite, SqlitePool};
+use sqlx::{sqlite::SqlitePoolOptions, Pool, Sqlite};
 use std::sync::Arc;
 use std::time::Duration;
 use tracing::info;
@@ -22,6 +22,7 @@ pub struct StorageManager {
     issues: Arc<IssueRepository>,
     messages: Arc<MessageRepository>,
     knowledge: Arc<KnowledgeRepository>,
+    projects: Arc<ProjectRepository>,
     prompts: Arc<PromptRepository>,
     templates: Arc<TemplateRepository>,
     agent_service: Arc<AgentService>,
@@ -53,12 +54,19 @@ impl StorageManager {
             .pragma("mmap_size", "268435456") // 256MB mmap
             .pragma("optimize", "1");
 
-        let pool_builder = SqlitePool::connect_with(connect_options.clone());
-        let pool = if let Some(max_connections) = config.max_connections {
-            info!("Using connection pool with {} connections", max_connections);
-            SqlitePool::connect_with(connect_options.clone().create_if_missing(true)).await?
-        } else {
-            pool_builder.await?
+        let pool = match config.max_connections {
+            Some(max_connections) => {
+                info!("Using connection pool with {} connections", max_connections);
+                SqlitePoolOptions::new()
+                    .max_connections(max_connections)
+                    .connect_with(connect_options.clone().create_if_missing(true))
+                    .await?
+            }
+            None => {
+                SqlitePoolOptions::new()
+                    .connect_with(connect_options.clone().create_if_missing(true))
+                    .await?
+            }
         };
 
         info!("Database connection established with performance optimizations");
@@ -72,6 +80,7 @@ impl StorageManager {
         let issues = Arc::new(IssueRepository::new(pool.clone()));
         let messages = Arc::new(MessageRepository::new(pool.clone()));
         let knowledge = Arc::new(KnowledgeRepository::new(pool.clone()));
+        let projects = Arc::new(ProjectRepository::new(pool.clone()));
         let prompts = Arc::new(PromptRepository::new(pool.clone()));
         let templates = Arc::new(TemplateRepository::new(pool.clone()));
 
@@ -87,6 +96,7 @@ impl StorageManager {
             issues,
             messages,
             knowledge,
+            projects,
             prompts,
             templates,
             agent_service,
@@ -144,6 +154,11 @@ impl StorageManager {
         self.knowledge.clone()
     }
 
+    /// Get project repository
+    pub fn projects(&self) -> Arc<ProjectRepository> {
+        self.projects.clone()
+    }
+
     /// Get prompt repository
     pub fn prompts(&self) -> Arc<PromptRepository> {
         self.prompts.clone()
@@ -188,12 +203,26 @@ impl StorageManager {
         Ok(())
     }
 
+    /// Get the database connection pool
+    ///
+    /// WARNING: Direct pool access bypasses repository-level validation and business logic.
+    /// This should only be used for:
+    /// - System-level operations (migrations, health checks, optimization)
+    /// - Advanced queries that repositories don't support
+    /// - Testing scenarios requiring direct database access
+    ///
+    /// For normal operations, use the typed repository methods instead.
+    pub fn pool(&self) -> &Pool<Sqlite> {
+        &self.pool
+    }
+
     /// Get database statistics
     pub async fn stats(&self) -> Result<DatabaseStats> {
         let agents_count = self.agents.count().await?;
         let issues_count = self.issues.count().await?;
         let messages_count = self.messages.count().await?;
         let knowledge_count = self.knowledge.count().await?;
+        let projects_count = self.projects.count().await?;
         let prompts_count = self.prompts.count().await?;
         let templates_count = self.templates.count().await?;
 
@@ -202,6 +231,7 @@ impl StorageManager {
             issues_count,
             messages_count,
             knowledge_count,
+            projects_count,
             prompts_count,
             templates_count,
         })
@@ -256,6 +286,7 @@ pub struct DatabaseStats {
     pub issues_count: i64,
     pub messages_count: i64,
     pub knowledge_count: i64,
+    pub projects_count: i64,
     pub prompts_count: i64,
     pub templates_count: i64,
 }
