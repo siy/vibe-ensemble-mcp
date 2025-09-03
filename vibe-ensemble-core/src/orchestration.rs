@@ -75,6 +75,7 @@
 
 pub mod executor;
 pub mod models;
+pub mod task_worker_orchestrator;
 pub mod template_manager;
 pub mod worker_manager;
 pub mod workflow;
@@ -82,6 +83,10 @@ pub mod workspace_manager;
 
 pub use executor::{ClaudeStreamEvent, ExecutionResult, HeadlessClaudeExecutor};
 pub use models::*;
+pub use task_worker_orchestrator::{
+    TaskPromptGenerator, TaskWorkerConfig, TaskWorkerMapping, TaskWorkerOrchestrator,
+    TaskWorkerStats, TaskWorkerStatus,
+};
 pub use template_manager::{FilesystemTemplateManager, TemplateManager};
 pub use worker_manager::{
     McpServerConfig, OutputLine, OutputType, WorkerHandle, WorkerInfo, WorkerManager, WorkerOutput,
