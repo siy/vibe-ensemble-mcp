@@ -13,6 +13,7 @@ use uuid::Uuid;
 use vibe_ensemble_core::{
     knowledge::KnowledgeEntry,
     message::Message,
+    orchestration::worker_manager::OutputType,
 };
 use vibe_ensemble_storage::StorageManager;
 
@@ -169,4 +170,16 @@ pub async fn messages_list(
         "total": filtered_messages.len(),
         "timestamp": chrono::Utc::now(),
     })))
+}
+
+// ======================
+// WORKER OUTPUT STRUCTURES
+// ======================
+
+/// Worker output line for API responses
+#[derive(Debug, Clone, Serialize)]
+pub struct WorkerOutputLine {
+    pub timestamp: chrono::DateTime<chrono::Utc>,
+    pub output_type: OutputType,
+    pub content: String,
 }

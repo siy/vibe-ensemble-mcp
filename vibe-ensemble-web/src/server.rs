@@ -83,6 +83,7 @@ impl WebServer {
             .route("/", get(handlers::dashboard))
             .route("/dashboard", get(handlers::dashboard))
             .route("/messages", get(handlers::messages_page))
+            .route("/workers", get(handlers::workers::dashboard))
             // Web UI routes
             .route("/agents", get(handlers::agents::list))
             .route("/agents/:id", get(handlers::agents::detail))
@@ -122,6 +123,28 @@ impl WebServer {
             .route(
                 "/api/messages/thread/:correlation_id",
                 get(handlers::messages_by_correlation),
+            )
+            // Worker API routes
+            .route("/api/workers", get(handlers::workers::list_workers_api))
+            .route(
+                "/api/workers/spawn",
+                post(handlers::workers::spawn_worker_api),
+            )
+            .route(
+                "/api/workers/:id",
+                get(handlers::workers::get_worker_status_api),
+            )
+            .route(
+                "/api/workers/:id/output",
+                get(handlers::workers::get_worker_output_api),
+            )
+            .route(
+                "/api/workers/:id/shutdown",
+                post(handlers::workers::shutdown_worker_api),
+            )
+            .route(
+                "/api/workers/ws",
+                get(handlers::workers::worker_websocket_handler),
             )
             // FUTURE: Prompt API routes will be implemented in a future update
             // Link validation API routes removed
