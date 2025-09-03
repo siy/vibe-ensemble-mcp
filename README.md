@@ -1,20 +1,38 @@
 # Vibe Ensemble
 
-A local team coordination system for Claude Code that helps multiple AI agents work together on your projects without conflicts.
+A powerful multi-agent coordination system that enables Claude Code instances to collaborate seamlessly through WebSocket connections, intelligent task orchestration, and automated worker management.
 
 ## What is Vibe Ensemble?
 
-Vibe Ensemble is a simple coordination server that runs locally on your computer. It helps when you're using multiple Claude Code instances to work on different parts of your projects - preventing conflicts, sharing knowledge, and keeping everyone organized.
+Vibe Ensemble is an advanced coordination server that transforms how multiple Claude Code instances work together on complex projects. Built on a WebSocket architecture, it provides real-time communication, intelligent task distribution, and automated worker spawning to create a true multi-agent development environment.
 
-Think of it as a local "mission control" for your AI development team.
+Think of it as an intelligent "mission control" that not only prevents conflicts but actively orchestrates teamwork across your AI development agents.
 
 ## Key Features
 
-- **Conflict Prevention**: Agents check with each other before making changes
-- **Knowledge Sharing**: Insights and patterns are shared across all agents  
-- **Issue Tracking**: Keep track of tasks, bugs, and coordination needs
-- **Web Dashboard**: Monitor agent activity and system health at a glance
-- **Zero Configuration**: Works out of the box with smart defaults
+### Multi-Agent WebSocket Architecture
+- **Real-time Communication**: WebSocket-based protocol for instant agent coordination
+- **Concurrent Connections**: Support for 10-50+ concurrent agents per instance
+- **Automatic Reconnection**: Robust connection management with graceful failure handling
+- **MCP 2.0 Compliance**: Full JSON-RPC 2.0 protocol implementation over WebSocket
+
+### Intelligent Task Orchestration
+- **Automated Worker Spawning**: Automatically creates specialized workers for specific tasks
+- **Task-Worker Mapping**: Intelligent assignment based on capabilities and workload
+- **Retry Logic**: Automatic retry with exponential backoff for failed operations
+- **Lifecycle Management**: Complete worker lifecycle from spawn to cleanup
+
+### Advanced Coordination Features
+- **Conflict Prevention**: Proactive detection and resolution of agent conflicts
+- **Knowledge Sharing**: Dynamic pattern recognition and insight distribution
+- **Issue Tracking**: Comprehensive task management with priority handling
+- **Cross-Project Learning**: Shared expertise across multiple project boundaries
+
+### Production-Ready Infrastructure
+- **Web Dashboard**: Real-time monitoring with system metrics and agent analytics
+- **SQLite Storage**: Persistent coordination data with ACID guarantees
+- **Security Hardening**: Process isolation, localhost-only binding, and data ownership
+- **Cross-Platform**: Mac, Linux, and Windows support with automated releases
 
 ## Quick Start
 
@@ -38,24 +56,41 @@ shasum -a 256 install.sh  # or sha256sum
 bash install.sh
 ```
 
-### 2. Start the Server
+### 2. Start the WebSocket Server
 
 ```bash
+# Start the full system (WebSocket MCP + Web Dashboard)
 vibe-ensemble
+
+# Or start WebSocket MCP server only
+vibe-ensemble --mcp-only --transport=websocket
 ```
 
-This starts:
-- Local coordination server
-- Web dashboard at <http://127.0.0.1:8080>
-- SQLite database in your platform data dir:
-  - macOS: `~/Library/Application Support/vibe-ensemble/`
-  - Linux: `~/.local/share/vibe-ensemble/`
-  - Windows: `%APPDATA%/vibe-ensemble/`
+This launches:
+- **WebSocket MCP Server** on `ws://127.0.0.1:8081` (default port)
+- **Web Dashboard** at `http://127.0.0.1:8080` (if not using --mcp-only)
+- **SQLite Database** in project-local directory: `./.vibe-ensemble/data.db`
 
-### 3. Connect Claude Code
+### 3. Connect Claude Code Agents
 
-Add this MCP server to Claude Code:
+Configure Claude Code to connect via WebSocket MCP:
 
+```json
+{
+  "mcpServers": {
+    "vibe-ensemble": {
+      "command": "vibe-ensemble",
+      "args": ["--mcp-only", "--transport=websocket", "--port=8081"],
+      "transport": {
+        "type": "websocket",
+        "url": "ws://127.0.0.1:8081"
+      }
+    }
+  }
+}
+```
+
+**Alternative stdio transport** (legacy support):
 ```json
 {
   "mcpServers": {
@@ -67,37 +102,81 @@ Add this MCP server to Claude Code:
 }
 ```
 
-That's it! Your Claude Code instances can now coordinate with each other.
+### 4. Verify Connection
 
-## How It Works
+Check agent coordination through the web dashboard or verify with:
 
-When you have multiple Claude Code instances working:
+```bash
+# Check server status
+curl http://127.0.0.1:8080/api/health
 
-1. **Agent Registration**: Each Claude Code instance registers as an agent
-2. **Conflict Detection**: Before making changes, agents check for conflicts
-3. **Knowledge Sharing**: Agents share discoveries and patterns
-4. **Issue Coordination**: Track and assign tasks across agents
+# List connected agents  
+curl http://127.0.0.1:8080/api/agents
+```
+
+Your Claude Code instances now have access to powerful multi-agent coordination tools!
+
+## How the WebSocket Architecture Works
+
+### Multi-Agent Coordination Flow
+
+```
+┌─────────────┐    WebSocket     ┌─────────────────────┐
+│ Claude Code │◄────────────────►│   Vibe Ensemble    │
+│   Agent 1   │   Real-time      │   WebSocket Server  │
+└─────────────┘   JSON-RPC       └─────────────────────┘
+                                           ▲
+┌─────────────┐    WebSocket               │
+│ Claude Code │◄───────────────────────────┤
+│   Agent 2   │   Concurrent               │ 
+└─────────────┘   Connection               ▼
+                                 ┌─────────────────────┐
+┌─────────────┐    WebSocket     │  Task Orchestrator  │
+│ Claude Code │◄─────────────────│  & Worker Manager   │
+│   Agent 3   │   Multi-agent    │                     │
+└─────────────┘   Protocol       └─────────────────────┘
+```
+
+### Coordination Process
+
+1. **WebSocket Connection**: Each Claude Code agent connects via WebSocket protocol
+2. **Agent Registration**: Agents register capabilities and specializations
+3. **Task Distribution**: Coordinator creates tasks and spawns specialized workers
+4. **Real-time Coordination**: Agents communicate instantly through WebSocket channels
+5. **Conflict Resolution**: Proactive detection and intelligent resolution protocols
+6. **Knowledge Synthesis**: Shared learning across all connected agents
+7. **Automated Cleanup**: Worker lifecycle management with graceful termination
 
 ## Use Cases
 
-**Single Developer with Multiple Agents:**
-- One agent working on frontend, another on backend
-- Specialized agents for testing, documentation, code review
-- Agents coordinate to avoid stepping on each other
+### Advanced Single Developer Workflows
+- **Intelligent Task Distribution**: Coordinator agent creates tasks, spawns specialized workers automatically
+- **Multi-Component Projects**: Frontend, backend, testing, and documentation agents working in harmony
+- **Automated Code Review**: Review agents triggered automatically on code changes
+- **Cross-Project Learning**: Knowledge patterns shared between different projects
 
-**Small Team Coordination:**
-- Each developer runs their own agents
-- Shared knowledge base and issue tracking
-- Prevent duplicate work and conflicting changes
+### Small Team Multi-Agent Coordination
+- **Distributed Agent Networks**: Each developer runs coordinated agent clusters
+- **Centralized Task Management**: Shared task orchestration across team members
+- **Real-time Conflict Prevention**: Instant notifications when agents might conflict
+- **Knowledge Amplification**: Team-wide pattern recognition and best practice sharing
 
-## Architecture
+### Production Development Scenarios
+- **CI/CD Integration**: Agents coordinate with build systems and deployment pipelines
+- **Issue-Driven Development**: Automatic worker spawning based on GitHub issues or tickets
+- **Quality Assurance Networks**: Multiple testing agents ensuring comprehensive coverage
+- **Documentation Automation**: Specialized documentation agents maintaining up-to-date docs
 
-Vibe Ensemble is designed to be simple and reliable:
+## WebSocket-First Architecture
 
-- **Local-First**: Runs entirely on your machine
-- **SQLite Storage**: No external database required  
-- **stdio Transport**: Direct integration with Claude Code
-- **Web Interface**: Optional dashboard for monitoring
+Vibe Ensemble is built for scalability and real-time coordination:
+
+- **WebSocket-Native**: Real-time multi-agent communication with JSON-RPC 2.0 over WebSocket
+- **Local-First**: Complete privacy with all data stored locally on your machine
+- **SQLite Storage**: High-performance persistent storage with ACID guarantees
+- **Task Orchestration**: Intelligent worker spawning and lifecycle management
+- **Web Dashboard**: Production-ready monitoring with real-time metrics and agent analytics
+- **Dual Transport**: WebSocket for real-time coordination + stdio for legacy compatibility
 
 ## Building from Source
 
@@ -113,24 +192,68 @@ The binary will be at `target/release/vibe-ensemble`.
 
 ## Configuration
 
-Vibe Ensemble works with zero configuration, but you can customize:
+### Zero Configuration Setup
+Vibe Ensemble works out of the box, but offers powerful customization:
 
 ```bash
-# Use custom database location
-export DATABASE_URL="sqlite://./my-project.db"
+# Default: WebSocket MCP + Web Dashboard + SQLite
+vibe-ensemble
 
-# Run web dashboard on different port  
-vibe-ensemble --port=9000
+# WebSocket MCP server only (no web dashboard)
+vibe-ensemble --mcp-only --transport=websocket
 
-# MCP-only mode (no web dashboard)
+# Custom ports for WebSocket and web interfaces
+vibe-ensemble --port=8081 --web-port=8080
+
+# Custom database location
+DATABASE_URL="sqlite://./my-project.db" vibe-ensemble
+
+# Legacy stdio transport (backward compatibility)
 vibe-ensemble --mcp-only --transport=stdio
+```
+
+### Advanced Configuration
+
+```bash
+# Production deployment with custom settings
+vibe-ensemble \
+  --port=8081 \
+  --web-port=8080 \
+  --host=127.0.0.1 \
+  --max-workers=50 \
+  --task-timeout=7200
+
+# Multi-project coordination
+DATABASE_URL="sqlite:///shared/coordination.db" vibe-ensemble --port=8081
+```
+
+### Environment Variables
+
+```bash
+# Database configuration
+export DATABASE_URL="sqlite://./project-coordination.db"
+
+# Network configuration  
+export VIBE_ENSEMBLE_PORT=8081
+export VIBE_WEB_PORT=8080
+export VIBE_HOST="127.0.0.1"
+
+# Worker management
+export VIBE_MAX_WORKERS=25
+export VIBE_TASK_TIMEOUT=3600
+
+# Logging
+export RUST_LOG=vibe_ensemble=info
 ```
 
 ## Documentation
 
-- [Installation Guide](docs/installation.md) - Detailed installation instructions
-- [User Guide](docs/user-guide.md) - Getting started and common workflows
-- [Developer Guide](docs/developer-guide.md) - Contributing and local development
+- [Installation Guide](docs/installation.md) - WebSocket server setup and Claude Code configuration
+- [Architecture Guide](docs/architecture.md) - WebSocket protocol, task orchestration, and system design
+- [User Guide](docs/user-guide.md) - Multi-agent workflows and coordination patterns
+- [Configuration Guide](docs/configuration.md) - Advanced settings and deployment options
+- [Troubleshooting Guide](docs/troubleshooting.md) - WebSocket connection issues and debugging
+- [Developer Guide](docs/developer-guide.md) - Contributing and extending the system
 
 ## Support
 
