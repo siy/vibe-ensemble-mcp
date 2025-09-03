@@ -10,6 +10,7 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use tracing::{debug, error, info, warn};
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
+use vibe_ensemble_core::orchestration::{McpServerConfig, WorkerManager, WorkerOutputConfig};
 use vibe_ensemble_mcp::{
     server::{CoordinationServices, McpServer},
     transport::WebSocketServer,
@@ -390,9 +391,28 @@ async fn main() -> anyhow::Result<()> {
     );
 
     // Create MCP server with coordination services
-    let server = McpServer::with_coordination(coordination_services);
+    let mut server = McpServer::with_coordination(coordination_services);
 
-    info!("MCP server initialized successfully");
+    // Initialize worker manager for Claude Code process management
+    info!("Initializing worker manager...");
+    let mcp_config = McpServerConfig {
+        host: mcp_host.clone(),
+        port: mcp_port,
+    };
+
+    let worker_output_config = WorkerOutputConfig {
+        enabled: log_worker_output,
+        log_directory: if log_worker_output {
+            Some(log_path.clone())
+        } else {
+            None
+        },
+    };
+
+    let worker_manager = Arc::new(WorkerManager::new(mcp_config, worker_output_config));
+    server = server.with_worker_manager(worker_manager.clone());
+
+    info!("MCP server with worker management initialized successfully");
 
     // Note: message_buffer_size was used for stdio transport only
     // WebSocket transport uses its own internal buffering
@@ -438,14 +458,22 @@ async fn main() -> anyhow::Result<()> {
     );
     run_websocket_transport(server, mcp_host, mcp_port, &mut web_handle, mcp_only).await?;
 
-    // Step 2: Shutdown web server gracefully
+    // Step 2: Shutdown worker manager
+    info!("Shutting down worker manager...");
+    if let Err(e) = worker_manager.shutdown_all().await {
+        error!("Error shutting down worker manager: {}", e);
+    } else {
+        info!("Worker manager shutdown completed");
+    }
+
+    // Step 3: Shutdown web server gracefully
     info!("Shutting down web dashboard...");
     web_handle.abort();
 
     // Give web server time to shut down gracefully
     tokio::time::sleep(std::time::Duration::from_millis(500)).await;
 
-    // Step 3: Final cleanup and status
+    // Step 4: Final cleanup and status
     info!("All services shut down successfully");
     info!("Vibe Ensemble MCP Server shutdown completed");
     Ok(())

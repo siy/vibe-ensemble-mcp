@@ -76,11 +76,16 @@
 pub mod executor;
 pub mod models;
 pub mod template_manager;
+pub mod worker_manager;
 pub mod workflow;
 pub mod workspace_manager;
 
 pub use executor::{ClaudeStreamEvent, ExecutionResult, HeadlessClaudeExecutor};
 pub use models::*;
 pub use template_manager::{FilesystemTemplateManager, TemplateManager};
+pub use worker_manager::{
+    McpServerConfig, OutputLine, OutputType, WorkerHandle, WorkerInfo, WorkerManager, WorkerOutput,
+    WorkerOutputConfig, WorkerStatus,
+};
 pub use workflow::{WorkflowContext, WorkflowExecutor, WorkflowResult};
 pub use workspace_manager::{WorkspaceConfig, WorkspaceManager};

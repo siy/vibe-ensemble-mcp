@@ -61,6 +61,9 @@ pub enum Error {
 
     #[error("Resource already exists: {resource} with id {id}")]
     AlreadyExists { resource: String, id: String },
+
+    #[error("Worker error: {0}")]
+    Worker(String),
 }
 
 impl From<serde_json::Error> for Error {
@@ -253,6 +256,7 @@ impl Error {
             Error::Io { .. } => "io",
             Error::Rendering { .. } => "rendering",
             Error::AlreadyExists { .. } => "already_exists",
+            Error::Worker(_) => "worker",
         }
     }
 }

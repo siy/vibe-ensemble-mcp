@@ -30,7 +30,9 @@ use uuid::Uuid;
 use vibe_ensemble_core::agent::{AgentStatus, AgentType, ConnectionMetadata};
 use vibe_ensemble_core::issue::{IssuePriority, IssueStatus};
 use vibe_ensemble_core::message::{MessagePriority, MessageType};
-use vibe_ensemble_core::orchestration::workspace_manager::WorkspaceManager;
+use vibe_ensemble_core::orchestration::{
+    worker_manager::WorkerManager, workspace_manager::WorkspaceManager,
+};
 use vibe_ensemble_storage::services::{
     AgentService, CoordinationService, IssueService, KnowledgeService, MessageService,
 };
@@ -83,6 +85,8 @@ pub struct McpServer {
     knowledge_service: Option<Arc<KnowledgeService>>,
     /// Workspace manager for git worktree management
     workspace_manager: Option<Arc<WorkspaceManager>>,
+    /// Worker manager for Claude Code process management
+    worker_manager: Option<Arc<WorkerManager>>,
 }
 
 /// Client session information
@@ -108,6 +112,7 @@ impl McpServer {
             coordination_service: None,
             knowledge_service: None,
             workspace_manager: None,
+            worker_manager: None,
         }
     }
 
@@ -123,6 +128,7 @@ impl McpServer {
             coordination_service: Some(services.coordination_service),
             knowledge_service: Some(services.knowledge_service),
             workspace_manager: None,
+            worker_manager: None,
         }
     }
 
@@ -141,12 +147,19 @@ impl McpServer {
             coordination_service: Some(services.coordination_service),
             knowledge_service: Some(services.knowledge_service),
             workspace_manager: None,
+            worker_manager: None,
         }
     }
 
     /// Set the workspace manager for git worktree management
     pub fn with_workspace_manager(mut self, workspace_manager: Arc<WorkspaceManager>) -> Self {
         self.workspace_manager = Some(workspace_manager);
+        self
+    }
+
+    /// Set the worker manager for Claude Code process management
+    pub fn with_worker_manager(mut self, worker_manager: Arc<WorkerManager>) -> Self {
+        self.worker_manager = Some(worker_manager);
         self
     }
 
@@ -527,6 +540,74 @@ impl McpServer {
                         "details": {"type": "object", "description": "Coordination details and requirements"}
                     },
                     "required": ["coordinationType", "involvedAgents", "scope", "coordinatorAgentId", "details"]
+                }
+            }),
+            // Worker process management tools
+            serde_json::json!({
+                "name": "vibe_worker_spawn",
+                "description": "Spawn a new Claude Code worker process with task-specific prompt",
+                "inputSchema": {
+                    "type": "object",
+                    "properties": {
+                        "prompt": {"type": "string", "description": "Task-specific prompt for the worker"},
+                        "capabilities": {"type": "array", "items": {"type": "string"}, "description": "List of capabilities/tools the worker should have"},
+                        "workingDirectory": {"type": "string", "description": "Optional working directory for the worker"}
+                    },
+                    "required": ["prompt"]
+                }
+            }),
+            serde_json::json!({
+                "name": "vibe_worker_list",
+                "description": "List all active Claude Code worker processes",
+                "inputSchema": {
+                    "type": "object",
+                    "properties": {},
+                    "additionalProperties": false
+                }
+            }),
+            serde_json::json!({
+                "name": "vibe_worker_status",
+                "description": "Get detailed status information for a specific worker",
+                "inputSchema": {
+                    "type": "object",
+                    "properties": {
+                        "workerId": {"type": "string", "description": "UUID of the worker to query"}
+                    },
+                    "required": ["workerId"]
+                }
+            }),
+            serde_json::json!({
+                "name": "vibe_worker_output",
+                "description": "Get captured output from a specific worker process",
+                "inputSchema": {
+                    "type": "object",
+                    "properties": {
+                        "workerId": {"type": "string", "description": "UUID of the worker to query"}
+                    },
+                    "required": ["workerId"]
+                }
+            }),
+            serde_json::json!({
+                "name": "vibe_worker_shutdown",
+                "description": "Gracefully shutdown a specific worker process",
+                "inputSchema": {
+                    "type": "object",
+                    "properties": {
+                        "workerId": {"type": "string", "description": "UUID of the worker to shutdown"}
+                    },
+                    "required": ["workerId"]
+                }
+            }),
+            serde_json::json!({
+                "name": "vibe_worker_register_connection",
+                "description": "Associate a worker process with a WebSocket connection",
+                "inputSchema": {
+                    "type": "object",
+                    "properties": {
+                        "workerId": {"type": "string", "description": "UUID of the worker"},
+                        "connectionId": {"type": "string", "description": "ID of the WebSocket connection"}
+                    },
+                    "required": ["workerId", "connectionId"]
                 }
             }),
             serde_json::json!({
@@ -5836,6 +5917,55 @@ impl McpServer {
                 ))
                 .await
             }
+            // Worker process management operations
+            "worker_spawn" => {
+                self.handle_worker_spawn(JsonRpcRequest::new_with_id(
+                    request.id,
+                    "vibe/worker/spawn",
+                    Some(params.params),
+                ))
+                .await
+            }
+            "worker_list" => {
+                self.handle_worker_list(JsonRpcRequest::new_with_id(
+                    request.id,
+                    "vibe/worker/list",
+                    Some(params.params),
+                ))
+                .await
+            }
+            "worker_status" => {
+                self.handle_worker_status(JsonRpcRequest::new_with_id(
+                    request.id,
+                    "vibe/worker/status",
+                    Some(params.params),
+                ))
+                .await
+            }
+            "worker_output" => {
+                self.handle_worker_output(JsonRpcRequest::new_with_id(
+                    request.id,
+                    "vibe/worker/output",
+                    Some(params.params),
+                ))
+                .await
+            }
+            "worker_shutdown" => {
+                self.handle_worker_shutdown(JsonRpcRequest::new_with_id(
+                    request.id,
+                    "vibe/worker/shutdown",
+                    Some(params.params),
+                ))
+                .await
+            }
+            "worker_register_connection" => {
+                self.handle_worker_register_connection(JsonRpcRequest::new_with_id(
+                    request.id,
+                    "vibe/worker/register_connection",
+                    Some(params.params),
+                ))
+                .await
+            }
 
             // Resource operations
             "project_lock" => {
@@ -6236,6 +6366,352 @@ impl McpServer {
                     data: None,
                 },
             ))),
+        }
+    }
+
+    // Worker process management methods
+    async fn handle_worker_spawn(
+        &self,
+        request: JsonRpcRequest,
+    ) -> Result<Option<JsonRpcResponse>> {
+        if let Some(worker_manager) = &self.worker_manager {
+            let params: serde_json::Map<String, serde_json::Value> =
+                if let Some(params) = request.params {
+                    serde_json::from_value(params).map_err(|e| Error::InvalidParams {
+                        message: format!("Invalid worker spawn parameters: {}", e),
+                    })?
+                } else {
+                    serde_json::Map::new()
+                };
+
+            // Extract parameters
+            let prompt = params
+                .get("prompt")
+                .and_then(|v| v.as_str())
+                .ok_or_else(|| Error::InvalidParams {
+                    message: "Missing 'prompt' parameter".to_string(),
+                })?
+                .to_string();
+
+            let capabilities: Vec<String> = params
+                .get("capabilities")
+                .and_then(|v| v.as_array())
+                .map(|arr| {
+                    arr.iter()
+                        .filter_map(|v| v.as_str().map(String::from))
+                        .collect()
+                })
+                .unwrap_or_default();
+
+            let working_directory = params
+                .get("workingDirectory")
+                .and_then(|v| v.as_str())
+                .map(std::path::PathBuf::from);
+
+            // Spawn the worker
+            match worker_manager
+                .spawn_worker(prompt, capabilities, working_directory)
+                .await
+            {
+                Ok(worker_id) => {
+                    info!("Successfully spawned worker {}", worker_id);
+                    Ok(Some(JsonRpcResponse::success(
+                        request.id,
+                        serde_json::json!({
+                            "workerId": worker_id,
+                            "status": "spawned"
+                        }),
+                    )))
+                }
+                Err(e) => {
+                    error!("Failed to spawn worker: {}", e);
+                    Ok(Some(JsonRpcResponse::error(
+                        request.id,
+                        JsonRpcError {
+                            code: error_codes::INTERNAL_ERROR,
+                            message: format!("Failed to spawn worker: {}", e),
+                            data: None,
+                        },
+                    )))
+                }
+            }
+        } else {
+            Ok(Some(JsonRpcResponse::error(
+                request.id,
+                JsonRpcError {
+                    code: error_codes::INTERNAL_ERROR,
+                    message: "Worker manager not available".to_string(),
+                    data: None,
+                },
+            )))
+        }
+    }
+
+    async fn handle_worker_list(&self, request: JsonRpcRequest) -> Result<Option<JsonRpcResponse>> {
+        if let Some(worker_manager) = &self.worker_manager {
+            let workers = worker_manager.list_workers().await;
+            Ok(Some(JsonRpcResponse::success(
+                request.id,
+                serde_json::json!({
+                    "workers": workers
+                }),
+            )))
+        } else {
+            Ok(Some(JsonRpcResponse::error(
+                request.id,
+                JsonRpcError {
+                    code: error_codes::INTERNAL_ERROR,
+                    message: "Worker manager not available".to_string(),
+                    data: None,
+                },
+            )))
+        }
+    }
+
+    async fn handle_worker_status(
+        &self,
+        request: JsonRpcRequest,
+    ) -> Result<Option<JsonRpcResponse>> {
+        if let Some(worker_manager) = &self.worker_manager {
+            let params: serde_json::Map<String, serde_json::Value> =
+                if let Some(params) = request.params {
+                    serde_json::from_value(params).map_err(|e| Error::InvalidParams {
+                        message: format!("Invalid worker status parameters: {}", e),
+                    })?
+                } else {
+                    serde_json::Map::new()
+                };
+
+            let worker_id_str =
+                params
+                    .get("workerId")
+                    .and_then(|v| v.as_str())
+                    .ok_or_else(|| Error::InvalidParams {
+                        message: "Missing 'workerId' parameter".to_string(),
+                    })?;
+
+            let worker_id = Uuid::parse_str(worker_id_str).map_err(|e| Error::InvalidParams {
+                message: format!("Invalid worker ID format: {}", e),
+            })?;
+
+            match worker_manager.get_worker_status(&worker_id).await {
+                Some(worker_info) => Ok(Some(JsonRpcResponse::success(
+                    request.id,
+                    serde_json::to_value(worker_info)?,
+                ))),
+                None => Ok(Some(JsonRpcResponse::error(
+                    request.id,
+                    JsonRpcError {
+                        code: error_codes::INVALID_PARAMS,
+                        message: format!("Worker {} not found", worker_id),
+                        data: None,
+                    },
+                ))),
+            }
+        } else {
+            Ok(Some(JsonRpcResponse::error(
+                request.id,
+                JsonRpcError {
+                    code: error_codes::INTERNAL_ERROR,
+                    message: "Worker manager not available".to_string(),
+                    data: None,
+                },
+            )))
+        }
+    }
+
+    async fn handle_worker_output(
+        &self,
+        request: JsonRpcRequest,
+    ) -> Result<Option<JsonRpcResponse>> {
+        if let Some(worker_manager) = &self.worker_manager {
+            let params: serde_json::Map<String, serde_json::Value> =
+                if let Some(params) = request.params {
+                    serde_json::from_value(params).map_err(|e| Error::InvalidParams {
+                        message: format!("Invalid worker output parameters: {}", e),
+                    })?
+                } else {
+                    serde_json::Map::new()
+                };
+
+            let worker_id_str =
+                params
+                    .get("workerId")
+                    .and_then(|v| v.as_str())
+                    .ok_or_else(|| Error::InvalidParams {
+                        message: "Missing 'workerId' parameter".to_string(),
+                    })?;
+
+            let worker_id = Uuid::parse_str(worker_id_str).map_err(|e| Error::InvalidParams {
+                message: format!("Invalid worker ID format: {}", e),
+            })?;
+
+            match worker_manager.get_worker_output(&worker_id).await {
+                Ok(output_lines) => Ok(Some(JsonRpcResponse::success(
+                    request.id,
+                    serde_json::json!({
+                        "workerId": worker_id,
+                        "output": output_lines
+                    }),
+                ))),
+                Err(e) => Ok(Some(JsonRpcResponse::error(
+                    request.id,
+                    JsonRpcError {
+                        code: error_codes::INVALID_PARAMS,
+                        message: format!("Failed to get worker output: {}", e),
+                        data: None,
+                    },
+                ))),
+            }
+        } else {
+            Ok(Some(JsonRpcResponse::error(
+                request.id,
+                JsonRpcError {
+                    code: error_codes::INTERNAL_ERROR,
+                    message: "Worker manager not available".to_string(),
+                    data: None,
+                },
+            )))
+        }
+    }
+
+    async fn handle_worker_shutdown(
+        &self,
+        request: JsonRpcRequest,
+    ) -> Result<Option<JsonRpcResponse>> {
+        if let Some(worker_manager) = &self.worker_manager {
+            let params: serde_json::Map<String, serde_json::Value> =
+                if let Some(params) = request.params {
+                    serde_json::from_value(params).map_err(|e| Error::InvalidParams {
+                        message: format!("Invalid worker shutdown parameters: {}", e),
+                    })?
+                } else {
+                    serde_json::Map::new()
+                };
+
+            let worker_id_str =
+                params
+                    .get("workerId")
+                    .and_then(|v| v.as_str())
+                    .ok_or_else(|| Error::InvalidParams {
+                        message: "Missing 'workerId' parameter".to_string(),
+                    })?;
+
+            let worker_id = Uuid::parse_str(worker_id_str).map_err(|e| Error::InvalidParams {
+                message: format!("Invalid worker ID format: {}", e),
+            })?;
+
+            match worker_manager.shutdown_worker(&worker_id).await {
+                Ok(()) => {
+                    info!("Successfully shutdown worker {}", worker_id);
+                    Ok(Some(JsonRpcResponse::success(
+                        request.id,
+                        serde_json::json!({
+                            "workerId": worker_id,
+                            "status": "shutdown"
+                        }),
+                    )))
+                }
+                Err(e) => {
+                    error!("Failed to shutdown worker {}: {}", worker_id, e);
+                    Ok(Some(JsonRpcResponse::error(
+                        request.id,
+                        JsonRpcError {
+                            code: error_codes::INTERNAL_ERROR,
+                            message: format!("Failed to shutdown worker: {}", e),
+                            data: None,
+                        },
+                    )))
+                }
+            }
+        } else {
+            Ok(Some(JsonRpcResponse::error(
+                request.id,
+                JsonRpcError {
+                    code: error_codes::INTERNAL_ERROR,
+                    message: "Worker manager not available".to_string(),
+                    data: None,
+                },
+            )))
+        }
+    }
+
+    async fn handle_worker_register_connection(
+        &self,
+        request: JsonRpcRequest,
+    ) -> Result<Option<JsonRpcResponse>> {
+        if let Some(worker_manager) = &self.worker_manager {
+            let params: serde_json::Map<String, serde_json::Value> =
+                if let Some(params) = request.params {
+                    serde_json::from_value(params).map_err(|e| Error::InvalidParams {
+                        message: format!("Invalid worker register connection parameters: {}", e),
+                    })?
+                } else {
+                    serde_json::Map::new()
+                };
+
+            let worker_id_str =
+                params
+                    .get("workerId")
+                    .and_then(|v| v.as_str())
+                    .ok_or_else(|| Error::InvalidParams {
+                        message: "Missing 'workerId' parameter".to_string(),
+                    })?;
+
+            let connection_id = params
+                .get("connectionId")
+                .and_then(|v| v.as_str())
+                .ok_or_else(|| Error::InvalidParams {
+                    message: "Missing 'connectionId' parameter".to_string(),
+                })?
+                .to_string();
+
+            let worker_id = Uuid::parse_str(worker_id_str).map_err(|e| Error::InvalidParams {
+                message: format!("Invalid worker ID format: {}", e),
+            })?;
+
+            match worker_manager
+                .register_connection(worker_id, connection_id.clone())
+                .await
+            {
+                Ok(()) => {
+                    info!(
+                        "Successfully registered connection {} for worker {}",
+                        connection_id, worker_id
+                    );
+                    Ok(Some(JsonRpcResponse::success(
+                        request.id,
+                        serde_json::json!({
+                            "workerId": worker_id,
+                            "connectionId": connection_id,
+                            "status": "connected"
+                        }),
+                    )))
+                }
+                Err(e) => {
+                    error!(
+                        "Failed to register connection for worker {}: {}",
+                        worker_id, e
+                    );
+                    Ok(Some(JsonRpcResponse::error(
+                        request.id,
+                        JsonRpcError {
+                            code: error_codes::INTERNAL_ERROR,
+                            message: format!("Failed to register connection: {}", e),
+                            data: None,
+                        },
+                    )))
+                }
+            }
+        } else {
+            Ok(Some(JsonRpcResponse::error(
+                request.id,
+                JsonRpcError {
+                    code: error_codes::INTERNAL_ERROR,
+                    message: "Worker manager not available".to_string(),
+                    data: None,
+                },
+            )))
         }
     }
 
