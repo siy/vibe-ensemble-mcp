@@ -9,7 +9,7 @@ use axum::{
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 use uuid::Uuid;
-use vibe_ensemble_core::orchestration::worker_manager::{WorkerInfo, WorkerStatus, OutputType};
+use vibe_ensemble_core::orchestration::worker_manager::{OutputType, WorkerInfo, WorkerStatus};
 use vibe_ensemble_storage::StorageManager;
 
 use crate::{templates::WorkersTemplate, Result};
