@@ -427,7 +427,7 @@ impl McpServer {
                         "description": {"type": "string", "description": "Issue description"},
                         "priority": {"type": "string", "enum": ["Low", "Medium", "High", "Critical"], "description": "Issue priority"},
                         "issueType": {"type": "string", "description": "Type of issue (e.g., bug, feature, task)"},
-                        "projectId": {"type": "string", "description": "Project identifier"},
+                        "projectId": {"type": "string", "format": "uuid", "description": "Project identifier (UUID)"},
                         "createdByAgentId": {"type": "string", "description": "ID of the agent creating the issue"},
                         "labels": {"type": "array", "items": {"type": "string"}, "description": "Issue labels/tags"},
                         "assignee": {"type": "string", "description": "Agent ID to assign the issue to"}
@@ -441,7 +441,7 @@ impl McpServer {
                 "inputSchema": {
                     "type": "object",
                     "properties": {
-                        "projectId": {"type": "string", "description": "Filter by project ID"},
+                        "projectId": {"type": "string", "format": "uuid", "description": "Filter by project ID (UUID)"},
                         "status": {"type": "string", "enum": ["Open", "InProgress", "Resolved", "Closed"], "description": "Filter by status"},
                         "assignee": {"type": "string", "description": "Filter by assignee agent ID"},
                         "issueType": {"type": "string", "description": "Filter by issue type"},
@@ -616,7 +616,7 @@ impl McpServer {
                 "inputSchema": {
                     "type": "object",
                     "properties": {
-                        "projectId": {"type": "string", "description": "Project identifier (optional)"},
+                        "projectId": {"type": "string", "format": "uuid", "description": "Project identifier (UUID, optional)"},
                         "resourcePath": {"type": "string", "description": "Path to resource being locked"},
                         "lockType": {"type": "string", "enum": ["Exclusive", "Shared", "Coordination"], "description": "Type of lock"},
                         "lockHolderAgentId": {"type": "string", "description": "Agent ID requesting the lock"},
@@ -633,8 +633,8 @@ impl McpServer {
                     "type": "object",
                     "properties": {
                         "declaringAgentId": {"type": "string", "description": "ID of agent declaring dependency"},
-                        "sourceProject": {"type": "string", "description": "Source project name"},
-                        "targetProject": {"type": "string", "description": "Target project name"},
+                        "sourceProject": {"type": "string", "format": "uuid", "description": "Source project ID (UUID)"},
+                        "targetProject": {"type": "string", "format": "uuid", "description": "Target project ID (UUID)"},
                         "dependencyType": {"type": "string", "enum": ["API_CHANGE", "SHARED_RESOURCE", "BUILD_DEPENDENCY", "CONFIGURATION", "DATA_SCHEMA"], "description": "Type of dependency"},
                         "description": {"type": "string", "description": "Description of dependency"},
                         "impact": {"type": "string", "enum": ["BLOCKER", "MAJOR", "MINOR", "INFO"], "description": "Impact level"},
@@ -652,7 +652,7 @@ impl McpServer {
                     "type": "object",
                     "properties": {
                         "requestingAgentId": {"type": "string", "description": "ID of requesting agent"},
-                        "targetProject": {"type": "string", "description": "Target project name"},
+                        "targetProject": {"type": "string", "format": "uuid", "description": "Target project ID (UUID)"},
                         "requiredCapabilities": {"type": "array", "items": {"type": "string"}, "description": "Required worker capabilities"},
                         "priority": {"type": "string", "enum": ["CRITICAL", "HIGH", "MEDIUM", "LOW"], "description": "Spawn priority"},
                         "taskDescription": {"type": "string", "description": "Task description for new worker"},
@@ -3458,6 +3458,18 @@ impl McpServer {
         let declaring_agent_id = Uuid::parse_str(&params.declaring_agent_id)
             .map_err(|_| Error::validation("Invalid declaring_agent_id UUID"))?;
 
+        // Parse project UUIDs from strings
+        let source_project = Uuid::parse_str(&params.source_project)
+            .map_err(|e| Error::validation(&format!("Invalid source_project UUID: {e}")))?;
+        let target_project = Uuid::parse_str(&params.target_project)
+            .map_err(|e| Error::validation(&format!("Invalid target_project UUID: {e}")))?;
+
+        if source_project == target_project {
+            return Err(Error::validation(
+                "source_project and target_project must differ",
+            ));
+        }
+
         // Parse dependency type
         let dependency_type = match params.dependency_type.as_str() {
             "API_CHANGE" => vibe_ensemble_core::coordination::DependencyType::ApiChange,
@@ -3498,8 +3510,8 @@ impl McpServer {
         let (dependency, coordination_plan, issue) = coordination_service
             .declare_dependency(
                 declaring_agent_id,
-                params.source_project,
-                params.target_project,
+                source_project,
+                target_project,
                 dependency_type,
                 params.description,
                 impact,
@@ -3566,6 +3578,10 @@ impl McpServer {
         let requesting_agent_id = Uuid::parse_str(&params.requesting_agent_id)
             .map_err(|_| Error::validation("Invalid requesting_agent_id UUID"))?;
 
+        // Parse project UUID from string
+        let target_project = Uuid::parse_str(&params.target_project)
+            .map_err(|e| Error::validation(&format!("Invalid target_project UUID: {e}")))?;
+
         // Parse priority
         let priority = match params.priority.as_str() {
             "CRITICAL" => vibe_ensemble_core::coordination::SpawnPriority::Critical,
@@ -3595,7 +3611,7 @@ impl McpServer {
         let spawn_request = coordination_service
             .request_worker_spawn(
                 requesting_agent_id,
-                params.target_project,
+                target_project,
                 params.required_capabilities.clone(),
                 priority,
                 params.task_description,

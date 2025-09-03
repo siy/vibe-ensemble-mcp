@@ -50,8 +50,8 @@ impl CoordinationService {
     pub async fn declare_dependency(
         &self,
         declaring_agent_id: Uuid,
-        source_project: String,
-        target_project: String,
+        source_project: Uuid,
+        target_project: Uuid,
         dependency_type: DependencyType,
         description: String,
         impact: DependencyImpact,
@@ -77,8 +77,8 @@ impl CoordinationService {
         // Create dependency record
         let mut dependency = CrossProjectDependency::builder()
             .declaring_agent_id(declaring_agent_id)
-            .source_project(source_project.clone())
-            .target_project(target_project.clone())
+            .source_project(source_project)
+            .target_project(target_project)
             .dependency_type(dependency_type.clone())
             .description(description.clone())
             .impact(impact.clone())
@@ -91,9 +91,7 @@ impl CoordinationService {
         }
 
         // Detect active workers on target project
-        let target_workers = self
-            .find_active_workers_for_project(&target_project)
-            .await?;
+        let target_workers = self.find_active_workers_for_project(target_project).await?;
         debug!(
             "Found {} active workers on target project {}",
             target_workers.len(),
@@ -131,7 +129,7 @@ impl CoordinationService {
     pub async fn request_worker_spawn(
         &self,
         requesting_agent_id: Uuid,
-        target_project: String,
+        target_project: Uuid,
         required_capabilities: Vec<String>,
         priority: SpawnPriority,
         task_description: String,
@@ -154,9 +152,7 @@ impl CoordinationService {
             })?;
 
         // Check if workers are already available
-        let existing_workers = self
-            .find_active_workers_for_project(&target_project)
-            .await?;
+        let existing_workers = self.find_active_workers_for_project(target_project).await?;
         let capability_matches = self
             .find_workers_with_capabilities(&required_capabilities)
             .await?;
@@ -164,7 +160,7 @@ impl CoordinationService {
         // Create spawn request
         let mut spawn_request = WorkerSpawnRequest::builder()
             .requesting_agent_id(requesting_agent_id)
-            .target_project(target_project.clone())
+            .target_project(target_project)
             .required_capabilities(required_capabilities.clone())
             .priority(priority)
             .task_description(task_description.clone())
@@ -332,7 +328,7 @@ impl CoordinationService {
     // Private helper methods
 
     /// Find active workers for a specific project
-    async fn find_active_workers_for_project(&self, _project: &str) -> Result<Vec<Agent>> {
+    async fn find_active_workers_for_project(&self, _project: Uuid) -> Result<Vec<Agent>> {
         let all_agents = self.agent_repo.list().await?;
         let active_workers: Vec<Agent> = all_agents
             .into_iter()
@@ -379,7 +375,7 @@ impl CoordinationService {
                             worker.name, dependency.target_project
                         ),
                         assigned_agent_id: Some(worker.id),
-                        target_project: dependency.target_project.clone(),
+                        target_project: dependency.target_project,
                         affected_resources: dependency.affected_files.clone(),
                         estimated_effort: Some("2-4 hours".to_string()),
                         dependencies: Vec::new(),
@@ -400,7 +396,7 @@ impl CoordinationService {
                         dependency.target_project
                     ),
                     assigned_agent_id: Some(dependency.declaring_agent_id),
-                    target_project: dependency.target_project.clone(),
+                    target_project: dependency.target_project,
                     affected_resources: dependency.affected_files.clone(),
                     estimated_effort: Some("1-2 hours".to_string()),
                     dependencies: Vec::new(),
@@ -420,7 +416,7 @@ impl CoordinationService {
                         dependency.dependency_type, dependency.target_project
                     ),
                     assigned_agent_id: None,
-                    target_project: dependency.target_project.clone(),
+                    target_project: dependency.target_project,
                     affected_resources: dependency.affected_files.clone(),
                     estimated_effort: Some("4-8 hours".to_string()),
                     dependencies: Vec::new(),
@@ -533,8 +529,8 @@ impl CoordinationService {
             .description(description)
             .priority(priority)
             .tag("cross-project-dependency")
-            .tag(&dependency.source_project)
-            .tag(&dependency.target_project)
+            .tag(dependency.source_project.to_string())
+            .tag(dependency.target_project.to_string())
             .build()?;
 
         // Link to dependency metadata
@@ -593,7 +589,7 @@ impl CoordinationService {
             .description(description)
             .priority(priority)
             .tag("worker-spawn-request")
-            .tag(&spawn_request.target_project)
+            .tag(spawn_request.target_project.to_string())
             .build()?;
 
         Ok(issue)
@@ -835,7 +831,7 @@ impl CoordinationService {
                     action_type: ActionType::Coordinate,
                     description: "Participate in conflict resolution".to_string(),
                     assigned_agent_id: Some(agent_id),
-                    target_project: "conflict-resolution".to_string(),
+                    target_project: Uuid::new_v4(), // Mock project ID for conflict resolution
                     affected_resources: conflict_case.conflicted_resources.clone(),
                     estimated_effort: Some("1-2 hours".to_string()),
                     dependencies: Vec::new(),

@@ -17,6 +17,7 @@
 //! - **[Configuration]**: Manages coordinator settings and behavioral parameters
 //! - **[SystemPrompt]**: Versioned prompts for different agent roles and capabilities
 //! - **[AgentTemplate]**: Templates for configuring Claude Code agents with workflows
+//! - **[Project]**: Organizational units that group agents and provide workspace context
 //!
 //! # Error Handling
 //!
@@ -29,13 +30,21 @@
 //! Here's a quick example of creating an agent and assigning it to an issue:
 //!
 //! ```rust
-//! use vibe_ensemble_core::{agent::*, issue::*, Error, Result};
-//! use uuid::Uuid;
+//! use vibe_ensemble_core::{agent::*, issue::*, project::*, Error, Result};
+//! # fn try_main() -> Result<()> {
+//!
+//! // Create a project to organize work
+//! let project = Project::builder()
+//!     .name("authentication-system")
+//!     .description("Core authentication and authorization system")
+//!     .workspace_path("/path/to/auth-project")
+//!     .build()?;
 //!
 //! // Create connection metadata for the agent
 //! let metadata = ConnectionMetadata::builder()
 //!     .endpoint("https://localhost:8080")
 //!     .protocol_version("1.0")
+//!     .project_id(project.id)
 //!     .build()?;
 //!
 //! // Create a worker agent with capabilities
@@ -59,8 +68,10 @@
 //! // Assign the issue to the agent
 //! issue.assign_to(agent.id);
 //!
-//! println!("Agent {} assigned to issue: {}", agent.name, issue.title);
-//! # Ok::<(), Error>(())
+//! println!("Agent {} assigned to issue: {} in project {}", agent.name, issue.title, project.name);
+//! # Ok(())
+//! # }
+//! # try_main().unwrap();
 //! ```
 //!
 //! # Features
@@ -83,6 +94,7 @@
 //! [Configuration]: config::Configuration
 //! [SystemPrompt]: prompt::SystemPrompt
 //! [AgentTemplate]: prompt::AgentTemplate
+//! [Project]: project::Project
 
 pub mod agent;
 pub mod config;
@@ -93,6 +105,7 @@ pub mod knowledge;
 pub mod knowledge_intelligence;
 pub mod message;
 pub mod orchestration;
+pub mod project;
 pub mod prompt;
 
 pub use error::{Error, Result, ValidationErrors};
