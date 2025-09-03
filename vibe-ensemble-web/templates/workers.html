@@ -1,0 +1,493 @@
+{% extends "base.html" %}
+
+{% block title %}{{ title }}{% endblock %}
+
+{% block content %}
+<!-- Worker Management Dashboard -->
+
+<!-- Statistics Cards -->
+<div class="grid grid-4">
+    <div class="card stat-card">
+        <div class="stat-number" id="total-workers">{{ workers_data.total_workers }}</div>
+        <div class="stat-label">Total Workers</div>
+    </div>
+    <div class="card stat-card">
+        <div class="stat-number" id="active-workers">{{ workers_data.active_workers }}</div>
+        <div class="stat-label">Active Workers</div>
+    </div>
+    <div class="card stat-card">
+        <div class="stat-number" id="connected-workers">{{ workers_data.connected_workers }}</div>
+        <div class="stat-label">Connected Workers</div>
+    </div>
+    {% match system_metrics %}
+    {% when Some with (metrics) %}
+    <div class="card stat-card">
+        <div class="stat-number" id="cpu-usage">{{ metrics.cpu_usage_percent_int() }}%</div>
+        <div class="stat-label">CPU Usage</div>
+    </div>
+    {% when None %}
+    <div class="card stat-card">
+        <div class="stat-number" id="processes-spawned">0</div>
+        <div class="stat-label">Processes Spawned</div>
+    </div>
+    {% endmatch %}
+</div>
+
+<!-- Worker Spawn Controls -->
+<div class="card">
+    <h3>Spawn New Worker</h3>
+    <form id="spawn-worker-form" style="margin-bottom: 20px;">
+        <div class="grid grid-2">
+            <div>
+                <label for="worker-prompt">Task Prompt:</label>
+                <textarea id="worker-prompt" name="prompt" placeholder="Enter task description for the worker..." required style="min-height: 100px; width: 100%; margin-bottom: 10px;"></textarea>
+                
+                <label for="worker-capabilities">Capabilities (comma-separated):</label>
+                <input type="text" id="worker-capabilities" name="capabilities" placeholder="coding, debugging, testing" style="width: 100%; margin-bottom: 10px;">
+            </div>
+            <div>
+                <label for="working-directory">Working Directory (optional):</label>
+                <input type="text" id="working-directory" name="working_directory" placeholder="/path/to/project" style="width: 100%; margin-bottom: 10px;">
+                
+                <button type="submit" style="background: var(--primary-color); color: white; border: none; padding: 10px 20px; border-radius: 4px; cursor: pointer; margin-top: 20px;">
+                    Spawn Worker
+                </button>
+            </div>
+        </div>
+    </form>
+    <div id="spawn-result" style="display: none; margin-top: 15px;"></div>
+</div>
+
+<!-- Worker List -->
+<div class="card">
+    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
+        <h3>Active Workers</h3>
+        <button onclick="refreshWorkers()" style="background: var(--secondary-color); color: white; border: none; padding: 8px 16px; border-radius: 4px; cursor: pointer;">
+            Refresh
+        </button>
+    </div>
+    
+    <div id="workers-list">
+        {% if workers_data.workers.is_empty() %}
+        <div class="alert alert-info">
+            <strong>No workers currently running.</strong><br>
+            Use the form above to spawn a new worker or they will appear here when started.
+        </div>
+        {% else %}
+        <div class="table-container">
+            <table class="workers-table">
+                <thead>
+                    <tr>
+                        <th>Worker ID</th>
+                        <th>Status</th>
+                        <th>Started</th>
+                        <th>Process ID</th>
+                        <th>Capabilities</th>
+                        <th>Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for worker in workers_data.workers %}
+                    <tr class="worker-row" data-worker-id="{{ worker.id }}">
+                        <td><code>{{ worker.id.to_string()|truncate(8) }}...</code></td>
+                        <td><span class="status-badge status-{{ worker.status|lower }}">{{ worker.status }}</span></td>
+                        <td>{{ worker.started_at|format_timestamp }}</td>
+                        <td>{% match worker.process_id %}{% when Some with (pid) %}{{ pid }}{% when None %}N/A{% endmatch %}</td>
+                        <td>{% for cap in worker.capabilities %}{{ cap }}{% if !loop.last %}, {% endif %}{% endfor %}</td>
+                        <td>
+                            <button onclick="viewWorkerOutput('{{ worker.id }}')" class="btn-small">Output</button>
+                            <button onclick="shutdownWorker('{{ worker.id }}', true)" class="btn-small btn-warning">Shutdown</button>
+                            <button onclick="shutdownWorker('{{ worker.id }}', false)" class="btn-small btn-danger">Kill</button>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% endif %}
+    </div>
+</div>
+
+<!-- Worker Output Modal -->
+<div id="worker-output-modal" class="modal" style="display: none;">
+    <div class="modal-content">
+        <div class="modal-header">
+            <h3>Worker Output - <span id="output-worker-id"></span></h3>
+            <button onclick="closeOutputModal()" class="modal-close">&times;</button>
+        </div>
+        <div class="modal-body">
+            <div id="worker-output-content" style="background: #000; color: #fff; padding: 15px; font-family: monospace; height: 400px; overflow-y: auto; white-space: pre-wrap;">
+                Loading worker output...
+            </div>
+        </div>
+        <div class="modal-footer">
+            <button onclick="clearOutput()" class="btn-small">Clear</button>
+            <button onclick="closeOutputModal()" class="btn-small">Close</button>
+        </div>
+    </div>
+</div>
+
+{% endblock %}
+
+{% block extra_style %}
+.workers-table {
+    width: 100%;
+    border-collapse: collapse;
+    margin-top: 15px;
+}
+
+.workers-table th,
+.workers-table td {
+    text-align: left;
+    padding: 12px;
+    border-bottom: 1px solid #ddd;
+}
+
+.workers-table th {
+    background-color: var(--gray-100);
+    font-weight: bold;
+}
+
+.status-badge {
+    padding: 4px 8px;
+    border-radius: 12px;
+    font-size: 0.8em;
+    font-weight: bold;
+    text-transform: uppercase;
+}
+
+.status-starting { background: #fef3c7; color: #92400e; }
+.status-connected { background: #d1fae5; color: #065f46; }
+.status-running { background: #dbeafe; color: #1e40af; }
+.status-disconnected { background: #fde68a; color: #92400e; }
+.status-stopping { background: #fed7d7; color: #9b2c2c; }
+.status-stopped { background: #f3f4f6; color: #374151; }
+
+.btn-small {
+    padding: 4px 8px;
+    font-size: 0.8em;
+    border-radius: 3px;
+    border: none;
+    cursor: pointer;
+    margin-right: 5px;
+    background: var(--primary-color);
+    color: white;
+}
+
+.btn-warning { background: #f59e0b; }
+.btn-danger { background: #dc2626; }
+
+.modal {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: rgba(0, 0, 0, 0.5);
+    z-index: 1000;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.modal-content {
+    background: white;
+    border-radius: 8px;
+    width: 90%;
+    max-width: 800px;
+    max-height: 90%;
+    display: flex;
+    flex-direction: column;
+}
+
+.modal-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 20px;
+    border-bottom: 1px solid #ddd;
+}
+
+.modal-body {
+    flex: 1;
+    padding: 20px;
+    overflow: auto;
+}
+
+.modal-footer {
+    padding: 20px;
+    border-top: 1px solid #ddd;
+    text-align: right;
+}
+
+.modal-close {
+    background: none;
+    border: none;
+    font-size: 1.5em;
+    cursor: pointer;
+    color: #666;
+}
+
+.alert {
+    padding: 15px;
+    border-radius: 4px;
+    margin: 15px 0;
+}
+
+.alert-info {
+    background: #dbeafe;
+    color: #1e40af;
+    border: 1px solid #93c5fd;
+}
+
+.table-container {
+    overflow-x: auto;
+}
+{% endblock %}
+
+{% block extra_script %}
+// Worker management WebSocket connection
+let workersWebSocket = null;
+
+// Initialize WebSocket connection for real-time updates
+function initWorkersWebSocket() {
+    const wsProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+    const wsUrl = `${wsProtocol}//${window.location.host}/api/workers/ws`;
+    
+    workersWebSocket = new WebSocket(wsUrl);
+    
+    workersWebSocket.onopen = function() {
+        console.log('Workers WebSocket connected');
+    };
+    
+    workersWebSocket.onmessage = function(event) {
+        try {
+            const data = JSON.parse(event.data);
+            handleWorkersUpdate(data);
+        } catch (error) {
+            console.error('Error parsing workers WebSocket message:', error);
+        }
+    };
+    
+    workersWebSocket.onclose = function() {
+        console.log('Workers WebSocket disconnected, attempting reconnect...');
+        setTimeout(initWorkersWebSocket, 3000);
+    };
+    
+    workersWebSocket.onerror = function(error) {
+        console.error('Workers WebSocket error:', error);
+    };
+}
+
+// Handle worker status updates from WebSocket
+function handleWorkersUpdate(data) {
+    if (data.type === 'worker_status_update') {
+        updateWorkersDisplay(data.workers);
+        updateWorkerStats(data.workers);
+    } else if (data.type === 'worker_output') {
+        updateWorkerOutput(data.worker_id, data.output);
+    }
+}
+
+// Update workers display table
+function updateWorkersDisplay(workers) {
+    // Implementation for updating the workers table
+    refreshWorkers();
+}
+
+// Update worker statistics
+function updateWorkerStats(workers) {
+    const totalWorkers = workers.length;
+    const activeWorkers = workers.filter(w => {
+        const status = w.status.toLowerCase();
+        return status === 'connected' || status === 'running';
+    }).length;
+    const connectedWorkers = workers.filter(w => 
+        w.status.toLowerCase() === 'connected'
+    ).length;
+    
+    document.getElementById('total-workers').textContent = totalWorkers;
+    document.getElementById('active-workers').textContent = activeWorkers;
+    document.getElementById('connected-workers').textContent = connectedWorkers;
+}
+
+// Spawn new worker
+document.getElementById('spawn-worker-form').addEventListener('submit', async function(e) {
+    e.preventDefault();
+    
+    const formData = new FormData(e.target);
+    const capabilities = formData.get('capabilities').split(',').map(c => c.trim()).filter(c => c);
+    
+    const request = {
+        prompt: formData.get('prompt'),
+        capabilities: capabilities,
+        working_directory: formData.get('working_directory') || null
+    };
+    
+    try {
+        const response = await fetch('/api/workers/spawn', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify(request)
+        });
+        
+        const result = await response.json();
+        
+        if (response.ok) {
+            const alertDiv = document.createElement('div');
+            alertDiv.className = 'alert';
+            alertDiv.style.background = '#d1fae5';
+            alertDiv.style.color = '#065f46';
+            
+            const strongElement = document.createElement('strong');
+            strongElement.textContent = 'Worker spawned successfully!';
+            
+            alertDiv.appendChild(strongElement);
+            alertDiv.appendChild(document.createElement('br'));
+            
+            const workerIdText = document.createTextNode(`Worker ID: ${result.worker_id}`);
+            alertDiv.appendChild(workerIdText);
+            alertDiv.appendChild(document.createElement('br'));
+            
+            const statusText = document.createTextNode(`Status: ${result.status}`);
+            alertDiv.appendChild(statusText);
+            alertDiv.appendChild(document.createElement('br'));
+            
+            const messageText = document.createTextNode(`Message: ${result.message}`);
+            alertDiv.appendChild(messageText);
+            
+            const resultContainer = document.getElementById('spawn-result');
+            resultContainer.innerHTML = '';
+            resultContainer.appendChild(alertDiv);
+            e.target.reset();
+            setTimeout(refreshWorkers, 1000);
+        } else {
+            throw new Error(result.message || 'Failed to spawn worker');
+        }
+    } catch (error) {
+        const alertDiv = document.createElement('div');
+        alertDiv.className = 'alert';
+        alertDiv.style.background = '#fecaca';
+        alertDiv.style.color = '#991b1b';
+        
+        const strongElement = document.createElement('strong');
+        strongElement.textContent = 'Error:';
+        
+        const errorText = document.createTextNode(` ${error.message}`);
+        
+        alertDiv.appendChild(strongElement);
+        alertDiv.appendChild(errorText);
+        
+        const resultContainer = document.getElementById('spawn-result');
+        resultContainer.innerHTML = '';
+        resultContainer.appendChild(alertDiv);
+    }
+    
+    document.getElementById('spawn-result').style.display = 'block';
+});
+
+// Refresh workers list
+async function refreshWorkers() {
+    try {
+        const response = await fetch('/api/workers');
+        const workers = await response.json();
+        
+        // Update workers list (this would be more sophisticated in real implementation)
+        console.log('Workers updated:', workers);
+        
+        // For now, just update the count
+        updateWorkerStats(workers);
+    } catch (error) {
+        console.error('Failed to refresh workers:', error);
+    }
+}
+
+// View worker output
+function viewWorkerOutput(workerId) {
+    document.getElementById('output-worker-id').textContent = workerId.substr(0, 8) + '...';
+    document.getElementById('worker-output-modal').style.display = 'flex';
+    
+    // Load worker output
+    loadWorkerOutput(workerId);
+}
+
+// Load worker output via API
+async function loadWorkerOutput(workerId) {
+    try {
+        const response = await fetch(`/api/workers/${workerId}/output`);
+        const output = await response.json();
+        
+        const outputContent = document.getElementById('worker-output-content');
+        outputContent.innerHTML = '';
+        
+        if (output.length === 0) {
+            outputContent.textContent = 'No output available yet...';
+        } else {
+            output.forEach(line => {
+                const lineDiv = document.createElement('div');
+                lineDiv.className = `output-line output-${line.output_type}`;
+                lineDiv.textContent = `[${line.timestamp}] ${line.output_type.toUpperCase()}: ${line.content}`;
+                outputContent.appendChild(lineDiv);
+            });
+        }
+        
+        // Auto-scroll to bottom
+        outputContent.scrollTop = outputContent.scrollHeight;
+    } catch (error) {
+        console.error('Failed to load worker output:', error);
+        document.getElementById('worker-output-content').textContent = 'Error loading output: ' + error.message;
+    }
+}
+
+// Close output modal
+function closeOutputModal() {
+    document.getElementById('worker-output-modal').style.display = 'none';
+}
+
+// Clear output display
+function clearOutput() {
+    const outputContent = document.getElementById('worker-output-content');
+    outputContent.textContent = '';
+}
+
+// Shutdown worker
+async function shutdownWorker(workerId, graceful) {
+    const action = graceful ? 'shutdown' : 'kill';
+    
+    if (!confirm(`Are you sure you want to ${action} worker ${workerId.substr(0, 8)}...?`)) {
+        return;
+    }
+    
+    try {
+        const response = await fetch(`/api/workers/${workerId}/shutdown`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({ graceful: graceful })
+        });
+        
+        const result = await response.json();
+        
+        if (response.ok) {
+            console.log(`Worker ${action} initiated:`, result);
+            setTimeout(refreshWorkers, 1000);
+        } else {
+            alert(`Failed to ${action} worker: ${result.message}`);
+        }
+    } catch (error) {
+        console.error(`Error during worker ${action}:`, error);
+        alert(`Error: ${error.message}`);
+    }
+}
+
+// Initialize WebSocket connection when page loads
+document.addEventListener('DOMContentLoaded', function() {
+    initWorkersWebSocket();
+    
+    // Refresh workers list every 30 seconds
+    setInterval(refreshWorkers, 30000);
+});
+{% endblock %}

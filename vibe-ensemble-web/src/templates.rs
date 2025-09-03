@@ -189,6 +189,39 @@ impl Default for MessagesTemplate {
     }
 }
 
+/// Workers dashboard template
+#[derive(Template)]
+#[template(path = "workers.html")]
+pub struct WorkersTemplate {
+    pub title: String,
+    pub current_page: String,
+    pub workers_data: crate::handlers::workers::WorkerDashboardData,
+    pub system_metrics: Option<SystemMetrics>,
+    pub storage_metrics: Option<StorageMetrics>,
+}
+
+impl WorkersTemplate {
+    pub fn new(workers_data: crate::handlers::workers::WorkerDashboardData) -> Self {
+        Self {
+            title: "Worker Management - Vibe Ensemble".to_string(),
+            current_page: "workers".to_string(),
+            workers_data,
+            system_metrics: None,
+            storage_metrics: None,
+        }
+    }
+
+    pub fn with_system_metrics(mut self, metrics: SystemMetrics) -> Self {
+        self.system_metrics = Some(metrics);
+        self
+    }
+
+    pub fn with_storage_metrics(mut self, metrics: StorageMetrics) -> Self {
+        self.storage_metrics = Some(metrics);
+        self
+    }
+}
+
 /// Issues list template
 #[derive(Template)]
 #[template(path = "issues_list.html")]
