@@ -124,27 +124,32 @@ impl ProjectRepository {
         }
     }
 
-    /// Update a project
-    pub async fn update(&self, project: &Project) -> Result<()> {
+    /// Update a project with optimistic locking
+    pub async fn update(
+        &self,
+        project: &Project,
+        old_updated_at: &DateTime<Utc>,
+    ) -> Result<Project> {
         debug!("Updating project: {} ({})", project.name, project.id);
 
         let project_id_str = project.id.to_string();
-        let updated_at_str = project.updated_at.to_rfc3339();
+        let old_updated_at_str = old_updated_at.to_rfc3339();
         let workspace_path_str = project.workspace_path_string();
 
         let result = sqlx::query!(
             r#"
             UPDATE projects 
-            SET name = ?2, description = ?3, working_directory = ?4, updated_at = ?5
-            WHERE id = ?1
+            SET name = ?1, description = ?2, working_directory = ?3, updated_at = strftime('%Y-%m-%dT%H:%M:%SZ', 'now')
+            WHERE id = ?4 AND updated_at = ?5
+            RETURNING id, name, description, working_directory, git_repository, created_at, updated_at, status
             "#,
-            project_id_str,
             project.name,
             project.description,
             workspace_path_str,
-            updated_at_str
+            project_id_str,
+            old_updated_at_str
         )
-        .execute(&self.pool)
+        .fetch_optional(&self.pool)
         .await
         .map_err(|e| match &e {
             sqlx::Error::Database(db_err)
@@ -159,18 +164,30 @@ impl ProjectRepository {
             _ => Error::Database(e),
         })?;
 
-        if result.rows_affected() == 0 {
-            return Err(Error::NotFound {
-                entity: "Project".to_string(),
-                id: project.id.to_string(),
-            });
-        }
+        match result {
+            Some(row) => {
+                let updated_project = self.parse_project_from_row(
+                    row.id.as_ref().unwrap(),
+                    &row.name,
+                    row.description.as_deref(),
+                    row.working_directory.as_deref(),
+                    row.git_repository.as_deref(),
+                    &row.created_at,
+                    &row.updated_at,
+                    &row.status,
+                )?;
 
-        info!(
-            "Successfully updated project: {} ({})",
-            project.name, project.id
-        );
-        Ok(())
+                info!(
+                    "Successfully updated project: {} ({})",
+                    project.name, project.id
+                );
+                Ok(updated_project)
+            }
+            None => Err(Error::Conflict(format!(
+                "Project {} was modified by another process. Please reload and try again.",
+                project.id
+            ))),
+        }
     }
 
     /// Delete a project
@@ -272,14 +289,15 @@ impl ProjectRepository {
         Ok(projects)
     }
 
-    /// Count total number of projects
+    /// Count total number of active projects
     pub async fn count(&self) -> Result<i64> {
-        debug!("Counting projects");
-        let row = sqlx::query!("SELECT COUNT(*) as count FROM projects")
-            .fetch_one(&self.pool)
-            .await
-            .map_err(Error::Database)?;
-        Ok(row.count as i64)
+        debug!("Counting active projects");
+        let row =
+            sqlx::query!("SELECT COUNT(*) as projects_count FROM projects WHERE status = 'Active'")
+                .fetch_one(&self.pool)
+                .await
+                .map_err(Error::Database)?;
+        Ok(row.projects_count as i64)
     }
 
     /// Parse a project from database row data
@@ -404,7 +422,16 @@ mod tests {
             .set_description(Some("Updated description".to_string()))
             .unwrap();
 
-        project_repo.update(&updated_project).await.unwrap();
+        let old_updated_at = found_project.updated_at;
+        let result_project = project_repo
+            .update(&updated_project, &old_updated_at)
+            .await
+            .unwrap();
+        assert_eq!(result_project.name, "updated-test-project");
+        assert_eq!(
+            result_project.description,
+            Some("Updated description".to_string())
+        );
 
         let found_updated = project_repo.find_by_id(&project_id).await.unwrap().unwrap();
         assert_eq!(found_updated.name, "updated-test-project");
@@ -484,9 +511,12 @@ mod tests {
         let mut fake_project_with_id = fake_project;
         fake_project_with_id.id = non_existent_id;
 
-        let result = project_repo.update(&fake_project_with_id).await;
+        let fake_old_updated_at = Utc::now();
+        let result = project_repo
+            .update(&fake_project_with_id, &fake_old_updated_at)
+            .await;
         assert!(result.is_err());
-        assert!(matches!(result.unwrap_err(), Error::NotFound { .. }));
+        assert!(matches!(result.unwrap_err(), Error::Conflict(_)));
 
         // Test delete non-existent project
         let result = project_repo.delete(&non_existent_id).await;
