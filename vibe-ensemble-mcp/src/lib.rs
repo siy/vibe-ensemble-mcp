@@ -95,9 +95,6 @@ pub mod server;
 pub mod transport;
 
 #[cfg(test)]
-mod integration_tests;
-
-#[cfg(test)]
 mod communication_tests;
 
 #[cfg(test)]

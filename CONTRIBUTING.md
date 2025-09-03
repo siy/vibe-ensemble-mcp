@@ -70,7 +70,7 @@ feat: implement agent registration system
 fix: resolve connection timeout in messaging
 docs: add installation guide
 refactor: simplify error handling
-test: add integration tests for MCP protocol
+test: add unit tests for MCP protocol
 ```
 
 **Types**: `feat`, `fix`, `docs`, `style`, `refactor`, `test`, `chore`
@@ -119,10 +119,6 @@ pub fn register_agent(&self, agent: Agent) -> Result<AgentId, AgentError> {
    cargo test --lib
    ```
 
-2. **Integration Tests**: Test MCP protocol compliance
-   ```bash
-   cargo test --test integration
-   ```
 
 3. **Component Tests**: Test full coordination workflows
    ```bash
@@ -215,7 +211,6 @@ Brief description of changes made.
 
 ## Test Plan
 - [ ] Unit tests pass
-- [ ] Integration tests pass  
 - [ ] Manual testing with Claude Code
 
 Fixes #123

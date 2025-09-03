@@ -213,18 +213,6 @@ cargo test --package vibe-ensemble-core
 cargo test -- --nocapture
 ```
 
-### Integration Tests
-
-Test the full MCP protocol integration:
-
-```bash
-# Run integration tests
-cargo test --test integration
-
-# Test specific MCP tools
-cargo test test_agent_registration
-```
-
 ### Manual Testing
 
 ```bash
