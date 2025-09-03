@@ -116,18 +116,14 @@ pub enum Commands {
 #[derive(ValueEnum, Clone, Debug)]
 pub enum CliTransportType {
     InMemory,
-    Stdio,
     WebSocket,
-    Sse,
 }
 
 impl From<CliTransportType> for TransportType {
     fn from(cli_type: CliTransportType) -> Self {
         match cli_type {
             CliTransportType::InMemory => TransportType::InMemory,
-            CliTransportType::Stdio => TransportType::Stdio,
             CliTransportType::WebSocket => TransportType::WebSocket,
-            CliTransportType::Sse => TransportType::Sse,
         }
     }
 }
@@ -284,18 +280,8 @@ pub async fn execute_cli_command(cli: TransportTestCli) -> Result<()> {
             );
             eprintln!(
                 "  {:12} - {}",
-                TransportType::Stdio.id(),
-                TransportType::Stdio.name()
-            );
-            eprintln!(
-                "  {:12} - {}",
                 TransportType::WebSocket.id(),
                 TransportType::WebSocket.name()
-            );
-            eprintln!(
-                "  {:12} - {}",
-                TransportType::Sse.id(),
-                TransportType::Sse.name()
             );
         }
 
