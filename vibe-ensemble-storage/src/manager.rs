@@ -1,7 +1,7 @@
 //! Storage manager for coordinating database operations
 
 use crate::{migrations::Migrations, performance::*, repositories::*, services::*, Error, Result};
-use sqlx::{Pool, Sqlite, SqlitePool};
+use sqlx::{sqlite::SqlitePoolOptions, Pool, Sqlite};
 use std::sync::Arc;
 use std::time::Duration;
 use tracing::info;
@@ -54,12 +54,19 @@ impl StorageManager {
             .pragma("mmap_size", "268435456") // 256MB mmap
             .pragma("optimize", "1");
 
-        let pool_builder = SqlitePool::connect_with(connect_options.clone());
-        let pool = if let Some(max_connections) = config.max_connections {
-            info!("Using connection pool with {} connections", max_connections);
-            SqlitePool::connect_with(connect_options.clone().create_if_missing(true)).await?
-        } else {
-            pool_builder.await?
+        let pool = match config.max_connections {
+            Some(max_connections) => {
+                info!("Using connection pool with {} connections", max_connections);
+                SqlitePoolOptions::new()
+                    .max_connections(max_connections)
+                    .connect_with(connect_options.clone().create_if_missing(true))
+                    .await?
+            }
+            None => {
+                SqlitePoolOptions::new()
+                    .connect_with(connect_options.clone().create_if_missing(true))
+                    .await?
+            }
         };
 
         info!("Database connection established with performance optimizations");
@@ -197,6 +204,14 @@ impl StorageManager {
     }
 
     /// Get the database connection pool
+    ///
+    /// WARNING: Direct pool access bypasses repository-level validation and business logic.
+    /// This should only be used for:
+    /// - System-level operations (migrations, health checks, optimization)
+    /// - Advanced queries that repositories don't support
+    /// - Testing scenarios requiring direct database access
+    ///
+    /// For normal operations, use the typed repository methods instead.
     pub fn pool(&self) -> &Pool<Sqlite> {
         &self.pool
     }

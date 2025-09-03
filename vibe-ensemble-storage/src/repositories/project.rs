@@ -45,7 +45,16 @@ impl ProjectRepository {
         )
         .execute(&self.pool)
         .await
-        .map_err(Error::Database)?;
+        .map_err(|e| match &e {
+            sqlx::Error::Database(db_err) if db_err.code() == Some(std::borrow::Cow::Borrowed("2067")) => {
+                // SQLite unique constraint violation
+                Error::ConstraintViolation(format!(
+                    "Project name '{}' already exists",
+                    project.name
+                ))
+            }
+            _ => Error::Database(e),
+        })?;
 
         info!(
             "Successfully created project: {} ({})",
@@ -137,7 +146,18 @@ impl ProjectRepository {
         )
         .execute(&self.pool)
         .await
-        .map_err(Error::Database)?;
+        .map_err(|e| match &e {
+            sqlx::Error::Database(db_err)
+                if db_err.code() == Some(std::borrow::Cow::Borrowed("2067")) =>
+            {
+                // SQLite unique constraint violation
+                Error::ConstraintViolation(format!(
+                    "Project name '{}' already exists",
+                    project.name
+                ))
+            }
+            _ => Error::Database(e),
+        })?;
 
         if result.rows_affected() == 0 {
             return Err(Error::NotFound {
@@ -275,23 +295,45 @@ impl ProjectRepository {
         updated_at: &str,
         _status: &str, // Status field for future enhancement
     ) -> Result<Project> {
-        let parsed_id = Uuid::parse_str(id)
-            .map_err(|e| Error::Internal(anyhow::anyhow!("Invalid project UUID: {}", e)))?;
+        // Validate name is not empty
+        if name.trim().is_empty() {
+            return Err(Error::Validation {
+                message: "Project name cannot be empty".to_string(),
+            });
+        }
+
+        let parsed_id = Uuid::parse_str(id).map_err(|e| {
+            Error::Internal(anyhow::anyhow!("Invalid project UUID '{}': {}", id, e))
+        })?;
 
         let parsed_created_at = DateTime::parse_from_rfc3339(created_at)
-            .map_err(|e| Error::Internal(anyhow::anyhow!("Failed to parse created_at: {}", e)))?
+            .map_err(|e| {
+                Error::Internal(anyhow::anyhow!(
+                    "Failed to parse created_at '{}': {}",
+                    created_at,
+                    e
+                ))
+            })?
             .with_timezone(&Utc);
 
         let parsed_updated_at = DateTime::parse_from_rfc3339(updated_at)
-            .map_err(|e| Error::Internal(anyhow::anyhow!("Failed to parse updated_at: {}", e)))?
+            .map_err(|e| {
+                Error::Internal(anyhow::anyhow!(
+                    "Failed to parse updated_at '{}': {}",
+                    updated_at,
+                    e
+                ))
+            })?
             .with_timezone(&Utc);
 
         let workspace_path = working_directory.map(PathBuf::from);
 
         Ok(Project {
             id: parsed_id,
-            name: name.to_string(),
-            description: description.map(|s| s.to_string()),
+            name: name.trim().to_string(),
+            description: description
+                .map(|s| s.trim().to_string())
+                .filter(|s| !s.is_empty()),
             created_at: parsed_created_at,
             updated_at: parsed_updated_at,
             workspace_path,
@@ -472,21 +514,21 @@ mod tests {
         let agent_id_str = agent_id.to_string();
         let now = Utc::now().to_rfc3339();
 
-        sqlx::query!(
+        sqlx::query(
             r#"
             INSERT INTO agents (id, name, agent_type, capabilities, status, connection_metadata, created_at, last_seen, project_id)
             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)
-            "#,
-            agent_id_str,
-            "test-agent",
-            "Worker",
-            "[]",
-            r#"{"active": true}"#,
-            r#"{"protocol": "test"}"#,
-            now,
-            now,
-            project_id_str
+            "#
         )
+        .bind(&agent_id_str)
+        .bind("test-agent")
+        .bind("Worker")
+        .bind("[]")
+        .bind(r#"{"active": true}"#)
+        .bind(r#"{"protocol": "test"}"#)
+        .bind(&now)
+        .bind(&now)
+        .bind(&project_id_str)
         .execute(&project_repo.pool)
         .await
         .unwrap();

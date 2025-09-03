@@ -10,8 +10,8 @@ CREATE TABLE IF NOT EXISTS projects (
     description TEXT,
     working_directory TEXT,
     git_repository TEXT,
-    created_at TEXT NOT NULL,
-    updated_at TEXT NOT NULL,
+    created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),
+    updated_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),
     status TEXT NOT NULL DEFAULT 'Active'
 );
 
