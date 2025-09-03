@@ -1,13 +1,16 @@
 # Installation Guide
 
-This guide will help you install Vibe Ensemble on your system. Choose the method that works best for you.
+Complete installation guide for Vibe Ensemble's WebSocket-based multi-agent coordination system.
 
 ## System Requirements
 
 - **Operating System**: macOS 10.15+, Linux (Ubuntu 20.04+), Windows 10+
-- **Memory**: 256 MB RAM minimum (512 MB recommended)
-- **Storage**: 100 MB free space
-- **Network**: Internet connection for installation only
+- **Memory**: 512 MB RAM minimum (1 GB recommended for multi-agent coordination)
+- **Storage**: 200 MB free space for application and coordination database
+- **Network**: 
+  - Internet connection for installation
+  - Localhost ports 8080 (web) and 8081 (WebSocket) available
+  - Firewall allowing localhost connections on these ports
 
 ## Quick Install (Recommended)
 
@@ -34,8 +37,9 @@ Get-FileHash .\install.ps1 -Algorithm SHA256
 The installer will:
 1. Download the latest binary for your platform
 2. Install it to your PATH
-3. Create the data directory at `./.vibe-ensemble/` (current directory)
-4. Verify the installation
+3. Create the data directory at `./.vibe-ensemble/` (project-local coordination)
+4. Configure WebSocket server with default settings
+5. Verify the installation with connection tests
 
 ## Manual Installation
 
@@ -104,40 +108,110 @@ vibe-ensemble 0.4.1
 
 ## First Run
 
-Start Vibe Ensemble for the first time:
+Start the WebSocket coordination system:
 
 ```bash
 vibe-ensemble
 ```
 
-This will:
-- Create the database at `./.vibe-ensemble/data.db` (current directory)
-- Start the web server on http://127.0.0.1:8080
-- Print startup information
+This launches:
+- **WebSocket MCP Server** on `ws://127.0.0.1:8081`
+- **Web Dashboard** on `http://127.0.0.1:8080`
+- **SQLite Database** at `./.vibe-ensemble/data.db` (project-local)
+- **Task Orchestrator** ready for multi-agent coordination
 
-You should see:
+Expected startup output:
 ```
-🚀 Vibe Ensemble started successfully
-📊 Web dashboard: http://127.0.0.1:8080
-💾 Database: ./.vibe-ensemble/data.db (current directory)
-🔧 Configuration: Default settings
+🚀 Vibe Ensemble WebSocket Server started successfully
+🔌 WebSocket MCP: ws://127.0.0.1:8081 (ready for agent connections)
+📊 Web Dashboard: http://127.0.0.1:8080 (monitoring & control)  
+💾 Database: ./.vibe-ensemble/data.db (project coordination storage)
+🤖 Task Orchestrator: Ready for worker spawning and coordination
+⚡ Transport: WebSocket (real-time) + stdio (legacy compatibility)
 ```
 
-## Connect to Claude Code
+### WebSocket-Only Mode
 
-### Option 1: Claude Code Settings UI
+For production deployments or MCP-only usage:
 
-1. Open Claude Code
-2. Go to Settings (Cmd/Ctrl + ,)
-3. Navigate to "MCP Servers"
-4. Click "Add Server"
-5. Enter:
-   - **Name**: `vibe-ensemble`
-   - **Command**: `vibe-ensemble --mcp-only --transport=stdio`
+```bash
+vibe-ensemble --mcp-only --transport=websocket
+```
 
-### Option 2: Configuration File
+This starts:
+- **WebSocket MCP Server** only (no web dashboard)
+- **Lower resource usage** for dedicated coordination
+- **Production-ready** WebSocket transport with full MCP compliance
 
-Add to your Claude Code MCP configuration file:
+## Connect Claude Code Agents
+
+### WebSocket MCP Configuration (Recommended)
+
+Configure Claude Code to connect via WebSocket for real-time multi-agent coordination:
+
+```json
+{
+  "mcpServers": {
+    "vibe-ensemble": {
+      "command": "vibe-ensemble",
+      "args": ["--mcp-only", "--transport=websocket", "--port=8081"],
+      "transport": {
+        "type": "websocket", 
+        "url": "ws://127.0.0.1:8081",
+        "reconnect": true,
+        "timeout": 30000
+      },
+      "env": {
+        "RUST_LOG": "vibe_ensemble=info"
+      }
+    }
+  }
+}
+```
+
+### Multiple Agent Configuration
+
+For coordinated multi-agent workflows:
+
+```json
+{
+  "mcpServers": {
+    "vibe-coordinator": {
+      "command": "vibe-ensemble",
+      "args": ["--mcp-only", "--transport=websocket", "--port=8081"],
+      "transport": {
+        "type": "websocket",
+        "url": "ws://127.0.0.1:8081"
+      },
+      "role": "coordinator"
+    },
+    "vibe-worker-1": {
+      "command": "vibe-ensemble", 
+      "args": ["--mcp-only", "--transport=websocket", "--port=8081"],
+      "transport": {
+        "type": "websocket",
+        "url": "ws://127.0.0.1:8081"
+      },
+      "role": "worker",
+      "specialization": "frontend"
+    },
+    "vibe-worker-2": {
+      "command": "vibe-ensemble",
+      "args": ["--mcp-only", "--transport=websocket", "--port=8081"], 
+      "transport": {
+        "type": "websocket",
+        "url": "ws://127.0.0.1:8081"
+      },
+      "role": "worker",
+      "specialization": "backend"
+    }
+  }
+}
+```
+
+### Legacy stdio Transport
+
+For backward compatibility or simpler single-agent use:
 
 ```json
 {
@@ -150,53 +224,108 @@ Add to your Claude Code MCP configuration file:
 }
 ```
 
-The configuration file is typically located at:
+### Configuration File Location
+
+The Claude Code MCP configuration is typically located at:
 - **macOS**: `~/Library/Application Support/Claude Code/mcp_settings.json`
-- **Linux**: `~/.config/claude-code/mcp_settings.json`
+- **Linux**: `~/.config/claude-code/mcp_settings.json`  
 - **Windows**: `%APPDATA%/Claude Code/mcp_settings.json`
 
-## Configuration
+### Verify Agent Connections
 
-Vibe Ensemble works with zero configuration, but you can customize it:
-
-### Command Line Options
+After configuration, verify agents are connecting:
 
 ```bash
-# Run on different port
-vibe-ensemble --port=9000
+# Check WebSocket server status
+curl http://127.0.0.1:8080/api/health
 
-# Disable web dashboard
-vibe-ensemble --mcp-only --transport=stdio
+# List connected agents
+curl http://127.0.0.1:8080/api/agents
 
-# Use custom database location
-DATABASE_URL="sqlite://./my-project.db" vibe-ensemble
+# View real-time agent activity
+curl http://127.0.0.1:8080/api/stats
+```
+
+## Advanced Configuration
+
+### WebSocket Server Options
+
+```bash
+# Custom WebSocket and web ports
+vibe-ensemble --port=8081 --web-port=8080
+
+# WebSocket-only deployment (no web dashboard)
+vibe-ensemble --mcp-only --transport=websocket
+
+# Custom host binding (default: 127.0.0.1)
+vibe-ensemble --host=0.0.0.0 --port=8081
+
+# Production settings with worker limits
+vibe-ensemble --max-workers=50 --task-timeout=7200
 ```
 
 ### Environment Variables
 
 ```bash
-# Database location (file path)
-export DATABASE_URL="sqlite:///path/to/my-database.db"
+# Network configuration
+export VIBE_ENSEMBLE_PORT=8081      # WebSocket MCP port
+export VIBE_WEB_PORT=8080           # Web dashboard port  
+export VIBE_HOST="127.0.0.1"        # Bind address
 
-# In-memory database
-export DATABASE_URL="sqlite::memory:"
+# Database configuration
+export DATABASE_URL="sqlite://./project-coordination.db"
 
-# Server port
-export VIBE_ENSEMBLE_PORT=9000
+# Task orchestration
+export VIBE_MAX_WORKERS=25          # Maximum concurrent workers
+export VIBE_TASK_TIMEOUT=3600       # Task timeout in seconds
+export VIBE_RETRY_ATTEMPTS=3        # Max retry attempts for failed tasks
 
-# Log level
-export RUST_LOG=info
+# Logging and monitoring
+export RUST_LOG="vibe_ensemble=info,vibe_ensemble_mcp=debug"
+export VIBE_METRICS_ENABLED=true
 ```
 
-## Data Directory
+### Multi-Project Configuration
 
-Vibe Ensemble stores its data in `./.vibe-ensemble/` directory relative to your current working directory.
+```bash
+# Shared coordination database across projects
+DATABASE_URL="sqlite:///shared/team-coordination.db" vibe-ensemble
 
-This directory contains:
-- `data.db` - SQLite database with agents, issues, and knowledge
-- `logs/` - Application logs (if file logging is enabled)
+# Project-specific coordination (default)
+cd /path/to/project
+vibe-ensemble  # Creates ./.vibe-ensemble/data.db
 
-This approach ensures each project has its own coordination database, making project-scoped coordination more logical and organized.
+# Temporary in-memory coordination (testing)
+DATABASE_URL="sqlite::memory:" vibe-ensemble
+```
+
+## Data Directory Structure
+
+Vibe Ensemble uses project-local coordination storage in `./.vibe-ensemble/`:
+
+```
+./.vibe-ensemble/
+├── data.db              # SQLite coordination database
+├── logs/                # Application logs (if enabled)
+├── workers/             # Worker process outputs and state
+├── tasks/               # Task orchestration data
+└── websocket-state/     # WebSocket connection state
+```
+
+### Database Schema
+The coordination database includes:
+- **agents** - Connected agent registry and capabilities
+- **tasks** - Task definitions and orchestration state
+- **workers** - Worker lifecycle and assignment tracking  
+- **messages** - Inter-agent communication history
+- **knowledge** - Shared patterns and insights
+- **issues** - Issue tracking and resolution state
+
+### Project-Local Benefits
+- **Isolation**: Each project maintains separate coordination data
+- **Portability**: Coordination state moves with project directory
+- **Version Control**: Add `.vibe-ensemble/` to `.gitignore` or commit for shared state
+- **Cleanup**: Remove directory to reset coordination state completely
 
 ## Updating
 
@@ -216,54 +345,141 @@ Your data and configuration will be preserved.
 
 ## Troubleshooting
 
-### Port Already in Use
+### WebSocket Connection Issues
 
-If you see "Address already in use" error:
-
+**Problem**: Agents cannot connect to WebSocket server
 ```bash
-# Find what's using port 8080
-lsof -i :8080  # macOS/Linux
+# Check if WebSocket server is running
+curl http://127.0.0.1:8080/api/health
+
+# Test WebSocket connection manually
+wscat -c ws://127.0.0.1:8081
+
+# Check server logs for WebSocket errors
+RUST_LOG=vibe_ensemble_mcp=debug vibe-ensemble
+```
+
+**Problem**: WebSocket connections timing out
+```bash
+# Check for firewall blocking localhost connections
+telnet 127.0.0.1 8081
+
+# Try with increased timeouts
+vibe-ensemble --read-timeout=60 --write-timeout=30
+```
+
+### Port Conflicts
+
+**WebSocket (8081) or Web (8080) ports in use:**
+```bash
+# Find what's using the ports
+lsof -i :8080 -i :8081  # macOS/Linux
 netstat -ano | findstr :8080  # Windows
+netstat -ano | findstr :8081  # Windows
 
-# Use a different port
-vibe-ensemble --port=8081
+# Use different ports
+vibe-ensemble --port=8082 --web-port=8083
+
+# Update Claude Code configuration accordingly
 ```
 
-### Permission Denied
+### Agent Registration Problems
 
-**macOS/Linux:**
+**Problem**: Agents connect but don't register properly
 ```bash
-# Fix binary permissions
-chmod +x /usr/local/bin/vibe-ensemble
+# Check agent connection status
+curl http://127.0.0.1:8080/api/agents
 
-# Fix data directory permissions  
-chmod -R 755 ~/.local/share/vibe-ensemble/
+# Enable debug logging for agent registration
+RUST_LOG="vibe_ensemble=debug,vibe_ensemble_mcp=debug" vibe-ensemble
+
+# Check for JSON-RPC 2.0 compliance errors in logs
 ```
 
-**Windows:**
-- Run Command Prompt as Administrator
-- Ensure the binary is in a writable location
-
-### Database Issues
+### Database and Storage Issues
 
 ```bash
-# Check database permissions
+# Check database file permissions
 ls -la ./.vibe-ensemble/data.db
 
-# Reset database (⚠️ this deletes all data)
-rm ./.vibe-ensemble/data.db
-vibe-ensemble  # Will recreate empty database
+# Check database connectivity
+sqlite3 ./.vibe-ensemble/data.db "SELECT COUNT(*) FROM agents;"
+
+# Reset coordination database (⚠️ deletes all data)
+rm -rf ./.vibe-ensemble/
+vibe-ensemble  # Will recreate empty coordination state
 ```
 
-### Connection Issues with Claude Code
+### Performance and Resource Issues
 
-1. Verify Vibe Ensemble is running:
-   ```bash
-   curl http://127.0.0.1:8080/api/health
+**Problem**: High memory usage with many agents
+```bash
+# Monitor resource usage
+top -p $(pgrep vibe-ensemble)
+
+# Limit concurrent workers
+vibe-ensemble --max-workers=10 --task-timeout=1800
+
+# Use WebSocket-only mode to reduce overhead
+vibe-ensemble --mcp-only --transport=websocket
+```
+
+### Claude Code Integration Issues
+
+**Problem**: MCP server not appearing in Claude Code
+1. Verify configuration file location and syntax
+2. Check Claude Code logs for MCP loading errors
+3. Restart Claude Code after configuration changes
+4. Test with minimal configuration:
+   ```json
+   {
+     "mcpServers": {
+       "vibe-test": {
+         "command": "vibe-ensemble",
+         "args": ["--mcp-only", "--transport=websocket", "--port=8081"]
+       }
+     }
+   }
    ```
 
-2. Check Claude Code MCP configuration
-3. Restart Claude Code after adding the MCP server
+**Problem**: WebSocket transport not working in Claude Code
+- Ensure Claude Code supports WebSocket MCP transport
+- Fall back to stdio transport as alternative:
+  ```json
+  {
+    "mcpServers": {
+      "vibe-ensemble": {
+        "command": "vibe-ensemble --mcp-only --transport=stdio",
+        "args": []
+      }
+    }
+  }
+  ```
+
+### Network and Security Issues
+
+**Problem**: Cannot access web dashboard from other machines
+```bash
+# Bind to all interfaces (⚠️ security implications)
+vibe-ensemble --host=0.0.0.0
+
+# Or use SSH tunnel for secure remote access
+ssh -L 8080:127.0.0.1:8080 user@your-server
+```
+
+### Logging and Diagnostics
+
+Enable comprehensive logging for debugging:
+```bash
+# Full debug logging
+RUST_LOG="vibe_ensemble=debug,vibe_ensemble_mcp=debug,vibe_ensemble_web=debug" vibe-ensemble
+
+# WebSocket-specific debugging
+RUST_LOG="vibe_ensemble_mcp::transport=trace" vibe-ensemble --mcp-only --transport=websocket
+
+# Save logs to file
+vibe-ensemble 2>&1 | tee vibe-ensemble.log
+```
 
 ## Uninstalling
 
