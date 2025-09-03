@@ -31,7 +31,7 @@
 //!
 //! ```rust
 //! use vibe_ensemble_core::{agent::*, issue::*, project::*, Error, Result};
-//! use uuid::Uuid;
+//! # fn try_main() -> Result<()> {
 //!
 //! // Create a project to organize work
 //! let project = Project::builder()
@@ -69,7 +69,9 @@
 //! issue.assign_to(agent.id);
 //!
 //! println!("Agent {} assigned to issue: {} in project {}", agent.name, issue.title, project.name);
-//! # Ok::<(), Error>(())
+//! # Ok(())
+//! # }
+//! # try_main().unwrap();
 //! ```
 //!
 //! # Features

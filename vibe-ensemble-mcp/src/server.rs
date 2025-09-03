@@ -3460,9 +3460,15 @@ impl McpServer {
 
         // Parse project UUIDs from strings
         let source_project = Uuid::parse_str(&params.source_project)
-            .map_err(|_| Error::validation("Invalid source_project UUID"))?;
+            .map_err(|e| Error::validation(&format!("Invalid source_project UUID: {e}")))?;
         let target_project = Uuid::parse_str(&params.target_project)
-            .map_err(|_| Error::validation("Invalid target_project UUID"))?;
+            .map_err(|e| Error::validation(&format!("Invalid target_project UUID: {e}")))?;
+
+        if source_project == target_project {
+            return Err(Error::validation(
+                "source_project and target_project must differ",
+            ));
+        }
 
         // Parse dependency type
         let dependency_type = match params.dependency_type.as_str() {
@@ -3574,7 +3580,7 @@ impl McpServer {
 
         // Parse project UUID from string
         let target_project = Uuid::parse_str(&params.target_project)
-            .map_err(|_| Error::validation("Invalid target_project UUID"))?;
+            .map_err(|e| Error::validation(&format!("Invalid target_project UUID: {e}")))?;
 
         // Parse priority
         let priority = match params.priority.as_str() {
