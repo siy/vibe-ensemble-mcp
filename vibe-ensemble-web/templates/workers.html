@@ -298,11 +298,12 @@ function updateWorkersDisplay(workers) {
 // Update worker statistics
 function updateWorkerStats(workers) {
     const totalWorkers = workers.length;
-    const activeWorkers = workers.filter(w => 
-        w.status === 'connected' || w.status === 'running'
-    ).length;
+    const activeWorkers = workers.filter(w => {
+        const status = w.status.toLowerCase();
+        return status === 'connected' || status === 'running';
+    }).length;
     const connectedWorkers = workers.filter(w => 
-        w.status === 'connected'
+        w.status.toLowerCase() === 'connected'
     ).length;
     
     document.getElementById('total-workers').textContent = totalWorkers;
@@ -335,23 +336,53 @@ document.getElementById('spawn-worker-form').addEventListener('submit', async fu
         const result = await response.json();
         
         if (response.ok) {
-            document.getElementById('spawn-result').innerHTML = 
-                `<div class="alert" style="background: #d1fae5; color: #065f46;">
-                    <strong>Worker spawned successfully!</strong><br>
-                    Worker ID: ${result.worker_id}<br>
-                    Status: ${result.status}<br>
-                    Message: ${result.message}
-                </div>`;
+            const alertDiv = document.createElement('div');
+            alertDiv.className = 'alert';
+            alertDiv.style.background = '#d1fae5';
+            alertDiv.style.color = '#065f46';
+            
+            const strongElement = document.createElement('strong');
+            strongElement.textContent = 'Worker spawned successfully!';
+            
+            alertDiv.appendChild(strongElement);
+            alertDiv.appendChild(document.createElement('br'));
+            
+            const workerIdText = document.createTextNode(`Worker ID: ${result.worker_id}`);
+            alertDiv.appendChild(workerIdText);
+            alertDiv.appendChild(document.createElement('br'));
+            
+            const statusText = document.createTextNode(`Status: ${result.status}`);
+            alertDiv.appendChild(statusText);
+            alertDiv.appendChild(document.createElement('br'));
+            
+            const messageText = document.createTextNode(`Message: ${result.message}`);
+            alertDiv.appendChild(messageText);
+            
+            const resultContainer = document.getElementById('spawn-result');
+            resultContainer.innerHTML = '';
+            resultContainer.appendChild(alertDiv);
             e.target.reset();
             setTimeout(refreshWorkers, 1000);
         } else {
             throw new Error(result.message || 'Failed to spawn worker');
         }
     } catch (error) {
-        document.getElementById('spawn-result').innerHTML = 
-            `<div class="alert" style="background: #fecaca; color: #991b1b;">
-                <strong>Error:</strong> ${error.message}
-            </div>`;
+        const alertDiv = document.createElement('div');
+        alertDiv.className = 'alert';
+        alertDiv.style.background = '#fecaca';
+        alertDiv.style.color = '#991b1b';
+        
+        const strongElement = document.createElement('strong');
+        strongElement.textContent = 'Error:';
+        
+        const errorText = document.createTextNode(` ${error.message}`);
+        
+        alertDiv.appendChild(strongElement);
+        alertDiv.appendChild(errorText);
+        
+        const resultContainer = document.getElementById('spawn-result');
+        resultContainer.innerHTML = '';
+        resultContainer.appendChild(alertDiv);
     }
     
     document.getElementById('spawn-result').style.display = 'block';
@@ -417,7 +448,8 @@ function closeOutputModal() {
 
 // Clear output display
 function clearOutput() {
-    document.getElementById('worker-output-content').innerHTML = '';
+    const outputContent = document.getElementById('worker-output-content');
+    outputContent.textContent = '';
 }
 
 // Shutdown worker
