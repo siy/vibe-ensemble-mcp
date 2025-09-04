@@ -448,6 +448,49 @@ impl IssueRepository {
             ))),
         }
     }
+
+    /// Find issues by tag (supports project scoping)
+    pub async fn find_by_tag(&self, tag: &str) -> Result<Vec<Issue>> {
+        debug!("Finding issues by tag: {}", tag);
+
+        let rows = sqlx::query!(
+            "SELECT id, title, description, status, priority, assigned_agent_id, created_at, updated_at, resolved_at, tags FROM issues ORDER BY created_at DESC"
+        )
+        .fetch_all(&self.pool)
+        .await
+        .map_err(Error::Database)?;
+
+        let mut issues = Vec::new();
+        for row in rows {
+            // Parse the issue
+            let issue = match self.parse_issue_from_row(
+                row.id.as_ref().unwrap(),
+                &row.title,
+                &row.description,
+                &row.status,
+                &row.priority,
+                row.assigned_agent_id.as_deref(),
+                &row.created_at,
+                &row.updated_at,
+                row.resolved_at.as_deref(),
+                &row.tags,
+            ) {
+                Ok(issue) => issue,
+                Err(e) => {
+                    debug!("Failed to parse issue from row: {}", e);
+                    continue;
+                }
+            };
+
+            // Check if the issue has the specified tag
+            if issue.has_tag(tag) {
+                issues.push(issue);
+            }
+        }
+
+        debug!("Found {} issues with tag: {}", issues.len(), tag);
+        Ok(issues)
+    }
 }
 
 #[cfg(test)]
