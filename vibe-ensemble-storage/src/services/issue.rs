@@ -598,17 +598,14 @@ impl IssueService {
             title, project_id
         );
 
-        // Create issue using existing logic
-        let mut issue = self
+        // Create issue using existing logic; append project tag if provided (single write)
+        let mut tags = tags;
+        if let Some(pid) = project_id {
+            tags.push(format!("project:{}", pid));
+        }
+        let issue = self
             .create_issue(title, description, priority, tags)
             .await?;
-
-        // If project context is provided, we could enhance the issue with project-specific metadata
-        // For now, we just add a project tag if project_id is provided
-        if let Some(pid) = project_id {
-            issue.add_tag(format!("project:{}", pid))?;
-            self.repository.update(&issue).await?;
-        }
 
         info!(
             "Successfully created issue with project context: {} ({})",

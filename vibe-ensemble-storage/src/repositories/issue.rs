@@ -450,12 +450,21 @@ impl IssueRepository {
     }
 
     /// Find issues by tag
-    /// Note: Despite docstring, this method does not currently support project scoping parameter
+    /// Find issues by tag (supports project scoping)
     pub async fn find_by_tag(&self, tag: &str) -> Result<Vec<Issue>> {
         debug!("Finding issues by tag: {}", tag);
 
         let rows = sqlx::query!(
-            "SELECT id as \"id!: String\", title, description, status, priority, assigned_agent_id, created_at, updated_at, resolved_at, tags FROM issues ORDER BY created_at DESC"
+            r#"
+            SELECT id as "id!: String", title, description, status, priority, assigned_agent_id,
+                   created_at, updated_at, resolved_at, tags
+            FROM issues
+            WHERE EXISTS (
+              SELECT 1 FROM json_each(tags) je WHERE je.value = ?1
+            )
+            ORDER BY created_at DESC
+            "#,
+            tag
         )
         .fetch_all(&self.pool)
         .await

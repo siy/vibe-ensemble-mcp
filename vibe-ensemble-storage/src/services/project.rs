@@ -84,24 +84,29 @@ impl ProjectService {
         }
 
         // Create the project
-        let project = Project::new(name.clone(), description, workspace_path.clone())?;
+        let project = Project::new(name, description, workspace_path.clone())?;
 
-        // Store in database
-        self.repository.create(&project).await?;
-
-        // Setup workspace if requested and path is provided
+        // Setup workspace if requested and path is provided BEFORE persisting
         if setup_workspace {
             if let Some(ref path) = workspace_path {
-                self.setup_workspace_internal(&project.id, path).await?;
+                if let Err(e) = self.setup_workspace_internal(&project.id, path).await {
+                    // Do not persist a project if workspace setup fails
+                    return Err(e);
+                }
             } else {
                 warn!(
                     "Workspace setup requested for project '{}' but no workspace path provided",
-                    name
+                    &project.name
                 );
             }
         }
 
-        info!("Successfully created project: {} ({})", name, project.id);
+        // Store in database after successful workspace setup (if any)
+        self.repository.create(&project).await?;
+        info!(
+            "Successfully created project: {} ({})",
+            &project.name, project.id
+        );
         Ok(project)
     }
 
@@ -130,6 +135,18 @@ impl ProjectService {
                 entity: "Project".to_string(),
                 id: project.id.to_string(),
             })?;
+
+        // Name change: enforce uniqueness
+        if project.name != current.name {
+            if let Some(other) = self.repository.find_by_name(&project.name).await? {
+                if other.id != project.id {
+                    return Err(Error::Conflict(format!(
+                        "Project with name '{}' already exists",
+                        project.name
+                    )));
+                }
+            }
+        }
 
         // Validate workspace path if changed
         if let Some(ref new_path) = project.workspace_path {
@@ -193,6 +210,11 @@ impl ProjectService {
                 }
             }
         }
+
+        // Persist archived status
+        self.repository
+            .archive(&id, archive_result.archived_at)
+            .await?;
 
         info!("Successfully archived project: {}", id);
         Ok(archive_result)
@@ -494,11 +516,13 @@ impl ProjectService {
 mod tests {
     use super::*;
     use crate::repositories::ProjectRepository;
-    use sqlx::SqlitePool;
+    use sqlx::sqlite::SqlitePoolOptions;
     use std::path::PathBuf;
 
     async fn setup_test_service() -> ProjectService {
-        let pool = SqlitePool::connect(":memory:")
+        let pool = SqlitePoolOptions::new()
+            .max_connections(1)
+            .connect(":memory:")
             .await
             .expect("Failed to connect to test database");
 

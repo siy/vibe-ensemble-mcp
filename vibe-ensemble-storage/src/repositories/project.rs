@@ -48,7 +48,7 @@ impl ProjectRepository {
         .map_err(|e| match &e {
             sqlx::Error::Database(db_err) if db_err.code() == Some(std::borrow::Cow::Borrowed("2067")) => {
                 // SQLite unique constraint violation
-                Error::ConstraintViolation(format!(
+                Error::Conflict(format!(
                     "Project name '{}' already exists",
                     project.name
                 ))
@@ -156,7 +156,7 @@ impl ProjectRepository {
                 if db_err.code() == Some(std::borrow::Cow::Borrowed("2067")) =>
             {
                 // SQLite unique constraint violation
-                Error::ConstraintViolation(format!(
+                Error::Conflict(format!(
                     "Project name '{}' already exists",
                     project.name
                 ))
@@ -188,6 +188,34 @@ impl ProjectRepository {
                 project.id
             ))),
         }
+    }
+
+    /// Archive a project by setting its status to "Archived"
+    pub async fn archive(
+        &self,
+        id: &Uuid,
+        archived_at: chrono::DateTime<chrono::Utc>,
+    ) -> Result<()> {
+        debug!("Archiving project: {}", id);
+
+        let id_str = id.to_string();
+        let archived_at_str = archived_at.to_rfc3339();
+
+        sqlx::query!(
+            r#"
+            UPDATE projects 
+            SET status = "Archived", updated_at = ?2
+            WHERE id = ?1
+            "#,
+            id_str,
+            archived_at_str
+        )
+        .execute(&self.pool)
+        .await
+        .map_err(Error::Database)?;
+
+        info!("Successfully archived project: {}", id);
+        Ok(())
     }
 
     /// Delete a project
