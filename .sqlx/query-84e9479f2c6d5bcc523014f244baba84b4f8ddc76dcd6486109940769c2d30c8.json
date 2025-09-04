@@ -1,10 +1,10 @@
 {
   "db_name": "SQLite",
-  "query": "SELECT COUNT(*) as count FROM projects",
+  "query": "SELECT COUNT(*) as projects_count FROM projects WHERE status = 'Active'",
   "describe": {
     "columns": [
       {
-        "name": "count",
+        "name": "projects_count",
         "ordinal": 0,
         "type_info": "Integer"
       }
@@ -16,5 +16,5 @@
       false
     ]
   },
-  "hash": "96892af92727035e9275675a8da451f33bb26443408b70466f398a084378903b"
+  "hash": "84e9479f2c6d5bcc523014f244baba84b4f8ddc76dcd6486109940769c2d30c8"
 }

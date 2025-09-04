@@ -1,6 +1,6 @@
 {
   "db_name": "SQLite",
-  "query": "SELECT id, name, agent_type, capabilities, status, connection_metadata, created_at, last_seen FROM agents ORDER BY created_at DESC",
+  "query": "SELECT id, name, agent_type, capabilities, status, connection_metadata, created_at, last_seen, project_id FROM agents ORDER BY created_at DESC",
   "describe": {
     "columns": [
       {
@@ -42,6 +42,11 @@
         "name": "last_seen",
         "ordinal": 7,
         "type_info": "Text"
+      },
+      {
+        "name": "project_id",
+        "ordinal": 8,
+        "type_info": "Text"
       }
     ],
     "parameters": {
@@ -55,8 +60,9 @@
       false,
       false,
       false,
-      false
+      false,
+      true
     ]
   },
-  "hash": "442697db86fb2bc253918b91cb9444570a168525697f132d18c96dfa37f896f4"
+  "hash": "79c3606d9489d965272aa5a4aa9063754daa918bddcc0653382338557711154a"
 }
