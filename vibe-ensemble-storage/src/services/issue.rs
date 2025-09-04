@@ -3,7 +3,7 @@
 use crate::{repositories::IssueRepository, Error, Result};
 use std::collections::HashMap;
 use std::sync::Arc;
-use tracing::{debug, info};
+use tracing::{debug, info, warn};
 use uuid::Uuid;
 use vibe_ensemble_core::issue::{Issue, IssuePriority, IssueStatus, WebMetadata};
 
@@ -544,6 +544,211 @@ impl IssueService {
             allowed,
             reason,
         }
+    }
+
+    /// Get assignment recommendations for an issue
+    pub async fn get_assignment_recommendations(
+        &self,
+        issue_id: Uuid,
+    ) -> Result<Vec<AssignmentRecommendation>> {
+        debug!("Getting assignment recommendations for issue: {}", issue_id);
+
+        let issue = self
+            .get_issue(issue_id)
+            .await?
+            .ok_or_else(|| Error::NotFound {
+                entity: "Issue".to_string(),
+                id: issue_id.to_string(),
+            })?;
+
+        // This is a simplified recommendation system
+        // In a full implementation, you'd analyze agent capabilities, workload, etc.
+        let recommendations = Vec::new();
+
+        // Basic recommendation based on issue priority
+        let _confidence = match issue.priority {
+            IssuePriority::Critical => 0.9,
+            IssuePriority::High => 0.8,
+            IssuePriority::Medium => 0.6,
+            IssuePriority::Low => 0.4,
+        };
+
+        // TODO: Implement real agent selection strategy via AgentRepository/AgentService
+        // For now, return empty recommendations instead of placeholder random UUIDs
+        // recommendations.push(AssignmentRecommendation {
+        //     agent_id: real_agent_id, // Would be selected from available agents
+        //     confidence,
+        //     reason: format!("Suitable for {} priority issues", issue.priority),
+        // });
+
+        Ok(recommendations)
+    }
+
+    /// Create an issue with project-aware assignment recommendations
+    pub async fn create_issue_with_project_context(
+        &self,
+        title: String,
+        description: String,
+        priority: IssuePriority,
+        tags: Vec<String>,
+        project_id: Option<Uuid>,
+    ) -> Result<Issue> {
+        info!(
+            "Creating new issue with project context: {} (project: {:?})",
+            title, project_id
+        );
+
+        // Create issue using existing logic; append project tag if provided (single write)
+        let mut tags = tags;
+        if let Some(pid) = project_id {
+            tags.push(format!("project:{}", pid));
+        }
+        let issue = self
+            .create_issue(title, description, priority, tags)
+            .await?;
+
+        info!(
+            "Successfully created issue with project context: {} ({})",
+            issue.title, issue.id
+        );
+        Ok(issue)
+    }
+
+    /// Get issues filtered by project context using tags
+    /// This is a placeholder implementation until issues get direct project support
+    pub async fn get_issues_for_project(&self, project_id: &Uuid) -> Result<Vec<Issue>> {
+        debug!("Getting issues for project: {}", project_id);
+
+        let project_tag = format!("project:{}", project_id);
+        self.repository.find_by_tag(&project_tag).await
+    }
+
+    /// Get project-scoped issue statistics
+    pub async fn get_project_issue_statistics(
+        &self,
+        project_id: Option<&Uuid>,
+    ) -> Result<IssueStatistics> {
+        debug!(
+            "Computing project-scoped issue statistics for project: {:?}",
+            project_id
+        );
+
+        let issues = match project_id {
+            Some(pid) => self.get_issues_for_project(pid).await?,
+            None => self.list_issues().await?,
+        };
+
+        self.compute_statistics_from_issues(&issues)
+    }
+
+    /// Assign issue to agent with project validation
+    pub async fn assign_issue_with_project_validation(
+        &self,
+        issue_id: Uuid,
+        agent_id: Uuid,
+        validate_same_project: bool,
+    ) -> Result<Issue> {
+        info!(
+            "Assigning issue {} to agent {} (validate_project: {})",
+            issue_id, agent_id, validate_same_project
+        );
+
+        let issue = self
+            .get_issue(issue_id)
+            .await?
+            .ok_or_else(|| Error::NotFound {
+                entity: "Issue".to_string(),
+                id: issue_id.to_string(),
+            })?;
+
+        // If project validation is requested, check for project tag consistency
+        if validate_same_project {
+            // This is a simplified check using tags - in a full implementation,
+            // you'd want direct project association in issues
+            let issue_project_tags: Vec<String> = issue
+                .tags
+                .iter()
+                .filter(|tag| tag.starts_with("project:"))
+                .cloned()
+                .collect();
+
+            if !issue_project_tags.is_empty() {
+                debug!("Issue has project tags: {:?}", issue_project_tags);
+                // TODO: Wire AgentRepository to enforce validation
+                // For now, just log the check - would return error on mismatch in full implementation
+                warn!("Project validation requested but not fully implemented - would check agent project assignment");
+            }
+        }
+
+        // Use existing assignment logic
+        self.assign_issue(issue_id, agent_id).await
+    }
+
+    /// Find recommended agents for an issue based on project context
+    pub async fn get_assignment_recommendations_for_project(
+        &self,
+        issue_id: Uuid,
+        project_id: Option<&Uuid>,
+    ) -> Result<Vec<AssignmentRecommendation>> {
+        debug!(
+            "Getting assignment recommendations for issue {} in project context: {:?}",
+            issue_id, project_id
+        );
+
+        // Get basic recommendations using existing logic
+        let mut recommendations = self.get_assignment_recommendations(issue_id).await?;
+
+        // If we have project context, we could prioritize agents from the same project
+        if let Some(_pid) = project_id {
+            // Enhance recommendations with project awareness
+            // For now, we'll just add a note to existing recommendations
+            for recommendation in &mut recommendations {
+                recommendation.reason = format!("{} (project-aware)", recommendation.reason);
+            }
+        }
+
+        Ok(recommendations)
+    }
+
+    /// Helper method to compute statistics from a collection of issues
+    fn compute_statistics_from_issues(&self, issues: &[Issue]) -> Result<IssueStatistics> {
+        let total_issues = issues.len() as i64;
+        let mut open_issues = 0;
+        let mut in_progress_issues = 0;
+        let mut blocked_issues = 0;
+        let mut resolved_issues = 0;
+        let mut closed_issues = 0;
+        let mut assigned_issues = 0;
+        let mut issues_by_priority = std::collections::HashMap::new();
+
+        for issue in issues {
+            match issue.status {
+                IssueStatus::Open => open_issues += 1,
+                IssueStatus::InProgress => in_progress_issues += 1,
+                IssueStatus::Blocked { .. } => blocked_issues += 1,
+                IssueStatus::Resolved => resolved_issues += 1,
+                IssueStatus::Closed => closed_issues += 1,
+            }
+
+            if issue.assigned_agent_id.is_some() {
+                assigned_issues += 1;
+            }
+
+            let priority_str = format!("{:?}", issue.priority);
+            *issues_by_priority.entry(priority_str).or_insert(0) += 1;
+        }
+
+        Ok(IssueStatistics {
+            total_issues,
+            open_issues,
+            in_progress_issues,
+            blocked_issues,
+            resolved_issues,
+            closed_issues,
+            issues_by_priority,
+            assigned_issues,
+            unassigned_issues: total_issues - assigned_issues,
+        })
     }
 }
 

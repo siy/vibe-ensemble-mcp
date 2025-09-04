@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "\n            UPDATE agents \n            SET name = ?2, agent_type = ?3, capabilities = ?4, status = ?5, \n                connection_metadata = ?6, last_seen = ?7, project_id = ?8\n            WHERE id = ?1\n            ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 8
+    },
+    "nullable": []
+  },
+  "hash": "39c38e3e625015ec9aff81acc8f5b18d9a4f8367064d7198e7744a438aa74401"
+}

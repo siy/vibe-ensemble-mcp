@@ -31,14 +31,6 @@ impl AgentRepository {
         let status_json = serde_json::to_string(&agent.status)
             .map_err(|e| Error::Internal(anyhow::anyhow!("Failed to serialize status: {}", e)))?;
 
-        let connection_metadata_json =
-            serde_json::to_string(&agent.connection_metadata).map_err(|e| {
-                Error::Internal(anyhow::anyhow!(
-                    "Failed to serialize connection metadata: {}",
-                    e
-                ))
-            })?;
-
         let agent_type_str = match agent.agent_type {
             AgentType::Coordinator => "Coordinator",
             AgentType::Worker => "Worker",
@@ -47,11 +39,25 @@ impl AgentRepository {
         let agent_id_str = agent.id.to_string();
         let created_at_str = agent.created_at.to_rfc3339();
         let last_seen_str = agent.last_seen.to_rfc3339();
+        let project_id_str = agent
+            .connection_metadata
+            .project_id
+            .map(|id| id.to_string());
+
+        // Strip project_id from JSON metadata to avoid dual-source inconsistency
+        let mut metadata_for_json = agent.connection_metadata.clone();
+        metadata_for_json.project_id = None;
+        let connection_metadata_json = serde_json::to_string(&metadata_for_json).map_err(|e| {
+            Error::Internal(anyhow::anyhow!(
+                "Failed to serialize connection metadata: {}",
+                e
+            ))
+        })?;
 
         sqlx::query!(
             r#"
-            INSERT INTO agents (id, name, agent_type, capabilities, status, connection_metadata, created_at, last_seen)
-            VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)
+            INSERT INTO agents (id, name, agent_type, capabilities, status, connection_metadata, created_at, last_seen, project_id)
+            VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)
             "#,
             agent_id_str,
             agent.name,
@@ -60,7 +66,8 @@ impl AgentRepository {
             status_json,
             connection_metadata_json,
             created_at_str,
-            last_seen_str
+            last_seen_str,
+            project_id_str
         )
         .execute(&self.pool)
         .await
@@ -76,7 +83,7 @@ impl AgentRepository {
 
         let id_str = id.to_string();
         let row = sqlx::query!(
-            "SELECT id, name, agent_type, capabilities, status, connection_metadata, created_at, last_seen FROM agents WHERE id = ?1",
+            "SELECT id as \"id!: String\", name, agent_type, capabilities, status, connection_metadata, created_at, last_seen, project_id FROM agents WHERE id = ?1",
             id_str
         )
         .fetch_optional(&self.pool)
@@ -86,7 +93,7 @@ impl AgentRepository {
         match row {
             Some(row) => {
                 let agent = self.parse_agent_from_row(
-                    row.id.as_ref().unwrap(),
+                    &row.id,
                     &row.name,
                     &row.agent_type,
                     &row.capabilities,
@@ -94,6 +101,7 @@ impl AgentRepository {
                     &row.connection_metadata,
                     &row.created_at,
                     &row.last_seen,
+                    row.project_id.as_deref(),
                 )?;
                 Ok(Some(agent))
             }
@@ -103,11 +111,25 @@ impl AgentRepository {
 
     /// Find an agent by name
     pub async fn find_by_name(&self, name: &str) -> Result<Option<Agent>> {
-        debug!("Finding agent by name: {}", name);
+        self.find_by_name_in_project(name, None).await
+    }
 
+    /// Find an agent by name within a specific project (or global if project_id is None)
+    pub async fn find_by_name_in_project(
+        &self,
+        name: &str,
+        project_id: Option<Uuid>,
+    ) -> Result<Option<Agent>> {
+        debug!(
+            "Finding agent by name: {} in project: {:?}",
+            name, project_id
+        );
+
+        let project_id_str = project_id.map(|id| id.to_string());
         let row = sqlx::query!(
-            "SELECT id, name, agent_type, capabilities, status, connection_metadata, created_at, last_seen FROM agents WHERE name = ?1",
-            name
+            "SELECT id as \"id!: String\", name, agent_type, capabilities, status, connection_metadata, created_at, last_seen, project_id FROM agents WHERE name = ?1 AND ((?2 IS NULL AND project_id IS NULL) OR project_id = ?2)",
+            name,
+            project_id_str
         )
         .fetch_optional(&self.pool)
         .await
@@ -116,7 +138,7 @@ impl AgentRepository {
         match row {
             Some(row) => {
                 let agent = self.parse_agent_from_row(
-                    row.id.as_ref().unwrap(),
+                    &row.id,
                     &row.name,
                     &row.agent_type,
                     &row.capabilities,
@@ -124,6 +146,7 @@ impl AgentRepository {
                     &row.connection_metadata,
                     &row.created_at,
                     &row.last_seen,
+                    row.project_id.as_deref(),
                 )?;
                 Ok(Some(agent))
             }
@@ -142,14 +165,6 @@ impl AgentRepository {
         let status_json = serde_json::to_string(&agent.status)
             .map_err(|e| Error::Internal(anyhow::anyhow!("Failed to serialize status: {}", e)))?;
 
-        let connection_metadata_json =
-            serde_json::to_string(&agent.connection_metadata).map_err(|e| {
-                Error::Internal(anyhow::anyhow!(
-                    "Failed to serialize connection metadata: {}",
-                    e
-                ))
-            })?;
-
         let agent_type_str = match agent.agent_type {
             AgentType::Coordinator => "Coordinator",
             AgentType::Worker => "Worker",
@@ -157,12 +172,26 @@ impl AgentRepository {
 
         let agent_id_str = agent.id.to_string();
         let last_seen_str = agent.last_seen.to_rfc3339();
+        let project_id_str = agent
+            .connection_metadata
+            .project_id
+            .map(|id| id.to_string());
+
+        // Strip project_id from JSON metadata to avoid dual-source inconsistency
+        let mut metadata_for_json = agent.connection_metadata.clone();
+        metadata_for_json.project_id = None;
+        let connection_metadata_json = serde_json::to_string(&metadata_for_json).map_err(|e| {
+            Error::Internal(anyhow::anyhow!(
+                "Failed to serialize connection metadata: {}",
+                e
+            ))
+        })?;
 
         let result = sqlx::query!(
             r#"
             UPDATE agents 
             SET name = ?2, agent_type = ?3, capabilities = ?4, status = ?5, 
-                connection_metadata = ?6, last_seen = ?7
+                connection_metadata = ?6, last_seen = ?7, project_id = ?8
             WHERE id = ?1
             "#,
             agent_id_str,
@@ -171,7 +200,8 @@ impl AgentRepository {
             capabilities_json,
             status_json,
             connection_metadata_json,
-            last_seen_str
+            last_seen_str,
+            project_id_str
         )
         .execute(&self.pool)
         .await
@@ -270,7 +300,7 @@ impl AgentRepository {
         debug!("Listing all agents");
 
         let rows = sqlx::query!(
-            "SELECT id, name, agent_type, capabilities, status, connection_metadata, created_at, last_seen FROM agents ORDER BY created_at DESC"
+            "SELECT id as \"id!: String\", name, agent_type, capabilities, status, connection_metadata, created_at, last_seen, project_id FROM agents ORDER BY created_at DESC"
         )
         .fetch_all(&self.pool)
         .await
@@ -279,7 +309,7 @@ impl AgentRepository {
         let mut agents = Vec::new();
         for row in rows {
             let agent = self.parse_agent_from_row(
-                row.id.as_ref().unwrap(),
+                &row.id,
                 &row.name,
                 &row.agent_type,
                 &row.capabilities,
@@ -287,6 +317,7 @@ impl AgentRepository {
                 &row.connection_metadata,
                 &row.created_at,
                 &row.last_seen,
+                row.project_id.as_deref(),
             )?;
             agents.push(agent);
         }
@@ -303,7 +334,7 @@ impl AgentRepository {
             .map_err(|e| Error::Internal(anyhow::anyhow!("Failed to serialize status: {}", e)))?;
 
         let rows = sqlx::query!(
-            "SELECT id, name, agent_type, capabilities, status, connection_metadata, created_at, last_seen FROM agents WHERE status = ?1 ORDER BY created_at DESC",
+            "SELECT id as \"id!: String\", name, agent_type, capabilities, status, connection_metadata, created_at, last_seen, project_id FROM agents WHERE status = ?1 ORDER BY created_at DESC",
             status_json
         )
         .fetch_all(&self.pool)
@@ -313,7 +344,7 @@ impl AgentRepository {
         let mut agents = Vec::new();
         for row in rows {
             let agent = self.parse_agent_from_row(
-                row.id.as_ref().unwrap(),
+                &row.id,
                 &row.name,
                 &row.agent_type,
                 &row.capabilities,
@@ -321,6 +352,7 @@ impl AgentRepository {
                 &row.connection_metadata,
                 &row.created_at,
                 &row.last_seen,
+                row.project_id.as_deref(),
             )?;
             agents.push(agent);
         }
@@ -339,7 +371,7 @@ impl AgentRepository {
         };
 
         let rows = sqlx::query!(
-            "SELECT id, name, agent_type, capabilities, status, connection_metadata, created_at, last_seen FROM agents WHERE agent_type = ?1 ORDER BY created_at DESC",
+            "SELECT id as \"id!: String\", name, agent_type, capabilities, status, connection_metadata, created_at, last_seen, project_id FROM agents WHERE agent_type = ?1 ORDER BY created_at DESC",
             agent_type_str
         )
         .fetch_all(&self.pool)
@@ -349,7 +381,7 @@ impl AgentRepository {
         let mut agents = Vec::new();
         for row in rows {
             let agent = self.parse_agent_from_row(
-                row.id.as_ref().unwrap(),
+                &row.id,
                 &row.name,
                 &row.agent_type,
                 &row.capabilities,
@@ -357,6 +389,7 @@ impl AgentRepository {
                 &row.connection_metadata,
                 &row.created_at,
                 &row.last_seen,
+                row.project_id.as_deref(),
             )?;
             agents.push(agent);
         }
@@ -369,8 +402,19 @@ impl AgentRepository {
     pub async fn find_by_capability(&self, capability: &str) -> Result<Vec<Agent>> {
         debug!("Finding agents with capability: {}", capability);
 
+        // Use JSON1 extension to filter agents by capability at SQL level
         let rows = sqlx::query!(
-            "SELECT id, name, agent_type, capabilities, status, connection_metadata, created_at, last_seen FROM agents ORDER BY created_at DESC"
+            r#"
+            SELECT id as "id!: String", name, agent_type, capabilities, status, connection_metadata,
+                   created_at, last_seen, project_id
+            FROM agents
+            WHERE EXISTS (
+                SELECT 1 FROM json_each(capabilities) je 
+                WHERE je.value = ?1
+            )
+            ORDER BY created_at DESC
+            "#,
+            capability
         )
         .fetch_all(&self.pool)
         .await
@@ -379,7 +423,7 @@ impl AgentRepository {
         let mut agents = Vec::new();
         for row in rows {
             let agent = self.parse_agent_from_row(
-                row.id.as_ref().unwrap(),
+                &row.id,
                 &row.name,
                 &row.agent_type,
                 &row.capabilities,
@@ -387,10 +431,9 @@ impl AgentRepository {
                 &row.connection_metadata,
                 &row.created_at,
                 &row.last_seen,
+                row.project_id.as_deref(),
             )?;
-            if agent.has_capability(capability) {
-                agents.push(agent);
-            }
+            agents.push(agent);
         }
 
         debug!(
@@ -444,7 +487,104 @@ impl AgentRepository {
         Ok(row.count as i64 > 0)
     }
 
+    /// Find agents by project ID
+    pub async fn find_by_project(&self, project_id: &Uuid) -> Result<Vec<Agent>> {
+        debug!("Finding agents by project ID: {}", project_id);
+
+        let project_id_str = project_id.to_string();
+        let rows = sqlx::query!(
+            "SELECT id as \"id!: String\", name, agent_type, capabilities, status, connection_metadata, created_at, last_seen, project_id FROM agents WHERE project_id = ?1 ORDER BY created_at DESC",
+            project_id_str
+        )
+        .fetch_all(&self.pool)
+        .await
+        .map_err(Error::Database)?;
+
+        let mut agents = Vec::new();
+        for row in rows {
+            let agent = self.parse_agent_from_row(
+                &row.id,
+                &row.name,
+                &row.agent_type,
+                &row.capabilities,
+                &row.status,
+                &row.connection_metadata,
+                &row.created_at,
+                &row.last_seen,
+                row.project_id.as_deref(),
+            )?;
+            agents.push(agent);
+        }
+
+        debug!("Found {} agents for project: {}", agents.len(), project_id);
+        Ok(agents)
+    }
+
+    /// Find agents with no project assignment
+    pub async fn find_unassigned(&self) -> Result<Vec<Agent>> {
+        debug!("Finding agents with no project assignment");
+
+        let rows = sqlx::query!(
+            "SELECT id as \"id!: String\", name, agent_type, capabilities, status, connection_metadata, created_at, last_seen, project_id FROM agents WHERE project_id IS NULL ORDER BY created_at DESC"
+        )
+        .fetch_all(&self.pool)
+        .await
+        .map_err(Error::Database)?;
+
+        let mut agents = Vec::new();
+        for row in rows {
+            let agent = self.parse_agent_from_row(
+                &row.id,
+                &row.name,
+                &row.agent_type,
+                &row.capabilities,
+                &row.status,
+                &row.connection_metadata,
+                &row.created_at,
+                &row.last_seen,
+                row.project_id.as_deref(),
+            )?;
+            agents.push(agent);
+        }
+
+        debug!("Found {} unassigned agents", agents.len());
+        Ok(agents)
+    }
+
+    /// Assign agent to project
+    pub async fn assign_to_project(&self, agent_id: Uuid, project_id: Option<Uuid>) -> Result<()> {
+        debug!("Assigning agent {} to project: {:?}", agent_id, project_id);
+
+        let agent_id_str = agent_id.to_string();
+        let project_id_str = project_id.map(|id| id.to_string());
+
+        let result = sqlx::query!(
+            "UPDATE agents SET project_id = ?1 WHERE id = ?2",
+            project_id_str,
+            agent_id_str
+        )
+        .execute(&self.pool)
+        .await
+        .map_err(Error::Database)?;
+
+        if result.rows_affected() == 0 {
+            return Err(Error::NotFound {
+                entity: "Agent".to_string(),
+                id: agent_id.to_string(),
+            });
+        }
+
+        info!(
+            "Successfully assigned agent {} to project: {:?}",
+            agent_id, project_id
+        );
+        Ok(())
+    }
+
     /// Helper method to parse agent from database fields
+    ///
+    /// Note: The project_id column takes precedence over any project_id in the JSON metadata.
+    /// This avoids dual-source inconsistencies by ensuring the dedicated column is authoritative.
     #[allow(clippy::too_many_arguments)]
     fn parse_agent_from_row(
         &self,
@@ -456,6 +596,7 @@ impl AgentRepository {
         connection_metadata: &str,
         created_at: &str,
         last_seen: &str,
+        project_id: Option<&str>,
     ) -> Result<Agent> {
         let parsed_id = Uuid::parse_str(id)
             .map_err(|e| Error::Internal(anyhow::anyhow!("Invalid agent UUID: {}", e)))?;
@@ -494,13 +635,22 @@ impl AgentRepository {
             .map_err(|e| Error::Internal(anyhow::anyhow!("Failed to parse last_seen: {}", e)))?
             .with_timezone(&Utc);
 
+        let parsed_project_id = project_id
+            .map(Uuid::parse_str)
+            .transpose()
+            .map_err(|e| Error::Internal(anyhow::anyhow!("Invalid project UUID: {}", e)))?;
+
+        // Update connection metadata with project_id from column (column takes precedence)
+        let mut updated_connection_metadata = parsed_connection_metadata;
+        updated_connection_metadata.project_id = parsed_project_id;
+
         Ok(Agent {
             id: parsed_id,
             name: name.to_string(),
             agent_type: parsed_agent_type,
             capabilities: parsed_capabilities,
             status: parsed_status,
-            connection_metadata: parsed_connection_metadata,
+            connection_metadata: updated_connection_metadata,
             created_at: parsed_created_at,
             last_seen: parsed_last_seen,
             performance_metrics: vibe_ensemble_core::agent::AgentPerformanceMetrics::default(),

@@ -377,6 +377,7 @@ async fn main() -> anyhow::Result<()> {
         storage_manager.agents(),
         storage_manager.issues(),
         storage_manager.messages(),
+        storage_manager.projects(),
     ));
 
     info!("Services initialized");

@@ -19,7 +19,7 @@ mod tests {
     use uuid::Uuid;
     use vibe_ensemble_core::agent::{AgentType, ConnectionMetadata};
     use vibe_ensemble_storage::repositories::{
-        AgentRepository, IssueRepository, KnowledgeRepository, MessageRepository,
+        AgentRepository, IssueRepository, KnowledgeRepository, MessageRepository, ProjectRepository,
     };
     use vibe_ensemble_storage::services::{
         AgentService, CoordinationService, IssueService, KnowledgeService, MessageService,
@@ -40,7 +40,8 @@ mod tests {
         let agent_repo = Arc::new(AgentRepository::new(pool.clone()));
         let issue_repo = Arc::new(IssueRepository::new(pool.clone()));
         let message_repo = Arc::new(MessageRepository::new(pool.clone()));
-        let knowledge_repo = Arc::new(KnowledgeRepository::new(pool));
+        let knowledge_repo = Arc::new(KnowledgeRepository::new(pool.clone()));
+        let project_repo = Arc::new(ProjectRepository::new(pool));
 
         // Create services
         let agent_service = Arc::new(AgentService::new(agent_repo.clone()));
@@ -51,6 +52,7 @@ mod tests {
             agent_repo,
             issue_repo,
             message_repo,
+            project_repo,
         ));
 
         let coordination_services = CoordinationServices::new(

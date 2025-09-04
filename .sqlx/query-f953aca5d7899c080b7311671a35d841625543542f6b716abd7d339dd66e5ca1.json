@@ -1,0 +1,62 @@
+{
+  "db_name": "SQLite",
+  "query": "\n            UPDATE projects \n            SET name = ?1, description = ?2, working_directory = ?3, updated_at = strftime('%Y-%m-%dT%H:%M:%SZ', 'now')\n            WHERE id = ?4 AND updated_at = ?5\n            RETURNING id as \"id!: String\", name, description, working_directory, git_repository, created_at, updated_at, status\n            ",
+  "describe": {
+    "columns": [
+      {
+        "name": "id!: String",
+        "ordinal": 0,
+        "type_info": "Text"
+      },
+      {
+        "name": "name",
+        "ordinal": 1,
+        "type_info": "Text"
+      },
+      {
+        "name": "description",
+        "ordinal": 2,
+        "type_info": "Text"
+      },
+      {
+        "name": "working_directory",
+        "ordinal": 3,
+        "type_info": "Text"
+      },
+      {
+        "name": "git_repository",
+        "ordinal": 4,
+        "type_info": "Text"
+      },
+      {
+        "name": "created_at",
+        "ordinal": 5,
+        "type_info": "Text"
+      },
+      {
+        "name": "updated_at",
+        "ordinal": 6,
+        "type_info": "Text"
+      },
+      {
+        "name": "status",
+        "ordinal": 7,
+        "type_info": "Text"
+      }
+    ],
+    "parameters": {
+      "Right": 5
+    },
+    "nullable": [
+      true,
+      false,
+      true,
+      true,
+      true,
+      false,
+      false,
+      false
+    ]
+  },
+  "hash": "f953aca5d7899c080b7311671a35d841625543542f6b716abd7d339dd66e5ca1"
+}

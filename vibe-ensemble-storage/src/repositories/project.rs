@@ -48,7 +48,7 @@ impl ProjectRepository {
         .map_err(|e| match &e {
             sqlx::Error::Database(db_err) if db_err.code() == Some(std::borrow::Cow::Borrowed("2067")) => {
                 // SQLite unique constraint violation
-                Error::ConstraintViolation(format!(
+                Error::Conflict(format!(
                     "Project name '{}' already exists",
                     project.name
                 ))
@@ -69,7 +69,7 @@ impl ProjectRepository {
 
         let id_str = id.to_string();
         let row = sqlx::query!(
-            "SELECT id, name, description, working_directory, git_repository, created_at, updated_at, status FROM projects WHERE id = ?1",
+            "SELECT id as \"id!: String\", name, description, working_directory, git_repository, created_at, updated_at, status FROM projects WHERE id = ?1",
             id_str
         )
         .fetch_optional(&self.pool)
@@ -79,7 +79,7 @@ impl ProjectRepository {
         match row {
             Some(row) => {
                 let project = self.parse_project_from_row(
-                    row.id.as_ref().unwrap(),
+                    &row.id,
                     &row.name,
                     row.description.as_deref(),
                     row.working_directory.as_deref(),
@@ -99,7 +99,7 @@ impl ProjectRepository {
         debug!("Finding project by name: {}", name);
 
         let row = sqlx::query!(
-            "SELECT id, name, description, working_directory, git_repository, created_at, updated_at, status FROM projects WHERE name = ?1",
+            "SELECT id as \"id!: String\", name, description, working_directory, git_repository, created_at, updated_at, status FROM projects WHERE name = ?1",
             name
         )
         .fetch_optional(&self.pool)
@@ -109,7 +109,7 @@ impl ProjectRepository {
         match row {
             Some(row) => {
                 let project = self.parse_project_from_row(
-                    row.id.as_ref().unwrap(),
+                    &row.id,
                     &row.name,
                     row.description.as_deref(),
                     row.working_directory.as_deref(),
@@ -141,7 +141,7 @@ impl ProjectRepository {
             UPDATE projects 
             SET name = ?1, description = ?2, working_directory = ?3, updated_at = strftime('%Y-%m-%dT%H:%M:%SZ', 'now')
             WHERE id = ?4 AND updated_at = ?5
-            RETURNING id, name, description, working_directory, git_repository, created_at, updated_at, status
+            RETURNING id as "id!: String", name, description, working_directory, git_repository, created_at, updated_at, status
             "#,
             project.name,
             project.description,
@@ -156,7 +156,7 @@ impl ProjectRepository {
                 if db_err.code() == Some(std::borrow::Cow::Borrowed("2067")) =>
             {
                 // SQLite unique constraint violation
-                Error::ConstraintViolation(format!(
+                Error::Conflict(format!(
                     "Project name '{}' already exists",
                     project.name
                 ))
@@ -167,7 +167,7 @@ impl ProjectRepository {
         match result {
             Some(row) => {
                 let updated_project = self.parse_project_from_row(
-                    row.id.as_ref().unwrap(),
+                    &row.id,
                     &row.name,
                     row.description.as_deref(),
                     row.working_directory.as_deref(),
@@ -188,6 +188,34 @@ impl ProjectRepository {
                 project.id
             ))),
         }
+    }
+
+    /// Archive a project by setting its status to "Archived"
+    pub async fn archive(
+        &self,
+        id: &Uuid,
+        archived_at: chrono::DateTime<chrono::Utc>,
+    ) -> Result<()> {
+        debug!("Archiving project: {}", id);
+
+        let id_str = id.to_string();
+        let archived_at_str = archived_at.to_rfc3339();
+
+        sqlx::query!(
+            r#"
+            UPDATE projects 
+            SET status = "Archived", updated_at = ?2
+            WHERE id = ?1
+            "#,
+            id_str,
+            archived_at_str
+        )
+        .execute(&self.pool)
+        .await
+        .map_err(Error::Database)?;
+
+        info!("Successfully archived project: {}", id);
+        Ok(())
     }
 
     /// Delete a project
@@ -233,7 +261,7 @@ impl ProjectRepository {
         debug!("Listing all projects");
 
         let rows = sqlx::query!(
-            "SELECT id, name, description, working_directory, git_repository, created_at, updated_at, status FROM projects ORDER BY created_at DESC"
+            "SELECT id as \"id!: String\", name, description, working_directory, git_repository, created_at, updated_at, status FROM projects ORDER BY created_at DESC"
         )
         .fetch_all(&self.pool)
         .await
@@ -242,7 +270,7 @@ impl ProjectRepository {
         let mut projects = Vec::new();
         for row in rows {
             let project = self.parse_project_from_row(
-                row.id.as_ref().unwrap(),
+                &row.id,
                 &row.name,
                 row.description.as_deref(),
                 row.working_directory.as_deref(),
@@ -263,7 +291,7 @@ impl ProjectRepository {
         debug!("Listing projects by status: {}", status);
 
         let rows = sqlx::query!(
-            "SELECT id, name, description, working_directory, git_repository, created_at, updated_at, status FROM projects WHERE status = ?1 ORDER BY created_at DESC",
+            "SELECT id as \"id!: String\", name, description, working_directory, git_repository, created_at, updated_at, status FROM projects WHERE status = ?1 ORDER BY created_at DESC",
             status
         )
         .fetch_all(&self.pool)
@@ -273,7 +301,7 @@ impl ProjectRepository {
         let mut projects = Vec::new();
         for row in rows {
             let project = self.parse_project_from_row(
-                row.id.as_ref().unwrap(),
+                &row.id,
                 &row.name,
                 row.description.as_deref(),
                 row.working_directory.as_deref(),

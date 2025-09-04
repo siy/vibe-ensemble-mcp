@@ -3,7 +3,7 @@
 //! This service provides sophisticated coordination logic for managing dependencies
 //! and work between multiple Claude Code agents across different projects.
 
-use crate::repositories::{AgentRepository, IssueRepository, MessageRepository};
+use crate::repositories::{AgentRepository, IssueRepository, MessageRepository, ProjectRepository};
 use crate::{Error, Result};
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -29,6 +29,7 @@ pub struct CoordinationService {
     #[allow(dead_code)]
     issue_repo: Arc<IssueRepository>,
     message_repo: Arc<MessageRepository>,
+    project_repo: Arc<ProjectRepository>,
 }
 
 impl CoordinationService {
@@ -37,11 +38,13 @@ impl CoordinationService {
         agent_repo: Arc<AgentRepository>,
         issue_repo: Arc<IssueRepository>,
         message_repo: Arc<MessageRepository>,
+        project_repo: Arc<ProjectRepository>,
     ) -> Self {
         Self {
             agent_repo,
             issue_repo,
             message_repo,
+            project_repo,
         }
     }
 
@@ -853,6 +856,206 @@ impl CoordinationService {
             rollback_plan: None, // TODO: Implement rollback plans
         })
     }
+
+    /// Validate cross-project dependency with project entity validation
+    pub async fn validate_cross_project_dependency(
+        &self,
+        source_project: &Uuid,
+        target_project: &Uuid,
+        declaring_agent_id: &Uuid,
+    ) -> Result<ProjectValidationResult> {
+        debug!(
+            "Validating cross-project dependency: {} -> {} (agent: {})",
+            source_project, target_project, declaring_agent_id
+        );
+
+        let mut validation = ProjectValidationResult {
+            valid: true,
+            errors: Vec::new(),
+            warnings: Vec::new(),
+        };
+
+        // Validate source project exists
+        let source_exists = self.project_repo.find_by_id(source_project).await?;
+        if source_exists.is_none() {
+            validation.valid = false;
+            validation
+                .errors
+                .push(format!("Source project {} not found", source_project));
+        }
+
+        // Validate target project exists
+        let target_exists = self.project_repo.find_by_id(target_project).await?;
+        if target_exists.is_none() {
+            validation.valid = false;
+            validation
+                .errors
+                .push(format!("Target project {} not found", target_project));
+        }
+
+        // Validate declaring agent exists
+        let agent_exists = self.agent_repo.find_by_id(*declaring_agent_id).await?;
+        if agent_exists.is_none() {
+            validation.valid = false;
+            validation
+                .errors
+                .push(format!("Declaring agent {} not found", declaring_agent_id));
+        }
+
+        // Check if agent is assigned to source project
+        if let Some(agent) = agent_exists {
+            if agent.connection_metadata.project_id != Some(*source_project) {
+                // TODO: Consider upgrading to error for stricter enforcement
+                validation.warnings.push(format!(
+                    "Agent {} is not assigned to source project {} - this may warrant a hard error",
+                    declaring_agent_id, source_project
+                ));
+            }
+        }
+
+        // Warn if source and target are the same project
+        if source_project == target_project {
+            validation
+                .warnings
+                .push("Cross-project dependency declared within same project".to_string());
+        }
+
+        Ok(validation)
+    }
+
+    /// Get coordination status for a specific project
+    pub async fn get_project_coordination_status(
+        &self,
+        project_id: &Uuid,
+    ) -> Result<ProjectCoordinationStatus> {
+        debug!("Getting coordination status for project: {}", project_id);
+
+        // Validate project exists
+        let project = self
+            .project_repo
+            .find_by_id(project_id)
+            .await?
+            .ok_or_else(|| Error::NotFound {
+                entity: "Project".to_string(),
+                id: project_id.to_string(),
+            })?;
+
+        // Get agents assigned to this project
+        let agents = self.agent_repo.find_by_project(project_id).await?;
+
+        // For a full implementation, you'd also track dependencies and coordination activities
+        // For now, provide basic status based on agent assignments
+        let coordinator_count = agents
+            .iter()
+            .filter(|a| {
+                matches!(
+                    a.agent_type,
+                    vibe_ensemble_core::agent::AgentType::Coordinator
+                )
+            })
+            .count();
+
+        let worker_count = agents
+            .iter()
+            .filter(|a| matches!(a.agent_type, vibe_ensemble_core::agent::AgentType::Worker))
+            .count();
+
+        Ok(ProjectCoordinationStatus {
+            project_id: *project_id,
+            project_name: project.name,
+            active_agents: agents.len(),
+            coordinator_agents: coordinator_count,
+            worker_agents: worker_count,
+            active_dependencies: 0,   // TODO: Wire dependency tracking system
+            pending_coordinations: 0, // TODO: Wire coordination activity tracking
+            last_activity: project.updated_at,
+        })
+    }
+
+    /// Validate agent can participate in cross-project coordination
+    pub async fn validate_agent_coordination_eligibility(
+        &self,
+        agent_id: &Uuid,
+        target_project: &Uuid,
+    ) -> Result<AgentCoordinationEligibility> {
+        debug!(
+            "Validating agent {} eligibility for project {}",
+            agent_id, target_project
+        );
+
+        let agent = self
+            .agent_repo
+            .find_by_id(*agent_id)
+            .await?
+            .ok_or_else(|| Error::NotFound {
+                entity: "Agent".to_string(),
+                id: agent_id.to_string(),
+            })?;
+
+        let target_project_exists = self.project_repo.find_by_id(target_project).await?;
+        if target_project_exists.is_none() {
+            return Ok(AgentCoordinationEligibility {
+                eligible: false,
+                agent_id: *agent_id,
+                reason: "Target project does not exist".to_string(),
+                recommendations: vec!["Verify project ID is correct".to_string()],
+            });
+        }
+
+        // Check agent availability (accounts for load and status)
+        let eligible = agent.is_available();
+        let reason = if eligible {
+            "Agent is available for cross-project coordination".to_string()
+        } else {
+            "Agent is not available".to_string()
+        };
+
+        let mut recommendations = Vec::new();
+        if agent.connection_metadata.project_id.is_none() {
+            recommendations.push("Consider assigning agent to a primary project".to_string());
+        }
+        if !agent.has_capability("coordination") {
+            recommendations
+                .push("Agent may benefit from coordination capability training".to_string());
+        }
+
+        Ok(AgentCoordinationEligibility {
+            eligible,
+            agent_id: *agent_id,
+            reason,
+            recommendations,
+        })
+    }
+}
+
+/// Result of project validation for coordination
+#[derive(Debug, Clone)]
+pub struct ProjectValidationResult {
+    pub valid: bool,
+    pub errors: Vec<String>,
+    pub warnings: Vec<String>,
+}
+
+/// Coordination status for a specific project
+#[derive(Debug, Clone)]
+pub struct ProjectCoordinationStatus {
+    pub project_id: Uuid,
+    pub project_name: String,
+    pub active_agents: usize,
+    pub coordinator_agents: usize,
+    pub worker_agents: usize,
+    pub active_dependencies: usize,
+    pub pending_coordinations: usize,
+    pub last_activity: chrono::DateTime<chrono::Utc>,
+}
+
+/// Agent eligibility for cross-project coordination
+#[derive(Debug, Clone)]
+pub struct AgentCoordinationEligibility {
+    pub eligible: bool,
+    pub agent_id: Uuid,
+    pub reason: String,
+    pub recommendations: Vec<String>,
 }
 
 // TODO: Add comprehensive tests once in-memory repository implementations are available

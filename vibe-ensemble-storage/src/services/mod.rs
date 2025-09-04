@@ -6,11 +6,12 @@ pub mod issue;
 pub mod knowledge;
 pub mod knowledge_intelligence;
 pub mod message;
+pub mod project;
 
 pub use agent::{
     AgentPool, AgentPoolConfig, AgentPoolPerformance, AgentPoolStatistics, AgentPoolStatus,
     AgentService, AgentSession, AgentStatistics, CapabilityStats, HealthCheckResult,
-    LoadBalancerRecommendation, SystemHealth, TaskAssignment,
+    LoadBalancerRecommendation, ProjectAssignmentStats, SystemHealth, TaskAssignment,
 };
 
 pub use issue::{AssignmentRecommendation, IssueService, IssueStatistics, WorkflowTransition};
@@ -24,4 +25,11 @@ pub use message::{
     MessageStatistics,
 };
 
-pub use coordination::CoordinationService;
+pub use coordination::{
+    AgentCoordinationEligibility, CoordinationService, ProjectCoordinationStatus,
+    ProjectValidationResult,
+};
+
+pub use project::{
+    ArchiveResult, ProjectService, ProjectStatistics, ProjectValidation, WorkspaceSetup,
+};
