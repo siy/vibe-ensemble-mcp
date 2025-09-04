@@ -89,10 +89,7 @@ impl ProjectService {
         // Setup workspace if requested and path is provided BEFORE persisting
         if setup_workspace {
             if let Some(ref path) = workspace_path {
-                if let Err(e) = self.setup_workspace_internal(&project.id, path).await {
-                    // Do not persist a project if workspace setup fails
-                    return Err(e);
-                }
+                self.setup_workspace_internal(&project.id, path).await?;
             } else {
                 warn!(
                     "Workspace setup requested for project '{}' but no workspace path provided",
