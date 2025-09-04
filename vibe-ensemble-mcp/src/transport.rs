@@ -12,7 +12,7 @@ use serde_json::Value;
 use std::net::SocketAddr;
 use tokio::sync::mpsc;
 use tokio::time::{timeout, Duration};
-use tokio_tungstenite::{accept_async, tungstenite::Message};
+use tokio_tungstenite::tungstenite::Message;
 use tracing::{debug, error, info, warn};
 
 /// Validate that a message is proper JSON-RPC 2.0 (free function for testing)
@@ -759,18 +759,19 @@ impl TransportFactory {
     }
 }
 
-/// WebSocket server for accepting multiple MCP connections
+/// HTTP server with WebSocket upgrade for accepting multiple MCP connections
 ///
-/// This provides a multi-agent WebSocket server that:
-/// - Accepts multiple concurrent connections on a specified port
-/// - Handles HTTP->WebSocket upgrade protocol
+/// This provides a multi-agent HTTP server with WebSocket upgrade that:
+/// - Accepts multiple concurrent HTTP connections with WebSocket upgrade
+/// - Implements auto-discovery port fallback (22360, 22361, 22362, 9090, 8081)
+/// - Provides /ws endpoint for WebSocket upgrade
 /// - Creates WebSocket transports for each connected agent
 /// - Manages connection lifecycle and cleanup
 /// - Integrates with the existing MCP server architecture
 pub struct WebSocketServer {
     /// Host address to bind to
     host: String,
-    /// Port to listen on
+    /// Preferred port (will fallback if unavailable)
     port: u16,
     /// Read timeout for WebSocket connections
     read_timeout: Duration,
@@ -779,8 +780,11 @@ pub struct WebSocketServer {
 }
 
 impl WebSocketServer {
-    /// Default WebSocket server port
-    pub const DEFAULT_PORT: u16 = 8081;
+    /// Port fallback sequence for auto-discovery (in priority order)
+    pub const PORT_FALLBACK_SEQUENCE: &'static [u16] = &[22360, 22361, 22362, 9090, 8081];
+
+    /// Default WebSocket server port (first in fallback sequence)
+    pub const DEFAULT_PORT: u16 = 22360;
 
     /// Create a new WebSocket server with default settings
     pub fn new(host: String, port: u16) -> Self {
@@ -812,118 +816,340 @@ impl WebSocketServer {
         format!("{}:{}", self.host, self.port)
     }
 
-    /// Start the WebSocket server and return a channel receiver for new connections
+    /// Start the HTTP server with WebSocket upgrade and return a channel receiver for new connections
     ///
-    /// Each connection yields a ready-to-use WebSocket transport that can be
-    /// used with the MCP server. The server handles the HTTP upgrade protocol
-    /// and connection lifecycle automatically.
+    /// This implements port fallback (22360, 22361, 22362, 9090, 8081) and creates an HTTP server
+    /// with a /ws endpoint that handles WebSocket upgrade requests. Each connection yields a
+    /// ready-to-use WebSocket transport that can be used with the MCP server.
     pub async fn start(
         self,
-    ) -> Result<mpsc::UnboundedReceiver<std::result::Result<Box<dyn Transport>, Error>>> {
+    ) -> Result<(
+        u16,
+        mpsc::UnboundedReceiver<std::result::Result<Box<dyn Transport>, Error>>,
+    )> {
+        use axum::{extract::WebSocketUpgrade, routing::get, Router};
         use tokio::net::TcpListener;
+        use tower::ServiceBuilder;
+        use tower_http::cors::CorsLayer;
 
-        let bind_addr = format!("{}:{}", self.host, self.port);
-        let listener = TcpListener::bind(&bind_addr).await.map_err(|e| {
+        let (connection_tx, connection_rx) = mpsc::unbounded_channel();
+
+        // Try ports in fallback sequence
+        let mut bound_port = None;
+        let mut listener = None;
+        let mut bind_attempts = Vec::new();
+
+        // Start with provided port, then try fallback sequence
+        let mut ports_to_try = vec![self.port];
+        if !Self::PORT_FALLBACK_SEQUENCE.contains(&self.port) {
+            ports_to_try.extend_from_slice(Self::PORT_FALLBACK_SEQUENCE);
+        } else {
+            // If provided port is in sequence, try the full sequence
+            ports_to_try = Self::PORT_FALLBACK_SEQUENCE.to_vec();
+        }
+
+        for port in ports_to_try {
+            let bind_addr = format!("{}:{}", self.host, port);
+            match TcpListener::bind(&bind_addr).await {
+                Ok(l) => {
+                    bound_port = Some(port);
+                    listener = Some(l);
+                    info!("Successfully bound HTTP server to {}", bind_addr);
+                    break;
+                }
+                Err(e) => {
+                    debug!("Failed to bind to {}: {:?}", bind_addr, e.kind());
+                    bind_attempts.push((port, e));
+                }
+            }
+        }
+
+        let listener = listener.ok_or_else(|| {
+            let attempts_str = bind_attempts
+                .iter()
+                .map(|(port, err)| format!("{}:{} ({})", self.host, port, err))
+                .collect::<Vec<_>>()
+                .join(", ");
+
+            warn!(
+                "All preferred ports are unavailable. Tried: {}",
+                attempts_str
+            );
             Error::Transport(format!(
-                "Failed to bind WebSocket server to {}: {}",
-                bind_addr, e
+                "Failed to bind HTTP server to any port. Tried: {}",
+                attempts_str
             ))
         })?;
 
+        let bound_port = bound_port.unwrap();
+
         info!(
-            "WebSocket MCP server listening on {} (timeouts: read={}s, write={}s)",
-            bind_addr,
+            "HTTP MCP server with WebSocket upgrade listening on {}:{} (timeouts: read={}s, write={}s)",
+            self.host,
+            bound_port,
             self.read_timeout.as_secs(),
             self.write_timeout.as_secs()
         );
 
-        let (connection_tx, connection_rx) = mpsc::unbounded_channel();
-
-        // Spawn the server loop
+        // Create the router with WebSocket upgrade endpoint
         let read_timeout = self.read_timeout;
         let write_timeout = self.write_timeout;
+        let connection_tx_clone = connection_tx.clone();
 
+        let app = Router::new()
+            .route(
+                "/ws",
+                get(move |ws: WebSocketUpgrade| async move {
+                    handle_websocket_upgrade(ws, connection_tx_clone, read_timeout, write_timeout)
+                        .await
+                }),
+            )
+            .layer(
+                ServiceBuilder::new()
+                    .layer(CorsLayer::permissive()) // Allow cross-origin WebSocket connections
+                    .into_inner(),
+            );
+
+        // Spawn the HTTP server
         tokio::spawn(async move {
-            loop {
-                match listener.accept().await {
-                    Ok((stream, remote_addr)) => {
-                        debug!("Accepted TCP connection from {}", remote_addr);
-
-                        let connection_tx = connection_tx.clone();
-
-                        // Handle WebSocket upgrade in a separate task
-                        tokio::spawn(async move {
-                            match handle_websocket_connection(
-                                stream,
-                                remote_addr,
-                                read_timeout,
-                                write_timeout,
-                            )
-                            .await
-                            {
-                                Ok(transport) => {
-                                    if connection_tx.send(Ok(transport)).is_err() {
-                                        debug!("Connection receiver dropped, closing connection");
-                                    }
-                                }
-                                Err(e) => {
-                                    debug!(
-                                        "WebSocket connection failed from {}: {}",
-                                        remote_addr, e
-                                    );
-                                    // Don't send the error, just log it
-                                }
-                            }
-                        });
-                    }
-                    Err(e) => {
-                        error!("Failed to accept TCP connection: {}", e);
-                        if connection_tx
-                            .send(Err(Error::Transport(format!("Accept error: {}", e))))
-                            .is_err()
-                        {
-                            break; // Receiver dropped, stop server
-                        }
-                    }
+            if let Err(e) = axum::serve(listener, app).await {
+                error!("HTTP server error: {}", e);
+                if connection_tx
+                    .send(Err(Error::Transport(format!("HTTP server error: {}", e))))
+                    .is_err()
+                {
+                    debug!("Connection receiver dropped");
                 }
             }
-            info!("WebSocket server loop ended");
+            info!("HTTP server loop ended");
         });
 
-        Ok(connection_rx)
+        Ok((bound_port, connection_rx))
     }
 }
 
-/// Handle WebSocket connection directly (using tokio-tungstenite accept)
-async fn handle_websocket_connection(
-    stream: tokio::net::TcpStream,
-    remote_addr: SocketAddr,
+/// Handle WebSocket upgrade from Axum
+async fn handle_websocket_upgrade(
+    ws: axum::extract::WebSocketUpgrade,
+    connection_tx: mpsc::UnboundedSender<std::result::Result<Box<dyn Transport>, Error>>,
     read_timeout: Duration,
     write_timeout: Duration,
-) -> std::result::Result<Box<dyn Transport>, Error> {
-    debug!("Handling WebSocket connection from {}", remote_addr);
+) -> axum::response::Response {
+    ws.on_upgrade(move |socket| async move {
+        debug!("WebSocket upgrade completed for connection");
 
-    // Accept the WebSocket connection
-    // Note: For now using basic accept_async - subprotocol negotiation can be added later
-    let websocket = accept_async(stream).await.map_err(|e| {
-        error!(
-            "Failed to accept WebSocket connection from {}: {}",
-            remote_addr, e
+        // Create a channel-based transport that wraps the Axum WebSocket
+        let transport = ChannelWrappedTransport::new(socket, read_timeout, write_timeout);
+
+        if connection_tx.send(Ok(Box::new(transport))).is_err() {
+            debug!("Connection receiver dropped, closing connection");
+        } else {
+            info!("WebSocket connection established and sent to handler");
+        }
+    })
+}
+
+/// Channel-wrapped transport that bridges Axum WebSocket to our Transport trait
+/// This avoids Sync trait issues by using channels and spawning a background task
+pub struct ChannelWrappedTransport {
+    send_tx: mpsc::UnboundedSender<String>,
+    recv_rx: mpsc::UnboundedReceiver<std::result::Result<String, Error>>,
+    close_tx: Option<mpsc::UnboundedSender<()>>,
+    is_closed: bool,
+}
+
+impl ChannelWrappedTransport {
+    pub fn new(
+        socket: axum::extract::ws::WebSocket,
+        read_timeout: Duration,
+        write_timeout: Duration,
+    ) -> Self {
+        let (send_tx, send_rx) = mpsc::unbounded_channel::<String>();
+        let (recv_tx, recv_rx) = mpsc::unbounded_channel::<std::result::Result<String, Error>>();
+        let (close_tx, close_rx) = mpsc::unbounded_channel::<()>();
+
+        // Spawn background task to handle WebSocket operations
+        tokio::spawn(handle_axum_websocket_task(
+            socket,
+            send_rx,
+            recv_tx,
+            close_rx,
+            read_timeout,
+            write_timeout,
+        ));
+
+        Self {
+            send_tx,
+            recv_rx,
+            close_tx: Some(close_tx),
+            is_closed: false,
+        }
+    }
+}
+
+#[async_trait::async_trait]
+impl Transport for ChannelWrappedTransport {
+    async fn send(&mut self, message: &str) -> Result<()> {
+        if self.is_closed {
+            return Err(Error::Transport(
+                "Channel-wrapped transport is closed".to_string(),
+            ));
+        }
+
+        // Validate message before sending (MCP compliance)
+        validate_websocket_message(message)?;
+
+        self.send_tx
+            .send(message.to_string())
+            .map_err(|_| Error::Transport("Failed to send message through channel".to_string()))?;
+
+        debug!(
+            "Successfully queued message for sending: {} bytes",
+            message.len()
         );
-        Error::Transport(format!("WebSocket accept failed: {}", e))
-    })?;
+        Ok(())
+    }
 
-    info!("WebSocket connection established with {}", remote_addr);
+    async fn receive(&mut self) -> Result<String> {
+        if self.is_closed {
+            return Err(Error::Transport(
+                "Channel-wrapped transport is closed".to_string(),
+            ));
+        }
 
-    // Create transport
-    let transport = TransportFactory::websocket_with_config(
-        websocket,
-        read_timeout,
-        write_timeout,
-        Some(remote_addr),
-    );
+        match self.recv_rx.recv().await {
+            Some(Ok(message)) => {
+                debug!(
+                    "Successfully received message from channel: {} bytes",
+                    message.len()
+                );
+                Ok(message)
+            }
+            Some(Err(e)) => {
+                self.is_closed = true;
+                Err(e)
+            }
+            None => {
+                self.is_closed = true;
+                Err(Error::Connection(
+                    "WebSocket background task ended".to_string(),
+                ))
+            }
+        }
+    }
 
-    Ok(transport)
+    async fn close(&mut self) -> Result<()> {
+        if !self.is_closed {
+            info!("Closing channel-wrapped transport");
+
+            if let Some(close_tx) = self.close_tx.take() {
+                let _ = close_tx.send(());
+            }
+
+            self.is_closed = true;
+            info!("Channel-wrapped transport closed");
+        }
+        Ok(())
+    }
+}
+
+/// Background task to handle Axum WebSocket operations
+async fn handle_axum_websocket_task(
+    mut socket: axum::extract::ws::WebSocket,
+    mut send_rx: mpsc::UnboundedReceiver<String>,
+    recv_tx: mpsc::UnboundedSender<std::result::Result<String, Error>>,
+    mut close_rx: mpsc::UnboundedReceiver<()>,
+    _read_timeout: Duration,
+    _write_timeout: Duration,
+) {
+    use futures_util::StreamExt;
+
+    loop {
+        tokio::select! {
+            // Handle outgoing messages
+            msg = send_rx.recv() => {
+                if let Some(message) = msg {
+                    let ws_message = axum::extract::ws::Message::Text(message.clone());
+                    if let Err(e) = socket.send(ws_message).await {
+                        error!("Failed to send WebSocket message: {}", e);
+                        let _ = recv_tx.send(Err(Error::Transport(format!("Send failed: {}", e))));
+                        break;
+                    }
+                    debug!("Sent WebSocket message: {} bytes", message.len());
+                } else {
+                    debug!("Send channel closed");
+                    break;
+                }
+            }
+
+            // Handle incoming messages
+            msg = socket.next() => {
+                match msg {
+                    Some(Ok(message)) => {
+                        match message {
+                            axum::extract::ws::Message::Text(text) => {
+                                if !text.trim().is_empty() {
+                                    if validate_websocket_message(&text).is_ok() {
+                                        if recv_tx.send(Ok(text)).is_err() {
+                                            debug!("Receive channel closed");
+                                            break;
+                                        }
+                                    } else {
+                                        warn!("Received invalid WebSocket message, skipping");
+                                    }
+                                }
+                            }
+                            axum::extract::ws::Message::Binary(data) => {
+                                if let Ok(text) = String::from_utf8(data) {
+                                    if !text.trim().is_empty() && validate_websocket_message(&text).is_ok() && recv_tx.send(Ok(text)).is_err() {
+                                        debug!("Receive channel closed");
+                                        break;
+                                    }
+                                }
+                            }
+                            axum::extract::ws::Message::Ping(data) => {
+                                if let Err(e) = socket.send(axum::extract::ws::Message::Pong(data)).await {
+                                    error!("Failed to send pong: {}", e);
+                                    break;
+                                }
+                            }
+                            axum::extract::ws::Message::Pong(_) => {
+                                debug!("Received pong");
+                            }
+                            axum::extract::ws::Message::Close(frame) => {
+                                if let Some(frame) = frame {
+                                    info!("WebSocket closed by remote: {} - {}", frame.code, frame.reason);
+                                } else {
+                                    info!("WebSocket closed by remote");
+                                }
+                                let _ = recv_tx.send(Err(Error::Connection("WebSocket closed by remote".to_string())));
+                                break;
+                            }
+                        }
+                    }
+                    Some(Err(e)) => {
+                        error!("WebSocket error: {}", e);
+                        let _ = recv_tx.send(Err(Error::Transport(format!("WebSocket error: {}", e))));
+                        break;
+                    }
+                    None => {
+                        info!("WebSocket stream ended");
+                        let _ = recv_tx.send(Err(Error::Connection("WebSocket stream ended".to_string())));
+                        break;
+                    }
+                }
+            }
+
+            // Handle close signal
+            _ = close_rx.recv() => {
+                info!("Received close signal for WebSocket task");
+                let _ = socket.send(axum::extract::ws::Message::Close(None)).await;
+                break;
+            }
+        }
+    }
+
+    info!("WebSocket background task ended");
 }
 
 #[cfg(test)]

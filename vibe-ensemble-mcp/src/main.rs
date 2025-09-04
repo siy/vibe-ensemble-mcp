@@ -452,9 +452,9 @@ async fn main() -> anyhow::Result<()> {
         web_handle.abort(); // Stop web server since we don't need it
     }
 
-    // Start MCP transport with WebSocket
+    // Start MCP transport with HTTP-to-WebSocket upgrade
     info!(
-        "Starting MCP server with WebSocket transport on {}:{}",
+        "Starting MCP server with HTTP-to-WebSocket upgrade on {}:{} (with port fallback)",
         mcp_host, mcp_port
     );
     run_websocket_transport(server, mcp_host, mcp_port, &mut web_handle, mcp_only).await?;
@@ -489,41 +489,31 @@ async fn run_websocket_transport(
     _mcp_only: bool,
 ) -> anyhow::Result<()> {
     // Create WebSocket server
-    let ws_server = WebSocketServer::new(mcp_host, mcp_port);
-    let bind_address = ws_server.bind_address();
+    let ws_server = WebSocketServer::new(mcp_host.clone(), mcp_port);
+    let _bind_address = ws_server.bind_address();
 
-    // Check for port conflicts
-    if let Err(e) = tokio::net::TcpListener::bind(&bind_address).await {
-        match e.kind() {
-            std::io::ErrorKind::AddrInUse => {
-                error!("MCP port {} is already in use. Please choose a different port with --mcp-port or stop the conflicting service.", mcp_port);
-                return Err(anyhow::anyhow!("MCP port {} already in use", mcp_port));
-            }
-            std::io::ErrorKind::PermissionDenied => {
-                error!("Permission denied binding to MCP {}. Try using a port above 1024 or run with appropriate privileges.", bind_address);
-                return Err(anyhow::anyhow!(
-                    "Permission denied for MCP address {}",
-                    bind_address
-                ));
-            }
-            _ => {
-                error!("Failed to bind to MCP address {}: {}", bind_address, e);
-                return Err(anyhow::anyhow!(
-                    "Failed to bind to MCP {}: {}",
-                    bind_address,
-                    e
-                ));
-            }
-        }
+    // Port conflict checking is now handled by the HTTP server with fallback
+
+    // Start HTTP server with WebSocket upgrade and handle connections
+    let (actual_port, mut connection_rx) = ws_server.start().await.map_err(|e| {
+        anyhow::anyhow!("Failed to start HTTP server with WebSocket upgrade: {}", e)
+    })?;
+
+    if actual_port != mcp_port {
+        warn!(
+            "MCP server bound to port {} instead of requested port {} due to port conflicts",
+            actual_port, mcp_port
+        );
+        info!(
+            "Connect to WebSocket MCP at: ws://{}:{}/ws",
+            mcp_host, actual_port
+        );
+    } else {
+        info!(
+            "Connect to WebSocket MCP at: ws://{}:{}/ws",
+            mcp_host, actual_port
+        );
     }
-
-    info!("WebSocket MCP server listening on {}", bind_address);
-
-    // Start WebSocket server and handle connections
-    let mut connection_rx = ws_server
-        .start()
-        .await
-        .map_err(|e| anyhow::anyhow!("Failed to start WebSocket server: {}", e))?;
 
     let mut active_connections = 0u64;
     let server_start = std::time::Instant::now();

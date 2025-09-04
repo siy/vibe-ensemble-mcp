@@ -3482,7 +3482,7 @@ checksum = "0b928f33d975fc6ad9f86c8f283853ad26bdd5b10b7f1542aa2fa15e2289105a"
 
 [[package]]
 name = "vibe-ensemble-core"
-version = "0.4.1"
+version = "0.4.2"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -3501,11 +3501,12 @@ dependencies = [
 
 [[package]]
 name = "vibe-ensemble-mcp"
-version = "0.4.1"
+version = "0.4.2"
 dependencies = [
  "anyhow",
  "async-stream",
  "async-trait",
+ "axum",
  "base64",
  "chrono",
  "clap",
@@ -3527,6 +3528,8 @@ dependencies = [
  "tokio",
  "tokio-test",
  "tokio-tungstenite 0.21.0",
+ "tower 0.4.13",
+ "tower-http 0.5.2",
  "tracing",
  "tracing-appender",
  "tracing-subscriber",
@@ -3539,7 +3542,7 @@ dependencies = [
 
 [[package]]
 name = "vibe-ensemble-prompts"
-version = "0.4.1"
+version = "0.4.2"
 dependencies = [
  "anyhow",
  "chrono",
@@ -3557,7 +3560,7 @@ dependencies = [
 
 [[package]]
 name = "vibe-ensemble-storage"
-version = "0.4.1"
+version = "0.4.2"
 dependencies = [
  "anyhow",
  "base64",
@@ -3584,7 +3587,7 @@ dependencies = [
 
 [[package]]
 name = "vibe-ensemble-web"
-version = "0.4.1"
+version = "0.4.2"
 dependencies = [
  "anyhow",
  "askama",

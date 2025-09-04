@@ -1,0 +1,5 @@
+2025-09-04T07:05:51.374904Z  INFO Connecting to database: ./ve.db
+2025-09-04T07:05:51.375471Z  INFO Using connection pool with 10 connections
+2025-09-04T07:05:51.381711Z  INFO Database connection established with performance optimizations
+2025-09-04T07:05:51.381957Z  INFO Running database migrations
+2025-09-04T07:05:51.390947Z  INFO Database migrations completed successfully
