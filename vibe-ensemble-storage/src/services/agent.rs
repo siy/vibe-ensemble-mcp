@@ -42,7 +42,31 @@ impl AgentService {
         connection_metadata: ConnectionMetadata,
         session_id: String,
     ) -> Result<Agent> {
-        info!("Registering new agent: {} (type: {:?})", name, agent_type);
+        self.register_agent_internal(
+            name,
+            agent_type,
+            capabilities,
+            connection_metadata,
+            session_id,
+            None,
+        )
+        .await
+    }
+
+    /// Internal helper method for agent registration with optional project assignment
+    async fn register_agent_internal(
+        &self,
+        name: String,
+        agent_type: AgentType,
+        capabilities: Vec<String>,
+        connection_metadata: ConnectionMetadata,
+        session_id: String,
+        project_id: Option<Uuid>,
+    ) -> Result<Agent> {
+        info!(
+            "Registering new agent: {} (type: {:?}, project: {:?})",
+            name, agent_type, project_id
+        );
 
         // Check if agent name already exists
         if let Some(_existing) = self.repository.find_by_name(&name).await? {
@@ -52,8 +76,26 @@ impl AgentService {
             )));
         }
 
-        // Create the agent
-        let mut agent = Agent::new(name, agent_type, capabilities, connection_metadata)?;
+        // Create the agent with optional project assignment
+        let mut metadata = connection_metadata;
+        if let Some(pid) = project_id {
+            metadata.project_id = Some(pid);
+        }
+
+        let agent = if project_id.is_some() {
+            // Use builder pattern for project-assigned agents
+            Agent::builder()
+                .name(name)
+                .agent_type(agent_type)
+                .capabilities(capabilities)
+                .connection_metadata(metadata)
+                .build()?
+        } else {
+            // Use simple constructor for unassigned agents
+            Agent::new(name, agent_type, capabilities, metadata)?
+        };
+
+        let mut agent = agent;
 
         // Transition to online after successful connection
         agent.go_online()?;
@@ -72,8 +114,8 @@ impl AgentService {
         self.active_sessions.write().await.insert(agent.id, session);
 
         info!(
-            "Successfully registered agent: {} ({})",
-            agent.name, agent.id
+            "Successfully registered agent: {} ({}) with project: {:?}",
+            agent.name, agent.id, project_id
         );
         Ok(agent)
     }
@@ -1124,54 +1166,15 @@ impl AgentService {
         session_id: String,
         project_id: Option<Uuid>,
     ) -> Result<Agent> {
-        info!(
-            "Registering new agent: {} (type: {:?}, project: {:?})",
-            name, agent_type, project_id
-        );
-
-        // Check if agent name already exists
-        if let Some(_existing) = self.repository.find_by_name(&name).await? {
-            return Err(Error::Conflict(format!(
-                "Agent with name '{}' already exists",
-                name
-            )));
-        }
-
-        // Create the agent with project assignment
-        let mut connection_metadata_builder = connection_metadata;
-        if let Some(pid) = project_id {
-            connection_metadata_builder.project_id = Some(pid);
-        }
-
-        let agent = Agent::builder()
-            .name(name.clone())
-            .agent_type(agent_type)
-            .capabilities(capabilities)
-            .connection_metadata(connection_metadata_builder);
-
-        let mut agent = agent.build()?;
-
-        // Transition to online after successful connection
-        agent.go_online()?;
-
-        // Store in database
-        self.repository.create(&agent).await?;
-
-        // Create active session
-        let session = AgentSession {
-            agent_id: agent.id,
-            session_id: session_id.clone(),
-            connected_at: chrono::Utc::now(),
-            last_heartbeat: chrono::Utc::now(),
-        };
-
-        self.active_sessions.write().await.insert(agent.id, session);
-
-        info!(
-            "Successfully registered agent: {} ({}) with project: {:?}",
-            agent.name, agent.id, project_id
-        );
-        Ok(agent)
+        self.register_agent_internal(
+            name,
+            agent_type,
+            capabilities,
+            connection_metadata,
+            session_id,
+            project_id,
+        )
+        .await
     }
 
     /// Assign an agent to a project
@@ -1217,8 +1220,8 @@ impl AgentService {
         debug!("Computing project assignment statistics");
 
         let all_agents = self.repository.list().await?;
-        let mut assigned_count = 0;
-        let mut unassigned_count = 0;
+        let mut assigned_count: i64 = 0;
+        let mut unassigned_count: i64 = 0;
         let mut projects_with_agents = std::collections::HashSet::new();
 
         for agent in &all_agents {

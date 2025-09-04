@@ -905,8 +905,9 @@ impl CoordinationService {
         // Check if agent is assigned to source project
         if let Some(agent) = agent_exists {
             if agent.connection_metadata.project_id != Some(*source_project) {
+                // TODO: Consider upgrading to error for stricter enforcement
                 validation.warnings.push(format!(
-                    "Agent {} is not assigned to source project {}",
+                    "Agent {} is not assigned to source project {} - this may warrant a hard error",
                     declaring_agent_id, source_project
                 ));
             }
@@ -965,8 +966,8 @@ impl CoordinationService {
             active_agents: agents.len(),
             coordinator_agents: coordinator_count,
             worker_agents: worker_count,
-            active_dependencies: 0, // Would be tracked in a full implementation
-            pending_coordinations: 0, // Would be tracked in a full implementation
+            active_dependencies: 0,   // TODO: Wire dependency tracking system
+            pending_coordinations: 0, // TODO: Wire coordination activity tracking
             last_activity: project.updated_at,
         })
     }
@@ -1001,12 +1002,12 @@ impl CoordinationService {
             });
         }
 
-        // Check agent status and capabilities
-        let eligible = matches!(agent.status, vibe_ensemble_core::agent::AgentStatus::Online);
+        // Check agent availability (accounts for load and status)
+        let eligible = agent.is_available();
         let reason = if eligible {
-            "Agent is eligible for cross-project coordination".to_string()
+            "Agent is available for cross-project coordination".to_string()
         } else {
-            "Agent is not online or available".to_string()
+            "Agent is not available".to_string()
         };
 
         let mut recommendations = Vec::new();

@@ -31,14 +31,6 @@ impl AgentRepository {
         let status_json = serde_json::to_string(&agent.status)
             .map_err(|e| Error::Internal(anyhow::anyhow!("Failed to serialize status: {}", e)))?;
 
-        let connection_metadata_json =
-            serde_json::to_string(&agent.connection_metadata).map_err(|e| {
-                Error::Internal(anyhow::anyhow!(
-                    "Failed to serialize connection metadata: {}",
-                    e
-                ))
-            })?;
-
         let agent_type_str = match agent.agent_type {
             AgentType::Coordinator => "Coordinator",
             AgentType::Worker => "Worker",
@@ -51,6 +43,16 @@ impl AgentRepository {
             .connection_metadata
             .project_id
             .map(|id| id.to_string());
+
+        // Strip project_id from JSON metadata to avoid dual-source inconsistency
+        let mut metadata_for_json = agent.connection_metadata.clone();
+        metadata_for_json.project_id = None;
+        let connection_metadata_json = serde_json::to_string(&metadata_for_json).map_err(|e| {
+            Error::Internal(anyhow::anyhow!(
+                "Failed to serialize connection metadata: {}",
+                e
+            ))
+        })?;
 
         sqlx::query!(
             r#"
@@ -149,14 +151,6 @@ impl AgentRepository {
         let status_json = serde_json::to_string(&agent.status)
             .map_err(|e| Error::Internal(anyhow::anyhow!("Failed to serialize status: {}", e)))?;
 
-        let connection_metadata_json =
-            serde_json::to_string(&agent.connection_metadata).map_err(|e| {
-                Error::Internal(anyhow::anyhow!(
-                    "Failed to serialize connection metadata: {}",
-                    e
-                ))
-            })?;
-
         let agent_type_str = match agent.agent_type {
             AgentType::Coordinator => "Coordinator",
             AgentType::Worker => "Worker",
@@ -168,6 +162,16 @@ impl AgentRepository {
             .connection_metadata
             .project_id
             .map(|id| id.to_string());
+
+        // Strip project_id from JSON metadata to avoid dual-source inconsistency
+        let mut metadata_for_json = agent.connection_metadata.clone();
+        metadata_for_json.project_id = None;
+        let connection_metadata_json = serde_json::to_string(&metadata_for_json).map_err(|e| {
+            Error::Internal(anyhow::anyhow!(
+                "Failed to serialize connection metadata: {}",
+                e
+            ))
+        })?;
 
         let result = sqlx::query!(
             r#"
@@ -384,8 +388,19 @@ impl AgentRepository {
     pub async fn find_by_capability(&self, capability: &str) -> Result<Vec<Agent>> {
         debug!("Finding agents with capability: {}", capability);
 
+        // Use JSON1 extension to filter agents by capability at SQL level
         let rows = sqlx::query!(
-            "SELECT id, name, agent_type, capabilities, status, connection_metadata, created_at, last_seen, project_id FROM agents ORDER BY created_at DESC"
+            r#"
+            SELECT id, name, agent_type, capabilities, status, connection_metadata,
+                   created_at, last_seen, project_id
+            FROM agents
+            WHERE EXISTS (
+                SELECT 1 FROM json_each(capabilities) je 
+                WHERE je.value = ?1
+            )
+            ORDER BY created_at DESC
+            "#,
+            capability
         )
         .fetch_all(&self.pool)
         .await
@@ -404,9 +419,7 @@ impl AgentRepository {
                 &row.last_seen,
                 row.project_id.as_deref(),
             )?;
-            if agent.has_capability(capability) {
-                agents.push(agent);
-            }
+            agents.push(agent);
         }
 
         debug!(
@@ -555,6 +568,9 @@ impl AgentRepository {
     }
 
     /// Helper method to parse agent from database fields
+    ///
+    /// Note: The project_id column takes precedence over any project_id in the JSON metadata.
+    /// This avoids dual-source inconsistencies by ensuring the dedicated column is authoritative.
     #[allow(clippy::too_many_arguments)]
     fn parse_agent_from_row(
         &self,
@@ -610,7 +626,7 @@ impl AgentRepository {
             .transpose()
             .map_err(|e| Error::Internal(anyhow::anyhow!("Invalid project UUID: {}", e)))?;
 
-        // Update connection metadata with project_id
+        // Update connection metadata with project_id from column (column takes precedence)
         let mut updated_connection_metadata = parsed_connection_metadata;
         updated_connection_metadata.project_id = parsed_project_id;
 

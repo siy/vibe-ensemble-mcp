@@ -449,7 +449,8 @@ impl IssueRepository {
         }
     }
 
-    /// Find issues by tag (supports project scoping)
+    /// Find issues by tag
+    /// Note: Despite docstring, this method does not currently support project scoping parameter
     pub async fn find_by_tag(&self, tag: &str) -> Result<Vec<Issue>> {
         debug!("Finding issues by tag: {}", tag);
 

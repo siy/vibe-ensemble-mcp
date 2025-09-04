@@ -216,6 +216,7 @@ impl ProjectService {
     }
 
     /// List projects by status
+    /// TODO: Consider using enum instead of stringly-typed status to avoid typos
     pub async fn list_projects_by_status(&self, status: &str) -> Result<Vec<Project>> {
         debug!("Listing projects by status: {}", status);
         self.repository.list_by_status(status).await
@@ -400,16 +401,35 @@ impl ProjectService {
         workspace_path: &Path,
         preserve_files: &[PathBuf],
     ) -> Result<Vec<PathBuf>> {
-        let removed_files = Vec::new();
+        let mut removed_files = Vec::new();
 
-        // This is a simplified cleanup - in a real implementation, you'd want more sophisticated logic
+        // Enumerate candidates for removal to aid observability
         if workspace_path.exists() && workspace_path.is_dir() {
-            // For now, just record what would be removed
-            // In a real implementation, you'd iterate through files and remove non-preserved ones
+            let mut rd = tokio::fs::read_dir(workspace_path).await.map_err(|e| {
+                Error::Internal(anyhow::anyhow!(
+                    "Failed to read workspace directory '{}': {}",
+                    workspace_path.display(),
+                    e
+                ))
+            })?;
+            let preserve_set: std::collections::HashSet<PathBuf> =
+                preserve_files.iter().cloned().collect();
+            while let Some(entry) = rd.next_entry().await.map_err(|e| {
+                Error::Internal(anyhow::anyhow!(
+                    "Failed to iterate workspace directory '{}': {}",
+                    workspace_path.display(),
+                    e
+                ))
+            })? {
+                let p = entry.path();
+                if !preserve_set.contains(&p) {
+                    removed_files.push(p);
+                }
+            }
             debug!(
-                "Would perform cleanup of workspace: {} (preserving {} files)",
-                workspace_path.display(),
-                preserve_files.len()
+                "Identified {} entries for removal in workspace: {}",
+                removed_files.len(),
+                workspace_path.display()
             );
         }
 
@@ -425,11 +445,24 @@ impl ProjectService {
             });
         }
 
-        // Check if parent directory exists and is writable
-        if let Some(parent) = path.parent() {
-            if parent.exists() && !parent.is_dir() {
+        // Check parent directory existence and type
+        match path.parent() {
+            Some(parent) => {
+                if !parent.exists() {
+                    return Err(Error::Validation {
+                        message: "Parent directory of workspace path does not exist".to_string(),
+                    });
+                }
+                if !parent.is_dir() {
+                    return Err(Error::Validation {
+                        message: "Parent directory of workspace path is not a directory"
+                            .to_string(),
+                    });
+                }
+            }
+            None => {
                 return Err(Error::Validation {
-                    message: "Parent directory of workspace path is not a directory".to_string(),
+                    message: "Workspace path has no parent directory".to_string(),
                 });
             }
         }

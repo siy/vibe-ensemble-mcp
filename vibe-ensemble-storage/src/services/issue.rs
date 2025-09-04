@@ -3,7 +3,7 @@
 use crate::{repositories::IssueRepository, Error, Result};
 use std::collections::HashMap;
 use std::sync::Arc;
-use tracing::{debug, info};
+use tracing::{debug, info, warn};
 use uuid::Uuid;
 use vibe_ensemble_core::issue::{Issue, IssuePriority, IssueStatus, WebMetadata};
 
@@ -563,21 +563,23 @@ impl IssueService {
 
         // This is a simplified recommendation system
         // In a full implementation, you'd analyze agent capabilities, workload, etc.
-        let mut recommendations = Vec::new();
+        let recommendations = Vec::new();
 
         // Basic recommendation based on issue priority
-        let confidence = match issue.priority {
+        let _confidence = match issue.priority {
             IssuePriority::Critical => 0.9,
             IssuePriority::High => 0.8,
             IssuePriority::Medium => 0.6,
             IssuePriority::Low => 0.4,
         };
 
-        recommendations.push(AssignmentRecommendation {
-            agent_id: Uuid::new_v4(), // Placeholder - would be real agent in full implementation
-            confidence,
-            reason: format!("Suitable for {} priority issues", issue.priority),
-        });
+        // TODO: Implement real agent selection strategy via AgentRepository/AgentService
+        // For now, return empty recommendations instead of placeholder random UUIDs
+        // recommendations.push(AssignmentRecommendation {
+        //     agent_id: real_agent_id, // Would be selected from available agents
+        //     confidence,
+        //     reason: format!("Suitable for {} priority issues", issue.priority),
+        // });
 
         Ok(recommendations)
     }
@@ -639,7 +641,7 @@ impl IssueService {
             None => self.list_issues().await?,
         };
 
-        self.compute_statistics_from_issues(&issues).await
+        self.compute_statistics_from_issues(&issues)
     }
 
     /// Assign issue to agent with project validation
@@ -675,7 +677,9 @@ impl IssueService {
 
             if !issue_project_tags.is_empty() {
                 debug!("Issue has project tags: {:?}", issue_project_tags);
-                // In a real implementation, you'd verify agent is assigned to same project
+                // TODO: Wire AgentRepository to enforce validation
+                // For now, just log the check - would return error on mismatch in full implementation
+                warn!("Project validation requested but not fully implemented - would check agent project assignment");
             }
         }
 
@@ -710,7 +714,7 @@ impl IssueService {
     }
 
     /// Helper method to compute statistics from a collection of issues
-    async fn compute_statistics_from_issues(&self, issues: &[Issue]) -> Result<IssueStatistics> {
+    fn compute_statistics_from_issues(&self, issues: &[Issue]) -> Result<IssueStatistics> {
         let total_issues = issues.len() as i64;
         let mut open_issues = 0;
         let mut in_progress_issues = 0;
@@ -733,7 +737,7 @@ impl IssueService {
                 assigned_issues += 1;
             }
 
-            let priority_str = format!("{}", issue.priority);
+            let priority_str = format!("{:?}", issue.priority);
             *issues_by_priority.entry(priority_str).or_insert(0) += 1;
         }
 
