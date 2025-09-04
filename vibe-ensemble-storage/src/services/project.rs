@@ -345,11 +345,9 @@ impl ProjectService {
                 id: id.to_string(),
             })?;
 
-        let workspace_path = project
-            .workspace_path
-            .ok_or_else(|| Error::Validation {
-                message: "Project has no workspace path configured".to_string(),
-            })?;
+        let workspace_path = project.workspace_path.ok_or_else(|| Error::Validation {
+            message: "Project has no workspace path configured".to_string(),
+        })?;
 
         self.setup_workspace_internal(&id, &workspace_path).await
     }

@@ -47,7 +47,10 @@ impl AgentRepository {
         let agent_id_str = agent.id.to_string();
         let created_at_str = agent.created_at.to_rfc3339();
         let last_seen_str = agent.last_seen.to_rfc3339();
-        let project_id_str = agent.connection_metadata.project_id.map(|id| id.to_string());
+        let project_id_str = agent
+            .connection_metadata
+            .project_id
+            .map(|id| id.to_string());
 
         sqlx::query!(
             r#"
@@ -161,7 +164,10 @@ impl AgentRepository {
 
         let agent_id_str = agent.id.to_string();
         let last_seen_str = agent.last_seen.to_rfc3339();
-        let project_id_str = agent.connection_metadata.project_id.map(|id| id.to_string());
+        let project_id_str = agent
+            .connection_metadata
+            .project_id
+            .map(|id| id.to_string());
 
         let result = sqlx::query!(
             r#"
