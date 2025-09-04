@@ -239,8 +239,8 @@ mod tests {
     async fn create_test_agent(pool: &Pool<Sqlite>, agent_id: Uuid) {
         sqlx::query(
             r#"
-            INSERT INTO agents (id, name, agent_type, capabilities, status, connection_metadata, created_at, last_seen)
-            VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)
+            INSERT INTO agents (id, name, agent_type, capabilities, status, connection_metadata, created_at, last_seen, project_id)
+            VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)
             "#
         )
         .bind(agent_id.to_string())
@@ -251,6 +251,7 @@ mod tests {
         .bind("{}")
         .bind(chrono::Utc::now().to_rfc3339())
         .bind(chrono::Utc::now().to_rfc3339())
+        .bind(None::<String>) // project_id is NULL for test agents
         .execute(pool)
         .await
         .unwrap();

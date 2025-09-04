@@ -1,6 +1,6 @@
 {
   "db_name": "SQLite",
-  "query": "SELECT id, sender_id, recipient_id, message_type, content, metadata, created_at, delivered_at FROM messages WHERE recipient_id = ?1 ORDER BY created_at DESC",
+  "query": "\n            SELECT id, name, agent_type, capabilities, status, connection_metadata,\n                   created_at, last_seen, project_id\n            FROM agents\n            WHERE EXISTS (\n                SELECT 1 FROM json_each(capabilities) je \n                WHERE je.value = ?1\n            )\n            ORDER BY created_at DESC\n            ",
   "describe": {
     "columns": [
       {
@@ -9,27 +9,27 @@
         "type_info": "Text"
       },
       {
-        "name": "sender_id",
+        "name": "name",
         "ordinal": 1,
         "type_info": "Text"
       },
       {
-        "name": "recipient_id",
+        "name": "agent_type",
         "ordinal": 2,
         "type_info": "Text"
       },
       {
-        "name": "message_type",
+        "name": "capabilities",
         "ordinal": 3,
         "type_info": "Text"
       },
       {
-        "name": "content",
+        "name": "status",
         "ordinal": 4,
         "type_info": "Text"
       },
       {
-        "name": "metadata",
+        "name": "connection_metadata",
         "ordinal": 5,
         "type_info": "Text"
       },
@@ -39,8 +39,13 @@
         "type_info": "Text"
       },
       {
-        "name": "delivered_at",
+        "name": "last_seen",
         "ordinal": 7,
+        "type_info": "Text"
+      },
+      {
+        "name": "project_id",
+        "ordinal": 8,
         "type_info": "Text"
       }
     ],
@@ -50,7 +55,8 @@
     "nullable": [
       true,
       false,
-      true,
+      false,
+      false,
       false,
       false,
       false,
@@ -58,5 +64,5 @@
       true
     ]
   },
-  "hash": "c9465402ac37945f1efac532453f6b6324dad5314b0a14586574269f877787d0"
+  "hash": "c559e653b67307e250b8e462dbbe9c26649e856aba59cf5d989dffd4593e431f"
 }

@@ -111,11 +111,25 @@ impl AgentRepository {
 
     /// Find an agent by name
     pub async fn find_by_name(&self, name: &str) -> Result<Option<Agent>> {
-        debug!("Finding agent by name: {}", name);
+        self.find_by_name_in_project(name, None).await
+    }
 
+    /// Find an agent by name within a specific project (or global if project_id is None)
+    pub async fn find_by_name_in_project(
+        &self,
+        name: &str,
+        project_id: Option<Uuid>,
+    ) -> Result<Option<Agent>> {
+        debug!(
+            "Finding agent by name: {} in project: {:?}",
+            name, project_id
+        );
+
+        let project_id_str = project_id.map(|id| id.to_string());
         let row = sqlx::query!(
-            "SELECT id, name, agent_type, capabilities, status, connection_metadata, created_at, last_seen, project_id FROM agents WHERE name = ?1",
-            name
+            "SELECT id, name, agent_type, capabilities, status, connection_metadata, created_at, last_seen, project_id FROM agents WHERE name = ?1 AND ((?2 IS NULL AND project_id IS NULL) OR project_id = ?2)",
+            name,
+            project_id_str
         )
         .fetch_optional(&self.pool)
         .await
