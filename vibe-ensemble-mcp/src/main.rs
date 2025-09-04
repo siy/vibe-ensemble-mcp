@@ -1,7 +1,8 @@
 //! Vibe Ensemble MCP Server - Claude Code Companion
 //!
-//! WebSocket MCP server for coordinating multiple Claude Code instances.
-//! Features WebSocket transport, SQLite database, and local web dashboard.
+//! HTTP server with WebSocket MCP upgrade for coordinating multiple Claude Code instances.
+//! Features auto-discovery ports, WebSocket MCP transport, SQLite database, and local web dashboard.
+//! Provides /ws endpoint for WebSocket upgrade and auto-discovery by Claude Code IDE integration.
 
 use clap::Parser;
 use std::env;
@@ -68,13 +69,13 @@ struct Cli {
     #[arg(long)]
     mcp_only: bool,
 
-    /// WebSocket MCP server host (default: 127.0.0.1)
+    /// HTTP server host for WebSocket MCP upgrade (default: 127.0.0.1)
     /// Environment variable: VIBE_ENSEMBLE_MCP_HOST
     #[arg(long)]
     mcp_host: Option<String>,
 
-    /// WebSocket MCP server port (default: 8081)
-    /// Environment variable: VIBE_ENSEMBLE_MCP_PORT
+    /// HTTP server port with auto-discovery fallback (default: 22360, fallback: 22361, 22362, 9090, 8081)
+    /// Provides /ws endpoint for WebSocket upgrade. Environment variable: VIBE_ENSEMBLE_MCP_PORT
     #[arg(long)]
     mcp_port: Option<u16>,
 
