@@ -1,35 +1,35 @@
 {
   "db_name": "SQLite",
-  "query": "SELECT id, title, description, status, priority, assigned_agent_id, created_at, updated_at, resolved_at, tags FROM issues WHERE assigned_agent_id = ?1 ORDER BY created_at DESC",
+  "query": "SELECT id as \"id!: String\", name, agent_type, capabilities, status, connection_metadata, created_at, last_seen, project_id FROM agents WHERE name = ?1 AND ((?2 IS NULL AND project_id IS NULL) OR project_id = ?2)",
   "describe": {
     "columns": [
       {
-        "name": "id",
+        "name": "id!: String",
         "ordinal": 0,
         "type_info": "Text"
       },
       {
-        "name": "title",
+        "name": "name",
         "ordinal": 1,
         "type_info": "Text"
       },
       {
-        "name": "description",
+        "name": "agent_type",
         "ordinal": 2,
         "type_info": "Text"
       },
       {
-        "name": "status",
+        "name": "capabilities",
         "ordinal": 3,
         "type_info": "Text"
       },
       {
-        "name": "priority",
+        "name": "status",
         "ordinal": 4,
         "type_info": "Text"
       },
       {
-        "name": "assigned_agent_id",
+        "name": "connection_metadata",
         "ordinal": 5,
         "type_info": "Text"
       },
@@ -39,23 +39,18 @@
         "type_info": "Text"
       },
       {
-        "name": "updated_at",
+        "name": "last_seen",
         "ordinal": 7,
         "type_info": "Text"
       },
       {
-        "name": "resolved_at",
+        "name": "project_id",
         "ordinal": 8,
-        "type_info": "Text"
-      },
-      {
-        "name": "tags",
-        "ordinal": 9,
         "type_info": "Text"
       }
     ],
     "parameters": {
-      "Right": 1
+      "Right": 2
     },
     "nullable": [
       true,
@@ -63,12 +58,11 @@
       false,
       false,
       false,
-      true,
       false,
       false,
-      true,
-      false
+      false,
+      true
     ]
   },
-  "hash": "d2916f19ea5f6116ef3f9e2098dfb6a98f08e0144823e6cbf26c15e0b2d5d361"
+  "hash": "44940bd862308c549cfe2f20617ba7a1f1689e9d7984cfd81916447462aa1cbb"
 }

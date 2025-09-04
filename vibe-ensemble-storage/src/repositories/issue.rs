@@ -66,7 +66,7 @@ impl IssueRepository {
 
         let id_str = id.to_string();
         let row = sqlx::query!(
-            "SELECT id, title, description, status, priority, assigned_agent_id, created_at, updated_at, resolved_at, tags FROM issues WHERE id = ?1",
+            "SELECT id as \"id!: String\", title, description, status, priority, assigned_agent_id, created_at, updated_at, resolved_at, tags FROM issues WHERE id = ?1",
             id_str
         )
         .fetch_optional(&self.pool)
@@ -76,7 +76,7 @@ impl IssueRepository {
         match row {
             Some(row) => {
                 let issue = self.parse_issue_from_row(
-                    row.id.as_ref().unwrap(),
+                    &row.id,
                     &row.title,
                     &row.description,
                     &row.status,
@@ -166,7 +166,7 @@ impl IssueRepository {
         debug!("Listing all issues");
 
         let rows = sqlx::query!(
-            "SELECT id, title, description, status, priority, assigned_agent_id, created_at, updated_at, resolved_at, tags FROM issues ORDER BY created_at DESC"
+            "SELECT id as \"id!: String\", title, description, status, priority, assigned_agent_id, created_at, updated_at, resolved_at, tags FROM issues ORDER BY created_at DESC"
         )
         .fetch_all(&self.pool)
         .await
@@ -175,7 +175,7 @@ impl IssueRepository {
         let mut issues = Vec::new();
         for row in rows {
             let issue = self.parse_issue_from_row(
-                row.id.as_ref().unwrap(),
+                &row.id,
                 &row.title,
                 &row.description,
                 &row.status,
@@ -213,7 +213,7 @@ impl IssueRepository {
 
         let status_str = self.serialize_status(status);
         let rows = sqlx::query!(
-            "SELECT id, title, description, status, priority, assigned_agent_id, created_at, updated_at, resolved_at, tags FROM issues WHERE status = ?1 ORDER BY created_at DESC",
+            "SELECT id as \"id!: String\", title, description, status, priority, assigned_agent_id, created_at, updated_at, resolved_at, tags FROM issues WHERE status = ?1 ORDER BY created_at DESC",
             status_str
         )
         .fetch_all(&self.pool)
@@ -223,7 +223,7 @@ impl IssueRepository {
         let mut issues = Vec::new();
         for row in rows {
             let issue = self.parse_issue_from_row(
-                row.id.as_ref().unwrap(),
+                &row.id,
                 &row.title,
                 &row.description,
                 &row.status,
@@ -247,7 +247,7 @@ impl IssueRepository {
 
         let priority_str = self.serialize_priority(priority);
         let rows = sqlx::query!(
-            "SELECT id, title, description, status, priority, assigned_agent_id, created_at, updated_at, resolved_at, tags FROM issues WHERE priority = ?1 ORDER BY created_at DESC",
+            "SELECT id as \"id!: String\", title, description, status, priority, assigned_agent_id, created_at, updated_at, resolved_at, tags FROM issues WHERE priority = ?1 ORDER BY created_at DESC",
             priority_str
         )
         .fetch_all(&self.pool)
@@ -257,7 +257,7 @@ impl IssueRepository {
         let mut issues = Vec::new();
         for row in rows {
             let issue = self.parse_issue_from_row(
-                row.id.as_ref().unwrap(),
+                &row.id,
                 &row.title,
                 &row.description,
                 &row.status,
@@ -281,7 +281,7 @@ impl IssueRepository {
 
         let agent_id_str = agent_id.to_string();
         let rows = sqlx::query!(
-            "SELECT id, title, description, status, priority, assigned_agent_id, created_at, updated_at, resolved_at, tags FROM issues WHERE assigned_agent_id = ?1 ORDER BY created_at DESC",
+            "SELECT id as \"id!: String\", title, description, status, priority, assigned_agent_id, created_at, updated_at, resolved_at, tags FROM issues WHERE assigned_agent_id = ?1 ORDER BY created_at DESC",
             agent_id_str
         )
         .fetch_all(&self.pool)
@@ -291,7 +291,7 @@ impl IssueRepository {
         let mut issues = Vec::new();
         for row in rows {
             let issue = self.parse_issue_from_row(
-                row.id.as_ref().unwrap(),
+                &row.id,
                 &row.title,
                 &row.description,
                 &row.status,
@@ -455,7 +455,7 @@ impl IssueRepository {
         debug!("Finding issues by tag: {}", tag);
 
         let rows = sqlx::query!(
-            "SELECT id, title, description, status, priority, assigned_agent_id, created_at, updated_at, resolved_at, tags FROM issues ORDER BY created_at DESC"
+            "SELECT id as \"id!: String\", title, description, status, priority, assigned_agent_id, created_at, updated_at, resolved_at, tags FROM issues ORDER BY created_at DESC"
         )
         .fetch_all(&self.pool)
         .await
@@ -465,7 +465,7 @@ impl IssueRepository {
         for row in rows {
             // Parse the issue
             let issue = match self.parse_issue_from_row(
-                row.id.as_ref().unwrap(),
+                &row.id,
                 &row.title,
                 &row.description,
                 &row.status,

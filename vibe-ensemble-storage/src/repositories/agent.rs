@@ -83,7 +83,7 @@ impl AgentRepository {
 
         let id_str = id.to_string();
         let row = sqlx::query!(
-            "SELECT id, name, agent_type, capabilities, status, connection_metadata, created_at, last_seen, project_id FROM agents WHERE id = ?1",
+            "SELECT id as \"id!: String\", name, agent_type, capabilities, status, connection_metadata, created_at, last_seen, project_id FROM agents WHERE id = ?1",
             id_str
         )
         .fetch_optional(&self.pool)
@@ -93,7 +93,7 @@ impl AgentRepository {
         match row {
             Some(row) => {
                 let agent = self.parse_agent_from_row(
-                    row.id.as_ref().unwrap(),
+                    &row.id,
                     &row.name,
                     &row.agent_type,
                     &row.capabilities,
@@ -127,7 +127,7 @@ impl AgentRepository {
 
         let project_id_str = project_id.map(|id| id.to_string());
         let row = sqlx::query!(
-            "SELECT id, name, agent_type, capabilities, status, connection_metadata, created_at, last_seen, project_id FROM agents WHERE name = ?1 AND ((?2 IS NULL AND project_id IS NULL) OR project_id = ?2)",
+            "SELECT id as \"id!: String\", name, agent_type, capabilities, status, connection_metadata, created_at, last_seen, project_id FROM agents WHERE name = ?1 AND ((?2 IS NULL AND project_id IS NULL) OR project_id = ?2)",
             name,
             project_id_str
         )
@@ -138,7 +138,7 @@ impl AgentRepository {
         match row {
             Some(row) => {
                 let agent = self.parse_agent_from_row(
-                    row.id.as_ref().unwrap(),
+                    &row.id,
                     &row.name,
                     &row.agent_type,
                     &row.capabilities,
@@ -300,7 +300,7 @@ impl AgentRepository {
         debug!("Listing all agents");
 
         let rows = sqlx::query!(
-            "SELECT id, name, agent_type, capabilities, status, connection_metadata, created_at, last_seen, project_id FROM agents ORDER BY created_at DESC"
+            "SELECT id as \"id!: String\", name, agent_type, capabilities, status, connection_metadata, created_at, last_seen, project_id FROM agents ORDER BY created_at DESC"
         )
         .fetch_all(&self.pool)
         .await
@@ -309,7 +309,7 @@ impl AgentRepository {
         let mut agents = Vec::new();
         for row in rows {
             let agent = self.parse_agent_from_row(
-                row.id.as_ref().unwrap(),
+                &row.id,
                 &row.name,
                 &row.agent_type,
                 &row.capabilities,
@@ -334,7 +334,7 @@ impl AgentRepository {
             .map_err(|e| Error::Internal(anyhow::anyhow!("Failed to serialize status: {}", e)))?;
 
         let rows = sqlx::query!(
-            "SELECT id, name, agent_type, capabilities, status, connection_metadata, created_at, last_seen, project_id FROM agents WHERE status = ?1 ORDER BY created_at DESC",
+            "SELECT id as \"id!: String\", name, agent_type, capabilities, status, connection_metadata, created_at, last_seen, project_id FROM agents WHERE status = ?1 ORDER BY created_at DESC",
             status_json
         )
         .fetch_all(&self.pool)
@@ -344,7 +344,7 @@ impl AgentRepository {
         let mut agents = Vec::new();
         for row in rows {
             let agent = self.parse_agent_from_row(
-                row.id.as_ref().unwrap(),
+                &row.id,
                 &row.name,
                 &row.agent_type,
                 &row.capabilities,
@@ -371,7 +371,7 @@ impl AgentRepository {
         };
 
         let rows = sqlx::query!(
-            "SELECT id, name, agent_type, capabilities, status, connection_metadata, created_at, last_seen, project_id FROM agents WHERE agent_type = ?1 ORDER BY created_at DESC",
+            "SELECT id as \"id!: String\", name, agent_type, capabilities, status, connection_metadata, created_at, last_seen, project_id FROM agents WHERE agent_type = ?1 ORDER BY created_at DESC",
             agent_type_str
         )
         .fetch_all(&self.pool)
@@ -381,7 +381,7 @@ impl AgentRepository {
         let mut agents = Vec::new();
         for row in rows {
             let agent = self.parse_agent_from_row(
-                row.id.as_ref().unwrap(),
+                &row.id,
                 &row.name,
                 &row.agent_type,
                 &row.capabilities,
@@ -405,7 +405,7 @@ impl AgentRepository {
         // Use JSON1 extension to filter agents by capability at SQL level
         let rows = sqlx::query!(
             r#"
-            SELECT id, name, agent_type, capabilities, status, connection_metadata,
+            SELECT id as "id!: String", name, agent_type, capabilities, status, connection_metadata,
                    created_at, last_seen, project_id
             FROM agents
             WHERE EXISTS (
@@ -423,7 +423,7 @@ impl AgentRepository {
         let mut agents = Vec::new();
         for row in rows {
             let agent = self.parse_agent_from_row(
-                row.id.as_ref().unwrap(),
+                &row.id,
                 &row.name,
                 &row.agent_type,
                 &row.capabilities,
@@ -493,7 +493,7 @@ impl AgentRepository {
 
         let project_id_str = project_id.to_string();
         let rows = sqlx::query!(
-            "SELECT id, name, agent_type, capabilities, status, connection_metadata, created_at, last_seen, project_id FROM agents WHERE project_id = ?1 ORDER BY created_at DESC",
+            "SELECT id as \"id!: String\", name, agent_type, capabilities, status, connection_metadata, created_at, last_seen, project_id FROM agents WHERE project_id = ?1 ORDER BY created_at DESC",
             project_id_str
         )
         .fetch_all(&self.pool)
@@ -503,7 +503,7 @@ impl AgentRepository {
         let mut agents = Vec::new();
         for row in rows {
             let agent = self.parse_agent_from_row(
-                row.id.as_ref().unwrap(),
+                &row.id,
                 &row.name,
                 &row.agent_type,
                 &row.capabilities,
@@ -525,7 +525,7 @@ impl AgentRepository {
         debug!("Finding agents with no project assignment");
 
         let rows = sqlx::query!(
-            "SELECT id, name, agent_type, capabilities, status, connection_metadata, created_at, last_seen, project_id FROM agents WHERE project_id IS NULL ORDER BY created_at DESC"
+            "SELECT id as \"id!: String\", name, agent_type, capabilities, status, connection_metadata, created_at, last_seen, project_id FROM agents WHERE project_id IS NULL ORDER BY created_at DESC"
         )
         .fetch_all(&self.pool)
         .await
@@ -534,7 +534,7 @@ impl AgentRepository {
         let mut agents = Vec::new();
         for row in rows {
             let agent = self.parse_agent_from_row(
-                row.id.as_ref().unwrap(),
+                &row.id,
                 &row.name,
                 &row.agent_type,
                 &row.capabilities,

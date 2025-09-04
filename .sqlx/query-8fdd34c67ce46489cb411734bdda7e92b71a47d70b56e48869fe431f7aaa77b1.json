@@ -1,35 +1,35 @@
 {
   "db_name": "SQLite",
-  "query": "SELECT id, name, agent_type, capabilities, status, connection_metadata, created_at, last_seen, project_id FROM agents WHERE project_id = ?1 ORDER BY created_at DESC",
+  "query": "SELECT id as \"id!: String\", title, description, status, priority, assigned_agent_id, created_at, updated_at, resolved_at, tags FROM issues ORDER BY created_at DESC",
   "describe": {
     "columns": [
       {
-        "name": "id",
+        "name": "id!: String",
         "ordinal": 0,
         "type_info": "Text"
       },
       {
-        "name": "name",
+        "name": "title",
         "ordinal": 1,
         "type_info": "Text"
       },
       {
-        "name": "agent_type",
+        "name": "description",
         "ordinal": 2,
         "type_info": "Text"
       },
       {
-        "name": "capabilities",
+        "name": "status",
         "ordinal": 3,
         "type_info": "Text"
       },
       {
-        "name": "status",
+        "name": "priority",
         "ordinal": 4,
         "type_info": "Text"
       },
       {
-        "name": "connection_metadata",
+        "name": "assigned_agent_id",
         "ordinal": 5,
         "type_info": "Text"
       },
@@ -39,18 +39,23 @@
         "type_info": "Text"
       },
       {
-        "name": "last_seen",
+        "name": "updated_at",
         "ordinal": 7,
         "type_info": "Text"
       },
       {
-        "name": "project_id",
+        "name": "resolved_at",
         "ordinal": 8,
+        "type_info": "Text"
+      },
+      {
+        "name": "tags",
+        "ordinal": 9,
         "type_info": "Text"
       }
     ],
     "parameters": {
-      "Right": 1
+      "Right": 0
     },
     "nullable": [
       true,
@@ -58,11 +63,12 @@
       false,
       false,
       false,
+      true,
       false,
       false,
-      false,
-      true
+      true,
+      false
     ]
   },
-  "hash": "16623ed1198238a12a46337a12708b57e162eb0f43c51d097bf71827efd37774"
+  "hash": "8fdd34c67ce46489cb411734bdda7e92b71a47d70b56e48869fe431f7aaa77b1"
 }

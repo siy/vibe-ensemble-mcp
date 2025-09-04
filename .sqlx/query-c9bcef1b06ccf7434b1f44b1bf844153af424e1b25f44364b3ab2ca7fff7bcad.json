@@ -1,10 +1,10 @@
 {
   "db_name": "SQLite",
-  "query": "SELECT id, title, description, status, priority, assigned_agent_id, created_at, updated_at, resolved_at, tags FROM issues WHERE priority = ?1 ORDER BY created_at DESC",
+  "query": "SELECT id as \"id!: String\", title, description, status, priority, assigned_agent_id, created_at, updated_at, resolved_at, tags FROM issues WHERE status = ?1 ORDER BY created_at DESC",
   "describe": {
     "columns": [
       {
-        "name": "id",
+        "name": "id!: String",
         "ordinal": 0,
         "type_info": "Text"
       },
@@ -70,5 +70,5 @@
       false
     ]
   },
-  "hash": "490dda0e87985a0fb23ed0a11bca570dd3a046d8f6446fd113c0e0fbaa2aca83"
+  "hash": "c9bcef1b06ccf7434b1f44b1bf844153af424e1b25f44364b3ab2ca7fff7bcad"
 }

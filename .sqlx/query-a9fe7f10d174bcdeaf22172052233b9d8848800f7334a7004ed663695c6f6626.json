@@ -1,10 +1,10 @@
 {
   "db_name": "SQLite",
-  "query": "SELECT id, name, agent_type, capabilities, status, connection_metadata, created_at, last_seen, project_id FROM agents WHERE agent_type = ?1 ORDER BY created_at DESC",
+  "query": "SELECT id as \"id!: String\", name, agent_type, capabilities, status, connection_metadata, created_at, last_seen, project_id FROM agents WHERE project_id IS NULL ORDER BY created_at DESC",
   "describe": {
     "columns": [
       {
-        "name": "id",
+        "name": "id!: String",
         "ordinal": 0,
         "type_info": "Text"
       },
@@ -50,7 +50,7 @@
       }
     ],
     "parameters": {
-      "Right": 1
+      "Right": 0
     },
     "nullable": [
       true,
@@ -64,5 +64,5 @@
       true
     ]
   },
-  "hash": "9c51925a7d718f428ee96780c8944a70d0ca13991624ebb8a22e03b90a30d4d9"
+  "hash": "a9fe7f10d174bcdeaf22172052233b9d8848800f7334a7004ed663695c6f6626"
 }

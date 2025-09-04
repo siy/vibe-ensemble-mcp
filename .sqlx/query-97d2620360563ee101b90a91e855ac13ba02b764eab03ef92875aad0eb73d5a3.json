@@ -1,10 +1,10 @@
 {
   "db_name": "SQLite",
-  "query": "SELECT id, name, agent_type, capabilities, status, connection_metadata, created_at, last_seen, project_id FROM agents WHERE status = ?1 ORDER BY created_at DESC",
+  "query": "SELECT id as \"id!: String\", name, description, working_directory, git_repository, created_at, updated_at, status FROM projects WHERE name = ?1",
   "describe": {
     "columns": [
       {
-        "name": "id",
+        "name": "id!: String",
         "ordinal": 0,
         "type_info": "Text"
       },
@@ -14,38 +14,33 @@
         "type_info": "Text"
       },
       {
-        "name": "agent_type",
+        "name": "description",
         "ordinal": 2,
         "type_info": "Text"
       },
       {
-        "name": "capabilities",
+        "name": "working_directory",
         "ordinal": 3,
         "type_info": "Text"
       },
       {
-        "name": "status",
+        "name": "git_repository",
         "ordinal": 4,
         "type_info": "Text"
       },
       {
-        "name": "connection_metadata",
+        "name": "created_at",
         "ordinal": 5,
         "type_info": "Text"
       },
       {
-        "name": "created_at",
+        "name": "updated_at",
         "ordinal": 6,
         "type_info": "Text"
       },
       {
-        "name": "last_seen",
+        "name": "status",
         "ordinal": 7,
-        "type_info": "Text"
-      },
-      {
-        "name": "project_id",
-        "ordinal": 8,
         "type_info": "Text"
       }
     ],
@@ -55,14 +50,13 @@
     "nullable": [
       true,
       false,
+      true,
+      true,
+      true,
       false,
       false,
-      false,
-      false,
-      false,
-      false,
-      true
+      false
     ]
   },
-  "hash": "f9aab7bd690f6723b8612376d286a36dbf4f9f6145b89a0f626ab9fa4034b2b3"
+  "hash": "97d2620360563ee101b90a91e855ac13ba02b764eab03ef92875aad0eb73d5a3"
 }

@@ -1,35 +1,35 @@
 {
   "db_name": "SQLite",
-  "query": "SELECT id, name, agent_type, capabilities, status, connection_metadata, created_at, last_seen, project_id FROM agents WHERE project_id IS NULL ORDER BY created_at DESC",
+  "query": "SELECT id as \"id!: String\", title, description, status, priority, assigned_agent_id, created_at, updated_at, resolved_at, tags FROM issues WHERE assigned_agent_id = ?1 ORDER BY created_at DESC",
   "describe": {
     "columns": [
       {
-        "name": "id",
+        "name": "id!: String",
         "ordinal": 0,
         "type_info": "Text"
       },
       {
-        "name": "name",
+        "name": "title",
         "ordinal": 1,
         "type_info": "Text"
       },
       {
-        "name": "agent_type",
+        "name": "description",
         "ordinal": 2,
         "type_info": "Text"
       },
       {
-        "name": "capabilities",
+        "name": "status",
         "ordinal": 3,
         "type_info": "Text"
       },
       {
-        "name": "status",
+        "name": "priority",
         "ordinal": 4,
         "type_info": "Text"
       },
       {
-        "name": "connection_metadata",
+        "name": "assigned_agent_id",
         "ordinal": 5,
         "type_info": "Text"
       },
@@ -39,18 +39,23 @@
         "type_info": "Text"
       },
       {
-        "name": "last_seen",
+        "name": "updated_at",
         "ordinal": 7,
         "type_info": "Text"
       },
       {
-        "name": "project_id",
+        "name": "resolved_at",
         "ordinal": 8,
+        "type_info": "Text"
+      },
+      {
+        "name": "tags",
+        "ordinal": 9,
         "type_info": "Text"
       }
     ],
     "parameters": {
-      "Right": 0
+      "Right": 1
     },
     "nullable": [
       true,
@@ -58,11 +63,12 @@
       false,
       false,
       false,
+      true,
       false,
       false,
-      false,
-      true
+      true,
+      false
     ]
   },
-  "hash": "9982f945a2e92ac38ad5821c8bdbf49b3753247eca1869e0d4d8ced53296e4ef"
+  "hash": "75569ffc224e8db1812c993d94373a1b98b287897058ff9b7d369ce0fec6d923"
 }
