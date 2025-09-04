@@ -103,7 +103,7 @@ vibe-ensemble --version
 
 You should see output like:
 ```
-vibe-ensemble 0.4.1
+vibe-ensemble 0.4.2
 ```
 
 ## First Run
