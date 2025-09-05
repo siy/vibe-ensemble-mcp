@@ -81,12 +81,8 @@ impl WorkerManager {
               worker_id, 
               prompt.chars().take(80).collect::<String>());
 
-        // Build Claude Code command (use 'claude' not 'claude-code')
-        // Resolve full path to claude binary to handle PATH issues
-        let claude_path = resolve_claude_binary_path().await?;
-        debug!("Worker {} resolved claude binary path: {}", worker_id, claude_path);
-        
-        let mut cmd = Command::new(&claude_path);
+        // Build Claude Code command (use 'claude' not 'claude-code') 
+        let mut cmd = Command::new("claude");
         cmd.arg("-p").arg(&prompt);
 
         // Add MCP server configuration
@@ -101,10 +97,22 @@ impl WorkerManager {
         
         debug!("Worker {} capabilities: {:?}", worker_id, capabilities);
 
-        // Set working directory if provided
+        // Set working directory if provided - convert relative paths to absolute
         if let Some(working_dir) = &working_directory {
-            cmd.current_dir(working_dir);
-            debug!("Worker {} working directory: {:?}", worker_id, working_dir);
+            let absolute_working_dir = if working_dir.is_absolute() {
+                working_dir.clone()
+            } else {
+                // Convert relative path to absolute path based on current directory
+                match std::env::current_dir() {
+                    Ok(current_dir) => current_dir.join(working_dir),
+                    Err(e) => {
+                        warn!("Worker {} could not determine current directory: {}, using relative path", worker_id, e);
+                        working_dir.clone()
+                    }
+                }
+            };
+            cmd.current_dir(&absolute_working_dir);
+            debug!("Worker {} working directory: {:?} -> {:?}", worker_id, working_dir, absolute_working_dir);
         } else {
             debug!("Worker {} using current working directory", worker_id);
         }
@@ -121,7 +129,7 @@ impl WorkerManager {
         // Spawn the process
         let mut child = cmd.spawn().map_err(|e| {
             error!("Failed to spawn Claude Code worker {}: {} (command: 'claude')", worker_id, e);
-            Error::Worker(format!("Failed to spawn worker process 'claude': {} - Is Claude Code installed and in PATH?", e))
+            Error::Worker(format!("Failed to spawn worker process 'claude': {} - Ensure Claude Code is installed and accessible", e))
         })?;
 
         let started_at = Utc::now();
@@ -788,52 +796,6 @@ pub struct WorkerOutputConfig {
     pub log_directory: Option<PathBuf>,
 }
 
-/// Resolve the full path to the Claude binary using the system PATH
-/// This handles cases where `claude` is in non-standard locations like ~/.local/bin
-async fn resolve_claude_binary_path() -> Result<String> {
-    // First try using `which claude` command to find the binary
-    let output = Command::new("which")
-        .arg("claude")
-        .output()
-        .await;
-
-    match output {
-        Ok(output) if output.status.success() => {
-            let path = String::from_utf8_lossy(&output.stdout).trim().to_string();
-            if !path.is_empty() && std::path::Path::new(&path).exists() {
-                info!("Found Claude binary at: {}", path);
-                return Ok(path);
-            }
-        }
-        Ok(output) => {
-            debug!("'which claude' failed with status: {:?}, stderr: {}", 
-                   output.status, String::from_utf8_lossy(&output.stderr));
-        }
-        Err(e) => {
-            debug!("Failed to execute 'which claude': {}", e);
-        }
-    }
-
-    // Fallback: try common locations where Claude might be installed
-    let common_paths = [
-        "/usr/local/bin/claude",
-        "/usr/bin/claude", 
-        "/opt/homebrew/bin/claude",
-        &format!("{}/.local/bin/claude", std::env::var("HOME").unwrap_or_default()),
-        &format!("{}/bin/claude", std::env::var("HOME").unwrap_or_default()),
-    ];
-
-    for path in &common_paths {
-        if std::path::Path::new(path).exists() {
-            info!("Found Claude binary at fallback location: {}", path);
-            return Ok(path.to_string());
-        }
-    }
-
-    // Final fallback: return "claude" and let the system handle it
-    warn!("Could not resolve Claude binary path, falling back to 'claude' (may fail if not in PATH)");
-    Ok("claude".to_string())
-}
 
 #[cfg(test)]
 mod tests {
