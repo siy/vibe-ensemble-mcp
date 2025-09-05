@@ -8,7 +8,8 @@ pub mod testing;
 
 use crate::{Error, Result};
 use axum::{
-    extract::{Json as JsonExtract, WebSocketUpgrade},
+    extract::ws::WebSocketUpgrade,
+    extract::Json as JsonExtract,
     http::StatusCode,
     response::Sse,
     routing::{get, post},
@@ -941,7 +942,7 @@ impl MultiTransportServer {
 
 /// Handle WebSocket upgrade from Axum
 async fn handle_websocket_upgrade(
-    ws: axum::extract::WebSocketUpgrade,
+    ws: axum::extract::ws::WebSocketUpgrade,
     connection_tx: mpsc::UnboundedSender<std::result::Result<Box<dyn Transport>, Error>>,
     read_timeout: Duration,
     write_timeout: Duration,
