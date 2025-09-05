@@ -6,7 +6,7 @@
 pub mod automated_runner;
 pub mod testing;
 
-use crate::{Error, Result};
+use crate::{server::McpServer, Error, Result};
 use axum::{
     extract::ws::WebSocketUpgrade,
     extract::Json as JsonExtract,
@@ -15,6 +15,7 @@ use axum::{
     routing::{get, post},
     Json, Router,
 };
+use chrono;
 use futures_util::{SinkExt, StreamExt};
 use serde_json::Value;
 use std::net::SocketAddr;
@@ -833,6 +834,7 @@ impl MultiTransportServer {
     /// ready-to-use WebSocket transport that can be used with the MCP server.
     pub async fn start(
         self,
+        mcp_server: McpServer,
     ) -> Result<(
         u16,
         mpsc::UnboundedReceiver<std::result::Result<Box<dyn Transport>, Error>>,
@@ -904,6 +906,8 @@ impl MultiTransportServer {
         let read_timeout = self.read_timeout;
         let write_timeout = self.write_timeout;
         let connection_tx_clone = connection_tx.clone();
+        let mcp_server_http = mcp_server.clone();
+        let mcp_server_sse = mcp_server.clone();
 
         let app = Router::new()
             .route(
@@ -913,8 +917,14 @@ impl MultiTransportServer {
                         .await
                 }),
             )
-            .route("/mcp", post(handle_mcp_http_request))
-            .route("/events", get(handle_sse_connection))
+            .route(
+                "/mcp",
+                post(move |payload| handle_mcp_http_request(payload, mcp_server_http.clone())),
+            )
+            .route(
+                "/events",
+                get(move || handle_sse_connection(mcp_server_sse.clone())),
+            )
             .route("/health", get(handle_health_check))
             .layer(
                 ServiceBuilder::new()
@@ -1167,6 +1177,7 @@ async fn handle_axum_websocket_task(
 /// Handle HTTP MCP request (POST /mcp)
 async fn handle_mcp_http_request(
     JsonExtract(payload): JsonExtract<Value>,
+    mcp_server: McpServer,
 ) -> std::result::Result<Json<Value>, StatusCode> {
     // Validate JSON-RPC 2.0 format
     if let Err(_e) = validate_mcp_request(&payload) {
@@ -1174,41 +1185,86 @@ async fn handle_mcp_http_request(
         return Err(StatusCode::BAD_REQUEST);
     }
 
-    // TODO: Process MCP request through server
-    // For now, return a basic error response indicating the method is not implemented
-    let error_response = serde_json::json!({
-        "jsonrpc": "2.0",
-        "id": payload.get("id").cloned().unwrap_or(Value::Null),
-        "error": {
-            "code": -32601,
-            "message": "Method not found",
-            "data": "HTTP MCP endpoint is not fully implemented yet"
+    // Convert payload to string for MCP server processing
+    let message = match serde_json::to_string(&payload) {
+        Ok(msg) => msg,
+        Err(e) => {
+            debug!("Failed to serialize MCP request: {}", e);
+            return Err(StatusCode::BAD_REQUEST);
         }
-    });
+    };
 
-    debug!("Returning HTTP MCP response: {:?}", error_response);
-    Ok(Json(error_response))
+    // Process request through MCP server
+    match mcp_server.handle_message(&message).await {
+        Ok(Some(response_str)) => {
+            // Parse response back to JSON for return
+            match serde_json::from_str::<Value>(&response_str) {
+                Ok(response_json) => {
+                    debug!("HTTP MCP response: {:?}", response_json);
+                    Ok(Json(response_json))
+                }
+                Err(e) => {
+                    error!("Failed to parse MCP server response: {}", e);
+                    Err(StatusCode::INTERNAL_SERVER_ERROR)
+                }
+            }
+        }
+        Ok(None) => {
+            // No response needed (notification)
+            Ok(Json(serde_json::json!({"result": null})))
+        }
+        Err(e) => {
+            error!("MCP server error: {}", e);
+            let error_response = serde_json::json!({
+                "jsonrpc": "2.0",
+                "id": payload.get("id").cloned().unwrap_or(Value::Null),
+                "error": {
+                    "code": -32603,
+                    "message": "Internal error",
+                    "data": e.to_string()
+                }
+            });
+            Ok(Json(error_response))
+        }
+    }
 }
 
 /// Handle SSE connection (GET /events)
-async fn handle_sse_connection() -> Sse<
+async fn handle_sse_connection(
+    _mcp_server: McpServer,
+) -> Sse<
     impl futures_util::Stream<Item = std::result::Result<axum::response::sse::Event, serde_json::Error>>,
 > {
     use axum::response::sse::Event;
     use futures_util::stream;
     use std::time::Duration;
 
-    // Create a stream that sends periodic heartbeat events
+    // For now, implement a basic SSE stream that sends initialization events
+    // This is a simplified implementation - full MCP over SSE requires bidirectional communication
     let stream = stream::unfold(0, |counter| async move {
         tokio::time::sleep(Duration::from_secs(30)).await;
-        let event = Event::default().event("heartbeat").data(format!(
-            "{{\"type\":\"heartbeat\",\"counter\":{}}}",
-            counter
-        ));
-        Some((Ok(event), counter + 1))
+
+        if counter == 0 {
+            // Send MCP server info on first connection
+            let event = Event::default()
+                .event("mcp_info")
+                .data(format!(
+                    r#"{{"type":"server_info","protocol_version":"2024-11-05","server_info":{{"name":"vibe-ensemble","version":"{}"}}}}"#,
+                    env!("CARGO_PKG_VERSION")
+                ));
+            Some((Ok(event), counter + 1))
+        } else {
+            // Send periodic heartbeat events
+            let event = Event::default().event("heartbeat").data(format!(
+                r#"{{"type":"heartbeat","counter":{},"timestamp":"{}"}}"#,
+                counter,
+                chrono::Utc::now().to_rfc3339()
+            ));
+            Some((Ok(event), counter + 1))
+        }
     });
 
-    debug!("SSE connection established");
+    debug!("SSE connection established for MCP protocol");
     Sse::new(stream).keep_alive(
         axum::response::sse::KeepAlive::new()
             .interval(Duration::from_secs(15))
