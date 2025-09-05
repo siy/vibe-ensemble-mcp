@@ -35,17 +35,17 @@ Located at project root directory:
       }
     },
     "vibe-ensemble-http": {
-      "transport": "http",
-      "url": "http://127.0.0.1:22360/mcp",
-      "headers": {
-        "Content-Type": "application/json"
+      "transport": {
+        "type": "http",
+        "url": "http://127.0.0.1:22360/mcp",
+        "headers": { "Content-Type": "application/json" }
       }
     },
     "vibe-ensemble-sse": {
-      "transport": "sse", 
-      "url": "http://127.0.0.1:22360/events",
-      "headers": {
-        "X-API-Key": "${VIBE_API_KEY:-default}"
+      "transport": {
+        "type": "sse",
+        "url": "http://127.0.0.1:22360/events",
+        "headers": { "X-API-Key": "${VIBE_API_KEY:-default}" }
       }
     }
   }
