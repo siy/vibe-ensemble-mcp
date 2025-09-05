@@ -63,6 +63,17 @@ Located at project root directory:
 - **HTTP**: Standard HTTP-based communication
 - **WebSocket**: Not directly supported by Claude Code
 
+### Ports and Host Defaults
+
+Vibe Ensemble uses intelligent port fallback for reliable connectivity:
+
+- **Default Host**: `127.0.0.1` (localhost)
+- **Default Port**: `22360` (`DEFAULT_PORT`)
+- **Port Fallback Sequence**: `[22360, 22361, 22362, 9090, 8081]`
+- **Excluded Port**: `8080` (high risk of conflicts with development servers)
+
+The server attempts to bind to each port in sequence until successful. This ensures reliable startup even if some ports are occupied by other services.
+
 ## Claude Code Command Line Interface
 
 ### Core Commands
@@ -232,6 +243,7 @@ Implement actual MCP protocol over HTTP instead of WebSocket upgrade:
 app.route("/mcp", post(handle_mcp_request))
    .route("/events", get(handle_sse_connection))  // For SSE transport
    .route("/ws", get(handle_websocket_upgrade))   // Keep for direct WebSocket clients
+   .route("/health", get(handle_health_check))    // Health monitoring endpoint
 ```
 
 ### Option 2: Configuration-First Approach
@@ -239,10 +251,10 @@ Focus on making configuration extremely simple:
 
 ```bash
 # Auto-generate .mcp.json in current directory
-vibe-ensemble --generate-config
+vibe-ensemble --setup-claude-code
 
-# Or integrate with Claude Code directly
-vibe-ensemble --register-with-claude
+# Generate configuration for multiple workers
+vibe-ensemble --setup-workers --workers=5
 ```
 
 ### Option 3: Multi-Transport Server
