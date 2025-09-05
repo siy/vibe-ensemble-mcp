@@ -91,11 +91,32 @@ struct Cli {
     /// Environment variable: VIBE_ENSEMBLE_LOG_WORKER_OUTPUT
     #[arg(long)]
     log_worker_output: bool,
+
+    /// Generate .mcp.json configuration for Claude Code integration
+    #[arg(long = "setup-claude-code")]
+    setup_claude_code: bool,
+
+    /// Generate configuration for multiple workers
+    #[arg(long = "setup-workers")]
+    setup_workers: bool,
+
+    /// Number of workers for multi-worker setup (default: 3)
+    #[arg(long = "workers", default_value = "3")]
+    workers: u16,
+
+    /// Transport type for configuration: http, sse, websocket (default: sse)
+    #[arg(long = "transport", default_value = "sse")]
+    transport: String,
 }
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
     let cli = Cli::parse();
+
+    // Handle configuration generation before setting up logging
+    if cli.setup_claude_code || cli.setup_workers {
+        return generate_mcp_configuration(&cli).await;
+    }
 
     // Determine log path with precedence: CLI > env > default
     let log_path = cli
@@ -644,5 +665,195 @@ fn mask_database_path(url: &str) -> String {
         }
     } else {
         "database".to_string()
+    }
+}
+
+/// Generate .mcp.json configuration for Claude Code integration
+async fn generate_mcp_configuration(cli: &Cli) -> anyhow::Result<()> {
+    use std::collections::HashMap;
+
+    // Determine the MCP host and port
+    let mcp_host = cli
+        .mcp_host
+        .clone()
+        .or_else(|| env::var("VIBE_ENSEMBLE_MCP_HOST").ok())
+        .unwrap_or_else(|| "127.0.0.1".to_string());
+
+    let mcp_port = cli
+        .mcp_port
+        .or_else(|| {
+            env::var("VIBE_ENSEMBLE_MCP_PORT")
+                .ok()
+                .and_then(|s| s.parse().ok())
+        })
+        .unwrap_or(vibe_ensemble_mcp::transport::WebSocketServer::DEFAULT_PORT);
+
+    // Validate transport type
+    let transport = cli.transport.to_lowercase();
+    if !["http", "sse", "websocket"].contains(&transport.as_str()) {
+        eprintln!(
+            "Error: Invalid transport type '{}'. Valid options: http, sse, websocket",
+            transport
+        );
+        return Err(anyhow::anyhow!("Invalid transport type"));
+    }
+
+    println!("Generating .mcp.json configuration...");
+    println!("  Host: {}", mcp_host);
+    println!("  Port: {}", mcp_port);
+    println!("  Transport: {}", transport);
+
+    let mut mcp_servers = HashMap::new();
+
+    if cli.setup_workers {
+        // Generate multi-worker configuration
+        let num_workers = cli.workers;
+        println!("  Workers: {}", num_workers);
+
+        for i in 1..=num_workers {
+            let server_name = format!("vibe-ensemble-worker-{}", i);
+            let server_config = create_server_config(&transport, &mcp_host, mcp_port)?;
+            mcp_servers.insert(server_name, server_config);
+        }
+    } else {
+        // Generate single server configuration
+        let server_config = create_server_config(&transport, &mcp_host, mcp_port)?;
+        mcp_servers.insert("vibe-ensemble".to_string(), server_config);
+    }
+
+    // Create the complete configuration structure
+    let mcp_config = serde_json::json!({
+        "mcpServers": mcp_servers
+    });
+
+    // Write to .mcp.json file
+    let config_path = ".mcp.json";
+    let config_content = serde_json::to_string_pretty(&mcp_config)?;
+
+    fs::write(config_path, config_content)?;
+
+    println!("✓ Configuration written to {}", config_path);
+    println!("✓ Ready for Claude Code integration!");
+
+    if transport == "websocket" {
+        println!("  Connect to: ws://{}:{}/ws", mcp_host, mcp_port);
+    } else if transport == "http" {
+        println!("  Connect to: http://{}:{}/mcp", mcp_host, mcp_port);
+    } else if transport == "sse" {
+        println!("  Connect to: http://{}:{}/events", mcp_host, mcp_port);
+    }
+
+    Ok(())
+}
+
+/// Create server configuration for a given transport type
+fn create_server_config(
+    transport: &str,
+    host: &str,
+    port: u16,
+) -> anyhow::Result<serde_json::Value> {
+    let config = match transport {
+        "websocket" => {
+            serde_json::json!({
+                "command": "vibe-ensemble",
+                "args": ["--mcp-only"],
+                "transport": {
+                    "type": "websocket",
+                    "url": format!("ws://{}:{}/ws", host, port)
+                }
+            })
+        }
+        "http" => {
+            serde_json::json!({
+                "transport": {
+                    "type": "http",
+                    "url": format!("http://{}:{}/mcp", host, port),
+                    "headers": {
+                        "Content-Type": "application/json"
+                    }
+                }
+            })
+        }
+        "sse" => {
+            serde_json::json!({
+                "transport": {
+                    "type": "sse",
+                    "url": format!("http://{}:{}/events", host, port),
+                    "headers": {
+                        "Accept": "text/event-stream",
+                        "Cache-Control": "no-cache"
+                    }
+                }
+            })
+        }
+        _ => {
+            return Err(anyhow::anyhow!("Unsupported transport type: {}", transport));
+        }
+    };
+
+    Ok(config)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[tokio::test]
+    async fn test_create_server_config_websocket() {
+        let config = create_server_config("websocket", "127.0.0.1", 22360).unwrap();
+
+        assert_eq!(config["command"], "vibe-ensemble");
+        assert_eq!(config["args"][0], "--mcp-only");
+        assert_eq!(config["transport"]["type"], "websocket");
+        assert_eq!(config["transport"]["url"], "ws://127.0.0.1:22360/ws");
+    }
+
+    #[tokio::test]
+    async fn test_create_server_config_http() {
+        let config = create_server_config("http", "127.0.0.1", 22360).unwrap();
+
+        assert_eq!(config["transport"]["type"], "http");
+        assert_eq!(config["transport"]["url"], "http://127.0.0.1:22360/mcp");
+        assert_eq!(
+            config["transport"]["headers"]["Content-Type"],
+            "application/json"
+        );
+    }
+
+    #[tokio::test]
+    async fn test_create_server_config_sse() {
+        let config = create_server_config("sse", "127.0.0.1", 22360).unwrap();
+
+        assert_eq!(config["transport"]["type"], "sse");
+        assert_eq!(config["transport"]["url"], "http://127.0.0.1:22360/events");
+        assert_eq!(
+            config["transport"]["headers"]["Accept"],
+            "text/event-stream"
+        );
+        assert_eq!(config["transport"]["headers"]["Cache-Control"], "no-cache");
+    }
+
+    #[tokio::test]
+    async fn test_create_server_config_invalid() {
+        let result = create_server_config("invalid", "127.0.0.1", 22360);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_mask_database_path() {
+        // Test SQLite path masking
+        assert_eq!(
+            mask_database_path("sqlite:/path/to/data.db"),
+            "sqlite:.../data.db"
+        );
+        assert_eq!(mask_database_path("sqlite:data.db"), "sqlite:.../data.db");
+
+        // Test PostgreSQL masking
+        let postgres_url = "postgresql://user:pass@localhost:5432/dbname";
+        let masked = mask_database_path(postgres_url);
+        assert!(masked.contains("postgresql://***@localhost/dbname"));
+
+        // Test unknown format
+        assert_eq!(mask_database_path("unknown://format"), "database");
     }
 }
