@@ -9,17 +9,18 @@ pub mod testing;
 use crate::{server::McpServer, Error, Result};
 use axum::{
     extract::ws::WebSocketUpgrade,
-    extract::Json as JsonExtract,
+    extract::{Json as JsonExtract, Path},
     http::StatusCode,
     response::Sse,
     routing::{get, post},
     Json, Router,
 };
-use chrono;
 use futures_util::{SinkExt, StreamExt};
 use serde_json::Value;
+use std::collections::HashMap;
 use std::net::SocketAddr;
-use tokio::sync::mpsc;
+use std::sync::Arc;
+use tokio::sync::{mpsc, RwLock};
 use tokio::time::{timeout, Duration};
 use tokio_tungstenite::tungstenite::Message;
 use tracing::{debug, error, info, warn};
@@ -768,12 +769,25 @@ impl TransportFactory {
     }
 }
 
+/// SSE session information for MCP protocol
+#[derive(Debug, Clone)]
+pub struct SseSession {
+    /// Session ID
+    pub id: String,
+    /// Channel sender for sending messages to SSE client
+    pub sender: mpsc::UnboundedSender<String>,
+}
+
+/// Global SSE session manager for MCP protocol
+type SseSessionManager = Arc<RwLock<HashMap<String, SseSession>>>;
+
 /// Multi-transport MCP server supporting WebSocket, HTTP, and SSE
 ///
 /// This provides a multi-agent HTTP server with multiple MCP transports:
 /// - WebSocket upgrade at /ws endpoint for persistent connections
 /// - HTTP POST endpoint at /mcp for direct JSON-RPC 2.0 requests
 /// - Server-Sent Events at /events endpoint for streaming transport
+/// - HTTP POST endpoint at /messages/<session_id> for SSE client requests
 /// - Health check endpoint at /health for service discovery
 /// - Implements auto-discovery port fallback (22360, 22361, 22362, 9090, 8081)
 /// - Creates appropriate transports for each connected agent
@@ -908,6 +922,14 @@ impl MultiTransportServer {
         let connection_tx_clone = connection_tx.clone();
         let mcp_server_http = mcp_server.clone();
         let mcp_server_sse = mcp_server.clone();
+        let mcp_server_messages = mcp_server.clone();
+
+        // Create SSE session manager
+        let sse_sessions: SseSessionManager = Arc::new(RwLock::new(HashMap::new()));
+        let sse_sessions_clone = sse_sessions.clone();
+        let sse_sessions_messages = sse_sessions.clone();
+
+        let host_port = format!("{}:{}", self.host, self.port);
 
         let app = Router::new()
             .route(
@@ -923,7 +945,11 @@ impl MultiTransportServer {
             )
             .route(
                 "/events",
-                get(move || handle_sse_connection(mcp_server_sse.clone())),
+                get(move || handle_sse_connection(mcp_server_sse.clone(), sse_sessions_clone.clone(), host_port.clone())),
+            )
+            .route(
+                "/messages/:session_id",
+                post(move |session_id, payload| handle_sse_message_request(session_id, payload, mcp_server_messages.clone(), sse_sessions_messages.clone())),
             )
             .route("/health", get(handle_health_check))
             .layer(
@@ -1230,77 +1256,154 @@ async fn handle_mcp_http_request(
 }
 
 /// Handle SSE connection (GET /events)
+/// Implements MCP SSE transport protocol: sends 'endpoint' event first, then 'message' events
 async fn handle_sse_connection(
     mcp_server: McpServer,
-) -> Sse<
-    impl futures_util::Stream<Item = std::result::Result<axum::response::sse::Event, serde_json::Error>>,
-> {
+    sse_sessions: SseSessionManager,
+    host_port: String,
+) -> Sse<impl futures_util::Stream<Item = std::result::Result<axum::response::sse::Event, std::convert::Infallible>>> {
     use axum::response::sse::Event;
     use futures_util::stream;
-    use std::time::Duration;
+    use uuid::Uuid;
 
     debug!("SSE connection established for MCP protocol");
 
-    // Create immediate stream that sends MCP initialization without delay
-    let stream = stream::unfold((0, mcp_server), |(counter, server)| async move {
-        if counter == 0 {
-            // Send immediate MCP server initialization (no delay)
-            // This simulates what the initialize method would return
-            let init_response = serde_json::json!({
-                "jsonrpc": "2.0",
-                "id": null, // SSE doesn't have request IDs
-                "result": {
-                    "protocolVersion": "2024-11-05",
-                    "capabilities": {
-                        "tools": {"listChanged": true},
-                        "resources": {"listChanged": true, "subscribe": true},
-                        "prompts": {"listChanged": true},
-                        "vibe_agent_management": true,
-                        "vibe_issue_tracking": true,
-                        "vibe_messaging": true,
-                        "vibe_knowledge_management": true
-                    },
-                    "serverInfo": {
-                        "name": "vibe-ensemble-mcp",
-                        "version": env!("CARGO_PKG_VERSION")
-                    },
-                    "instructions": "Vibe Ensemble MCP Server - Coordinating multiple Claude Code instances"
+    // Generate unique session ID for this SSE connection
+    let session_id = Uuid::new_v4().to_string();
+    let (sender, receiver) = mpsc::unbounded_channel::<String>();
+
+    // Register session in the global manager
+    {
+        let mut sessions = sse_sessions.write().await;
+        sessions.insert(session_id.clone(), SseSession {
+            id: session_id.clone(),
+            sender: sender.clone(),
+        });
+    }
+
+    debug!("Created SSE session: {}", session_id);
+
+    // Create stream that follows MCP SSE protocol
+    let host_port_clone = host_port.clone();
+    let stream = stream::unfold((0, session_id.clone(), mcp_server, receiver, sse_sessions.clone(), host_port_clone), 
+        move |(counter, session_id, server, mut receiver, sessions, host_port)| async move {
+            if counter == 0 {
+                // First event: Send 'endpoint' event with message URL according to MCP SSE spec
+                let endpoint_url = format!("http://{}/messages/{}", host_port, session_id);
+                let event = Event::default()
+                    .event("endpoint")
+                    .data(endpoint_url);
+
+                debug!("SSE sending 'endpoint' event for session: {}", session_id);
+                Some((Ok(event), (counter + 1, session_id, server, receiver, sessions, host_port)))
+            } else {
+                // Subsequent events: Wait for messages from the session channel
+                // This allows HTTP POST requests to /messages/:session_id to send responses back via SSE
+                match receiver.recv().await {
+                    Some(message_data) => {
+                        let event = Event::default()
+                            .event("message")
+                            .data(message_data);
+
+                        debug!("SSE sending 'message' event for session: {}", session_id);
+                        Some((Ok(event), (counter + 1, session_id, server, receiver, sessions, host_port)))
+                    }
+                    None => {
+                        // Channel closed, clean up session
+                        debug!("SSE channel closed for session: {}", session_id);
+                        let mut session_map = sessions.write().await;
+                        session_map.remove(&session_id);
+                        None // End stream
+                    }
                 }
-            });
+            }
+        });
 
-            let event_data =
-                serde_json::to_string(&init_response).unwrap_or_else(|_| "{}".to_string());
-            let event = Event::default().event("message").data(event_data);
+    Sse::new(stream)
+}
 
-            debug!("SSE sending immediate MCP initialization");
-            Some((Ok(event), (counter + 1, server)))
-        } else {
-            // Wait longer for subsequent messages to avoid spam
-            tokio::time::sleep(Duration::from_secs(60)).await;
+/// Handle SSE message request (POST /messages/:session_id)
+/// Processes MCP requests from SSE clients and sends responses back via the SSE channel
+async fn handle_sse_message_request(
+    Path(session_id): Path<String>,
+    JsonExtract(payload): JsonExtract<Value>,
+    mcp_server: McpServer,
+    sse_sessions: SseSessionManager,
+) -> std::result::Result<Json<Value>, StatusCode> {
+    debug!("SSE message request for session: {}", session_id);
 
-            // Send periodic keepalive events
-            let keepalive = serde_json::json!({
-                "jsonrpc": "2.0",
-                "method": "notifications/keepalive",
-                "params": {
-                    "timestamp": chrono::Utc::now().to_rfc3339(),
-                    "counter": counter
-                }
-            });
+    // Validate JSON-RPC 2.0 format
+    if let Err(_e) = validate_mcp_request(&payload) {
+        debug!("Invalid MCP SSE request: {:?}", payload);
+        return Err(StatusCode::BAD_REQUEST);
+    }
 
-            let event_data = serde_json::to_string(&keepalive).unwrap_or_else(|_| "{}".to_string());
-            let event = Event::default().event("message").data(event_data);
-
-            debug!("SSE sending keepalive message");
-            Some((Ok(event), (counter + 1, server)))
+    // Convert payload to string for MCP server processing
+    let message = match serde_json::to_string(&payload) {
+        Ok(msg) => msg,
+        Err(e) => {
+            debug!("Failed to serialize MCP SSE request: {}", e);
+            return Err(StatusCode::BAD_REQUEST);
         }
-    });
+    };
 
-    Sse::new(stream).keep_alive(
-        axum::response::sse::KeepAlive::new()
-            .interval(Duration::from_secs(30))
-            .text("keep-alive"),
-    )
+    // Process request through MCP server
+    match mcp_server.handle_message(&message).await {
+        Ok(Some(response_str)) => {
+            // Send response back through SSE channel
+            {
+                let sessions = sse_sessions.read().await;
+                if let Some(session) = sessions.get(&session_id) {
+                    if session.sender.send(response_str.clone()).is_err() {
+                        debug!("Failed to send response to SSE session: {}", session_id);
+                        return Err(StatusCode::GONE); // Session closed
+                    }
+                } else {
+                    debug!("SSE session not found: {}", session_id);
+                    return Err(StatusCode::NOT_FOUND);
+                }
+            }
+
+            // Return acknowledgment to HTTP POST client
+            let ack_response = serde_json::json!({
+                "status": "sent",
+                "session_id": session_id
+            });
+            debug!("SSE message sent for session: {}", session_id);
+            Ok(Json(ack_response))
+        }
+        Ok(None) => {
+            // No response needed (notification)
+            let ack_response = serde_json::json!({
+                "status": "processed",
+                "session_id": session_id
+            });
+            Ok(Json(ack_response))
+        }
+        Err(e) => {
+            error!("MCP server error for SSE session {}: {}", session_id, e);
+            let error_response = serde_json::json!({
+                "jsonrpc": "2.0",
+                "id": payload.get("id").cloned().unwrap_or(Value::Null),
+                "error": {
+                    "code": -32603,
+                    "message": "Internal error",
+                    "data": e.to_string()
+                }
+            });
+
+            // Send error response back through SSE channel
+            {
+                let sessions = sse_sessions.read().await;
+                if let Some(session) = sessions.get(&session_id) {
+                    let error_str = serde_json::to_string(&error_response).unwrap_or_else(|_| "{}".to_string());
+                    let _ = session.sender.send(error_str);
+                }
+            }
+
+            Ok(Json(error_response))
+        }
+    }
 }
 
 /// Handle health check (GET /health)
