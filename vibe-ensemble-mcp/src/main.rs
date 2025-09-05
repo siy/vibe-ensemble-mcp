@@ -754,35 +754,30 @@ fn create_server_config(
 ) -> anyhow::Result<serde_json::Value> {
     let config = match transport {
         "websocket" => {
+            // WebSocket transport uses command-based approach since it needs to start the server
             serde_json::json!({
                 "command": "vibe-ensemble",
-                "args": ["--mcp-only"],
-                "transport": {
-                    "type": "websocket",
-                    "url": format!("ws://{}:{}/ws", host, port)
-                }
+                "args": ["--mcp-only", "--mcp-host", host, "--mcp-port", port.to_string()]
             })
         }
         "http" => {
+            // HTTP transport uses top-level properties (not nested in transport object)
             serde_json::json!({
-                "transport": {
-                    "type": "http",
-                    "url": format!("http://{}:{}/mcp", host, port),
-                    "headers": {
-                        "Content-Type": "application/json"
-                    }
+                "type": "http",
+                "url": format!("http://{}:{}/mcp", host, port),
+                "headers": {
+                    "Content-Type": "application/json"
                 }
             })
         }
         "sse" => {
+            // SSE transport uses top-level properties (not nested in transport object)
             serde_json::json!({
-                "transport": {
-                    "type": "sse",
-                    "url": format!("http://{}:{}/events", host, port),
-                    "headers": {
-                        "Accept": "text/event-stream",
-                        "Cache-Control": "no-cache"
-                    }
+                "type": "sse",
+                "url": format!("http://{}:{}/events", host, port),
+                "headers": {
+                    "Accept": "text/event-stream",
+                    "Cache-Control": "no-cache"
                 }
             })
         }
@@ -804,33 +799,29 @@ mod tests {
 
         assert_eq!(config["command"], "vibe-ensemble");
         assert_eq!(config["args"][0], "--mcp-only");
-        assert_eq!(config["transport"]["type"], "websocket");
-        assert_eq!(config["transport"]["url"], "ws://127.0.0.1:22360/ws");
+        assert_eq!(config["args"][1], "--mcp-host");
+        assert_eq!(config["args"][2], "127.0.0.1");
+        assert_eq!(config["args"][3], "--mcp-port");
+        assert_eq!(config["args"][4], "22360");
     }
 
     #[tokio::test]
     async fn test_create_server_config_http() {
         let config = create_server_config("http", "127.0.0.1", 22360).unwrap();
 
-        assert_eq!(config["transport"]["type"], "http");
-        assert_eq!(config["transport"]["url"], "http://127.0.0.1:22360/mcp");
-        assert_eq!(
-            config["transport"]["headers"]["Content-Type"],
-            "application/json"
-        );
+        assert_eq!(config["type"], "http");
+        assert_eq!(config["url"], "http://127.0.0.1:22360/mcp");
+        assert_eq!(config["headers"]["Content-Type"], "application/json");
     }
 
     #[tokio::test]
     async fn test_create_server_config_sse() {
         let config = create_server_config("sse", "127.0.0.1", 22360).unwrap();
 
-        assert_eq!(config["transport"]["type"], "sse");
-        assert_eq!(config["transport"]["url"], "http://127.0.0.1:22360/events");
-        assert_eq!(
-            config["transport"]["headers"]["Accept"],
-            "text/event-stream"
-        );
-        assert_eq!(config["transport"]["headers"]["Cache-Control"], "no-cache");
+        assert_eq!(config["type"], "sse");
+        assert_eq!(config["url"], "http://127.0.0.1:22360/events");
+        assert_eq!(config["headers"]["Accept"], "text/event-stream");
+        assert_eq!(config["headers"]["Cache-Control"], "no-cache");
     }
 
     #[tokio::test]
