@@ -6,10 +6,12 @@
 use crate::{Error, Result};
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
+use serde_json::json;
 use std::collections::HashMap;
 use std::path::PathBuf;
 use std::process::Stdio;
 use std::sync::Arc;
+use tokio::fs;
 use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
 use tokio::process::{Child, Command};
 use tokio::sync::{broadcast, mpsc, Mutex, RwLock};
@@ -59,6 +61,88 @@ impl WorkerManager {
         }
     }
 
+    /// Generate Claude Code settings file for worker directory
+    ///
+    /// This ensures workers have access to all vibe-ensemble MCP tools while preserving
+    /// any existing user configurations in the settings file.
+    async fn ensure_claude_settings(&self, working_dir: &PathBuf) -> Result<()> {
+        let claude_dir = working_dir.join(".claude");
+        let settings_file = claude_dir.join("settings.local.json");
+
+        // Create .claude directory if it doesn't exist
+        if !claude_dir.exists() {
+            fs::create_dir_all(&claude_dir).await.map_err(|e| {
+                Error::Worker(format!("Failed to create .claude directory in {}: {}", working_dir.display(), e))
+            })?;
+            debug!("Created .claude directory at {}", claude_dir.display());
+        }
+
+        // If settings file already exists, preserve it (user may have customizations)
+        if settings_file.exists() {
+            info!("Preserving existing Claude settings file at {}", settings_file.display());
+            return Ok(());
+        }
+
+        // Generate comprehensive vibe-ensemble tool permissions
+        let vibe_tools = vec![
+            "mcp__vibe-ensemble__vibe_agent_register",
+            "mcp__vibe-ensemble__vibe_agent_status", 
+            "mcp__vibe-ensemble__vibe_agent_list",
+            "mcp__vibe-ensemble__vibe_agent_deregister",
+            "mcp__vibe-ensemble__vibe_issue_create",
+            "mcp__vibe-ensemble__vibe_issue_list",
+            "mcp__vibe-ensemble__vibe_issue_assign",
+            "mcp__vibe-ensemble__vibe_issue_update",
+            "mcp__vibe-ensemble__vibe_issue_close",
+            "mcp__vibe-ensemble__vibe_worker_message",
+            "mcp__vibe-ensemble__vibe_worker_request",
+            "mcp__vibe-ensemble__vibe_worker_coordinate",
+            "mcp__vibe-ensemble__vibe_worker_spawn",
+            "mcp__vibe-ensemble__vibe_worker_list",
+            "mcp__vibe-ensemble__vibe_worker_status",
+            "mcp__vibe-ensemble__vibe_worker_output",
+            "mcp__vibe-ensemble__vibe_worker_shutdown",
+            "mcp__vibe-ensemble__vibe_worker_register_connection",
+            "mcp__vibe-ensemble__vibe_project_lock",
+            "mcp__vibe-ensemble__vibe_dependency_declare",
+            "mcp__vibe-ensemble__vibe_coordinator_request_worker",
+            "mcp__vibe-ensemble__vibe_work_coordinate",
+            "mcp__vibe-ensemble__vibe_conflict_resolve",
+            "mcp__vibe-ensemble__vibe_schedule_coordinate",
+            "mcp__vibe-ensemble__vibe_conflict_predict",
+            "mcp__vibe-ensemble__vibe_resource_reserve",
+            "mcp__vibe-ensemble__vibe_merge_coordinate",
+            "mcp__vibe-ensemble__vibe_knowledge_query",
+            "mcp__vibe-ensemble__vibe_pattern_suggest",
+            "mcp__vibe-ensemble__vibe_guideline_enforce",
+            "mcp__vibe-ensemble__vibe_learning_capture",
+            "mcp__vibe-ensemble__vibe_workspace_create",
+            "mcp__vibe-ensemble__vibe_workspace_list",
+            "mcp__vibe-ensemble__vibe_workspace_assign",
+            "mcp__vibe-ensemble__vibe_workspace_status",
+            "mcp__vibe-ensemble__vibe_workspace_cleanup"
+        ];
+
+        let settings = json!({
+            "enabledMcpjsonServers": ["vibe-ensemble"],
+            "permissions": {
+                "allow": vibe_tools
+            }
+        });
+
+        // Write the settings file
+        let settings_json = serde_json::to_string_pretty(&settings).map_err(|e| {
+            Error::Worker(format!("Failed to serialize Claude settings: {}", e))
+        })?;
+
+        fs::write(&settings_file, settings_json).await.map_err(|e| {
+            Error::Worker(format!("Failed to write Claude settings to {}: {}", settings_file.display(), e))
+        })?;
+
+        info!("Created Claude settings file at {} with vibe-ensemble tool permissions", settings_file.display());
+        Ok(())
+    }
+
     /// Spawn a new Claude Code worker process
     ///
     /// # Arguments
@@ -85,15 +169,13 @@ impl WorkerManager {
         let mut cmd = Command::new("claude");
         cmd.arg("-p").arg(&prompt);
 
-        // Add MCP server configuration
-        let mcp_url = format!("ws://{}:{}/mcp", self.mcp_config.host, self.mcp_config.port);
-        cmd.arg("--mcp-server").arg(&mcp_url);
+        // Claude Code will automatically connect to MCP servers configured in .mcp.json
+        // No need to specify --mcp-server as that option doesn't exist
 
         // DEBUG level: Command details
-        debug!("Worker {} command: claude -p \"{}\" --mcp-server \"{}\"", 
+        debug!("Worker {} command: claude -p \"{}\"", 
                worker_id, 
-               prompt.chars().take(50).collect::<String>(),
-               mcp_url);
+               prompt.chars().take(50).collect::<String>());
         
         debug!("Worker {} capabilities: {:?}", worker_id, capabilities);
 
@@ -101,6 +183,9 @@ impl WorkerManager {
         if let Some(working_dir) = &working_directory {
             cmd.current_dir(working_dir);
             debug!("Worker {} working directory: {:?}", worker_id, working_dir);
+            
+            // Ensure Claude Code settings file exists with vibe-ensemble permissions
+            self.ensure_claude_settings(working_dir).await?;
         } else {
             debug!("Worker {} using current working directory", worker_id);
         }
