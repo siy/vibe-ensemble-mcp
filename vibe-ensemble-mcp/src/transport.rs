@@ -1231,7 +1231,7 @@ async fn handle_mcp_http_request(
 
 /// Handle SSE connection (GET /events)
 async fn handle_sse_connection(
-    _mcp_server: McpServer,
+    mcp_server: McpServer,
 ) -> Sse<
     impl futures_util::Stream<Item = std::result::Result<axum::response::sse::Event, serde_json::Error>>,
 > {
@@ -1239,36 +1239,67 @@ async fn handle_sse_connection(
     use futures_util::stream;
     use std::time::Duration;
 
-    // For now, implement a basic SSE stream that sends initialization events
-    // This is a simplified implementation - full MCP over SSE requires bidirectional communication
-    let stream = stream::unfold(0, |counter| async move {
-        tokio::time::sleep(Duration::from_secs(30)).await;
+    debug!("SSE connection established for MCP protocol");
 
+    // Create immediate stream that sends MCP initialization without delay
+    let stream = stream::unfold((0, mcp_server), |(counter, server)| async move {
         if counter == 0 {
-            // Send MCP server info on first connection
-            let event = Event::default()
-                .event("mcp_info")
-                .data(format!(
-                    r#"{{"type":"server_info","protocol_version":"2024-11-05","server_info":{{"name":"vibe-ensemble","version":"{}"}}}}"#,
-                    env!("CARGO_PKG_VERSION")
-                ));
-            Some((Ok(event), counter + 1))
+            // Send immediate MCP server initialization (no delay)
+            // This simulates what the initialize method would return
+            let init_response = serde_json::json!({
+                "jsonrpc": "2.0",
+                "id": null, // SSE doesn't have request IDs
+                "result": {
+                    "protocolVersion": "2024-11-05",
+                    "capabilities": {
+                        "tools": {"listChanged": true},
+                        "resources": {"listChanged": true, "subscribe": true},
+                        "prompts": {"listChanged": true},
+                        "vibe_agent_management": true,
+                        "vibe_issue_tracking": true,
+                        "vibe_messaging": true,
+                        "vibe_knowledge_management": true
+                    },
+                    "serverInfo": {
+                        "name": "vibe-ensemble-mcp",
+                        "version": env!("CARGO_PKG_VERSION")
+                    },
+                    "instructions": "Vibe Ensemble MCP Server - Coordinating multiple Claude Code instances"
+                }
+            });
+
+            let event_data =
+                serde_json::to_string(&init_response).unwrap_or_else(|_| "{}".to_string());
+            let event = Event::default().event("message").data(event_data);
+
+            debug!("SSE sending immediate MCP initialization");
+            Some((Ok(event), (counter + 1, server)))
         } else {
-            // Send periodic heartbeat events
-            let event = Event::default().event("heartbeat").data(format!(
-                r#"{{"type":"heartbeat","counter":{},"timestamp":"{}"}}"#,
-                counter,
-                chrono::Utc::now().to_rfc3339()
-            ));
-            Some((Ok(event), counter + 1))
+            // Wait longer for subsequent messages to avoid spam
+            tokio::time::sleep(Duration::from_secs(60)).await;
+
+            // Send periodic keepalive events
+            let keepalive = serde_json::json!({
+                "jsonrpc": "2.0",
+                "method": "notifications/keepalive",
+                "params": {
+                    "timestamp": chrono::Utc::now().to_rfc3339(),
+                    "counter": counter
+                }
+            });
+
+            let event_data = serde_json::to_string(&keepalive).unwrap_or_else(|_| "{}".to_string());
+            let event = Event::default().event("message").data(event_data);
+
+            debug!("SSE sending keepalive message");
+            Some((Ok(event), (counter + 1, server)))
         }
     });
 
-    debug!("SSE connection established for MCP protocol");
     Sse::new(stream).keep_alive(
         axum::response::sse::KeepAlive::new()
-            .interval(Duration::from_secs(15))
-            .text("keep-alive-text"),
+            .interval(Duration::from_secs(30))
+            .text("keep-alive"),
     )
 }
 
