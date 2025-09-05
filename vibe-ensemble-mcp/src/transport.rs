@@ -1448,12 +1448,8 @@ fn validate_mcp_request(payload: &Value) -> Result<()> {
         ));
     }
 
-    // Validate id exists (required for requests)
-    if obj.get("id").is_none() {
-        return Err(Error::Transport(
-            "Request must include id field".to_string(),
-        ));
-    }
+    // Note: 'id' field is required for requests but MUST NOT be present for notifications
+    // Both are valid according to JSON-RPC 2.0 specification
 
     Ok(())
 }
