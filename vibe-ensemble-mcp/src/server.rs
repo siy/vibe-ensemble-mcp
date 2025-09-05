@@ -3594,8 +3594,11 @@ impl McpServer {
             let namespace = uuid::Uuid::parse_str("6ba7b810-9dad-11d1-80b4-00c04fd430c8").unwrap(); // DNS namespace
             uuid::Uuid::new_v5(&namespace, params.target_project.as_bytes())
         };
-        
-        debug!("Project '{}' mapped to UUID: {}", params.target_project, target_project);
+
+        debug!(
+            "Project '{}' mapped to UUID: {}",
+            params.target_project, target_project
+        );
 
         // Parse priority
         let priority = match params.priority.as_str() {
@@ -6451,7 +6454,7 @@ impl McpServer {
                         },
                     )));
                 }
-                
+
                 if !working_dir.exists() {
                     return Ok(Some(JsonRpcResponse::error(
                         request.id,

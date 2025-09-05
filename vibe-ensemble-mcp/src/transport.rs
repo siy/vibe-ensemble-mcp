@@ -945,11 +945,24 @@ impl MultiTransportServer {
             )
             .route(
                 "/events",
-                get(move || handle_sse_connection(mcp_server_sse.clone(), sse_sessions_clone.clone(), host_port.clone())),
+                get(move || {
+                    handle_sse_connection(
+                        mcp_server_sse.clone(),
+                        sse_sessions_clone.clone(),
+                        host_port.clone(),
+                    )
+                }),
             )
             .route(
                 "/messages/:session_id",
-                post(move |session_id, payload| handle_sse_message_request(session_id, payload, mcp_server_messages.clone(), sse_sessions_messages.clone())),
+                post(move |session_id, payload| {
+                    handle_sse_message_request(
+                        session_id,
+                        payload,
+                        mcp_server_messages.clone(),
+                        sse_sessions_messages.clone(),
+                    )
+                }),
             )
             .route("/health", get(handle_health_check))
             .layer(
@@ -1261,7 +1274,11 @@ async fn handle_sse_connection(
     mcp_server: McpServer,
     sse_sessions: SseSessionManager,
     host_port: String,
-) -> Sse<impl futures_util::Stream<Item = std::result::Result<axum::response::sse::Event, std::convert::Infallible>>> {
+) -> Sse<
+    impl futures_util::Stream<
+        Item = std::result::Result<axum::response::sse::Event, std::convert::Infallible>,
+    >,
+> {
     use axum::response::sse::Event;
     use futures_util::stream;
     use uuid::Uuid;
@@ -1275,38 +1292,65 @@ async fn handle_sse_connection(
     // Register session in the global manager
     {
         let mut sessions = sse_sessions.write().await;
-        sessions.insert(session_id.clone(), SseSession {
-            id: session_id.clone(),
-            sender: sender.clone(),
-        });
+        sessions.insert(
+            session_id.clone(),
+            SseSession {
+                id: session_id.clone(),
+                sender: sender.clone(),
+            },
+        );
     }
 
     debug!("Created SSE session: {}", session_id);
 
     // Create stream that follows MCP SSE protocol
     let host_port_clone = host_port.clone();
-    let stream = stream::unfold((0, session_id.clone(), mcp_server, receiver, sse_sessions.clone(), host_port_clone), 
+    let stream = stream::unfold(
+        (
+            0,
+            session_id.clone(),
+            mcp_server,
+            receiver,
+            sse_sessions.clone(),
+            host_port_clone,
+        ),
         move |(counter, session_id, server, mut receiver, sessions, host_port)| async move {
             if counter == 0 {
                 // First event: Send 'endpoint' event with message URL according to MCP SSE spec
                 let endpoint_url = format!("http://{}/messages/{}", host_port, session_id);
-                let event = Event::default()
-                    .event("endpoint")
-                    .data(endpoint_url);
+                let event = Event::default().event("endpoint").data(endpoint_url);
 
                 debug!("SSE sending 'endpoint' event for session: {}", session_id);
-                Some((Ok(event), (counter + 1, session_id, server, receiver, sessions, host_port)))
+                Some((
+                    Ok(event),
+                    (
+                        counter + 1,
+                        session_id,
+                        server,
+                        receiver,
+                        sessions,
+                        host_port,
+                    ),
+                ))
             } else {
                 // Subsequent events: Wait for messages from the session channel
                 // This allows HTTP POST requests to /messages/:session_id to send responses back via SSE
                 match receiver.recv().await {
                     Some(message_data) => {
-                        let event = Event::default()
-                            .event("message")
-                            .data(message_data);
+                        let event = Event::default().event("message").data(message_data);
 
                         debug!("SSE sending 'message' event for session: {}", session_id);
-                        Some((Ok(event), (counter + 1, session_id, server, receiver, sessions, host_port)))
+                        Some((
+                            Ok(event),
+                            (
+                                counter + 1,
+                                session_id,
+                                server,
+                                receiver,
+                                sessions,
+                                host_port,
+                            ),
+                        ))
                     }
                     None => {
                         // Channel closed, clean up session
@@ -1317,7 +1361,8 @@ async fn handle_sse_connection(
                     }
                 }
             }
-        });
+        },
+    );
 
     Sse::new(stream)
 }
@@ -1396,7 +1441,8 @@ async fn handle_sse_message_request(
             {
                 let sessions = sse_sessions.read().await;
                 if let Some(session) = sessions.get(&session_id) {
-                    let error_str = serde_json::to_string(&error_response).unwrap_or_else(|_| "{}".to_string());
+                    let error_str =
+                        serde_json::to_string(&error_response).unwrap_or_else(|_| "{}".to_string());
                     let _ = session.sender.send(error_str);
                 }
             }

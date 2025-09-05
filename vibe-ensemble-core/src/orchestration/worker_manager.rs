@@ -8,7 +8,7 @@ use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 use std::collections::HashMap;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::process::Stdio;
 use std::sync::Arc;
 use tokio::fs;
@@ -43,6 +43,7 @@ pub struct WorkerManager {
     /// Output broadcast channels for real-time dashboard updates
     output_channels: Arc<RwLock<HashMap<Uuid, broadcast::Sender<WorkerOutput>>>>,
     /// MCP server configuration
+    #[allow(dead_code)]
     mcp_config: McpServerConfig,
     /// Worker output logging configuration
     output_logging: WorkerOutputConfig,
@@ -65,28 +66,35 @@ impl WorkerManager {
     ///
     /// This ensures workers have access to all vibe-ensemble MCP tools while preserving
     /// any existing user configurations in the settings file.
-    async fn ensure_claude_settings(&self, working_dir: &PathBuf) -> Result<()> {
+    async fn ensure_claude_settings(&self, working_dir: &Path) -> Result<()> {
         let claude_dir = working_dir.join(".claude");
         let settings_file = claude_dir.join("settings.local.json");
 
         // Create .claude directory if it doesn't exist
         if !claude_dir.exists() {
             fs::create_dir_all(&claude_dir).await.map_err(|e| {
-                Error::Worker(format!("Failed to create .claude directory in {}: {}", working_dir.display(), e))
+                Error::Worker(format!(
+                    "Failed to create .claude directory in {}: {}",
+                    working_dir.display(),
+                    e
+                ))
             })?;
             debug!("Created .claude directory at {}", claude_dir.display());
         }
 
         // If settings file already exists, preserve it (user may have customizations)
         if settings_file.exists() {
-            info!("Preserving existing Claude settings file at {}", settings_file.display());
+            info!(
+                "Preserving existing Claude settings file at {}",
+                settings_file.display()
+            );
             return Ok(());
         }
 
         // Generate comprehensive vibe-ensemble tool permissions
         let vibe_tools = vec![
             "mcp__vibe-ensemble__vibe_agent_register",
-            "mcp__vibe-ensemble__vibe_agent_status", 
+            "mcp__vibe-ensemble__vibe_agent_status",
             "mcp__vibe-ensemble__vibe_agent_list",
             "mcp__vibe-ensemble__vibe_agent_deregister",
             "mcp__vibe-ensemble__vibe_issue_create",
@@ -120,7 +128,7 @@ impl WorkerManager {
             "mcp__vibe-ensemble__vibe_workspace_list",
             "mcp__vibe-ensemble__vibe_workspace_assign",
             "mcp__vibe-ensemble__vibe_workspace_status",
-            "mcp__vibe-ensemble__vibe_workspace_cleanup"
+            "mcp__vibe-ensemble__vibe_workspace_cleanup",
         ];
 
         let settings = json!({
@@ -131,16 +139,153 @@ impl WorkerManager {
         });
 
         // Write the settings file
-        let settings_json = serde_json::to_string_pretty(&settings).map_err(|e| {
-            Error::Worker(format!("Failed to serialize Claude settings: {}", e))
-        })?;
+        let settings_json = serde_json::to_string_pretty(&settings)
+            .map_err(|e| Error::Worker(format!("Failed to serialize Claude settings: {}", e)))?;
 
-        fs::write(&settings_file, settings_json).await.map_err(|e| {
-            Error::Worker(format!("Failed to write Claude settings to {}: {}", settings_file.display(), e))
-        })?;
+        fs::write(&settings_file, settings_json)
+            .await
+            .map_err(|e| {
+                Error::Worker(format!(
+                    "Failed to write Claude settings to {}: {}",
+                    settings_file.display(),
+                    e
+                ))
+            })?;
 
-        info!("Created Claude settings file at {} with vibe-ensemble tool permissions", settings_file.display());
+        info!(
+            "Created Claude settings file at {} with vibe-ensemble tool permissions",
+            settings_file.display()
+        );
         Ok(())
+    }
+
+    /// Create worker initialization config for system awareness
+    ///
+    /// This creates a .vibe-worker-config.json file that provides the worker with
+    /// system context, coordinator information, and initialization instructions.
+    async fn create_worker_config(
+        &self,
+        worker_id: Uuid,
+        working_dir: &Path,
+        capabilities: &[String],
+    ) -> Result<()> {
+        let config_file = working_dir.join(".vibe-worker-config.json");
+
+        // Generate worker configuration with system awareness
+        let worker_config = json!({
+            "worker_id": worker_id.to_string(),
+            "coordinator_endpoint": "http://127.0.0.1:22360",
+            "system_role": "worker",
+            "capabilities": capabilities,
+            "working_directory": working_dir.display().to_string(),
+            "initialization_required": true,
+            "mcp_server_info": {
+                "server_name": "vibe-ensemble",
+                "protocol_version": "2024-11-05"
+            },
+            "coordination_tools": {
+                "register": "mcp__vibe-ensemble__vibe_agent_register",
+                "coordinate_work": "mcp__vibe-ensemble__vibe_work_coordinate",
+                "request_permissions": "mcp__vibe-ensemble__vibe_coordinator_request_worker",
+                "message_agents": "mcp__vibe-ensemble__vibe_worker_message",
+                "declare_dependencies": "mcp__vibe-ensemble__vibe_dependency_declare"
+            },
+            "created_at": chrono::Utc::now().to_rfc3339()
+        });
+
+        // Write the worker config file
+        let config_json = serde_json::to_string_pretty(&worker_config)
+            .map_err(|e| Error::Worker(format!("Failed to serialize worker config: {}", e)))?;
+
+        fs::write(&config_file, config_json).await.map_err(|e| {
+            Error::Worker(format!(
+                "Failed to write worker config to {}: {}",
+                config_file.display(),
+                e
+            ))
+        })?;
+
+        info!(
+            "Created worker initialization config at {} for worker {}",
+            config_file.display(),
+            worker_id
+        );
+        Ok(())
+    }
+
+    /// Create system-aware prompt for worker with coordination context
+    ///
+    /// This enhances the original user prompt with system awareness, coordination
+    /// instructions, and initialization workflow for multi-agent collaboration.
+    fn create_system_aware_prompt(
+        &self,
+        worker_id: Uuid,
+        original_prompt: &str,
+        capabilities: &[String],
+        working_directory: &Option<PathBuf>,
+    ) -> String {
+        let working_dir_str = working_directory
+            .as_ref()
+            .map(|p| p.display().to_string())
+            .unwrap_or_else(|| "current directory".to_string());
+
+        let capabilities_str = capabilities.join(", ");
+
+        format!(
+            r#"🤖 VIBE-ENSEMBLE WORKER INITIALIZATION 🤖
+
+You are a Claude Code worker (ID: {worker_id}) in a vibe-ensemble multi-agent coordination system.
+
+CRITICAL SYSTEM CONTEXT:
+- You are part of a coordinated team of agents working together
+- Your coordinator is available via MCP tools starting with `mcp__vibe-ensemble__`
+- Before making significant changes, coordinate with the system using available tools
+- A .vibe-worker-config.json file in your working directory contains your configuration
+
+MANDATORY INITIALIZATION SEQUENCE:
+1. 🔧 Register with coordinator using: `mcp__vibe-ensemble__vibe_agent_register`
+   - Provide your worker_id: {worker_id}
+   - Register as type: "worker"
+   - Include your capabilities: {capabilities_str}
+
+2. 📍 Declare your working context using: `mcp__vibe-ensemble__vibe_work_coordinate`
+   - Inform about your assigned task
+   - Declare your working directory: {working_dir_str}
+
+3. 🔑 Request necessary permissions using: `mcp__vibe-ensemble__vibe_coordinator_request_worker`
+   - Request permissions for file operations, git access, etc.
+   - Wait for coordinator approval before proceeding
+
+4. 🚀 Begin your assigned task (details below)
+
+COORDINATION TOOLS AVAILABLE:
+- `mcp__vibe-ensemble__vibe_agent_register` - Register with the coordination system
+- `mcp__vibe-ensemble__vibe_work_coordinate` - Coordinate work with other agents  
+- `mcp__vibe-ensemble__vibe_coordinator_request_worker` - Request permissions from coordinator
+- `mcp__vibe-ensemble__vibe_worker_message` - Send messages to other agents
+- `mcp__vibe-ensemble__vibe_dependency_declare` - Declare dependencies on other work
+- `mcp__vibe-ensemble__vibe_conflict_predict` - Check for potential conflicts
+- `mcp__vibe-ensemble__vibe_issue_create` - Create issues that need attention
+
+IMPORTANT RULES:
+- ALWAYS complete the initialization sequence before starting your main task
+- Coordinate with other agents before making changes that might affect them
+- Use the messaging system to communicate with teammates
+- Respect permission boundaries - request access when needed
+
+YOUR ASSIGNED TASK:
+{original_prompt}
+
+Working Directory: {working_dir_str}
+Your Capabilities: {capabilities_str}
+Worker ID: {worker_id}
+
+BEGIN BY RUNNING THE INITIALIZATION SEQUENCE, THEN PROCEED WITH YOUR TASK."#,
+            worker_id = worker_id,
+            capabilities_str = capabilities_str,
+            working_dir_str = working_dir_str,
+            original_prompt = original_prompt
+        )
     }
 
     /// Spawn a new Claude Code worker process
@@ -159,33 +304,48 @@ impl WorkerManager {
         working_directory: Option<PathBuf>,
     ) -> Result<Uuid> {
         let worker_id = Uuid::new_v4();
-        
-        // INFO level: Basic spawn information
-        info!("Spawning Claude Code worker {} for prompt: '{}'", 
-              worker_id, 
-              prompt.chars().take(80).collect::<String>());
 
-        // Build Claude Code command (use 'claude' not 'claude-code') 
+        // INFO level: Basic spawn information
+        info!(
+            "Spawning Claude Code worker {} for prompt: '{}'",
+            worker_id,
+            prompt.chars().take(80).collect::<String>()
+        );
+
+        // Enhance prompt with system awareness if working directory is provided
+        let enhanced_prompt = if working_directory.is_some() {
+            self.create_system_aware_prompt(worker_id, &prompt, &capabilities, &working_directory)
+        } else {
+            prompt.clone()
+        };
+
+        // Build Claude Code command (use 'claude' not 'claude-code')
         let mut cmd = Command::new("claude");
-        cmd.arg("-p").arg(&prompt);
+        cmd.arg("-p").arg(&enhanced_prompt);
 
         // Claude Code will automatically connect to MCP servers configured in .mcp.json
         // No need to specify --mcp-server as that option doesn't exist
 
         // DEBUG level: Command details
-        debug!("Worker {} command: claude -p \"{}\"", 
-               worker_id, 
-               prompt.chars().take(50).collect::<String>());
-        
+        debug!(
+            "Worker {} command: claude -p \"{}\"",
+            worker_id,
+            prompt.chars().take(50).collect::<String>()
+        );
+
         debug!("Worker {} capabilities: {:?}", worker_id, capabilities);
 
         // Set working directory if provided (already validated as absolute)
         if let Some(working_dir) = &working_directory {
             cmd.current_dir(working_dir);
             debug!("Worker {} working directory: {:?}", worker_id, working_dir);
-            
+
             // Ensure Claude Code settings file exists with vibe-ensemble permissions
             self.ensure_claude_settings(working_dir).await?;
+
+            // Create worker initialization config for system awareness
+            self.create_worker_config(worker_id, working_dir, &capabilities)
+                .await?;
         } else {
             debug!("Worker {} using current working directory", worker_id);
         }
@@ -196,8 +356,16 @@ impl WorkerManager {
             .stderr(Stdio::piped());
 
         // TRACE level: Full command details
-        trace!("Worker {} full command args: {:?}", worker_id, cmd.as_std().get_args().collect::<Vec<_>>());
-        trace!("Worker {} environment: {:?}", worker_id, cmd.as_std().get_envs().collect::<Vec<_>>());
+        trace!(
+            "Worker {} full command args: {:?}",
+            worker_id,
+            cmd.as_std().get_args().collect::<Vec<_>>()
+        );
+        trace!(
+            "Worker {} environment: {:?}",
+            worker_id,
+            cmd.as_std().get_envs().collect::<Vec<_>>()
+        );
 
         // Spawn the process
         let mut child = cmd.spawn().map_err(|e| {
@@ -209,16 +377,26 @@ impl WorkerManager {
 
         // Get process ID for tracking
         let process_id = child.id();
-        
+
         // INFO level: Success with PID
         if let Some(pid) = process_id {
-            info!("Claude Code worker {} spawned successfully with PID: {}", worker_id, pid);
+            info!(
+                "Claude Code worker {} spawned successfully with PID: {}",
+                worker_id, pid
+            );
         } else {
-            info!("Claude Code worker {} spawned successfully (PID not available)", worker_id);
+            info!(
+                "Claude Code worker {} spawned successfully (PID not available)",
+                worker_id
+            );
         }
-        
+
         // DEBUG level: Additional spawn details
-        debug!("Worker {} started at: {}", worker_id, started_at.format("%Y-%m-%d %H:%M:%S UTC"));
+        debug!(
+            "Worker {} started at: {}",
+            worker_id,
+            started_at.format("%Y-%m-%d %H:%M:%S UTC")
+        );
 
         // Setup output capture with broadcast channel for multiple subscribers
         let (broadcast_sender, _) = broadcast::channel(1000);
@@ -868,7 +1046,6 @@ pub struct WorkerOutputConfig {
     pub enabled: bool,
     pub log_directory: Option<PathBuf>,
 }
-
 
 #[cfg(test)]
 mod tests {
