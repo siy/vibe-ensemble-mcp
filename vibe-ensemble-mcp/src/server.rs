@@ -556,9 +556,9 @@ impl McpServer {
                     "properties": {
                         "prompt": {"type": "string", "description": "Task-specific prompt for the worker"},
                         "capabilities": {"type": "array", "items": {"type": "string"}, "description": "List of capabilities/tools the worker should have"},
-                        "workingDirectory": {"type": "string", "description": "Optional working directory for the worker"}
+                        "workingDirectory": {"type": "string", "description": "REQUIRED: Absolute path to working directory for the worker (e.g. /full/path/to/project). Relative paths will be rejected."}
                     },
-                    "required": ["prompt"]
+                    "required": ["prompt", "workingDirectory"]
                 }
             }),
             serde_json::json!({
@@ -6438,6 +6438,31 @@ impl McpServer {
                 .get("workingDirectory")
                 .and_then(|v| v.as_str())
                 .map(std::path::PathBuf::from);
+
+            // Validate working directory is absolute
+            if let Some(ref working_dir) = working_directory {
+                if !working_dir.is_absolute() {
+                    return Ok(Some(JsonRpcResponse::error(
+                        request.id,
+                        JsonRpcError {
+                            code: error_codes::INVALID_PARAMS,
+                            message: format!("Working directory must be an absolute path, got: {:?}. Please provide full path like /Users/username/project/subdir", working_dir),
+                            data: None,
+                        },
+                    )));
+                }
+                
+                if !working_dir.exists() {
+                    return Ok(Some(JsonRpcResponse::error(
+                        request.id,
+                        JsonRpcError {
+                            code: error_codes::INVALID_PARAMS,
+                            message: format!("Working directory does not exist: {:?}", working_dir),
+                            data: None,
+                        },
+                    )));
+                }
+            }
 
             // Spawn the worker
             match worker_manager

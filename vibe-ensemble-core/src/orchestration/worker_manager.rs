@@ -97,22 +97,10 @@ impl WorkerManager {
         
         debug!("Worker {} capabilities: {:?}", worker_id, capabilities);
 
-        // Set working directory if provided - convert relative paths to absolute
+        // Set working directory if provided (already validated as absolute)
         if let Some(working_dir) = &working_directory {
-            let absolute_working_dir = if working_dir.is_absolute() {
-                working_dir.clone()
-            } else {
-                // Convert relative path to absolute path based on current directory
-                match std::env::current_dir() {
-                    Ok(current_dir) => current_dir.join(working_dir),
-                    Err(e) => {
-                        warn!("Worker {} could not determine current directory: {}, using relative path", worker_id, e);
-                        working_dir.clone()
-                    }
-                }
-            };
-            cmd.current_dir(&absolute_working_dir);
-            debug!("Worker {} working directory: {:?} -> {:?}", worker_id, working_dir, absolute_working_dir);
+            cmd.current_dir(working_dir);
+            debug!("Worker {} working directory: {:?}", worker_id, working_dir);
         } else {
             debug!("Worker {} using current working directory", worker_id);
         }
