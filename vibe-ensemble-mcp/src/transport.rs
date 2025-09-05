@@ -1574,12 +1574,12 @@ mod tests {
         });
         assert!(validate_mcp_request(&no_method).is_err());
 
-        // Missing id
+        // Missing id is now valid (for notifications per JSON-RPC 2.0)
         let no_id = json!({
             "jsonrpc": "2.0",
             "method": "initialize"
         });
-        assert!(validate_mcp_request(&no_id).is_err());
+        assert!(validate_mcp_request(&no_id).is_ok());
 
         // Not an object
         let not_object = json!("invalid");

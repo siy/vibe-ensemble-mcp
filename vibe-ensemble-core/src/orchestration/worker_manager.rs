@@ -14,7 +14,7 @@ use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
 use tokio::process::{Child, Command};
 use tokio::sync::{broadcast, mpsc, Mutex, RwLock};
 use tokio::time::{timeout, Duration};
-use tracing::{debug, error, info, warn};
+use tracing::{debug, error, info, trace, warn};
 use uuid::Uuid;
 
 /// Maximum number of output lines to buffer per worker
@@ -75,22 +75,38 @@ impl WorkerManager {
         working_directory: Option<PathBuf>,
     ) -> Result<Uuid> {
         let worker_id = Uuid::new_v4();
-        info!(
-            "Spawning Claude Code worker {} with capabilities: {:?}",
-            worker_id, capabilities
-        );
+        
+        // INFO level: Basic spawn information
+        info!("Spawning Claude Code worker {} for prompt: '{}'", 
+              worker_id, 
+              prompt.chars().take(80).collect::<String>());
 
-        // Build Claude Code command
-        let mut cmd = Command::new("claude-code");
+        // Build Claude Code command (use 'claude' not 'claude-code')
+        // Resolve full path to claude binary to handle PATH issues
+        let claude_path = resolve_claude_binary_path().await?;
+        debug!("Worker {} resolved claude binary path: {}", worker_id, claude_path);
+        
+        let mut cmd = Command::new(&claude_path);
         cmd.arg("-p").arg(&prompt);
 
         // Add MCP server configuration
         let mcp_url = format!("ws://{}:{}/mcp", self.mcp_config.host, self.mcp_config.port);
         cmd.arg("--mcp-server").arg(&mcp_url);
 
+        // DEBUG level: Command details
+        debug!("Worker {} command: claude -p \"{}\" --mcp-server \"{}\"", 
+               worker_id, 
+               prompt.chars().take(50).collect::<String>(),
+               mcp_url);
+        
+        debug!("Worker {} capabilities: {:?}", worker_id, capabilities);
+
         // Set working directory if provided
         if let Some(working_dir) = &working_directory {
             cmd.current_dir(working_dir);
+            debug!("Worker {} working directory: {:?}", worker_id, working_dir);
+        } else {
+            debug!("Worker {} using current working directory", worker_id);
         }
 
         // Configure stdio for output capture
@@ -98,20 +114,30 @@ impl WorkerManager {
             .stdout(Stdio::piped())
             .stderr(Stdio::piped());
 
+        // TRACE level: Full command details
+        trace!("Worker {} full command args: {:?}", worker_id, cmd.as_std().get_args().collect::<Vec<_>>());
+        trace!("Worker {} environment: {:?}", worker_id, cmd.as_std().get_envs().collect::<Vec<_>>());
+
         // Spawn the process
         let mut child = cmd.spawn().map_err(|e| {
-            error!("Failed to spawn Claude Code worker {}: {}", worker_id, e);
-            Error::Worker(format!("Failed to spawn worker process: {}", e))
+            error!("Failed to spawn Claude Code worker {}: {} (command: 'claude')", worker_id, e);
+            Error::Worker(format!("Failed to spawn worker process 'claude': {} - Is Claude Code installed and in PATH?", e))
         })?;
 
         let started_at = Utc::now();
 
         // Get process ID for tracking
         let process_id = child.id();
-        info!(
-            "Claude Code worker {} spawned successfully with PID: {:?}",
-            worker_id, process_id
-        );
+        
+        // INFO level: Success with PID
+        if let Some(pid) = process_id {
+            info!("Claude Code worker {} spawned successfully with PID: {}", worker_id, pid);
+        } else {
+            info!("Claude Code worker {} spawned successfully (PID not available)", worker_id);
+        }
+        
+        // DEBUG level: Additional spawn details
+        debug!("Worker {} started at: {}", worker_id, started_at.format("%Y-%m-%d %H:%M:%S UTC"));
 
         // Setup output capture with broadcast channel for multiple subscribers
         let (broadcast_sender, _) = broadcast::channel(1000);
@@ -760,6 +786,53 @@ impl Default for McpServerConfig {
 pub struct WorkerOutputConfig {
     pub enabled: bool,
     pub log_directory: Option<PathBuf>,
+}
+
+/// Resolve the full path to the Claude binary using the system PATH
+/// This handles cases where `claude` is in non-standard locations like ~/.local/bin
+async fn resolve_claude_binary_path() -> Result<String> {
+    // First try using `which claude` command to find the binary
+    let output = Command::new("which")
+        .arg("claude")
+        .output()
+        .await;
+
+    match output {
+        Ok(output) if output.status.success() => {
+            let path = String::from_utf8_lossy(&output.stdout).trim().to_string();
+            if !path.is_empty() && std::path::Path::new(&path).exists() {
+                info!("Found Claude binary at: {}", path);
+                return Ok(path);
+            }
+        }
+        Ok(output) => {
+            debug!("'which claude' failed with status: {:?}, stderr: {}", 
+                   output.status, String::from_utf8_lossy(&output.stderr));
+        }
+        Err(e) => {
+            debug!("Failed to execute 'which claude': {}", e);
+        }
+    }
+
+    // Fallback: try common locations where Claude might be installed
+    let common_paths = [
+        "/usr/local/bin/claude",
+        "/usr/bin/claude", 
+        "/opt/homebrew/bin/claude",
+        &format!("{}/.local/bin/claude", std::env::var("HOME").unwrap_or_default()),
+        &format!("{}/bin/claude", std::env::var("HOME").unwrap_or_default()),
+    ];
+
+    for path in &common_paths {
+        if std::path::Path::new(path).exists() {
+            info!("Found Claude binary at fallback location: {}", path);
+            return Ok(path.to_string());
+        }
+    }
+
+    // Final fallback: return "claude" and let the system handle it
+    warn!("Could not resolve Claude binary path, falling back to 'claude' (may fail if not in PATH)");
+    Ok("claude".to_string())
 }
 
 #[cfg(test)]
