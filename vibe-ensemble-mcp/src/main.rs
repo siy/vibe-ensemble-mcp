@@ -11,7 +11,7 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use tracing::{debug, error, info, warn};
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
-use vibe_ensemble_core::orchestration::{McpServerConfig, WorkerManager, WorkerOutputConfig};
+use vibe_ensemble_core::orchestration::{McpServerConfig, WorkerManager, WorkerOutputConfig, WorkspaceManager};
 use vibe_ensemble_mcp::{
     server::{CoordinationServices, McpServer},
     transport::WebSocketServer,
@@ -304,7 +304,7 @@ async fn main() -> anyhow::Result<()> {
 
     // Create database configuration with smart defaults
     let db_config = vibe_ensemble_storage::manager::DatabaseConfig {
-        url: database_url,
+        url: database_url.clone(),
         max_connections: Some(max_connections),
         migrate_on_startup: !no_migrate,
         performance_config: None,
@@ -404,6 +404,22 @@ async fn main() -> anyhow::Result<()> {
 
     info!("Services initialized");
 
+    // Initialize workspace manager for git worktree coordination
+    let workspaces_dir = if database_url.starts_with("sqlite:") {
+        // Extract directory from sqlite URL
+        let db_file_path = PathBuf::from(database_url.strip_prefix("sqlite:").unwrap());
+        db_file_path.parent().unwrap_or_else(|| Path::new(".")).join("workspaces")
+    } else {
+        // Default workspace directory
+        let current_dir = std::env::current_dir().expect("Could not determine current directory");
+        current_dir.join(".vibe-ensemble").join("workspaces")
+    };
+    if let Err(e) = std::fs::create_dir_all(&workspaces_dir) {
+        warn!("Failed to create workspaces directory: {}", e);
+    }
+    let workspace_manager = Arc::new(WorkspaceManager::new(workspaces_dir));
+    info!("Workspace manager initialized for git worktree coordination");
+
     // Create coordination services bundle
     let coordination_services = CoordinationServices::new(
         agent_service,
@@ -411,6 +427,7 @@ async fn main() -> anyhow::Result<()> {
         message_service,
         coordination_service,
         knowledge_service,
+        workspace_manager,
     );
 
     // Create MCP server with coordination services

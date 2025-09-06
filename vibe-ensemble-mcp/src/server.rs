@@ -45,6 +45,7 @@ pub struct CoordinationServices {
     pub message_service: Arc<MessageService>,
     pub coordination_service: Arc<CoordinationService>,
     pub knowledge_service: Arc<KnowledgeService>,
+    pub workspace_manager: Arc<WorkspaceManager>,
 }
 
 impl CoordinationServices {
@@ -55,6 +56,7 @@ impl CoordinationServices {
         message_service: Arc<MessageService>,
         coordination_service: Arc<CoordinationService>,
         knowledge_service: Arc<KnowledgeService>,
+        workspace_manager: Arc<WorkspaceManager>,
     ) -> Self {
         Self {
             agent_service,
@@ -62,6 +64,7 @@ impl CoordinationServices {
             message_service,
             coordination_service,
             knowledge_service,
+            workspace_manager,
         }
     }
 }
@@ -127,7 +130,7 @@ impl McpServer {
             message_service: Some(services.message_service),
             coordination_service: Some(services.coordination_service),
             knowledge_service: Some(services.knowledge_service),
-            workspace_manager: None,
+            workspace_manager: Some(services.workspace_manager),
             worker_manager: None,
         }
     }
@@ -146,7 +149,7 @@ impl McpServer {
             message_service: Some(services.message_service),
             coordination_service: Some(services.coordination_service),
             knowledge_service: Some(services.knowledge_service),
-            workspace_manager: None,
+            workspace_manager: Some(services.workspace_manager),
             worker_manager: None,
         }
     }
@@ -830,12 +833,11 @@ impl McpServer {
             }),
         ];
 
-        // Only include workspace tools if workspace manager is configured
-        if self.workspace_manager.is_some() {
-            tools.extend([
+        // Include workspace tools for git worktree-based multi-agent coordination
+        tools.extend([
                 serde_json::json!({
                     "name": "vibe_workspace_create",
-                    "description": "Create a git worktree for parallel agent development",
+                    "description": "Create a git worktree for parallel development by multiple agents on the same project. Enables isolated workspaces where agents can work on different features without conflicts.",
                     "inputSchema": {
                         "type": "object",
                         "additionalProperties": false,
@@ -879,7 +881,7 @@ impl McpServer {
                 }),
                 serde_json::json!({
                     "name": "vibe_workspace_list",
-                    "description": "List all active git worktrees and their status",
+                    "description": "List all active git worktrees and their status. Shows which agents are assigned to which worktrees for coordinated parallel development.",
                     "inputSchema": {
                         "type": "object",
                         "additionalProperties": false,
@@ -899,7 +901,7 @@ impl McpServer {
                 }),
                 serde_json::json!({
                     "name": "vibe_workspace_assign",
-                    "description": "Assign an agent to a specific worktree",
+                    "description": "Assign an agent to a specific git worktree for coordinated multi-agent development. Ensures proper workspace isolation and agent ownership tracking.",
                     "inputSchema": {
                         "type": "object",
                         "additionalProperties": false,
@@ -921,7 +923,7 @@ impl McpServer {
                 }),
                 serde_json::json!({
                     "name": "vibe_workspace_status",
-                    "description": "Get status and information about a worktree",
+                    "description": "Get status and information about a git worktree including assigned agent, branch status, and modifications. Essential for multi-agent coordination.",
                     "inputSchema": {
                         "type": "object",
                         "additionalProperties": false,
@@ -937,7 +939,7 @@ impl McpServer {
                 }),
                 serde_json::json!({
                     "name": "vibe_workspace_cleanup",
-                    "description": "Remove inactive worktrees and clean up resources",
+                    "description": "Remove inactive git worktrees and clean up resources. Maintains clean workspace environment for ongoing multi-agent development.",
                     "inputSchema": {
                         "type": "object",
                         "additionalProperties": false,
@@ -961,7 +963,6 @@ impl McpServer {
                     }
                 }),
             ]);
-        }
 
         let result = serde_json::json!({
             "tools": tools
@@ -1493,17 +1494,68 @@ impl McpServer {
             }
         }
 
-        // Register the agent using the agent service
-        match agent_service
-            .register_agent(
-                params.name.clone(),
-                agent_type,
-                params.capabilities,
-                connection_metadata,
-                session_id.clone(),
-            )
-            .await
-        {
+        // If the registering client provides a workerId in connectionMetadata, use it as the agent ID.
+        // This unifies worker and agent identity, avoiding race conditions where callers
+        // immediately reference the worker UUID in subsequent operations (e.g., issue assign).
+        // Extract optional workerId from connection metadata (if provided). If present but invalid, return an error.
+        let mut worker_id_in_metadata: Option<Uuid> = None;
+        if let Some(obj) = params.connection_metadata.as_object() {
+            if let Some(worker_val) = obj.get("workerId") {
+                match worker_val.as_str() {
+                    Some(s) => match Uuid::parse_str(s) {
+                        Ok(u) => worker_id_in_metadata = Some(u),
+                        Err(_) => {
+                            return Ok(Some(JsonRpcResponse::error(
+                                request.id,
+                                JsonRpcError {
+                                    code: error_codes::INVALID_PARAMS,
+                                    message: "Invalid 'workerId' in connectionMetadata (must be a UUID)".to_string(),
+                                    data: None,
+                                },
+                            )));
+                        }
+                    },
+                    None => {
+                        return Ok(Some(JsonRpcResponse::error(
+                            request.id,
+                            JsonRpcError {
+                                code: error_codes::INVALID_PARAMS,
+                                message:
+                                    "Invalid 'workerId' in connectionMetadata (must be a string)"
+                                        .to_string(),
+                                data: None,
+                            },
+                        )));
+                    }
+                }
+            }
+        }
+
+        // Register the agent using the agent service (prefer explicit ID when workerId is provided)
+        let register_result = if let Some(worker_uuid) = worker_id_in_metadata {
+            agent_service
+                .register_agent_with_id(
+                    worker_uuid,
+                    params.name.clone(),
+                    agent_type,
+                    params.capabilities.clone(),
+                    connection_metadata,
+                    session_id.clone(),
+                )
+                .await
+        } else {
+            agent_service
+                .register_agent(
+                    params.name.clone(),
+                    agent_type,
+                    params.capabilities.clone(),
+                    connection_metadata,
+                    session_id.clone(),
+                )
+                .await
+        };
+
+        match register_result {
             Ok(agent) => {
                 info!(
                     "Successfully registered agent: {} ({})",

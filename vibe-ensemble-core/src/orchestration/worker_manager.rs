@@ -12,7 +12,7 @@ use std::path::{Path, PathBuf};
 use std::process::Stdio;
 use std::sync::Arc;
 use tokio::fs;
-use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
+use tokio::io::{AsyncBufReadExt, BufReader};
 use tokio::process::{Child, Command};
 use tokio::sync::{broadcast, mpsc, Mutex, RwLock};
 use tokio::time::{timeout, Duration};
@@ -339,13 +339,18 @@ BEGIN BY RUNNING THE INITIALIZATION SEQUENCE, THEN PROCEED WITH YOUR TASK."#,
         }
 
         // Configure permission prompt forwarding via MCP tool
-        cmd.arg("--permission-prompt-tool").arg("mcp__vibe-ensemble__vibe_worker_request");
+        cmd.arg("--permission-prompt-tool")
+            .arg("mcp__vibe-ensemble__vibe_worker_request");
 
         // Claude Code will automatically connect to MCP servers configured in .mcp.json
         // No need to specify --mcp-server as that option doesn't exist
 
         // DEBUG level: Command details
-        let verbose_flag = if self.output_logging.enabled { " --verbose" } else { "" };
+        let verbose_flag = if self.output_logging.enabled {
+            " --verbose"
+        } else {
+            ""
+        };
         debug!(
             "Worker {} command: claude -p \"{}\" --output-format json --permission-prompt-tool mcp__vibe-ensemble__vibe_worker_request{}",
             worker_id,
@@ -704,7 +709,6 @@ BEGIN BY RUNNING THE INITIALIZATION SEQUENCE, THEN PROCEED WITH YOUR TASK."#,
 
         // Capture stdout - now handles JSON output from Claude Code
         let stdout_sender = output_sender.clone();
-        let stdout_config = worker_output_config.clone();
         tokio::spawn(async move {
             let mut reader = BufReader::new(stdout);
             let mut buffer = String::new();
@@ -715,21 +719,22 @@ BEGIN BY RUNNING THE INITIALIZATION SEQUENCE, THEN PROCEED WITH YOUR TASK."#,
                 }
 
                 let line = buffer.trim_end();
-                
+
                 // Try to parse as JSON - Claude Code --output-format json returns structured data
-                let (output_type, content) = if let Ok(json_val) = serde_json::from_str::<Value>(line) {
-                    // This is JSON output from Claude Code
-                    if let Some(response) = json_val.get("response").and_then(|r| r.as_str()) {
-                        // Structured JSON response - forward to coordinator as completion notification
-                        (OutputType::JsonResponse, response.to_string())
+                let (output_type, content) =
+                    if let Ok(json_val) = serde_json::from_str::<Value>(line) {
+                        // This is JSON output from Claude Code
+                        if let Some(response) = json_val.get("response").and_then(|r| r.as_str()) {
+                            // Structured JSON response - preserve for logging and coordination
+                            (OutputType::JsonResponse, response.to_string())
+                        } else {
+                            // JSON but not in expected format - still important for debugging
+                            (OutputType::Stdout, line.to_string())
+                        }
                     } else {
-                        // JSON but not in expected format
+                        // Not JSON, treat as regular stdout - all text output is important
                         (OutputType::Stdout, line.to_string())
-                    }
-                } else {
-                    // Not JSON, treat as regular stdout
-                    (OutputType::Stdout, line.to_string())
-                };
+                    };
 
                 let output = WorkerOutput {
                     worker_id,
@@ -738,8 +743,7 @@ BEGIN BY RUNNING THE INITIALIZATION SEQUENCE, THEN PROCEED WITH YOUR TASK."#,
                     timestamp: Utc::now(),
                 };
 
-                // Store output type before moving output
-                let is_stdout = matches!(output_type, OutputType::Stdout);
+                // Output forwarding - all types are now handled by main processing task
 
                 if let Err(e) = stdout_sender.send(output) {
                     debug!(
@@ -749,21 +753,8 @@ BEGIN BY RUNNING THE INITIALIZATION SEQUENCE, THEN PROCEED WITH YOUR TASK."#,
                     break;
                 }
 
-                // For JSON responses, don't log to stdout file (these are completion notifications)
-                // For regular stdout, log if enabled
-                if is_stdout && stdout_config.enabled {
-                    if let Some(ref log_dir) = stdout_config.log_directory {
-                        let log_path = log_dir.join(format!("worker-{}-stdout.log", worker_id));
-                        if let Ok(mut file) = tokio::fs::OpenOptions::new()
-                            .create(true)
-                            .append(true)
-                            .open(&log_path)
-                            .await
-                        {
-                            let _ = file.write_all(format!("{}\n", line).as_bytes()).await;
-                        }
-                    }
-                }
+                // All output is now handled by the main output processing task
+                // No need for separate file logging in capture tasks
 
                 buffer.clear();
             }
@@ -800,21 +791,13 @@ BEGIN BY RUNNING THE INITIALIZATION SEQUENCE, THEN PROCEED WITH YOUR TASK."#,
                         break;
                     }
 
-                    // Log to file since logging is enabled
-                    if let Some(ref log_dir) = worker_output_config.log_directory {
-                        let log_path = log_dir.join(format!("worker-{}-stderr.log", worker_id));
-                        if let Ok(mut file) = tokio::fs::OpenOptions::new()
-                            .create(true)
-                            .append(true)
-                            .open(&log_path)
-                            .await
-                        {
-                            let _ = file.write_all(format!("{}\n", line_content).as_bytes()).await;
-                        }
-                    }
+                    // All stderr output is now handled by the main output processing task
                 } else {
                     // Logging not enabled - ignore stderr as requested
-                    debug!("Ignoring stderr from worker {} (logging disabled): {}", worker_id, line_content);
+                    debug!(
+                        "Ignoring stderr from worker {} (logging disabled): {}",
+                        worker_id, line_content
+                    );
                 }
 
                 line.clear();
@@ -844,7 +827,11 @@ BEGIN BY RUNNING THE INITIALIZATION SEQUENCE, THEN PROCEED WITH YOUR TASK."#,
                             Some(file)
                         }
                         Err(e) => {
-                            warn!("Failed to create worker log file {}: {}", log_path.display(), e);
+                            warn!(
+                                "Failed to create worker log file {}: {}",
+                                log_path.display(),
+                                e
+                            );
                             None
                         }
                     }
@@ -859,9 +846,12 @@ BEGIN BY RUNNING THE INITIALIZATION SEQUENCE, THEN PROCEED WITH YOUR TASK."#,
             while let Some(output) = output_receiver.recv().await {
                 // Handle JSON responses specially - forward as completion notifications
                 if matches!(output.output_type, OutputType::JsonResponse) {
-                    info!("Worker {} completed task with response: {}", worker_id, 
-                        output.content.chars().take(200).collect::<String>());
-                    
+                    info!(
+                        "Worker {} completed task with response: {}",
+                        worker_id,
+                        output.content.chars().take(200).collect::<String>()
+                    );
+
                     // TODO: Forward JSON response to coordinator via messaging system
                     // This serves as a signal that the worker has completed execution
                     // The response content should be sent as a notification to the coordinator
@@ -870,18 +860,19 @@ BEGIN BY RUNNING THE INITIALIZATION SEQUENCE, THEN PROCEED WITH YOUR TASK."#,
 
                 // Log to file if enabled
                 if let Some(ref mut file) = log_file {
-                    let log_line = format!("[{}] [{}] {}\n", 
+                    let log_line = format!(
+                        "[{}] [{}] {}\n",
                         output.timestamp.format("%Y-%m-%d %H:%M:%S UTC"),
                         output.output_type,
                         output.content
                     );
-                    
-                    if let Err(e) = tokio::io::AsyncWriteExt::write_all(file, log_line.as_bytes()).await {
+
+                    if let Err(e) =
+                        tokio::io::AsyncWriteExt::write_all(file, log_line.as_bytes()).await
+                    {
                         warn!("Failed to write to worker log file: {}", e);
-                    } else {
-                        if let Err(e) = tokio::io::AsyncWriteExt::flush(file).await {
-                            warn!("Failed to flush worker log file: {}", e);
-                        }
+                    } else if let Err(e) = tokio::io::AsyncWriteExt::flush(file).await {
+                        warn!("Failed to flush worker log file: {}", e);
                     }
                 }
 
@@ -1273,19 +1264,19 @@ mod tests {
 
                 // Check if log file was created
                 let log_file = log_dir.join(format!("worker-{}.log", worker_id));
-                
+
                 if log_file.exists() {
                     println!("✅ Worker log file created at: {:?}", log_file);
-                    
-                    let content = std::fs::read_to_string(&log_file)
-                        .expect("Failed to read log file");
-                    
+
+                    let content =
+                        std::fs::read_to_string(&log_file).expect("Failed to read log file");
+
                     println!("📄 Log file content:\n{}", content);
-                    
+
                     // Verify the log contains expected output
                     if !content.is_empty() {
                         println!("✅ Log file has content - output logging is working!");
-                        assert!(true, "Log file contains output as expected");
+                        // Log file contains output as expected - test passes
                     } else {
                         println!("⚠️ Log file is empty - this may indicate worker completed too quickly or output capture isn't working");
                         // Don't fail the test since the file was created correctly
@@ -1293,7 +1284,7 @@ mod tests {
                     }
                 } else {
                     println!("❌ Worker log file not found at: {:?}", log_file);
-                    
+
                     // Check directory contents
                     if let Ok(entries) = std::fs::read_dir(&log_dir) {
                         let files: Vec<String> = entries
@@ -1302,7 +1293,7 @@ mod tests {
                             .collect();
                         println!("📁 Directory contents: {:?}", files);
                     }
-                    
+
                     // Don't fail the test immediately - the worker might still be running
                     // Just warn that the log file wasn't found yet
                 }
@@ -1317,7 +1308,6 @@ mod tests {
 
                 // Test cleanup
                 manager.shutdown_worker(&worker_id).await.ok();
-                
             }
             Err(e) => {
                 println!("❌ Failed to spawn test worker: {}", e);
