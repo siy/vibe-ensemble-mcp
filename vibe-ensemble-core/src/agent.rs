@@ -153,6 +153,23 @@ impl Agent {
         capabilities: Vec<String>,
         connection_metadata: ConnectionMetadata,
     ) -> Result<Self> {
+        Self::new_with_id(
+            Uuid::new_v4(),
+            name,
+            agent_type,
+            capabilities,
+            connection_metadata,
+        )
+    }
+
+    /// Create a new agent instance with a specific ID and validation
+    pub fn new_with_id(
+        id: Uuid,
+        name: String,
+        agent_type: AgentType,
+        capabilities: Vec<String>,
+        connection_metadata: ConnectionMetadata,
+    ) -> Result<Self> {
         let mut validation_errors = ValidationErrors::new();
 
         // Collect all validation errors instead of short-circuiting
@@ -167,7 +184,7 @@ impl Agent {
 
         let now = Utc::now();
         Ok(Self {
-            id: Uuid::new_v4(),
+            id,
             name,
             agent_type,
             capabilities,

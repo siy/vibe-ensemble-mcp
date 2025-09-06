@@ -49,11 +49,34 @@ impl AgentService {
             connection_metadata,
             session_id,
             None,
+            None,
         )
         .await
     }
 
-    /// Internal helper method for agent registration with optional project assignment
+    /// Register a new agent with a specific ID
+    pub async fn register_agent_with_id(
+        &self,
+        agent_id: Uuid,
+        name: String,
+        agent_type: AgentType,
+        capabilities: Vec<String>,
+        connection_metadata: ConnectionMetadata,
+        session_id: String,
+    ) -> Result<Agent> {
+        self.register_agent_internal(
+            name,
+            agent_type,
+            capabilities,
+            connection_metadata,
+            session_id,
+            None,
+            Some(agent_id),
+        )
+        .await
+    }
+
+    /// Internal helper method for agent registration with optional project assignment and ID
     async fn register_agent_internal(
         &self,
         name: String,
@@ -62,6 +85,7 @@ impl AgentService {
         connection_metadata: ConnectionMetadata,
         session_id: String,
         project_id: Option<Uuid>,
+        agent_id: Option<Uuid>,
     ) -> Result<Agent> {
         info!(
             "Registering new agent: {} (type: {:?}, project: {:?})",
@@ -82,7 +106,10 @@ impl AgentService {
             metadata.project_id = Some(pid);
         }
 
-        let agent = if project_id.is_some() {
+        let agent = if let Some(id) = agent_id {
+            // Use specific ID constructor for workers
+            Agent::new_with_id(id, name, agent_type, capabilities, metadata)?
+        } else if project_id.is_some() {
             // Use builder pattern for project-assigned agents
             Agent::builder()
                 .name(name)
@@ -1173,6 +1200,7 @@ impl AgentService {
             connection_metadata,
             session_id,
             project_id,
+            None,
         )
         .await
     }
