@@ -237,6 +237,11 @@ impl McpServer {
                 // Client has finished initialization, no action needed
                 Ok(())
             }
+            "notifications/cancelled" => {
+                debug!("Client sent cancellation notification");
+                // Task cancellation notification from Claude Code, no action needed
+                Ok(())
+            }
             _ => {
                 debug!("Ignoring unknown notification: {}", notification.method);
                 Ok(())
@@ -551,9 +556,9 @@ impl McpServer {
                     "properties": {
                         "prompt": {"type": "string", "description": "Task-specific prompt for the worker"},
                         "capabilities": {"type": "array", "items": {"type": "string"}, "description": "List of capabilities/tools the worker should have"},
-                        "workingDirectory": {"type": "string", "description": "Optional working directory for the worker"}
+                        "workingDirectory": {"type": "string", "description": "REQUIRED: Absolute path to working directory for the worker (e.g. /full/path/to/project). Relative paths will be rejected."}
                     },
-                    "required": ["prompt"]
+                    "required": ["prompt", "workingDirectory"]
                 }
             }),
             serde_json::json!({
@@ -3578,9 +3583,22 @@ impl McpServer {
         let requesting_agent_id = Uuid::parse_str(&params.requesting_agent_id)
             .map_err(|_| Error::validation("Invalid requesting_agent_id UUID"))?;
 
-        // Parse project UUID from string
-        let target_project = Uuid::parse_str(&params.target_project)
-            .map_err(|e| Error::validation(&format!("Invalid target_project UUID: {e}")))?;
+        // Convert project name to UUID (deterministic UUID v5 based on project name)
+        // This allows project names to be used while maintaining UUID compatibility
+        let target_project = if let Ok(uuid) = Uuid::parse_str(&params.target_project) {
+            // If it's already a valid UUID, use it
+            uuid
+        } else {
+            // Generate a deterministic UUID v5 based on project name
+            // Using a fixed namespace UUID for all project names
+            let namespace = uuid::Uuid::parse_str("6ba7b810-9dad-11d1-80b4-00c04fd430c8").unwrap(); // DNS namespace
+            uuid::Uuid::new_v5(&namespace, params.target_project.as_bytes())
+        };
+
+        debug!(
+            "Project '{}' mapped to UUID: {}",
+            params.target_project, target_project
+        );
 
         // Parse priority
         let priority = match params.priority.as_str() {
@@ -6423,6 +6441,31 @@ impl McpServer {
                 .get("workingDirectory")
                 .and_then(|v| v.as_str())
                 .map(std::path::PathBuf::from);
+
+            // Validate working directory is absolute
+            if let Some(ref working_dir) = working_directory {
+                if !working_dir.is_absolute() {
+                    return Ok(Some(JsonRpcResponse::error(
+                        request.id,
+                        JsonRpcError {
+                            code: error_codes::INVALID_PARAMS,
+                            message: format!("Working directory must be an absolute path, got: {:?}. Please provide full path like /Users/username/project/subdir", working_dir),
+                            data: None,
+                        },
+                    )));
+                }
+
+                if !working_dir.exists() {
+                    return Ok(Some(JsonRpcResponse::error(
+                        request.id,
+                        JsonRpcError {
+                            code: error_codes::INVALID_PARAMS,
+                            message: format!("Working directory does not exist: {:?}", working_dir),
+                            data: None,
+                        },
+                    )));
+                }
+            }
 
             // Spawn the worker
             match worker_manager
