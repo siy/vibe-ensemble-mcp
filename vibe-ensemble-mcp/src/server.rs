@@ -166,6 +166,16 @@ impl McpServer {
         self
     }
 
+    /// Update worker manager MCP config (propagate actual host/port after bind fallback)
+    pub fn update_worker_mcp_config(&self, host: &str, port: u16) {
+        if let Some(wm) = &self.worker_manager {
+            wm.update_mcp_server_config(vibe_ensemble_core::orchestration::McpServerConfig {
+                host: host.to_string(),
+                port,
+            });
+        }
+    }
+
     /// Handle an incoming JSON-RPC message
     pub async fn handle_message(&self, message: &str) -> Result<Option<String>> {
         debug!("Handling raw message: {}", message);

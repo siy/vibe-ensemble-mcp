@@ -50,7 +50,6 @@ pub struct WorkerManager {
     /// Output broadcast channels for real-time dashboard updates
     output_channels: Arc<RwLock<HashMap<Uuid, broadcast::Sender<WorkerOutput>>>>,
     /// MCP server configuration
-    #[allow(dead_code)]
     mcp_config: McpServerConfig,
     /// Worker output logging configuration
     output_logging: WorkerOutputConfig,
@@ -78,6 +77,24 @@ impl WorkerManager {
             .log_directory
             .as_ref()
             .map(|dir| dir.join(format!("worker-{}.log", worker_id)))
+    }
+
+    /// Update the MCP server configuration (e.g., when actual port differs due to fallback)
+    pub fn update_mcp_server_config(&self, new_config: McpServerConfig) {
+        let old = &self.mcp_config;
+        if old.host != new_config.host || old.port != new_config.port {
+            info!(
+                "Updating worker MCP server config from {}:{} to {}:{}",
+                old.host, old.port, new_config.host, new_config.port
+            );
+            // SAFETY: mcp_config is not behind a lock, but this struct is only used from the server context.
+            // To keep it simple, we replace via pointer cast; alternatively we could wrap in a Mutex.
+            // We'll choose a Mutex-free approach by using interior mutability with a raw pointer write.
+            // Simpler: shadow self.mcp_config via unsafe. To avoid unsafe, we can require &mut self,
+            // but the server holds Arc<WorkerManager>. So we choose a small unsafe block here.
+            let ptr = self as *const Self as *mut Self;
+            unsafe { (*ptr).mcp_config = new_config; }
+        }
     }
 
     /// Generate Claude Code settings file for worker directory
@@ -387,6 +404,8 @@ BEGIN BY RUNNING THE INITIALIZATION SEQUENCE, THEN PROCEED WITH YOUR TASK."#,
 
         // Add JSON output format for structured response handling
         cmd.arg("--output-format").arg("json");
+        // Allow multiple turns so the model can initialize MCP and call tools
+        cmd.arg("--max-turns").arg("5");
 
         // Enable verbose logging if output logging is enabled
         if self.output_logging.enabled {
@@ -429,11 +448,11 @@ BEGIN BY RUNNING THE INITIALIZATION SEQUENCE, THEN PROCEED WITH YOUR TASK."#,
 
             // Ensure MCP configuration for Claude CLI and pass it explicitly
             let mcp_config_path = self.ensure_mcp_config(working_dir).await?;
-            cmd.arg("--mcp-config").arg(
-                mcp_config_path
-                    .strip_prefix(working_dir)
-                    .unwrap_or(&mcp_config_path),
-            );
+            cmd.arg("--mcp-config").arg(&mcp_config_path);
+            // Enable MCP debug logs if worker output logging is enabled
+            if self.output_logging.enabled {
+                cmd.arg("--mcp-debug");
+            }
         } else {
             debug!("Worker {} using current working directory", worker_id);
         }

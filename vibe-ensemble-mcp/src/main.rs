@@ -554,6 +554,9 @@ async fn run_websocket_transport(
         );
     }
 
+    // Propagate the actual bind port to the worker manager (so per-worker .mcp.json points to the correct port)
+    server.update_worker_mcp_config(&mcp_host, actual_port);
+
     let mut active_connections = 0u64;
     let server_start = std::time::Instant::now();
     info!("WebSocket MCP server running - Press Ctrl+C to stop");
