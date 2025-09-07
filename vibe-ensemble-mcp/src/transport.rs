@@ -852,6 +852,7 @@ impl MultiTransportServer {
     ) -> Result<(
         u16,
         mpsc::UnboundedReceiver<std::result::Result<Box<dyn Transport>, Error>>,
+        tokio::sync::oneshot::Sender<()>,
     )> {
         use tokio::net::TcpListener;
         use tower::ServiceBuilder;
@@ -931,6 +932,9 @@ impl MultiTransportServer {
 
         let host_port = format!("{}:{}", self.host, self.port);
 
+        // Shutdown signal for graceful server stop
+        let (shutdown_tx, shutdown_rx) = tokio::sync::oneshot::channel::<()>();
+
         let app = Router::new()
             .route(
                 "/ws",
@@ -971,9 +975,14 @@ impl MultiTransportServer {
                     .into_inner(),
             );
 
-        // Spawn the HTTP server
+        // Spawn the HTTP server with graceful shutdown
         tokio::spawn(async move {
-            if let Err(e) = axum::serve(listener, app).await {
+            if let Err(e) = axum::serve(listener, app)
+                .with_graceful_shutdown(async move {
+                    let _ = shutdown_rx.await;
+                })
+                .await
+            {
                 error!("HTTP server error: {}", e);
                 if connection_tx
                     .send(Err(Error::Transport(format!("HTTP server error: {}", e))))
@@ -985,7 +994,7 @@ impl MultiTransportServer {
             info!("HTTP server loop ended");
         });
 
-        Ok((bound_port, connection_rx))
+        Ok((bound_port, connection_rx, shutdown_tx))
     }
 }
 

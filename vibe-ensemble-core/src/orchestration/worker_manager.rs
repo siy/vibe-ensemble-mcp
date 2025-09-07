@@ -69,6 +69,17 @@ impl WorkerManager {
         }
     }
 
+    /// Return the expected log file path for a worker if output logging is enabled.
+    pub fn expected_log_path(&self, worker_id: Uuid) -> Option<PathBuf> {
+        if !self.output_logging.enabled {
+            return None;
+        }
+        self.output_logging
+            .log_directory
+            .as_ref()
+            .map(|dir| dir.join(format!("worker-{}.log", worker_id)))
+    }
+
     /// Generate Claude Code settings file for worker directory
     ///
     /// This ensures workers have access to all vibe-ensemble MCP tools while preserving
@@ -910,57 +921,58 @@ BEGIN BY RUNNING THE INITIALIZATION SEQUENCE, THEN PROCEED WITH YOUR TASK."#,
         let output_channels = self.output_channels.clone();
 
         tokio::spawn(async move {
-            // Wait for the process to exit
+            // Wait for the process to exit without holding locks across await points
             let mut child_exit = None;
 
-            // Extract the child handle for waiting
-            if let Some(worker) = workers.write().await.get_mut(&worker_id) {
-                // We can't move the child out while it's in the HashMap, so we'll use try_wait instead
-                loop {
-                    match worker.child.try_wait() {
-                        Ok(Some(status)) => {
-                            child_exit = Some(status);
-                            break;
-                        }
-                        Ok(None) => {
-                            // Process is still running, wait a bit and check again
-                            tokio::time::sleep(Duration::from_millis(100)).await;
-                        }
-                        Err(e) => {
-                            error!("Error checking worker {} exit status: {}", worker_id, e);
-                            break;
-                        }
+            loop {
+                // Scoped write lock to check child status
+                let try_wait_result = {
+                    let mut map = workers.write().await;
+                    if let Some(worker) = map.get_mut(&worker_id) {
+                        worker.child.try_wait()
+                    } else {
+                        debug!("Worker {} removed; stopping exit watcher", worker_id);
+                        break;
                     }
+                };
 
-                    // Check if the worker still exists (might have been shut down)
-                    if workers.read().await.get(&worker_id).is_none() {
-                        debug!("Worker {} was removed during exit watching", worker_id);
-                        return;
+                match try_wait_result {
+                    Ok(Some(status)) => {
+                        child_exit = Some(status);
+                        break;
+                    }
+                    Ok(None) => {}
+                    Err(e) => {
+                        error!("Error checking worker {} exit status: {}", worker_id, e);
+                        break;
                     }
                 }
+
+                tokio::time::sleep(Duration::from_millis(100)).await;
             }
 
             if let Some(exit_status) = child_exit {
                 info!("Worker {} exited with status: {:?}", worker_id, exit_status);
 
-                // Update worker status to stopped
-                if let Some(worker) = workers.write().await.get_mut(&worker_id) {
-                    worker.status = WorkerStatus::Stopped;
-
-                    // Send final output message
-                    if let Some(broadcast_sender) = output_channels.read().await.get(&worker_id) {
-                        let _ = broadcast_sender.send(WorkerOutput {
-                            worker_id,
-                            output_type: OutputType::Info,
-                            content: format!("Process exited with status: {:?}", exit_status),
-                            timestamp: Utc::now(),
-                        });
+                // Update worker status to stopped and emit final message
+                {
+                    let mut map = workers.write().await;
+                    if let Some(worker) = map.get_mut(&worker_id) {
+                        worker.status = WorkerStatus::Stopped;
                     }
                 }
+                if let Some(broadcast_sender) = output_channels.read().await.get(&worker_id) {
+                    let _ = broadcast_sender.send(WorkerOutput {
+                        worker_id,
+                        output_type: OutputType::Info,
+                        content: format!("Process exited with status: {:?}", exit_status),
+                        timestamp: Utc::now(),
+                    });
+                }
 
-                // Clean up connection mappings if worker was connected
-                if let Some(connection_id) = worker_connections.read().await.get(&worker_id) {
-                    connections.write().await.remove(connection_id);
+                // Clean connection mappings (best-effort)
+                if let Some(conn_id) = worker_connections.read().await.get(&worker_id) {
+                    connections.write().await.remove(conn_id);
                     worker_connections.write().await.remove(&worker_id);
                     info!("Cleaned up connection mappings for worker {}", worker_id);
                 }

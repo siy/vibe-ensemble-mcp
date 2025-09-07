@@ -536,6 +536,20 @@ impl McpServer {
                 }
             }),
             serde_json::json!({
+                "name": "vibe_permission_decide",
+                "description": "Approve or deny a pending permission request",
+                "inputSchema": {
+                    "type": "object",
+                    "properties": {
+                        "requestId": {"type": "string", "description": "Message ID of the permission request"},
+                        "decision": {"type": "string", "enum": ["APPROVE", "DENY"], "description": "Decision outcome"},
+                        "approverAgentId": {"type": "string", "description": "Agent ID making the decision"},
+                        "comment": {"type": "string", "description": "Optional comment or justification"}
+                    },
+                    "required": ["requestId", "decision", "approverAgentId"]
+                }
+            }),
+            serde_json::json!({
                 "name": "vibe_worker_coordinate",
                 "description": "Coordinate overlapping work areas between multiple workers",
                 "inputSchema": {
@@ -2629,6 +2643,81 @@ impl McpServer {
             issue_id, assignee_agent_id, assigned_by_agent_id
         );
 
+        // Ensure the assignee agent exists (clients may attempt to assign using a workerId
+        // before the agent registration has completed). We'll wait briefly, and if still
+        // not present but a worker with that ID exists, auto-register a minimal agent
+        // to satisfy the assignment.
+        if let Some(agent_service) = &self.agent_service {
+            // Fast path: agent exists
+            let mut present = agent_service
+                .get_agent(assignee_agent_id)
+                .await
+                .map(|opt| opt.is_some())
+                .unwrap_or(false);
+
+            // Brief wait-and-retry if not present yet (handles registration race)
+            if !present {
+                let mut attempts = 0;
+                while attempts < 15 { // ~1.5s total
+                    tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+                    if let Ok(Some(_)) = agent_service.get_agent(assignee_agent_id).await {
+                        present = true;
+                        break;
+                    }
+                    attempts += 1;
+                }
+            }
+
+            // Auto-register if still not present but a worker with this ID exists
+            if !present {
+                if let Some(worker_manager) = &self.worker_manager {
+                    let worker_exists = worker_manager
+                        .get_worker_status(&assignee_agent_id)
+                        .await
+                        .is_some();
+                    if worker_exists {
+                        warn!(
+                            "Assignee agent {} not registered yet; auto-registering minimal Worker agent to satisfy assignment",
+                            assignee_agent_id
+                        );
+                        // Minimal connection metadata
+                        let metadata = vibe_ensemble_core::agent::ConnectionMetadata::builder()
+                            .endpoint("system://auto-registered")
+                            .protocol_version(crate::protocol::MCP_VERSION)
+                            .build()
+                            .unwrap_or_else(|_| {
+                                // Fallback if builder validation changes
+                                vibe_ensemble_core::agent::ConnectionMetadata {
+                                    endpoint: "system://auto-registered".to_string(),
+                                    protocol_version: crate::protocol::MCP_VERSION.to_string(),
+                                    session_id: None,
+                                    version: None,
+                                    transport: None,
+                                    capabilities: None,
+                                    session_type: None,
+                                    project_id: None,
+                                    coordination_scope: None,
+                                    specialization: None,
+                                    coordinator_managed: None,
+                                    workspace_isolation: None,
+                                }
+                            });
+
+                        let _ = agent_service
+                            .register_agent_with_id(
+                                assignee_agent_id,
+                                format!("auto-worker-{}", &assignee_agent_id.to_string()[..8]),
+                                vibe_ensemble_core::agent::AgentType::Worker,
+                                vec!["auto-registered".to_string()],
+                                metadata,
+                                "auto-session".to_string(),
+                            )
+                            .await;
+                    }
+                }
+            }
+        }
+
         // Assign the issue
         match issue_service
             .assign_issue(issue_id, assignee_agent_id)
@@ -3132,9 +3221,58 @@ impl McpServer {
                 message: format!("Invalid requester agent ID: {}", e),
             })?;
 
-        let target_id = Uuid::parse_str(&params.target_agent_id).map_err(|e| Error::Protocol {
-            message: format!("Invalid target agent ID: {}", e),
-        })?;
+        // Resolve target agent: allow special handling for permission requests
+        let mut target_id = match Uuid::parse_str(&params.target_agent_id) {
+            Ok(id) => id,
+            Err(_) => {
+                // If this is a permission request, auto-route to a coordinator if possible
+                if params.request_type.eq_ignore_ascii_case("permission")
+                    || params.request_type.eq_ignore_ascii_case("permissions")
+                    || params.request_type.eq_ignore_ascii_case("permission_request")
+                {
+                    if let Some(agent_service) = &self.agent_service {
+                        // Pick the most recent coordinator
+                        let coordinators = agent_service
+                            .list_agents_by_type(&vibe_ensemble_core::agent::AgentType::Coordinator)
+                            .await
+                            .unwrap_or_default();
+                        if let Some(coord) = coordinators.first() {
+                            info!(
+                                "Auto-routing permission request to coordinator {} ({})",
+                                coord.name, coord.id
+                            );
+                            coord.id
+                        } else {
+                            return Ok(Some(JsonRpcResponse::error(
+                                request.id,
+                                JsonRpcError {
+                                    code: error_codes::AGENT_NOT_FOUND,
+                                    message:
+                                        "No coordinator available to handle permission request"
+                                            .to_string(),
+                                    data: None,
+                                },
+                            )));
+                        }
+                    } else {
+                        return Ok(Some(JsonRpcResponse::error(
+                            request.id,
+                            JsonRpcError {
+                                code: error_codes::AGENT_NOT_FOUND,
+                                message:
+                                    "Agent service not available; cannot auto-route permission request"
+                                        .to_string(),
+                                data: None,
+                            },
+                        )));
+                    }
+                } else {
+                    return Err(Error::Protocol {
+                        message: "Invalid target agent ID".to_string(),
+                    });
+                }
+            }
+        };
 
         // Validate agents exist if agent service is available
         if let Some(agent_service) = &self.agent_service {
@@ -3150,18 +3288,48 @@ impl McpServer {
             }
 
             if agent_service.get_agent(target_id).await?.is_none() {
-                return Ok(Some(JsonRpcResponse::error(
-                    request.id,
-                    JsonRpcError {
-                        code: error_codes::AGENT_NOT_FOUND,
-                        message: format!("Target agent not found: {}", target_id),
-                        data: None,
-                    },
-                )));
+                // If this is a permission request, try falling back to a coordinator
+                if params.request_type.eq_ignore_ascii_case("permission")
+                    || params.request_type.eq_ignore_ascii_case("permissions")
+                    || params.request_type.eq_ignore_ascii_case("permission_request")
+                {
+                    let coordinators = agent_service
+                        .list_agents_by_type(&vibe_ensemble_core::agent::AgentType::Coordinator)
+                        .await
+                        .unwrap_or_default();
+                    if let Some(coord) = coordinators.first() {
+                        info!(
+                            "Target not found; routing permission request to coordinator {} ({})",
+                            coord.name, coord.id
+                        );
+                        target_id = coord.id;
+                    } else {
+                        return Ok(Some(JsonRpcResponse::error(
+                            request.id,
+                            JsonRpcError {
+                                code: error_codes::AGENT_NOT_FOUND,
+                                message: format!(
+                                    "Target agent not found and no coordinator available: {}",
+                                    target_id
+                                ),
+                                data: None,
+                            },
+                        )));
+                    }
+                } else {
+                    return Ok(Some(JsonRpcResponse::error(
+                        request.id,
+                        JsonRpcError {
+                            code: error_codes::AGENT_NOT_FOUND,
+                            message: format!("Target agent not found: {}", target_id),
+                            data: None,
+                        },
+                    )));
+                }
             }
         }
 
-        // Parse priority
+        // Parse priority (will be overridden to Urgent for permission requests)
         let priority = match params.priority.as_deref() {
             Some("Low") => MessagePriority::Low,
             Some("Normal") => MessagePriority::Normal,
@@ -3179,10 +3347,23 @@ impl McpServer {
                 )));
             }
         };
-
+        let is_permission = params.request_type.eq_ignore_ascii_case("permission")
+            || params.request_type.eq_ignore_ascii_case("permissions")
+            || params.request_type.eq_ignore_ascii_case("permission_request");
+        let effective_priority = if is_permission {
+            MessagePriority::Urgent
+        } else {
+            priority
+        };
+        let header = if is_permission {
+            "PERMISSION REQUEST"
+        } else {
+            "ACTION REQUEST"
+        };
         // Create request message content
         let request_content = format!(
-            "ACTION REQUEST: {}\n\nDetails: {}\nRequested by: {}{}",
+            "{}: {}\n\nDetails: {}\nRequested by: {}{}",
+            header,
             params.request_type,
             serde_json::to_string_pretty(&params.request_details)
                 .unwrap_or_else(|_| "Unable to serialize request details".to_string()),
@@ -3205,7 +3386,7 @@ impl McpServer {
                 target_id,
                 request_content,
                 MessageType::Direct,
-                priority,
+                effective_priority,
             )
             .await
         {
@@ -3238,6 +3419,97 @@ impl McpServer {
                 )))
             }
         }
+    }
+
+    /// Handle permission decision (approve/deny) and notify requester
+    async fn handle_permission_decide(
+        &self,
+        request: JsonRpcRequest,
+    ) -> Result<Option<JsonRpcResponse>> {
+        let message_service = self
+            .message_service
+            .as_ref()
+            .ok_or_else(|| Error::Configuration {
+                message: "Message service not configured".to_string(),
+            })?;
+
+        let params: PermissionDecideParams = if let Some(params) = request.params.clone() {
+            serde_json::from_value(params).map_err(|e| Error::InvalidParams {
+                message: format!("Invalid permission decision parameters: {}", e),
+            })?
+        } else {
+            return Ok(Some(JsonRpcResponse::error(
+                request.id,
+                JsonRpcError {
+                    code: error_codes::INVALID_PARAMS,
+                    message: "Missing permission decision parameters".to_string(),
+                    data: None,
+                },
+            )));
+        };
+
+        let request_id = Uuid::parse_str(&params.request_id).map_err(|e| Error::InvalidParams {
+            message: format!("Invalid requestId: {}", e),
+        })?;
+        let approver_id = Uuid::parse_str(&params.approver_agent_id).map_err(|e| Error::InvalidParams {
+            message: format!("Invalid approverAgentId: {}", e),
+        })?;
+
+        // Fetch the original message
+        let original = message_service
+            .get_message(request_id)
+            .await?
+            .ok_or_else(|| Error::Protocol {
+                message: format!("Original request message not found: {}", request_id),
+            })?;
+
+        let requester_id = original.sender_id;
+        let decision_upper = params.decision.to_uppercase();
+        if decision_upper != "APPROVE" && decision_upper != "DENY" {
+            return Ok(Some(JsonRpcResponse::error(
+                request.id,
+                JsonRpcError {
+                    code: error_codes::INVALID_PARAMS,
+                    message: "decision must be APPROVE or DENY".to_string(),
+                    data: None,
+                },
+            )));
+        }
+
+        // Notify requester
+        let content = format!(
+            "PERMISSION DECISION: {}\nRequest ID: {}\nApprover: {}{}",
+            decision_upper,
+            request_id,
+            approver_id,
+            params
+                .comment
+                .as_ref()
+                .map(|c| format!("\nComment: {}", c))
+                .unwrap_or_default()
+        );
+        let _ = message_service
+            .send_message(
+                approver_id,
+                requester_id,
+                content,
+                MessageType::Direct,
+                MessagePriority::High,
+            )
+            .await?;
+
+        // Mark original as delivered (resolved)
+        let _ = message_service.mark_delivered(request_id).await?;
+
+        let result = PermissionDecideResult {
+            request_id,
+            status: decision_upper,
+            message: "Permission decision recorded and requester notified".to_string(),
+        };
+        Ok(Some(JsonRpcResponse::success(
+            request.id,
+            serde_json::to_value(result)?,
+        )))
     }
 
     /// Handle worker coordination - coordinate overlapping work areas between multiple workers
@@ -5991,6 +6263,15 @@ impl McpServer {
                 ))
                 .await
             }
+            "permission_decide" => {
+                // Map to dedicated permission decision handler
+                self.handle_permission_decide(JsonRpcRequest::new_with_id(
+                    request.id,
+                    "vibe/permission/decide",
+                    Some(params.params),
+                ))
+                .await
+            }
             "worker_coordinate" => {
                 let coord_params =
                     serde_json::from_value(params.params).map_err(|e| Error::InvalidParams {
@@ -6521,16 +6802,27 @@ impl McpServer {
 
             // Spawn the worker
             match worker_manager
-                .spawn_worker(prompt, capabilities, working_directory)
+                .spawn_worker(prompt, capabilities, working_directory.clone())
                 .await
             {
                 Ok(worker_id) => {
                     info!("Successfully spawned worker {}", worker_id);
+                    // Provide expected log file path (if configured) to aid debugging
+                    let log_path = worker_manager
+                        .expected_log_path(worker_id)
+                        .map(|p| p.display().to_string());
+                    if let Some(ref lp) = log_path {
+                        info!("Planned worker log file path for {}: {}", worker_id, lp);
+                    } else {
+                        info!("Worker output logging disabled or no log directory configured");
+                    }
                     Ok(Some(JsonRpcResponse::success(
                         request.id,
                         serde_json::json!({
                             "workerId": worker_id,
-                            "status": "spawned"
+                            "status": "spawned",
+                            "logPath": log_path,
+                            "workingDirectory": working_directory.map(|p| p.display().to_string())
                         }),
                     )))
                 }

@@ -38,3 +38,4 @@ Thumbs.db
 CLAUDE.md
 code-review-*.md
 
+/vibe-ensemble-core/.vibe-worker-config.json

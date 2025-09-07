@@ -534,7 +534,7 @@ async fn run_websocket_transport(
     // Port conflict checking is now handled by the HTTP server with fallback
 
     // Start HTTP server with WebSocket upgrade and handle connections
-    let (actual_port, mut connection_rx) = ws_server.start(server.clone()).await.map_err(|e| {
+    let (actual_port, mut connection_rx, shutdown_tx) = ws_server.start(server.clone()).await.map_err(|e| {
         anyhow::anyhow!("Failed to start HTTP server with WebSocket upgrade: {}", e)
     })?;
 
@@ -644,6 +644,8 @@ async fn run_websocket_transport(
             }
             _ = tokio::signal::ctrl_c() => {
                 info!("Received Ctrl+C signal - initiating graceful shutdown");
+                // Signal the HTTP server to stop accepting connections
+                let _ = shutdown_tx.send(());
                 break;
             }
         }
