@@ -39,3 +39,4 @@ CLAUDE.md
 code-review-*.md
 
 /vibe-ensemble-core/.vibe-worker-config.json
+/vibe-ensemble-core/.mcp.json

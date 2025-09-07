@@ -177,6 +177,50 @@ impl WorkerManager {
         Ok(())
     }
 
+    /// Ensure a local .mcp.json exists in the working directory so the Claude CLI
+    /// connects to the coordinator over SSE transport.
+    async fn ensure_mcp_config(&self, working_dir: &Path) -> Result<PathBuf> {
+        let config_path = working_dir.join(".mcp.json");
+
+        // Prepare minimal SSE transport config for CLI
+        let url = format!(
+            "http://{}:{}/events",
+            self.mcp_config.host, self.mcp_config.port
+        );
+        let config = serde_json::json!({
+            "mcpServers": {
+                "vibe-ensemble": {
+                    "type": "sse",
+                    "url": url,
+                    "headers": {
+                        "Accept": "text/event-stream",
+                        "Cache-Control": "no-cache"
+                    }
+                }
+            }
+        });
+
+        let content = serde_json::to_string_pretty(&config).map_err(|e| {
+            Error::Worker(format!("Failed to serialize MCP config: {}", e))
+        })?;
+
+        tokio::fs::write(&config_path, content).await.map_err(|e| {
+            Error::Worker(format!(
+                "Failed to write MCP config {}: {}",
+                config_path.display(),
+                e
+            ))
+        })?;
+
+        info!(
+            "Created MCP config at {} pointing to {}:{}",
+            config_path.display(),
+            self.mcp_config.host,
+            self.mcp_config.port
+        );
+        Ok(config_path)
+    }
+
     /// Create worker initialization config for system awareness
     ///
     /// This creates a .vibe-worker-config.json file that provides the worker with
@@ -382,6 +426,14 @@ BEGIN BY RUNNING THE INITIALIZATION SEQUENCE, THEN PROCEED WITH YOUR TASK."#,
             // Create worker initialization config for system awareness
             self.create_worker_config(worker_id, working_dir, &capabilities)
                 .await?;
+
+            // Ensure MCP configuration for Claude CLI and pass it explicitly
+            let mcp_config_path = self.ensure_mcp_config(working_dir).await?;
+            cmd.arg("--mcp-config").arg(
+                mcp_config_path
+                    .strip_prefix(working_dir)
+                    .unwrap_or(&mcp_config_path),
+            );
         } else {
             debug!("Worker {} using current working directory", worker_id);
         }
