@@ -60,7 +60,7 @@ mod tests {
         // Create workspace manager for tests
         let temp_dir = tempfile::tempdir().expect("Failed to create temp dir");
         let workspace_manager = Arc::new(WorkspaceManager::new(temp_dir.path().to_path_buf()));
-        
+
         let coordination_services = CoordinationServices::new(
             agent_service.clone(),
             issue_service,

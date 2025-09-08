@@ -789,7 +789,7 @@ type SseSessionManager = Arc<RwLock<HashMap<String, SseSession>>>;
 /// - Server-Sent Events at /events endpoint for streaming transport
 /// - HTTP POST endpoint at /messages/<session_id> for SSE client requests
 /// - Health check endpoint at /health for service discovery
-/// - Implements auto-discovery port fallback (22360, 22361, 22362, 9090, 8081)
+/// - Implements auto-discovery port fallback (8082, 9090)
 /// - Creates appropriate transports for each connected agent
 /// - Manages connection lifecycle and cleanup
 /// - Integrates with the existing MCP server architecture
@@ -806,10 +806,10 @@ pub struct MultiTransportServer {
 
 impl MultiTransportServer {
     /// Port fallback sequence for auto-discovery (in priority order)
-    pub const PORT_FALLBACK_SEQUENCE: &'static [u16] = &[22360, 22361, 22362, 9090, 8081];
+    pub const PORT_FALLBACK_SEQUENCE: &'static [u16] = &[8082, 9090];
 
-    /// Default WebSocket server port (first in fallback sequence)
-    pub const DEFAULT_PORT: u16 = 22360;
+    /// Default HTTP server port (first in fallback sequence)
+    pub const DEFAULT_PORT: u16 = 8082;
 
     /// Create a new WebSocket server with default settings
     pub fn new(host: String, port: u16) -> Self {
@@ -843,7 +843,7 @@ impl MultiTransportServer {
 
     /// Start the HTTP server with WebSocket upgrade and return a channel receiver for new connections
     ///
-    /// This implements port fallback (22360, 22361, 22362, 9090, 8081) and creates an HTTP server
+    /// This implements port fallback (8082, 9090) and creates an HTTP server
     /// with a /ws endpoint that handles WebSocket upgrade requests. Each connection yields a
     /// ready-to-use WebSocket transport that can be used with the MCP server.
     pub async fn start(
@@ -1643,19 +1643,16 @@ mod tests {
 
     #[tokio::test]
     async fn test_multi_transport_server_creation() {
-        let server = MultiTransportServer::new("127.0.0.1".to_string(), 22360);
+        let server = MultiTransportServer::new("127.0.0.1".to_string(), 8082);
 
         assert_eq!(server.host, "127.0.0.1");
-        assert_eq!(server.port, 22360);
-        assert_eq!(server.bind_address(), "127.0.0.1:22360");
+        assert_eq!(server.port, 8082);
+        assert_eq!(server.bind_address(), "127.0.0.1:8082");
     }
 
     #[tokio::test]
     async fn test_transport_server_port_constants() {
-        assert_eq!(MultiTransportServer::DEFAULT_PORT, 22360);
-        assert_eq!(
-            MultiTransportServer::PORT_FALLBACK_SEQUENCE,
-            &[22360, 22361, 22362, 9090, 8081]
-        );
+        assert_eq!(MultiTransportServer::DEFAULT_PORT, 8082);
+        assert_eq!(MultiTransportServer::PORT_FALLBACK_SEQUENCE, &[8082, 9090]);
     }
 }

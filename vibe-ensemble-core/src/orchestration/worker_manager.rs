@@ -93,7 +93,9 @@ impl WorkerManager {
             // Simpler: shadow self.mcp_config via unsafe. To avoid unsafe, we can require &mut self,
             // but the server holds Arc<WorkerManager>. So we choose a small unsafe block here.
             let ptr = self as *const Self as *mut Self;
-            unsafe { (*ptr).mcp_config = new_config; }
+            unsafe {
+                (*ptr).mcp_config = new_config;
+            }
         }
     }
 
@@ -126,48 +128,48 @@ impl WorkerManager {
             return Ok(());
         }
 
-        // Generate comprehensive vibe-ensemble tool permissions
+        // Generate comprehensive vibe-ensemble tool permissions for HTTP server
         let vibe_tools = vec![
-            "mcp__vibe-ensemble__vibe_agent_register",
-            "mcp__vibe-ensemble__vibe_agent_status",
-            "mcp__vibe-ensemble__vibe_agent_list",
-            "mcp__vibe-ensemble__vibe_agent_deregister",
-            "mcp__vibe-ensemble__vibe_issue_create",
-            "mcp__vibe-ensemble__vibe_issue_list",
-            "mcp__vibe-ensemble__vibe_issue_assign",
-            "mcp__vibe-ensemble__vibe_issue_update",
-            "mcp__vibe-ensemble__vibe_issue_close",
-            "mcp__vibe-ensemble__vibe_worker_message",
-            "mcp__vibe-ensemble__vibe_worker_request",
-            "mcp__vibe-ensemble__vibe_worker_coordinate",
-            "mcp__vibe-ensemble__vibe_worker_spawn",
-            "mcp__vibe-ensemble__vibe_worker_list",
-            "mcp__vibe-ensemble__vibe_worker_status",
-            "mcp__vibe-ensemble__vibe_worker_output",
-            "mcp__vibe-ensemble__vibe_worker_shutdown",
-            "mcp__vibe-ensemble__vibe_worker_register_connection",
-            "mcp__vibe-ensemble__vibe_project_lock",
-            "mcp__vibe-ensemble__vibe_dependency_declare",
-            "mcp__vibe-ensemble__vibe_coordinator_request_worker",
-            "mcp__vibe-ensemble__vibe_work_coordinate",
-            "mcp__vibe-ensemble__vibe_conflict_resolve",
-            "mcp__vibe-ensemble__vibe_schedule_coordinate",
-            "mcp__vibe-ensemble__vibe_conflict_predict",
-            "mcp__vibe-ensemble__vibe_resource_reserve",
-            "mcp__vibe-ensemble__vibe_merge_coordinate",
-            "mcp__vibe-ensemble__vibe_knowledge_query",
-            "mcp__vibe-ensemble__vibe_pattern_suggest",
-            "mcp__vibe-ensemble__vibe_guideline_enforce",
-            "mcp__vibe-ensemble__vibe_learning_capture",
-            "mcp__vibe-ensemble__vibe_workspace_create",
-            "mcp__vibe-ensemble__vibe_workspace_list",
-            "mcp__vibe-ensemble__vibe_workspace_assign",
-            "mcp__vibe-ensemble__vibe_workspace_status",
-            "mcp__vibe-ensemble__vibe_workspace_cleanup",
+            "mcp__vibe-ensemble-http__vibe_agent_register",
+            "mcp__vibe-ensemble-http__vibe_agent_status",
+            "mcp__vibe-ensemble-http__vibe_agent_list",
+            "mcp__vibe-ensemble-http__vibe_agent_deregister",
+            "mcp__vibe-ensemble-http__vibe_issue_create",
+            "mcp__vibe-ensemble-http__vibe_issue_list",
+            "mcp__vibe-ensemble-http__vibe_issue_assign",
+            "mcp__vibe-ensemble-http__vibe_issue_update",
+            "mcp__vibe-ensemble-http__vibe_issue_close",
+            "mcp__vibe-ensemble-http__vibe_worker_message",
+            "mcp__vibe-ensemble-http__vibe_worker_request",
+            "mcp__vibe-ensemble-http__vibe_worker_coordinate",
+            "mcp__vibe-ensemble-http__vibe_worker_spawn",
+            "mcp__vibe-ensemble-http__vibe_worker_list",
+            "mcp__vibe-ensemble-http__vibe_worker_status",
+            "mcp__vibe-ensemble-http__vibe_worker_output",
+            "mcp__vibe-ensemble-http__vibe_worker_shutdown",
+            "mcp__vibe-ensemble-http__vibe_worker_register_connection",
+            "mcp__vibe-ensemble-http__vibe_project_lock",
+            "mcp__vibe-ensemble-http__vibe_dependency_declare",
+            "mcp__vibe-ensemble-http__vibe_coordinator_request_worker",
+            "mcp__vibe-ensemble-http__vibe_work_coordinate",
+            "mcp__vibe-ensemble-http__vibe_conflict_resolve",
+            "mcp__vibe-ensemble-http__vibe_schedule_coordinate",
+            "mcp__vibe-ensemble-http__vibe_conflict_predict",
+            "mcp__vibe-ensemble-http__vibe_resource_reserve",
+            "mcp__vibe-ensemble-http__vibe_merge_coordinate",
+            "mcp__vibe-ensemble-http__vibe_knowledge_query",
+            "mcp__vibe-ensemble-http__vibe_pattern_suggest",
+            "mcp__vibe-ensemble-http__vibe_guideline_enforce",
+            "mcp__vibe-ensemble-http__vibe_learning_capture",
+            "mcp__vibe-ensemble-http__vibe_workspace_create",
+            "mcp__vibe-ensemble-http__vibe_workspace_list",
+            "mcp__vibe-ensemble-http__vibe_workspace_assign",
+            "mcp__vibe-ensemble-http__vibe_workspace_status",
+            "mcp__vibe-ensemble-http__vibe_workspace_cleanup",
         ];
 
         let settings = json!({
-            "enabledMcpjsonServers": ["vibe-ensemble"],
+            "enabledMcpjsonServers": ["vibe-ensemble-http", "vibe-ensemble-sse"],
             "permissions": {
                 "allow": vibe_tools
             }
@@ -188,27 +190,39 @@ impl WorkerManager {
             })?;
 
         info!(
-            "Created Claude settings file at {} with vibe-ensemble tool permissions",
+            "Created Claude settings file at {} with dual transport MCP servers (HTTP + SSE) and vibe-ensemble tool permissions",
             settings_file.display()
         );
         Ok(())
     }
 
     /// Ensure a local .mcp.json exists in the working directory so the Claude CLI
-    /// connects to the coordinator over SSE transport.
+    /// connects to the coordinator over HTTP transport.
     async fn ensure_mcp_config(&self, working_dir: &Path) -> Result<PathBuf> {
         let config_path = working_dir.join(".mcp.json");
 
-        // Prepare minimal SSE transport config for CLI
-        let url = format!(
+        // Create dual transport configuration for comprehensive MCP support
+        let http_url = format!(
+            "http://{}:{}/mcp",
+            self.mcp_config.host, self.mcp_config.port
+        );
+        let sse_url = format!(
             "http://{}:{}/events",
             self.mcp_config.host, self.mcp_config.port
         );
+
         let config = serde_json::json!({
             "mcpServers": {
-                "vibe-ensemble": {
+                "vibe-ensemble-http": {
+                    "type": "http",
+                    "url": http_url,
+                    "headers": {
+                        "Content-Type": "application/json"
+                    }
+                },
+                "vibe-ensemble-sse": {
                     "type": "sse",
-                    "url": url,
+                    "url": sse_url,
                     "headers": {
                         "Accept": "text/event-stream",
                         "Cache-Control": "no-cache"
@@ -217,9 +231,8 @@ impl WorkerManager {
             }
         });
 
-        let content = serde_json::to_string_pretty(&config).map_err(|e| {
-            Error::Worker(format!("Failed to serialize MCP config: {}", e))
-        })?;
+        let content = serde_json::to_string_pretty(&config)
+            .map_err(|e| Error::Worker(format!("Failed to serialize MCP config: {}", e)))?;
 
         tokio::fs::write(&config_path, content).await.map_err(|e| {
             Error::Worker(format!(
@@ -230,7 +243,7 @@ impl WorkerManager {
         })?;
 
         info!(
-            "Created MCP config at {} pointing to {}:{}",
+            "Created dual transport MCP config at {} (HTTP + SSE) pointing to {}:{}",
             config_path.display(),
             self.mcp_config.host,
             self.mcp_config.port
@@ -259,15 +272,17 @@ impl WorkerManager {
             "working_directory": working_dir.display().to_string(),
             "initialization_required": true,
             "mcp_server_info": {
-                "server_name": "vibe-ensemble",
-                "protocol_version": "2024-11-05"
+                "http_server": "vibe-ensemble-http",
+                "sse_server": "vibe-ensemble-sse",
+                "protocol_version": "2024-11-05",
+                "transport_mode": "dual"
             },
             "coordination_tools": {
-                "register": "mcp__vibe-ensemble__vibe_agent_register",
-                "coordinate_work": "mcp__vibe-ensemble__vibe_work_coordinate",
-                "request_permissions": "mcp__vibe-ensemble__vibe_coordinator_request_worker",
-                "message_agents": "mcp__vibe-ensemble__vibe_worker_message",
-                "declare_dependencies": "mcp__vibe-ensemble__vibe_dependency_declare"
+                "register": "mcp__vibe-ensemble-http__vibe_agent_register",
+                "coordinate_work": "mcp__vibe-ensemble-http__vibe_work_coordinate",
+                "request_permissions": "mcp__vibe-ensemble-http__vibe_coordinator_request_worker",
+                "message_agents": "mcp__vibe-ensemble-http__vibe_worker_message",
+                "declare_dependencies": "mcp__vibe-ensemble-http__vibe_dependency_declare"
             },
             "created_at": chrono::Utc::now().to_rfc3339()
         });
@@ -317,40 +332,49 @@ You are a Claude Code worker (ID: {worker_id}) in a vibe-ensemble multi-agent co
 
 CRITICAL SYSTEM CONTEXT:
 - You are part of a coordinated team of agents working together
-- Your coordinator is available via MCP tools starting with `mcp__vibe-ensemble__`
+- Your coordinator is available via MCP tools starting with `mcp__vibe-ensemble-http__`
+- Your system has DUAL TRANSPORT: HTTP for tool calls + SSE for incoming notifications
+- WATCH for incoming coordinator messages via the `vibe-ensemble-sse` server connection
 - Before making significant changes, coordinate with the system using available tools
 - A .vibe-worker-config.json file in your working directory contains your configuration
 
 MANDATORY INITIALIZATION SEQUENCE:
-1. 🔧 Register with coordinator using: `mcp__vibe-ensemble__vibe_agent_register`
+1. 🔧 Register with coordinator using: `mcp__vibe-ensemble-http__vibe_agent_register`
    - Provide your worker_id: {worker_id}
    - Register as type: "worker"
    - Include your capabilities: {capabilities_str}
 
-2. 📍 Declare your working context using: `mcp__vibe-ensemble__vibe_work_coordinate`
+2. 📍 Declare your working context using: `mcp__vibe-ensemble-http__vibe_work_coordinate`
    - Inform about your assigned task
    - Declare your working directory: {working_dir_str}
 
-3. 🔑 Request necessary permissions using: `mcp__vibe-ensemble__vibe_coordinator_request_worker`
+3. 🔑 Request necessary permissions using: `mcp__vibe-ensemble-http__vibe_coordinator_request_worker`
    - Request permissions for file operations, git access, etc.
    - Wait for coordinator approval before proceeding
 
 4. 🚀 Begin your assigned task (details below)
 
-COORDINATION TOOLS AVAILABLE:
-- `mcp__vibe-ensemble__vibe_agent_register` - Register with the coordination system
-- `mcp__vibe-ensemble__vibe_work_coordinate` - Coordinate work with other agents  
-- `mcp__vibe-ensemble__vibe_coordinator_request_worker` - Request permissions from coordinator
-- `mcp__vibe-ensemble__vibe_worker_message` - Send messages to other agents
-- `mcp__vibe-ensemble__vibe_dependency_declare` - Declare dependencies on other work
-- `mcp__vibe-ensemble__vibe_conflict_predict` - Check for potential conflicts
-- `mcp__vibe-ensemble__vibe_issue_create` - Create issues that need attention
+COORDINATION TOOLS AVAILABLE (HTTP):
+- `mcp__vibe-ensemble-http__vibe_agent_register` - Register with the coordination system
+- `mcp__vibe-ensemble-http__vibe_work_coordinate` - Coordinate work with other agents  
+- `mcp__vibe-ensemble-http__vibe_coordinator_request_worker` - Request permissions from coordinator
+- `mcp__vibe-ensemble-http__vibe_worker_message` - Send messages to other agents
+- `mcp__vibe-ensemble-http__vibe_dependency_declare` - Declare dependencies on other work
+- `mcp__vibe-ensemble-http__vibe_conflict_predict` - Check for potential conflicts
+- `mcp__vibe-ensemble-http__vibe_issue_create` - Create issues that need attention
+
+NOTIFICATION CHANNEL (SSE):
+- The `vibe-ensemble-sse` server provides real-time notifications from the coordinator
+- Events include: coordinator messages, conflict alerts, dependency violations, escalation requests
+- Monitor this connection continuously for coordination directives
 
 IMPORTANT RULES:
 - ALWAYS complete the initialization sequence before starting your main task
 - Coordinate with other agents before making changes that might affect them
 - Use the messaging system to communicate with teammates
 - Respect permission boundaries - request access when needed
+- MONITOR the SSE connection for incoming messages from coordinator and other agents
+- React promptly to coordination events, conflict notifications, and escalation requests
 
 YOUR ASSIGNED TASK:
 {original_prompt}
@@ -406,6 +430,7 @@ BEGIN BY RUNNING THE INITIALIZATION SEQUENCE, THEN PROCEED WITH YOUR TASK."#,
         cmd.arg("--output-format").arg("json");
         // Allow multiple turns so the model can initialize MCP and call tools
         cmd.arg("--max-turns").arg("5");
+        cmd.arg("--permission-mode").arg("bypassPermissions");
 
         // Enable verbose logging if output logging is enabled
         if self.output_logging.enabled {

@@ -1526,10 +1526,11 @@ impl McpServer {
         if let Some(obj) = params.connection_metadata.as_object() {
             if let Some(worker_val) = obj.get("workerId") {
                 match worker_val.as_str() {
-                    Some(s) => match Uuid::parse_str(s) {
-                        Ok(u) => worker_id_in_metadata = Some(u),
-                        Err(_) => {
-                            return Ok(Some(JsonRpcResponse::error(
+                    Some(s) => {
+                        match Uuid::parse_str(s) {
+                            Ok(u) => worker_id_in_metadata = Some(u),
+                            Err(_) => {
+                                return Ok(Some(JsonRpcResponse::error(
                                 request.id,
                                 JsonRpcError {
                                     code: error_codes::INVALID_PARAMS,
@@ -1537,8 +1538,9 @@ impl McpServer {
                                     data: None,
                                 },
                             )));
+                            }
                         }
-                    },
+                    }
                     None => {
                         return Ok(Some(JsonRpcResponse::error(
                             request.id,
@@ -2668,7 +2670,8 @@ impl McpServer {
             // Brief wait-and-retry if not present yet (handles registration race)
             if !present {
                 let mut attempts = 0;
-                while attempts < 15 { // ~1.5s total
+                while attempts < 15 {
+                    // ~1.5s total
                     tokio::time::sleep(std::time::Duration::from_millis(100)).await;
                     if let Ok(Some(_)) = agent_service.get_agent(assignee_agent_id).await {
                         present = true;
@@ -3238,7 +3241,9 @@ impl McpServer {
                 // If this is a permission request, auto-route to a coordinator if possible
                 if params.request_type.eq_ignore_ascii_case("permission")
                     || params.request_type.eq_ignore_ascii_case("permissions")
-                    || params.request_type.eq_ignore_ascii_case("permission_request")
+                    || params
+                        .request_type
+                        .eq_ignore_ascii_case("permission_request")
                 {
                     if let Some(agent_service) = &self.agent_service {
                         // Pick the most recent coordinator
@@ -3301,7 +3306,9 @@ impl McpServer {
                 // If this is a permission request, try falling back to a coordinator
                 if params.request_type.eq_ignore_ascii_case("permission")
                     || params.request_type.eq_ignore_ascii_case("permissions")
-                    || params.request_type.eq_ignore_ascii_case("permission_request")
+                    || params
+                        .request_type
+                        .eq_ignore_ascii_case("permission_request")
                 {
                     let coordinators = agent_service
                         .list_agents_by_type(&vibe_ensemble_core::agent::AgentType::Coordinator)
@@ -3359,7 +3366,9 @@ impl McpServer {
         };
         let is_permission = params.request_type.eq_ignore_ascii_case("permission")
             || params.request_type.eq_ignore_ascii_case("permissions")
-            || params.request_type.eq_ignore_ascii_case("permission_request");
+            || params
+                .request_type
+                .eq_ignore_ascii_case("permission_request");
         let effective_priority = if is_permission {
             MessagePriority::Urgent
         } else {
@@ -3436,12 +3445,12 @@ impl McpServer {
         &self,
         request: JsonRpcRequest,
     ) -> Result<Option<JsonRpcResponse>> {
-        let message_service = self
-            .message_service
-            .as_ref()
-            .ok_or_else(|| Error::Configuration {
-                message: "Message service not configured".to_string(),
-            })?;
+        let message_service =
+            self.message_service
+                .as_ref()
+                .ok_or_else(|| Error::Configuration {
+                    message: "Message service not configured".to_string(),
+                })?;
 
         let params: PermissionDecideParams = if let Some(params) = request.params.clone() {
             serde_json::from_value(params).map_err(|e| Error::InvalidParams {
@@ -3461,9 +3470,10 @@ impl McpServer {
         let request_id = Uuid::parse_str(&params.request_id).map_err(|e| Error::InvalidParams {
             message: format!("Invalid requestId: {}", e),
         })?;
-        let approver_id = Uuid::parse_str(&params.approver_agent_id).map_err(|e| Error::InvalidParams {
-            message: format!("Invalid approverAgentId: {}", e),
-        })?;
+        let approver_id =
+            Uuid::parse_str(&params.approver_agent_id).map_err(|e| Error::InvalidParams {
+                message: format!("Invalid approverAgentId: {}", e),
+            })?;
 
         // Fetch the original message
         let original = message_service
