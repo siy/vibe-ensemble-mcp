@@ -8,6 +8,18 @@ use tracing::{debug, info, warn};
 use uuid::Uuid;
 use vibe_ensemble_core::agent::{Agent, AgentStatus, AgentType, ConnectionMetadata};
 
+/// Parameters for agent registration
+#[derive(Debug)]
+pub struct AgentRegistrationParams {
+    pub name: String,
+    pub agent_type: AgentType,
+    pub capabilities: Vec<String>,
+    pub connection_metadata: ConnectionMetadata,
+    pub session_id: String,
+    pub project_id: Option<Uuid>,
+    pub agent_id: Option<Uuid>,
+}
+
 /// Service for managing agent registration and coordination
 pub struct AgentService {
     repository: Arc<AgentRepository>,
@@ -42,15 +54,15 @@ impl AgentService {
         connection_metadata: ConnectionMetadata,
         session_id: String,
     ) -> Result<Agent> {
-        self.register_agent_internal(
+        self.register_agent_internal(AgentRegistrationParams {
             name,
             agent_type,
             capabilities,
             connection_metadata,
             session_id,
-            None,
-            None,
-        )
+            project_id: None,
+            agent_id: None,
+        })
         .await
     }
 
@@ -64,62 +76,64 @@ impl AgentService {
         connection_metadata: ConnectionMetadata,
         session_id: String,
     ) -> Result<Agent> {
-        self.register_agent_internal(
+        self.register_agent_internal(AgentRegistrationParams {
             name,
             agent_type,
             capabilities,
             connection_metadata,
             session_id,
-            None,
-            Some(agent_id),
-        )
+            project_id: None,
+            agent_id: Some(agent_id),
+        })
         .await
     }
 
     /// Internal helper method for agent registration with optional project assignment and ID
-    async fn register_agent_internal(
-        &self,
-        name: String,
-        agent_type: AgentType,
-        capabilities: Vec<String>,
-        connection_metadata: ConnectionMetadata,
-        session_id: String,
-        project_id: Option<Uuid>,
-        agent_id: Option<Uuid>,
-    ) -> Result<Agent> {
+    async fn register_agent_internal(&self, params: AgentRegistrationParams) -> Result<Agent> {
         info!(
             "Registering new agent: {} (type: {:?}, project: {:?})",
-            name, agent_type, project_id
+            params.name, params.agent_type, params.project_id
         );
 
         // Check if agent name already exists
-        if let Some(_existing) = self.repository.find_by_name(&name).await? {
+        if let Some(_existing) = self.repository.find_by_name(&params.name).await? {
             return Err(Error::Conflict(format!(
                 "Agent with name '{}' already exists",
-                name
+                params.name
             )));
         }
 
         // Create the agent with optional project assignment
-        let mut metadata = connection_metadata;
-        if let Some(pid) = project_id {
+        let mut metadata = params.connection_metadata;
+        if let Some(pid) = params.project_id {
             metadata.project_id = Some(pid);
         }
 
-        let agent = if let Some(id) = agent_id {
+        let agent = if let Some(id) = params.agent_id {
             // Use specific ID constructor for workers
-            Agent::new_with_id(id, name, agent_type, capabilities, metadata)?
-        } else if project_id.is_some() {
+            Agent::new_with_id(
+                id,
+                params.name,
+                params.agent_type,
+                params.capabilities,
+                metadata,
+            )?
+        } else if params.project_id.is_some() {
             // Use builder pattern for project-assigned agents
             Agent::builder()
-                .name(name)
-                .agent_type(agent_type)
-                .capabilities(capabilities)
+                .name(params.name)
+                .agent_type(params.agent_type)
+                .capabilities(params.capabilities)
                 .connection_metadata(metadata)
                 .build()?
         } else {
             // Use simple constructor for unassigned agents
-            Agent::new(name, agent_type, capabilities, metadata)?
+            Agent::new(
+                params.name,
+                params.agent_type,
+                params.capabilities,
+                metadata,
+            )?
         };
 
         let mut agent = agent;
@@ -133,7 +147,7 @@ impl AgentService {
         // Create active session
         let session = AgentSession {
             agent_id: agent.id,
-            session_id: session_id.clone(),
+            session_id: params.session_id.clone(),
             connected_at: chrono::Utc::now(),
             last_heartbeat: chrono::Utc::now(),
         };
@@ -142,7 +156,7 @@ impl AgentService {
 
         info!(
             "Successfully registered agent: {} ({}) with project: {:?}",
-            agent.name, agent.id, project_id
+            agent.name, agent.id, params.project_id
         );
         Ok(agent)
     }
@@ -1193,15 +1207,15 @@ impl AgentService {
         session_id: String,
         project_id: Option<Uuid>,
     ) -> Result<Agent> {
-        self.register_agent_internal(
+        self.register_agent_internal(AgentRegistrationParams {
             name,
             agent_type,
             capabilities,
             connection_metadata,
             session_id,
             project_id,
-            None,
-        )
+            agent_id: None,
+        })
         .await
     }
 

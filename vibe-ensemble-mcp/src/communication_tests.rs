@@ -16,7 +16,6 @@ mod tests {
     use chrono::Utc;
     use serde_json::json;
     use std::sync::Arc;
-    use tempfile;
     use uuid::Uuid;
     use vibe_ensemble_core::agent::{AgentType, ConnectionMetadata};
     use vibe_ensemble_core::orchestration::WorkspaceManager;
@@ -59,7 +58,7 @@ mod tests {
 
         // Create workspace manager for tests
         let temp_dir = tempfile::tempdir().expect("Failed to create temp dir");
-        let workspace_manager = Arc::new(WorkspaceManager::new(temp_dir.path().to_path_buf()));
+        let workspace_manager = Arc::new(WorkspaceManager::new(temp_dir.path()));
 
         let coordination_services = CoordinationServices::new(
             agent_service.clone(),
