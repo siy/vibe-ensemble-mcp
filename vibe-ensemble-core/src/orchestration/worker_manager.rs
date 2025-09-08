@@ -1332,6 +1332,17 @@ mod tests {
         use std::time::Duration;
         use tempfile::TempDir;
 
+        // Skip this test if claude command is not available (e.g., in CI environments)
+        if tokio::process::Command::new("claude")
+            .arg("--version")
+            .output()
+            .await
+            .is_err()
+        {
+            println!("⏭️ Skipping worker output logging test - Claude Code not available");
+            return;
+        }
+
         // Create temporary directory for test logs
         let temp_dir = TempDir::new().expect("Failed to create temp dir");
         let log_dir = temp_dir.path().to_path_buf();
