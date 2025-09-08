@@ -428,8 +428,8 @@ BEGIN BY RUNNING THE INITIALIZATION SEQUENCE, THEN PROCEED WITH YOUR TASK."#,
 
         // Add JSON output format for structured response handling
         cmd.arg("--output-format").arg("json");
-        // Allow multiple turns so the model can initialize MCP and call tools
-        cmd.arg("--max-turns").arg("5");
+        // Allow unlimited turns so workers can complete their tasks fully
+        // Removed --max-turns limit to prevent premature worker termination
         cmd.arg("--permission-mode").arg("bypassPermissions");
 
         // Enable verbose logging if output logging is enabled
