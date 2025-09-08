@@ -439,7 +439,7 @@ BEGIN BY RUNNING THE INITIALIZATION SEQUENCE, THEN PROCEED WITH YOUR TASK."#,
 
         // Configure permission prompt forwarding via MCP tool
         cmd.arg("--permission-prompt-tool")
-            .arg("mcp__vibe-ensemble__vibe_worker_request");
+            .arg("mcp__vibe-ensemble-http__vibe_worker_request");
 
         // Claude Code will automatically connect to MCP servers configured in .mcp.json
         // No need to specify --mcp-server as that option doesn't exist
@@ -451,7 +451,7 @@ BEGIN BY RUNNING THE INITIALIZATION SEQUENCE, THEN PROCEED WITH YOUR TASK."#,
             ""
         };
         debug!(
-            "Worker {} command: claude -p \"{}\" --output-format json --permission-prompt-tool mcp__vibe-ensemble__vibe_worker_request{}",
+            "Worker {} command: claude -p \"{}\" --output-format json --permission-prompt-tool mcp__vibe-ensemble-http__vibe_worker_request{}",
             worker_id,
             prompt.chars().take(50).collect::<String>(),
             verbose_flag
