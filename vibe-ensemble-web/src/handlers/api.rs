@@ -119,6 +119,12 @@ pub struct MessageQuery {
     pub message_type: Option<String>,
 }
 
+/// Query parameters for pending message retrieval
+#[derive(Debug, Deserialize)]
+pub struct PendingMessageQuery {
+    pub since: Option<String>, // RFC3339 timestamp
+}
+
 /// List all messages with optional filtering
 pub async fn messages_list(
     State(storage): State<Arc<StorageManager>>,
@@ -130,12 +136,13 @@ pub async fn messages_list(
 
     let messages = storage.messages().list().await?;
 
-    // Apply basic filtering
+    // Apply basic filtering using correct field names
     let filtered_messages: Vec<Message> = messages
         .into_iter()
         .filter(|message| {
             if let Some(from_agent) = &query.from_agent {
-                message.from_agent == *from_agent
+                let sender_id_str = message.sender_id.to_string();
+                sender_id_str == *from_agent || sender_id_str.starts_with(from_agent)
             } else {
                 true
             }
@@ -143,9 +150,11 @@ pub async fn messages_list(
         .filter(|message| {
             if let Some(to_agent) = &query.to_agent {
                 message
-                    .to_agent
-                    .as_ref()
-                    .map(|to| to == to_agent)
+                    .recipient_id
+                    .map(|id| {
+                        let recipient_id_str = id.to_string();
+                        recipient_id_str == *to_agent || recipient_id_str.starts_with(to_agent)
+                    })
                     .unwrap_or(false)
             } else {
                 true
@@ -165,6 +174,88 @@ pub async fn messages_list(
     Ok(Json(json!({
         "messages": filtered_messages,
         "total": filtered_messages.len(),
+        "timestamp": chrono::Utc::now(),
+    })))
+}
+
+/// Get pending messages for a specific agent
+/// Supports HTTP fallback strategy for workers with SSE connection issues
+pub async fn pending_messages_for_agent(
+    State(storage): State<Arc<StorageManager>>,
+    Path(agent_id): Path<Uuid>,
+    Query(query): Query<PendingMessageQuery>,
+) -> Result<Json<Value>> {
+    // Parse the 'since' parameter or default to 1 hour ago
+    let since = if let Some(since_str) = query.since {
+        chrono::DateTime::parse_from_rfc3339(&since_str)
+            .map_err(|e| Error::BadRequest(format!("Invalid timestamp format: {}", e)))?
+            .with_timezone(&chrono::Utc)
+    } else {
+        // Default to 1 hour ago if no timestamp provided
+        chrono::Utc::now() - chrono::Duration::hours(1)
+    };
+
+    let pending_messages = storage
+        .messages()
+        .get_pending_messages_for_agent(agent_id, since)
+        .await?;
+
+    // Extract message IDs for deduplication tracking
+    let message_ids: Vec<Uuid> = pending_messages.iter().map(|m| m.id).collect();
+    let latest_timestamp = pending_messages
+        .iter()
+        .map(|m| m.created_at)
+        .max()
+        .unwrap_or(since);
+
+    Ok(Json(json!({
+        "messages": pending_messages,
+        "message_ids": message_ids,
+        "agent_id": agent_id,
+        "since": since,
+        "latest_timestamp": latest_timestamp,
+        "count": pending_messages.len(),
+        "timestamp": chrono::Utc::now(),
+        "deduplication_hint": "Track message_ids to avoid processing duplicates from SSE"
+    })))
+}
+
+/// Mark messages as delivered (batch operation)
+/// Used by workers to acknowledge receipt of messages retrieved via HTTP
+#[derive(Debug, Deserialize)]
+pub struct MessageDeliveryAck {
+    pub message_ids: Vec<Uuid>,
+}
+
+pub async fn acknowledge_message_delivery(
+    State(storage): State<Arc<StorageManager>>,
+    Json(ack): Json<MessageDeliveryAck>,
+) -> Result<Json<Value>> {
+    let mut acknowledged = Vec::new();
+    let mut failed = Vec::new();
+
+    for message_id in ack.message_ids {
+        match storage
+            .messages()
+            .mark_message_delivered_fast(message_id)
+            .await
+        {
+            Ok(()) => acknowledged.push(message_id),
+            Err(e) => {
+                tracing::warn!("Failed to mark message {} as delivered: {}", message_id, e);
+                failed.push(json!({
+                    "message_id": message_id,
+                    "error": e.to_string()
+                }));
+            }
+        }
+    }
+
+    Ok(Json(json!({
+        "acknowledged": acknowledged,
+        "failed": failed,
+        "acknowledged_count": acknowledged.len(),
+        "failed_count": failed.len(),
         "timestamp": chrono::Utc::now(),
     })))
 }

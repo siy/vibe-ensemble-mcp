@@ -1,6 +1,7 @@
 //! Web handlers for the Vibe Ensemble dashboard
 
 pub mod agents;
+pub mod api;
 pub mod dashboard;
 pub mod issues;
 pub mod knowledge;

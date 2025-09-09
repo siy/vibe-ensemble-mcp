@@ -18,6 +18,22 @@ After [installing Vibe Ensemble](installation.md), let's set up your first coord
    {
      "mcpServers": {
        "vibe-ensemble": {
+         "command": "vibe-ensemble",
+         "args": ["--mcp-only", "--transport=websocket", "--port=8081"],
+         "transport": {
+           "type": "websocket",
+           "url": "ws://127.0.0.1:8081"
+         }
+       }
+     }
+   }
+   ```
+
+   **Alternative stdio transport** (legacy support):
+   ```json
+   {
+     "mcpServers": {
+       "vibe-ensemble": {
          "command": "vibe-ensemble --mcp-only --transport=stdio",
          "args": []
        }

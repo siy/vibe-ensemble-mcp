@@ -18,7 +18,7 @@ Error: Storage(Database(Database(SqliteError { code: 14, message: "unable to ope
 **Solutions:**
 
 #### Option 1: Update to Latest Version (Recommended)
-The latest version (v0.4.2+) automatically uses platform-appropriate directories:
+The latest version (v0.4.2+) automatically uses platform-appropriate directories and includes dual-transport architecture (WebSocket + SSE):
 - **macOS**: `~/Library/Application Support/vibe-ensemble/`
 - **Linux**: `~/.local/share/vibe-ensemble/`
 - **Windows**: `%APPDATA%\vibe-ensemble\`
