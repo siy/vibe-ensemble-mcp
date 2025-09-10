@@ -18,6 +18,7 @@ mod tests {
     use std::sync::Arc;
     use uuid::Uuid;
     use vibe_ensemble_core::agent::{AgentType, ConnectionMetadata};
+    use vibe_ensemble_core::orchestration::WorkspaceManager;
     use vibe_ensemble_storage::repositories::{
         AgentRepository, IssueRepository, KnowledgeRepository, MessageRepository, ProjectRepository,
     };
@@ -55,12 +56,17 @@ mod tests {
             project_repo,
         ));
 
+        // Create workspace manager for tests
+        let temp_dir = tempfile::tempdir().expect("Failed to create temp dir");
+        let workspace_manager = Arc::new(WorkspaceManager::new(temp_dir.path()));
+
         let coordination_services = CoordinationServices::new(
             agent_service.clone(),
             issue_service,
             message_service.clone(),
             coordination_service,
             knowledge_service,
+            workspace_manager,
         );
         let server = McpServer::with_coordination(coordination_services);
 

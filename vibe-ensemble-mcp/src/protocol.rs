@@ -937,6 +937,7 @@ pub struct WorkCoordinateParams {
     pub coordination_type: String,
     #[serde(rename = "workItems")]
     pub work_items: Vec<serde_json::Value>,
+    #[serde(default)]
     pub dependencies: Vec<serde_json::Value>,
     #[serde(rename = "proposedTimeline")]
     pub proposed_timeline: Option<serde_json::Value>,
@@ -961,6 +962,27 @@ pub struct WorkCoordinateResult {
     pub communication_protocol: serde_json::Value,
     #[serde(rename = "escalationRules")]
     pub escalation_rules: Vec<serde_json::Value>,
+    pub message: String,
+}
+
+/// Permission decision parameters
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PermissionDecideParams {
+    #[serde(rename = "requestId")]
+    pub request_id: String,
+    #[serde(rename = "decision")]
+    pub decision: String, // APPROVE or DENY
+    #[serde(rename = "approverAgentId")]
+    pub approver_agent_id: String,
+    pub comment: Option<String>,
+}
+
+/// Permission decision result
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PermissionDecideResult {
+    #[serde(rename = "requestId")]
+    pub request_id: Uuid,
+    pub status: String,
     pub message: String,
 }
 

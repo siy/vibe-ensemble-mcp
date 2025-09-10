@@ -35,7 +35,7 @@ pub struct TaskWorkerConfig {
 impl Default for TaskWorkerConfig {
     fn default() -> Self {
         Self {
-            max_workers_per_type: 5,
+            max_workers_per_type: 10,
             default_task_timeout_seconds: 3600, // 1 hour
             max_retry_attempts: 3,
             retry_delay_seconds: 30,
@@ -862,7 +862,7 @@ mod tests {
     fn test_task_worker_config_default() {
         let config = TaskWorkerConfig::default();
 
-        assert_eq!(config.max_workers_per_type, 5);
+        assert_eq!(config.max_workers_per_type, 10);
         assert_eq!(config.default_task_timeout_seconds, 3600);
         assert_eq!(config.max_retry_attempts, 3);
         assert_eq!(config.retry_delay_seconds, 30);
