@@ -1,12 +1,14 @@
 # Architecture Overview
 
-This document explains how Vibe Ensemble's WebSocket-based multi-agent coordination system works internally and the design decisions behind its scalability and intelligence.
+This document explains how Vibe Ensemble's dual-transport multi-agent coordination system (WebSocket + SSE) works internally and the design decisions behind its scalability and intelligence.
 
 ## Design Principles
 
-### WebSocket-First Architecture
-Built around real-time WebSocket communication for intelligent multi-agent coordination:
+### Dual-Transport Architecture
+Built around real-time WebSocket + SSE communication for intelligent multi-agent coordination:
 - **Real-time Communication**: Instant agent coordination via WebSocket JSON-RPC 2.0 protocol
+- **SSE Message Delivery**: Server-Sent Events for reliable coordinator-worker messaging
+- **Permission Auto-Approval**: Seamless coordinator approval of worker permissions
 - **Concurrent Scalability**: Support for 10-50+ concurrent agents per instance  
 - **Connection Resilience**: Automatic reconnection, graceful error handling, and connection lifecycle management
 - **Protocol Compliance**: Full MCP 2024-11-05 specification over WebSocket transport
@@ -26,13 +28,14 @@ High-performance storage with intelligent task management:
 - **Pattern Learning**: Dynamic knowledge accumulation across coordination sessions
 
 ### Dual Transport Support
-WebSocket for real-time + stdio for compatibility:
+WebSocket + SSE for real-time coordination + stdio for compatibility:
 - **WebSocket Primary**: Real-time multi-agent coordination with JSON-RPC 2.0 over WebSocket
+- **SSE Secondary**: Server-Sent Events for reliable message delivery and permission workflows
 - **stdio Compatibility**: Legacy support for simple single-agent scenarios
-- **Transport Abstraction**: Unified MCP protocol implementation across both transports
-- **Connection Management**: Intelligent routing and fallback mechanisms
+- **Transport Abstraction**: Unified MCP protocol implementation across all transports
+- **Connection Management**: Intelligent routing, auto-approval workflows, and fallback mechanisms
 
-## WebSocket Multi-Agent System Architecture
+## Dual-Transport Multi-Agent System Architecture
 
 ```
 ┌──────────────────────────────────────────────────────────────────┐

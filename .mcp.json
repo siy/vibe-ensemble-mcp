@@ -1,0 +1,19 @@
+{
+  "mcpServers": {
+    "vibe-ensemble-http": {
+      "headers": {
+        "Content-Type": "application/json"
+      },
+      "type": "http",
+      "url": "http://127.0.0.1:8082/mcp"
+    },
+    "vibe-ensemble-sse": {
+      "headers": {
+        "Accept": "text/event-stream",
+        "Cache-Control": "no-cache"
+      },
+      "type": "sse",
+      "url": "http://127.0.0.1:8082/events"
+    }
+  }
+}

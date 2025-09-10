@@ -9,7 +9,7 @@ pub mod testing;
 use crate::{server::McpServer, Error, Result};
 use axum::{
     extract::ws::WebSocketUpgrade,
-    extract::{Json as JsonExtract, Path},
+    extract::{Json as JsonExtract, Path, State},
     http::StatusCode,
     response::Sse,
     routing::{get, post},
@@ -790,6 +790,7 @@ type SseSessionManager = Arc<RwLock<HashMap<String, SseSession>>>;
 /// - HTTP POST endpoint at /messages/<session_id> for SSE client requests
 /// - Health check endpoint at /health for service discovery
 /// - Implements auto-discovery port fallback (8082, 9090)
+/// - Uses port 8082 for HTTP and SSE endpoints
 /// - Creates appropriate transports for each connected agent
 /// - Manages connection lifecycle and cleanup
 /// - Integrates with the existing MCP server architecture
@@ -802,6 +803,8 @@ pub struct MultiTransportServer {
     read_timeout: Duration,
     /// Write timeout for WebSocket connections
     write_timeout: Duration,
+    /// MCP server instance for handling HTTP requests
+    mcp_server: Option<Arc<McpServer>>,
 }
 
 impl MultiTransportServer {
@@ -818,6 +821,18 @@ impl MultiTransportServer {
             port,
             read_timeout: Duration::from_secs(30),
             write_timeout: Duration::from_secs(10),
+            mcp_server: None,
+        }
+    }
+
+    /// Create a new server with MCP server instance for HTTP endpoints
+    pub fn with_mcp_server(host: String, port: u16, mcp_server: Arc<McpServer>) -> Self {
+        Self {
+            host,
+            port,
+            read_timeout: Duration::from_secs(30),
+            write_timeout: Duration::from_secs(10),
+            mcp_server: Some(mcp_server),
         }
     }
 
@@ -833,6 +848,7 @@ impl MultiTransportServer {
             port,
             read_timeout,
             write_timeout,
+            mcp_server: None,
         }
     }
 
@@ -1222,7 +1238,7 @@ async fn handle_axum_websocket_task(
     info!("WebSocket background task ended");
 }
 
-/// Handle HTTP MCP request (POST /mcp)
+/// Handle HTTP MCP request (POST /mcp) with MCP server
 async fn handle_mcp_http_request(
     JsonExtract(payload): JsonExtract<Value>,
     mcp_server: McpServer,
@@ -1460,6 +1476,7 @@ async fn handle_sse_message_request(
         }
     }
 }
+
 
 /// Handle health check (GET /health)
 async fn handle_health_check() -> Json<Value> {

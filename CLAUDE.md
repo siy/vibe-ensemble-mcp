@@ -14,7 +14,7 @@ This project uses standard Rust toolchain commands:
 # Build the project (active workspace only)
 cargo build
 
-# Run tests (316 tests passing)
+# Run tests (378 tests passing)
 cargo test --workspace
 
 # Run specific test
@@ -38,7 +38,7 @@ cargo audit
 # Clean build artifacts
 cargo clean
 
-# Start the unified server (default: API + Web Dashboard + MCP WebSocket)
+# Start the unified server (default: API + Web Dashboard + MCP WebSocket + SSE)
 cargo run --bin vibe-ensemble
 
 # Start in MCP-only mode with WebSocket transport (for multi-agent coordination)
@@ -87,13 +87,13 @@ The system is designed around five core subsystems:
 
 ### Current Implementation Status
 
-**✅ PRODUCTION READY (v0.2.1):**
-- `vibe-ensemble-core` - Complete domain models, business logic, and orchestration (146 tests)
-- `vibe-ensemble-storage` - Full persistence layer with SQLx, migrations, and health monitoring (99 tests)
+**✅ PRODUCTION READY (v0.4.2):**
+- `vibe-ensemble-core` - Complete domain models, business logic, and orchestration (184 tests)
+- `vibe-ensemble-storage` - Full persistence layer with SQLx, migrations, and health monitoring (110 tests)
 - `vibe-ensemble-prompts` - Intelligent coordination prompts with specialist templates (15 tests)
-- `vibe-ensemble-mcp` - Complete MCP protocol server with multi-agent coordination (42 tests)
-- `vibe-ensemble-web` - Production web dashboard with real-time monitoring and comprehensive API (12 tests)
-- `vibe-ensemble-server` - Main application server with configuration hardening and security (2 tests)
+- `vibe-ensemble-mcp` - Complete MCP protocol server with dual-transport coordination (39 tests)
+- `vibe-ensemble-web` - Production web dashboard with real-time monitoring and comprehensive API (13 tests)
+- Comprehensive integration testing and quality assurance (17 tests)
 
 **🛡️ PRODUCTION FEATURES:**
 - **Security**: Configuration validation, security headers, safe defaults for small teams
@@ -102,7 +102,7 @@ The system is designed around five core subsystems:
 - **Cross-Platform**: Automated releases for Mac/Linux/Windows with one-line installers
 - **User Experience**: Friendly setup for both newcomers and experienced developers
 
-The project is now **production-ready** with 316 passing tests, comprehensive security hardening, and complete documentation. The system provides powerful multi-agent coordination with simple deployment suitable for small teams and individual developers. Start with `cargo run --bin vibe-ensemble` for the full experience or `cargo run --bin vibe-ensemble -- --mcp-only` for WebSocket MCP-only mode.
+The project is now **production-ready** with 378 passing tests, comprehensive security hardening, and complete documentation. The system provides powerful multi-agent coordination with dual-transport architecture (WebSocket + SSE), automated permission approval workflows, and simple deployment suitable for small teams and individual developers. Start with `cargo run --bin vibe-ensemble` for the full experience or `cargo run --bin vibe-ensemble -- --mcp-only` for WebSocket MCP-only mode.
 
 ### Agent Hierarchy & Coordination Intelligence
 
@@ -163,13 +163,15 @@ mcp__github__get_job_logs owner=siy repo=vibe-ensemble-mcp run_id=<run_id> faile
 mcp__github__list_dependabot_alerts owner=siy repo=vibe-ensemble-mcp
 ```
 
-## WebSocket Transport for Multi-Agent Coordination
+## Dual Transport (WebSocket + SSE) for Multi-Agent Coordination
 
-The WebSocket transport provides optimal multi-agent coordination capabilities:
+The dual-transport architecture provides optimal multi-agent coordination capabilities:
 
 ### Key Features
 - **JSON-RPC 2.0 Compliance**: Strict validation of message format and protocol version over WebSocket frames
 - **Multi-Agent Support**: Concurrent connections for multiple Claude Code instances
+- **SSE Message Delivery**: Server-Sent Events for reliable coordinator-worker communication
+- **Auto-Approval Workflow**: Seamless coordinator approval of worker permissions
 - **Connection Lifecycle**: Proper WebSocket upgrade protocol and connection management
 - **MCP Protocol State Tracking**: Initialization sequence management and protocol compliance
 - **Performance Optimization**: Efficient message handling with configurable timeouts
@@ -199,17 +201,18 @@ let transport = TransportFactory::websocket_with_config(
 - **Message Validation**: JSON-RPC 2.0 compliance validation
 
 ### Multi-Agent Coordination
-The WebSocket transport enables advanced multi-agent scenarios:
+The dual-transport system enables advanced multi-agent scenarios:
 - Supports all MCP protocol methods (initialize, tools/list, tools/call, resources/list, etc.)
-- Handles multiple concurrent agent connections
+- Handles multiple concurrent agent connections with SSE updates
 - Provides proper error responses with JSON-RPC 2.0 error format
 - Supports coordination tools for agent communication
 - Enables distributed task execution and collaboration
+- Automated permission approval workflow between coordinators and workers
 
 ### Usage Examples
 
 ```bash
-# WebSocket MCP server for multi-agent coordination
+# Dual-transport MCP server for multi-agent coordination (WebSocket + SSE)
 cargo run --bin vibe-ensemble -- --mcp-only
 
 # With custom database for persistent state

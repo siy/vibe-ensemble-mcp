@@ -322,6 +322,12 @@ impl MessageService {
         self.repository.list_recent(limit).await
     }
 
+    /// List all messages (using recent messages with a reasonable limit)
+    pub async fn list(&self) -> Result<Vec<Message>> {
+        debug!("Listing all messages");
+        self.repository.list_recent(1000).await // Reasonable default limit
+    }
+
     /// Get messages within a specific time period
     pub async fn list_recent_messages(&self, duration: chrono::Duration) -> Result<Vec<Message>> {
         debug!("Getting messages from last {:?}", duration);
@@ -339,6 +345,29 @@ impl MessageService {
     pub async fn get_message(&self, message_id: Uuid) -> Result<Option<Message>> {
         debug!("Getting message: {}", message_id);
         self.repository.find_by_id(message_id).await
+    }
+
+    /// Get pending messages for a specific agent since a timestamp
+    /// This method supports the HTTP fallback strategy for message retrieval
+    pub async fn get_pending_messages_for_agent(
+        &self,
+        agent_id: Uuid,
+        since: DateTime<Utc>,
+    ) -> Result<Vec<Message>> {
+        debug!(
+            "Getting pending messages for agent {} since {}",
+            agent_id, since
+        );
+        self.repository
+            .list_pending_for_agent(agent_id, since)
+            .await
+    }
+
+    /// Mark a message as delivered using the repository method
+    /// This is optimized for SSE delivery acknowledgments
+    pub async fn mark_message_delivered_fast(&self, message_id: Uuid) -> Result<()> {
+        debug!("Fast marking message as delivered: {}", message_id);
+        self.repository.mark_delivered(message_id).await
     }
 
     /// Delete a message

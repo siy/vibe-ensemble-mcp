@@ -532,8 +532,8 @@ async fn run_websocket_transport(
     _web_handle: &mut tokio::task::JoinHandle<()>,
     _mcp_only: bool,
 ) -> anyhow::Result<()> {
-    // Create WebSocket server
-    let ws_server = WebSocketServer::new(mcp_host.clone(), mcp_port);
+    // Create WebSocket server with MCP server instance
+    let ws_server = WebSocketServer::with_mcp_server(mcp_host.clone(), mcp_port, Arc::new(server.clone()));
     let _bind_address = ws_server.bind_address();
 
     // Port conflict checking is now handled by the HTTP server with fallback
@@ -714,7 +714,7 @@ async fn generate_mcp_configuration(cli: &Cli) -> anyhow::Result<()> {
                 .ok()
                 .and_then(|s| s.parse().ok())
         })
-        .unwrap_or(vibe_ensemble_mcp::transport::WebSocketServer::DEFAULT_PORT);
+        .unwrap_or(8082);
 
     // Validate transport type
     let transport = cli.transport.to_lowercase();
@@ -942,7 +942,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_create_server_config_invalid() {
-        let result = create_server_config("invalid", "127.0.0.1", 22360);
+        let result = create_server_config("invalid", "127.0.0.1", 8082);
         assert!(result.is_err());
     }
 

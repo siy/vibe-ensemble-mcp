@@ -1,7 +1,7 @@
 //! MCP protocol implementation for Vibe Ensemble
 //!
-//! This crate provides the Model Context Protocol (MCP) implementation
-//! for communication between the Vibe Ensemble server and Claude Code instances.
+//! This crate provides the Model Context Protocol (MCP) implementation with dual-transport
+//! architecture (WebSocket + SSE) for communication between the Vibe Ensemble server and Claude Code instances.
 //!
 //! # Architecture
 //!
@@ -11,7 +11,7 @@
 //! - **[`protocol`]**: JSON-RPC 2.0 message types and MCP protocol definitions
 //! - **[`server`]**: MCP server implementation with capability negotiation
 //! - **[`client`]**: MCP client for connecting to MCP servers
-//! - **[`transport`]**: Transport layer supporting WebSocket and in-memory connections
+//! - **[`transport`]**: Dual-transport layer supporting WebSocket + SSE and in-memory connections
 //! - **[`error`]**: Comprehensive error handling for protocol operations
 //!
 //! # Protocol Flow

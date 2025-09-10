@@ -124,6 +124,15 @@ impl WebServer {
                 "/api/messages/thread/:correlation_id",
                 get(handlers::messages_by_correlation),
             )
+            // Message delivery routes for HTTP fallback strategy
+            .route(
+                "/api/messages/pending/:agent_id",
+                get(handlers::api::pending_messages_for_agent),
+            )
+            .route(
+                "/api/messages/ack",
+                post(handlers::api::acknowledge_message_delivery),
+            )
             // Worker API routes (read-only)
             .route("/api/workers", get(handlers::workers::list_workers_api))
             .route(

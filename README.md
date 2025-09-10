@@ -1,17 +1,18 @@
 # Vibe Ensemble
 
-A powerful multi-agent coordination system that enables Claude Code instances to collaborate seamlessly through WebSocket connections, intelligent task orchestration, and automated worker management.
+A powerful multi-agent coordination system that enables Claude Code instances to collaborate seamlessly through dual-transport architecture (WebSocket + SSE), intelligent task orchestration, and automated worker management with real-time permission approval workflows.
 
 ## What is Vibe Ensemble?
 
-Vibe Ensemble is an advanced coordination server that transforms how multiple Claude Code instances work together on complex projects. Built on a WebSocket architecture, it provides real-time communication, intelligent task distribution, and automated worker spawning to create a true multi-agent development environment.
+Vibe Ensemble is an advanced coordination server that transforms how multiple Claude Code instances work together on complex projects. Built on a dual-transport architecture (WebSocket + SSE), it provides real-time communication, intelligent task distribution, automated worker spawning, and seamless coordinator approval workflows to create a true multi-agent development environment.
 
 Think of it as an intelligent "mission control" that not only prevents conflicts but actively orchestrates teamwork across your AI development agents.
 
 ## Key Features
 
-### Multi-Agent WebSocket Architecture
+### Dual-Transport Architecture (WebSocket + SSE)
 - **Real-time Communication**: WebSocket-based protocol for instant agent coordination
+- **SSE Message Delivery**: Server-Sent Events for reliable coordinator-worker communication
 - **Concurrent Connections**: Support for 10-50+ concurrent agents per instance
 - **Automatic Reconnection**: Robust connection management with graceful failure handling
 - **MCP 2.0 Compliance**: Full JSON-RPC 2.0 protocol implementation over WebSocket
@@ -19,6 +20,7 @@ Think of it as an intelligent "mission control" that not only prevents conflicts
 ### Intelligent Task Orchestration
 - **Automated Worker Spawning**: Automatically creates specialized workers for specific tasks
 - **Task-Worker Mapping**: Intelligent assignment based on capabilities and workload
+- **Auto-Approval Workflow**: Seamless coordinator approval of worker permissions
 - **Retry Logic**: Automatic retry with exponential backoff for failed operations
 - **Lifecycle Management**: Complete worker lifecycle from spawn to cleanup
 
@@ -27,12 +29,15 @@ Think of it as an intelligent "mission control" that not only prevents conflicts
 - **Knowledge Sharing**: Dynamic pattern recognition and insight distribution
 - **Issue Tracking**: Comprehensive task management with priority handling
 - **Cross-Project Learning**: Shared expertise across multiple project boundaries
+- **Permission Monitoring**: Proactive monitoring and auto-approval of worker permissions
+- **Real-time Updates**: SSE-powered live updates for coordinators and workers
 
 ### Production-Ready Infrastructure
 - **Web Dashboard**: Real-time monitoring with system metrics and agent analytics
 - **SQLite Storage**: Persistent coordination data with ACID guarantees
 - **Security Hardening**: Process isolation, localhost-only binding, and data ownership
 - **Cross-Platform**: Mac, Linux, and Windows support with automated releases
+- **378+ Tests**: Comprehensive test suite ensuring reliability and stability
 
 ## Quick Start
 
@@ -116,36 +121,41 @@ curl http://127.0.0.1:8080/api/agents
 
 Your Claude Code instances now have access to powerful multi-agent coordination tools!
 
-## How the WebSocket Architecture Works
+## How the Dual-Transport Architecture Works
 
 ### Multi-Agent Coordination Flow
 
 ```
 ┌─────────────┐    WebSocket     ┌─────────────────────┐
 │ Claude Code │◄────────────────►│   Vibe Ensemble    │
-│   Agent 1   │   Real-time      │   WebSocket Server  │
-└─────────────┘   JSON-RPC       └─────────────────────┘
-                                           ▲
-┌─────────────┐    WebSocket               │
-│ Claude Code │◄───────────────────────────┤
-│   Agent 2   │   Concurrent               │ 
-└─────────────┘   Connection               ▼
-                                 ┌─────────────────────┐
-┌─────────────┐    WebSocket     │  Task Orchestrator  │
-│ Claude Code │◄─────────────────│  & Worker Manager   │
-│   Agent 3   │   Multi-agent    │                     │
+│ Coordinator │   JSON-RPC       │   Dual Transport    │
+└─────────────┘                  │  (WebSocket + SSE)  │
+                                 └─────────────────────┘
+                                           │
+                                   Auto-Approval &
+                                    SSE Messages
+                                           ▼
+┌─────────────┐    WebSocket     ┌─────────────────────┐
+│ Claude Code │◄────────────────►│  Task Orchestrator  │
+│  Worker 1   │   Real-time      │  & Worker Manager   │
+└─────────────┘   Coordination   │                     │
+                                 │  Permission         │
+┌─────────────┐    WebSocket     │  Auto-Approval      │
+│ Claude Code │◄─────────────────│  Workflow           │
+│  Worker 2   │   Multi-agent    │                     │
 └─────────────┘   Protocol       └─────────────────────┘
 ```
 
 ### Coordination Process
 
 1. **WebSocket Connection**: Each Claude Code agent connects via WebSocket protocol
-2. **Agent Registration**: Agents register capabilities and specializations
+2. **Agent Registration**: Agents register capabilities and specializations with auto-replacement
 3. **Task Distribution**: Coordinator creates tasks and spawns specialized workers
-4. **Real-time Coordination**: Agents communicate instantly through WebSocket channels
-5. **Conflict Resolution**: Proactive detection and intelligent resolution protocols
-6. **Knowledge Synthesis**: Shared learning across all connected agents
-7. **Automated Cleanup**: Worker lifecycle management with graceful termination
+4. **Permission Auto-Approval**: Seamless approval of worker permissions via coordinator
+5. **Real-time Coordination**: Agents communicate instantly through WebSocket + SSE channels
+6. **Conflict Resolution**: Proactive detection and intelligent resolution protocols
+7. **Knowledge Synthesis**: Shared learning across all connected agents
+8. **Automated Cleanup**: Worker lifecycle management with graceful termination
 
 ## Use Cases
 
@@ -167,16 +177,17 @@ Your Claude Code instances now have access to powerful multi-agent coordination 
 - **Quality Assurance Networks**: Multiple testing agents ensuring comprehensive coverage
 - **Documentation Automation**: Specialized documentation agents maintaining up-to-date docs
 
-## WebSocket-First Architecture
+## Dual-Transport Architecture
 
-Vibe Ensemble is built for scalability and real-time coordination:
+Vibe Ensemble is built for scalability and seamless real-time coordination:
 
-- **WebSocket-Native**: Real-time multi-agent communication with JSON-RPC 2.0 over WebSocket
+- **WebSocket + SSE**: Real-time multi-agent communication with JSON-RPC 2.0 over WebSocket + Server-Sent Events
+- **Auto-Approval Workflow**: Intelligent coordinator approval of worker permissions without human intervention
 - **Local-First**: Complete privacy with all data stored locally on your machine
 - **SQLite Storage**: High-performance persistent storage with ACID guarantees
-- **Task Orchestration**: Intelligent worker spawning and lifecycle management
+- **Task Orchestration**: Intelligent worker spawning and lifecycle management with permission automation
 - **Web Dashboard**: Production-ready monitoring with real-time metrics and agent analytics
-- **Dual Transport**: WebSocket for real-time coordination + stdio for legacy compatibility
+- **Legacy Support**: WebSocket for modern coordination + stdio for backward compatibility
 
 ## Building from Source
 

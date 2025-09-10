@@ -399,6 +399,121 @@ impl MessageRepository {
         Ok(exists)
     }
 
+    /// List pending messages for a specific agent since a timestamp
+    /// Returns messages that are either undelivered or created after the specified timestamp
+    pub async fn list_pending_for_agent(
+        &self,
+        agent_id: Uuid,
+        since: DateTime<Utc>,
+    ) -> Result<Vec<Message>> {
+        debug!(
+            "Listing pending messages for agent {} since {}",
+            agent_id, since
+        );
+
+        let agent_id_str = agent_id.to_string();
+        let since_str = since.to_rfc3339();
+
+        // Get direct messages for this agent that are either undelivered OR created after 'since'
+        let direct_rows = sqlx::query!(
+            "SELECT id, sender_id, recipient_id, message_type, content, metadata, created_at, delivered_at 
+             FROM messages 
+             WHERE recipient_id = ?1 
+             AND (delivered_at IS NULL OR created_at >= ?2)
+             ORDER BY created_at ASC",
+            agent_id_str,
+            since_str
+        )
+        .fetch_all(&self.pool)
+        .await
+        .map_err(Error::Database)?;
+
+        // Get broadcast messages created after 'since' (broadcasts are never marked as delivered)
+        let broadcast_rows = sqlx::query!(
+            "SELECT id, sender_id, recipient_id, message_type, content, metadata, created_at, delivered_at 
+             FROM messages 
+             WHERE recipient_id IS NULL 
+             AND created_at >= ?1
+             ORDER BY created_at ASC",
+            since_str
+        )
+        .fetch_all(&self.pool)
+        .await
+        .map_err(Error::Database)?;
+
+        let mut messages = Vec::new();
+
+        // Process direct messages
+        for row in direct_rows {
+            let message = self.parse_message_from_row(
+                row.id.as_deref().unwrap_or_default(),
+                &row.sender_id,
+                row.recipient_id.as_deref(),
+                &row.message_type,
+                &row.content,
+                &row.metadata,
+                &row.created_at,
+                row.delivered_at.as_deref(),
+            )?;
+            messages.push(message);
+        }
+
+        // Process broadcast messages
+        for row in broadcast_rows {
+            let message = self.parse_message_from_row(
+                row.id.as_deref().unwrap_or_default(),
+                &row.sender_id,
+                row.recipient_id.as_deref(),
+                &row.message_type,
+                &row.content,
+                &row.metadata,
+                &row.created_at,
+                row.delivered_at.as_deref(),
+            )?;
+            messages.push(message);
+        }
+
+        // Sort by created_at to ensure proper message ordering
+        messages.sort_by_key(|m| m.created_at);
+
+        debug!(
+            "Found {} pending messages for agent {} since {}",
+            messages.len(),
+            agent_id,
+            since
+        );
+        Ok(messages)
+    }
+
+    /// Mark a message as delivered for SSE-based delivery
+    pub async fn mark_delivered(&self, message_id: Uuid) -> Result<()> {
+        debug!("Marking message {} as delivered", message_id);
+
+        let message_id_str = message_id.to_string();
+        let delivered_at_str = Utc::now().to_rfc3339();
+
+        let rows_affected = sqlx::query!(
+            "UPDATE messages SET delivered_at = ?1 WHERE id = ?2 AND delivered_at IS NULL",
+            delivered_at_str,
+            message_id_str
+        )
+        .execute(&self.pool)
+        .await
+        .map_err(Error::Database)?
+        .rows_affected();
+
+        if rows_affected == 0 {
+            debug!(
+                "Message {} was already delivered or does not exist",
+                message_id
+            );
+        } else {
+            info!("Successfully marked message {} as delivered", message_id);
+        }
+
+        Ok(())
+    }
+
     /// Parse message from database row
     #[allow(clippy::too_many_arguments)]
     fn parse_message_from_row(

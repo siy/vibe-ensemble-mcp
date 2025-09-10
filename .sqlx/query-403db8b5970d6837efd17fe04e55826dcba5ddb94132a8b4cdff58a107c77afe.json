@@ -1,6 +1,6 @@
 {
   "db_name": "SQLite",
-  "query": "\n            SELECT id, name, agent_type, capabilities, status, connection_metadata,\n                   created_at, last_seen, project_id\n            FROM agents\n            WHERE EXISTS (\n                SELECT 1 FROM json_each(capabilities) je \n                WHERE je.value = ?1\n            )\n            ORDER BY created_at DESC\n            ",
+  "query": "SELECT id, sender_id, recipient_id, message_type, content, metadata, created_at, delivered_at \n             FROM messages \n             WHERE recipient_id IS NULL \n             AND created_at >= ?1\n             ORDER BY created_at ASC",
   "describe": {
     "columns": [
       {
@@ -9,27 +9,27 @@
         "type_info": "Text"
       },
       {
-        "name": "name",
+        "name": "sender_id",
         "ordinal": 1,
         "type_info": "Text"
       },
       {
-        "name": "agent_type",
+        "name": "recipient_id",
         "ordinal": 2,
         "type_info": "Text"
       },
       {
-        "name": "capabilities",
+        "name": "message_type",
         "ordinal": 3,
         "type_info": "Text"
       },
       {
-        "name": "status",
+        "name": "content",
         "ordinal": 4,
         "type_info": "Text"
       },
       {
-        "name": "connection_metadata",
+        "name": "metadata",
         "ordinal": 5,
         "type_info": "Text"
       },
@@ -39,13 +39,8 @@
         "type_info": "Text"
       },
       {
-        "name": "last_seen",
+        "name": "delivered_at",
         "ordinal": 7,
-        "type_info": "Text"
-      },
-      {
-        "name": "project_id",
-        "ordinal": 8,
         "type_info": "Text"
       }
     ],
@@ -55,8 +50,7 @@
     "nullable": [
       true,
       false,
-      false,
-      false,
+      true,
       false,
       false,
       false,
@@ -64,5 +58,5 @@
       true
     ]
   },
-  "hash": "c559e653b67307e250b8e462dbbe9c26649e856aba59cf5d989dffd4593e431f"
+  "hash": "403db8b5970d6837efd17fe04e55826dcba5ddb94132a8b4cdff58a107c77afe"
 }

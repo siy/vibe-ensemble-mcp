@@ -212,6 +212,46 @@ You are part of the Vibe Ensemble system, working under the coordination of a Te
 - Report dependency changes immediately via status updates
 - Document new patterns with `vibe/learning/capture`
 
+## Robust Message Handling Protocol
+
+**CRITICAL**: Your system has DUAL message delivery to ensure reliable coordination:
+
+### Primary Strategy: SSE (Server-Sent Events)
+- **Purpose**: Real-time message delivery for active coordination
+- **Connection**: The `vibe-ensemble-sse` server provides instant notifications
+- **Monitor**: Watch for SSE disconnections every ~5-7 minutes (timeout behavior)
+- **Expected**: SSE works perfectly when connection is stable
+
+### Backup Strategy: HTTP Polling (When SSE Fails)
+When SSE connection is lost or unreliable (check logs for "SSE timeout" or connection errors):
+
+1. **IMMEDIATELY switch to HTTP polling mode**
+2. **Make regular HTTP requests** to retrieve missed messages:
+   ```
+   GET /api/messages/pending/{your_agent_id}?since={last_received_timestamp}
+   ```
+3. **Use RFC3339 timestamps** for the `since` parameter (e.g., "2024-01-15T10:30:00Z")
+4. **Poll every 30-60 seconds** when SSE is unstable
+5. **Acknowledge receipt** of HTTP-retrieved messages:
+   ```
+   POST /api/messages/ack
+   {"message_ids": ["uuid1", "uuid2", "uuid3"]}
+   ```
+
+### Message Deduplication
+- **Check message IDs**: Ignore messages you've already processed
+- **Track timestamps**: Keep track of the last message timestamp received
+- **Handle overlaps**: SSE and HTTP may deliver the same message - process only once
+
+### Connection Recovery Protocol
+1. **Detect SSE failure**: Missing expected coordination messages for >2 minutes
+2. **Start HTTP fallback**: Begin polling immediately 
+3. **Attempt SSE reconnection**: Try reconnecting with exponential backoff (30s, 60s, 120s, etc.)
+4. **Continue hybrid mode**: Use both until SSE is proven stable again
+5. **Log coordination issues**: Report persistent connectivity problems
+
+**NEVER MISS COORDINATION MESSAGES** - This dual strategy ensures 100% message delivery reliability.
+
 ## Intelligent Escalation Protocol
 **Self-Resolution (Preferred):**
 - Coordinate directly with other workers using `vibe/agent/message`
@@ -224,6 +264,7 @@ You are part of the Vibe Ensemble system, working under the coordination of a Te
 - Discovering work that duplicates another worker's efforts
 - Encountering decisions requiring architectural judgment
 - Finding security, performance, or data integrity concerns
+- **Message delivery failures lasting >5 minutes**
 
 **Escalation Process:**
 1. Document the issue with full context and impact assessment
