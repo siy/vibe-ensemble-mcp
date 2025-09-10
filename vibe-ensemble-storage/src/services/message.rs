@@ -75,6 +75,8 @@ impl MessageService {
         }
     }
 
+    // NOTE: get_message is implemented further below in this file.
+
     /// Send a direct message
     pub async fn send_message(
         &self,

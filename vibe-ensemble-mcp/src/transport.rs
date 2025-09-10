@@ -6,11 +6,10 @@
 pub mod automated_runner;
 pub mod testing;
 
-use crate::{Error, Result, server::McpServer};
+use crate::{server::McpServer, Error, Result};
 use axum::{
     extract::ws::WebSocketUpgrade,
-    extract::Json as JsonExtract,
-    extract::State,
+    extract::{Json as JsonExtract, Path, State},
     http::StatusCode,
     response::Sse,
     routing::{get, post},
@@ -18,9 +17,10 @@ use axum::{
 };
 use futures_util::{SinkExt, StreamExt};
 use serde_json::Value;
+use std::collections::HashMap;
 use std::net::SocketAddr;
 use std::sync::Arc;
-use tokio::sync::mpsc;
+use tokio::sync::{mpsc, RwLock};
 use tokio::time::{timeout, Duration};
 use tokio_tungstenite::tungstenite::Message;
 use tracing::{debug, error, info, warn};
@@ -769,13 +769,27 @@ impl TransportFactory {
     }
 }
 
+/// SSE session information for MCP protocol
+#[derive(Debug, Clone)]
+pub struct SseSession {
+    /// Session ID
+    pub id: String,
+    /// Channel sender for sending messages to SSE client
+    pub sender: mpsc::UnboundedSender<String>,
+}
+
+/// Global SSE session manager for MCP protocol
+type SseSessionManager = Arc<RwLock<HashMap<String, SseSession>>>;
+
 /// Multi-transport MCP server supporting WebSocket, HTTP, and SSE
 ///
 /// This provides a multi-agent HTTP server with multiple MCP transports:
 /// - WebSocket upgrade at /ws endpoint for persistent connections
 /// - HTTP POST endpoint at /mcp for direct JSON-RPC 2.0 requests
 /// - Server-Sent Events at /events endpoint for streaming transport
+/// - HTTP POST endpoint at /messages/<session_id> for SSE client requests
 /// - Health check endpoint at /health for service discovery
+/// - Implements auto-discovery port fallback (8082, 9090)
 /// - Uses port 8082 for HTTP and SSE endpoints
 /// - Creates appropriate transports for each connected agent
 /// - Manages connection lifecycle and cleanup
@@ -795,9 +809,9 @@ pub struct MultiTransportServer {
 
 impl MultiTransportServer {
     /// Port fallback sequence for auto-discovery (in priority order)
-    pub const PORT_FALLBACK_SEQUENCE: &'static [u16] = &[8082, 8083, 8084, 9090, 8081];
+    pub const PORT_FALLBACK_SEQUENCE: &'static [u16] = &[8082, 9090];
 
-    /// Default WebSocket server port (first in fallback sequence)
+    /// Default HTTP server port (first in fallback sequence)
     pub const DEFAULT_PORT: u16 = 8082;
 
     /// Create a new WebSocket server with default settings
@@ -845,14 +859,16 @@ impl MultiTransportServer {
 
     /// Start the HTTP server with WebSocket upgrade and return a channel receiver for new connections
     ///
-    /// This implements port fallback (8082, 8083, 8084, 9090, 8081) and creates an HTTP server
+    /// This implements port fallback (8082, 9090) and creates an HTTP server
     /// with a /ws endpoint that handles WebSocket upgrade requests. Each connection yields a
     /// ready-to-use WebSocket transport that can be used with the MCP server.
     pub async fn start(
         self,
+        mcp_server: McpServer,
     ) -> Result<(
         u16,
         mpsc::UnboundedReceiver<std::result::Result<Box<dyn Transport>, Error>>,
+        tokio::sync::oneshot::Sender<()>,
     )> {
         use tokio::net::TcpListener;
         use tower::ServiceBuilder;
@@ -921,49 +937,68 @@ impl MultiTransportServer {
         let read_timeout = self.read_timeout;
         let write_timeout = self.write_timeout;
         let connection_tx_clone = connection_tx.clone();
+        let mcp_server_http = mcp_server.clone();
+        let mcp_server_sse = mcp_server.clone();
+        let mcp_server_messages = mcp_server.clone();
 
-        let app = if let Some(mcp_server) = self.mcp_server {
-            // Router with MCP server state for HTTP endpoints
-            Router::new()
-                .route(
-                    "/ws",
-                    get(move |ws: WebSocketUpgrade| async move {
-                        handle_websocket_upgrade(ws, connection_tx_clone, read_timeout, write_timeout)
-                            .await
-                    }),
-                )
-                .route("/mcp", post(handle_mcp_http_request))
-                .route("/events", get(handle_sse_connection))
-                .route("/health", get(handle_health_check))
-                .with_state(mcp_server)
-                .layer(
-                    ServiceBuilder::new()
-                        .layer(CorsLayer::permissive()) // Allow cross-origin WebSocket connections
-                        .into_inner(),
-                )
-        } else {
-            // Router without MCP server state (HTTP endpoints will return errors)
-            Router::new()
-                .route(
-                    "/ws",
-                    get(move |ws: WebSocketUpgrade| async move {
-                        handle_websocket_upgrade(ws, connection_tx_clone, read_timeout, write_timeout)
-                            .await
-                    }),
-                )
-                .route("/mcp", post(handle_mcp_http_request_no_server))
-                .route("/events", get(handle_sse_connection_no_server))
-                .route("/health", get(handle_health_check))
-                .layer(
-                    ServiceBuilder::new()
-                        .layer(CorsLayer::permissive()) // Allow cross-origin WebSocket connections
-                        .into_inner(),
-                )
-        };
+        // Create SSE session manager
+        let sse_sessions: SseSessionManager = Arc::new(RwLock::new(HashMap::new()));
+        let sse_sessions_clone = sse_sessions.clone();
+        let sse_sessions_messages = sse_sessions.clone();
 
-        // Spawn the HTTP server
+        let host_port = format!("{}:{}", self.host, self.port);
+
+        // Shutdown signal for graceful server stop
+        let (shutdown_tx, shutdown_rx) = tokio::sync::oneshot::channel::<()>();
+
+        let app = Router::new()
+            .route(
+                "/ws",
+                get(move |ws: WebSocketUpgrade| async move {
+                    handle_websocket_upgrade(ws, connection_tx_clone, read_timeout, write_timeout)
+                        .await
+                }),
+            )
+            .route(
+                "/mcp",
+                post(move |payload| handle_mcp_http_request(payload, mcp_server_http.clone())),
+            )
+            .route(
+                "/events",
+                get(move || {
+                    handle_sse_connection(
+                        mcp_server_sse.clone(),
+                        sse_sessions_clone.clone(),
+                        host_port.clone(),
+                    )
+                }),
+            )
+            .route(
+                "/messages/:session_id",
+                post(move |session_id, payload| {
+                    handle_sse_message_request(
+                        session_id,
+                        payload,
+                        mcp_server_messages.clone(),
+                        sse_sessions_messages.clone(),
+                    )
+                }),
+            )
+            .route("/health", get(handle_health_check))
+            .layer(
+                ServiceBuilder::new()
+                    .layer(CorsLayer::permissive()) // Allow cross-origin WebSocket connections
+                    .into_inner(),
+            );
+
+        // Spawn the HTTP server with graceful shutdown
         tokio::spawn(async move {
-            if let Err(e) = axum::serve(listener, app).await {
+            if let Err(e) = axum::serve(listener, app)
+                .with_graceful_shutdown(async move {
+                    let _ = shutdown_rx.await;
+                })
+                .await
+            {
                 error!("HTTP server error: {}", e);
                 if connection_tx
                     .send(Err(Error::Transport(format!("HTTP server error: {}", e))))
@@ -975,7 +1010,7 @@ impl MultiTransportServer {
             info!("HTTP server loop ended");
         });
 
-        Ok((bound_port, connection_rx))
+        Ok((bound_port, connection_rx, shutdown_tx))
     }
 }
 
@@ -1205,8 +1240,8 @@ async fn handle_axum_websocket_task(
 
 /// Handle HTTP MCP request (POST /mcp) with MCP server
 async fn handle_mcp_http_request(
-    State(mcp_server): State<Arc<McpServer>>,
     JsonExtract(payload): JsonExtract<Value>,
+    mcp_server: McpServer,
 ) -> std::result::Result<Json<Value>, StatusCode> {
     // Validate JSON-RPC 2.0 format
     if let Err(_e) = validate_mcp_request(&payload) {
@@ -1214,40 +1249,43 @@ async fn handle_mcp_http_request(
         return Err(StatusCode::BAD_REQUEST);
     }
 
-    // Convert payload to JSON string
-    let message = serde_json::to_string(&payload)
-        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    // Convert payload to string for MCP server processing
+    let message = match serde_json::to_string(&payload) {
+        Ok(msg) => msg,
+        Err(e) => {
+            debug!("Failed to serialize MCP request: {}", e);
+            return Err(StatusCode::BAD_REQUEST);
+        }
+    };
 
-    debug!("Processing HTTP MCP request: {}", message);
-
-    // Process the request through the MCP server
+    // Process request through MCP server
     match mcp_server.handle_message(&message).await {
-        Ok(Some(response)) => {
-            debug!("HTTP MCP response: {}", response);
-            // Parse response back to JSON
-            match serde_json::from_str::<Value>(&response) {
-                Ok(json_response) => Ok(Json(json_response)),
+        Ok(Some(response_str)) => {
+            // Parse response back to JSON for return
+            match serde_json::from_str::<Value>(&response_str) {
+                Ok(response_json) => {
+                    debug!("HTTP MCP response: {:?}", response_json);
+                    Ok(Json(response_json))
+                }
                 Err(e) => {
-                    error!("Failed to parse MCP server response as JSON: {}", e);
+                    error!("Failed to parse MCP server response: {}", e);
                     Err(StatusCode::INTERNAL_SERVER_ERROR)
                 }
             }
         }
         Ok(None) => {
             // No response needed (notification)
-            debug!("HTTP MCP request processed as notification (no response)");
-            Err(StatusCode::NO_CONTENT)
+            Ok(Json(serde_json::json!({"result": null})))
         }
         Err(e) => {
-            error!("Error processing HTTP MCP request: {}", e);
-            // Return JSON-RPC error response
+            error!("MCP server error: {}", e);
             let error_response = serde_json::json!({
                 "jsonrpc": "2.0",
                 "id": payload.get("id").cloned().unwrap_or(Value::Null),
                 "error": {
                     "code": -32603,
                     "message": "Internal error",
-                    "data": format!("MCP server error: {}", e)
+                    "data": e.to_string()
                 }
             });
             Ok(Json(error_response))
@@ -1255,66 +1293,190 @@ async fn handle_mcp_http_request(
     }
 }
 
-/// Handle HTTP MCP request when no server is available
-async fn handle_mcp_http_request_no_server(
-    JsonExtract(payload): JsonExtract<Value>,
-) -> std::result::Result<Json<Value>, StatusCode> {
-    // Return error indicating server is not configured
-    let error_response = serde_json::json!({
-        "jsonrpc": "2.0",
-        "id": payload.get("id").cloned().unwrap_or(Value::Null),
-        "error": {
-            "code": -32601,
-            "message": "Method not found",
-            "data": "HTTP MCP endpoint requires server configuration"
-        }
-    });
-    debug!("Returning HTTP MCP no-server response: {:?}", error_response);
-    Ok(Json(error_response))
-}
-
 /// Handle SSE connection (GET /events)
-async fn handle_sse_connection() -> Sse<
-    impl futures_util::Stream<Item = std::result::Result<axum::response::sse::Event, serde_json::Error>>,
+/// Implements MCP SSE transport protocol: sends 'endpoint' event first, then 'message' events
+async fn handle_sse_connection(
+    mcp_server: McpServer,
+    sse_sessions: SseSessionManager,
+    host_port: String,
+) -> Sse<
+    impl futures_util::Stream<
+        Item = std::result::Result<axum::response::sse::Event, std::convert::Infallible>,
+    >,
 > {
     use axum::response::sse::Event;
     use futures_util::stream;
-    use std::time::Duration;
+    use uuid::Uuid;
 
-    // Create a stream that sends periodic heartbeat events
-    let stream = stream::unfold(0, |counter| async move {
-        tokio::time::sleep(Duration::from_secs(30)).await;
-        let event = Event::default().event("heartbeat").data(format!(
-            "{{\"type\":\"heartbeat\",\"counter\":{}}}",
-            counter
-        ));
-        Some((Ok(event), counter + 1))
-    });
+    debug!("SSE connection established for MCP protocol");
 
-    debug!("SSE connection established");
-    Sse::new(stream).keep_alive(
-        axum::response::sse::KeepAlive::new()
-            .interval(Duration::from_secs(15))
-            .text("keep-alive-text"),
-    )
-}
+    // Generate unique session ID for this SSE connection
+    let session_id = Uuid::new_v4().to_string();
+    let (sender, receiver) = mpsc::unbounded_channel::<String>();
 
-/// Handle SSE connection when no server is available (GET /events)
-async fn handle_sse_connection_no_server() -> Sse<
-    impl futures_util::Stream<Item = std::result::Result<axum::response::sse::Event, serde_json::Error>>,
-> {
-    debug!("SSE connection established (no server)");
-    use axum::response::sse::Event;
-    use futures_util::stream;
-    
-    // Return error stream
-    let stream = stream::iter(vec![Ok(Event::default()
-        .event("error")
-        .data("SSE endpoint requires server configuration"))]);
+    // Register session in the global manager
+    {
+        let mut sessions = sse_sessions.write().await;
+        sessions.insert(
+            session_id.clone(),
+            SseSession {
+                id: session_id.clone(),
+                sender: sender.clone(),
+            },
+        );
+    }
 
-    debug!("Returning SSE no-server stream");
+    debug!("Created SSE session: {}", session_id);
+
+    // Create stream that follows MCP SSE protocol
+    let host_port_clone = host_port.clone();
+    let stream = stream::unfold(
+        (
+            0,
+            session_id.clone(),
+            mcp_server,
+            receiver,
+            sse_sessions.clone(),
+            host_port_clone,
+        ),
+        move |(counter, session_id, server, mut receiver, sessions, host_port)| async move {
+            if counter == 0 {
+                // First event: Send 'endpoint' event with message URL according to MCP SSE spec
+                let endpoint_url = format!("http://{}/messages/{}", host_port, session_id);
+                let event = Event::default().event("endpoint").data(endpoint_url);
+
+                debug!("SSE sending 'endpoint' event for session: {}", session_id);
+                Some((
+                    Ok(event),
+                    (
+                        counter + 1,
+                        session_id,
+                        server,
+                        receiver,
+                        sessions,
+                        host_port,
+                    ),
+                ))
+            } else {
+                // Subsequent events: Wait for messages from the session channel
+                // This allows HTTP POST requests to /messages/:session_id to send responses back via SSE
+                match receiver.recv().await {
+                    Some(message_data) => {
+                        let event = Event::default().event("message").data(message_data);
+
+                        debug!("SSE sending 'message' event for session: {}", session_id);
+                        Some((
+                            Ok(event),
+                            (
+                                counter + 1,
+                                session_id,
+                                server,
+                                receiver,
+                                sessions,
+                                host_port,
+                            ),
+                        ))
+                    }
+                    None => {
+                        // Channel closed, clean up session
+                        debug!("SSE channel closed for session: {}", session_id);
+                        let mut session_map = sessions.write().await;
+                        session_map.remove(&session_id);
+                        None // End stream
+                    }
+                }
+            }
+        },
+    );
+
     Sse::new(stream)
 }
+
+/// Handle SSE message request (POST /messages/:session_id)
+/// Processes MCP requests from SSE clients and sends responses back via the SSE channel
+async fn handle_sse_message_request(
+    Path(session_id): Path<String>,
+    JsonExtract(payload): JsonExtract<Value>,
+    mcp_server: McpServer,
+    sse_sessions: SseSessionManager,
+) -> std::result::Result<Json<Value>, StatusCode> {
+    debug!("SSE message request for session: {}", session_id);
+
+    // Validate JSON-RPC 2.0 format
+    if let Err(_e) = validate_mcp_request(&payload) {
+        debug!("Invalid MCP SSE request: {:?}", payload);
+        return Err(StatusCode::BAD_REQUEST);
+    }
+
+    // Convert payload to string for MCP server processing
+    let message = match serde_json::to_string(&payload) {
+        Ok(msg) => msg,
+        Err(e) => {
+            debug!("Failed to serialize MCP SSE request: {}", e);
+            return Err(StatusCode::BAD_REQUEST);
+        }
+    };
+
+    // Process request through MCP server
+    match mcp_server.handle_message(&message).await {
+        Ok(Some(response_str)) => {
+            // Send response back through SSE channel
+            {
+                let sessions = sse_sessions.read().await;
+                if let Some(session) = sessions.get(&session_id) {
+                    if session.sender.send(response_str.clone()).is_err() {
+                        debug!("Failed to send response to SSE session: {}", session_id);
+                        return Err(StatusCode::GONE); // Session closed
+                    }
+                } else {
+                    debug!("SSE session not found: {}", session_id);
+                    return Err(StatusCode::NOT_FOUND);
+                }
+            }
+
+            // Return acknowledgment to HTTP POST client
+            let ack_response = serde_json::json!({
+                "status": "sent",
+                "session_id": session_id
+            });
+            debug!("SSE message sent for session: {}", session_id);
+            Ok(Json(ack_response))
+        }
+        Ok(None) => {
+            // No response needed (notification)
+            let ack_response = serde_json::json!({
+                "status": "processed",
+                "session_id": session_id
+            });
+            Ok(Json(ack_response))
+        }
+        Err(e) => {
+            error!("MCP server error for SSE session {}: {}", session_id, e);
+            let error_response = serde_json::json!({
+                "jsonrpc": "2.0",
+                "id": payload.get("id").cloned().unwrap_or(Value::Null),
+                "error": {
+                    "code": -32603,
+                    "message": "Internal error",
+                    "data": e.to_string()
+                }
+            });
+
+            // Send error response back through SSE channel
+            {
+                let sessions = sse_sessions.read().await;
+                if let Some(session) = sessions.get(&session_id) {
+                    let error_str =
+                        serde_json::to_string(&error_response).unwrap_or_else(|_| "{}".to_string());
+                    let _ = session.sender.send(error_str);
+                }
+            }
+
+            Ok(Json(error_response))
+        }
+    }
+}
+
 
 /// Handle health check (GET /health)
 async fn handle_health_check() -> Json<Value> {
@@ -1358,12 +1520,8 @@ fn validate_mcp_request(payload: &Value) -> Result<()> {
         ));
     }
 
-    // Validate id exists (required for requests)
-    if obj.get("id").is_none() {
-        return Err(Error::Transport(
-            "Request must include id field".to_string(),
-        ));
-    }
+    // Note: 'id' field is required for requests but MUST NOT be present for notifications
+    // Both are valid according to JSON-RPC 2.0 specification
 
     Ok(())
 }
@@ -1488,12 +1646,12 @@ mod tests {
         });
         assert!(validate_mcp_request(&no_method).is_err());
 
-        // Missing id
+        // Missing id is now valid (for notifications per JSON-RPC 2.0)
         let no_id = json!({
             "jsonrpc": "2.0",
             "method": "initialize"
         });
-        assert!(validate_mcp_request(&no_id).is_err());
+        assert!(validate_mcp_request(&no_id).is_ok());
 
         // Not an object
         let not_object = json!("invalid");
@@ -1512,9 +1670,6 @@ mod tests {
     #[tokio::test]
     async fn test_transport_server_port_constants() {
         assert_eq!(MultiTransportServer::DEFAULT_PORT, 8082);
-        assert_eq!(
-            MultiTransportServer::PORT_FALLBACK_SEQUENCE,
-            &[8082, 8083, 8084, 9090, 8081]
-        );
+        assert_eq!(MultiTransportServer::PORT_FALLBACK_SEQUENCE, &[8082, 9090]);
     }
 }
