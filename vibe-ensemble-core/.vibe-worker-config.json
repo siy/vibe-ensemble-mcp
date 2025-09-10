@@ -9,7 +9,7 @@
     "register": "mcp__vibe-ensemble-http__vibe_agent_register",
     "request_permissions": "mcp__vibe-ensemble-http__vibe_coordinator_request_worker"
   },
-  "coordinator_endpoint": "http://127.0.0.1:22360",
+  "coordinator_endpoint": "http://127.0.0.1:8082",
   "created_at": "2025-09-09T07:36:52.283860+00:00",
   "initialization_required": true,
   "mcp_server_info": {

@@ -74,8 +74,8 @@ struct Cli {
     #[arg(long)]
     mcp_host: Option<String>,
 
-    /// HTTP server port with auto-discovery fallback (default: 22360, fallback: 22361, 22362, 9090, 8081)
-    /// Provides /ws endpoint for WebSocket upgrade. Environment variable: VIBE_ENSEMBLE_MCP_PORT
+    /// HTTP server port for MCP transport (default: 8082)
+    /// Provides /mcp and /events endpoints for HTTP and SSE transports. Environment variable: VIBE_ENSEMBLE_MCP_PORT
     #[arg(long)]
     mcp_port: Option<u16>,
 
@@ -510,8 +510,8 @@ async fn run_websocket_transport(
     _web_handle: &mut tokio::task::JoinHandle<()>,
     _mcp_only: bool,
 ) -> anyhow::Result<()> {
-    // Create WebSocket server
-    let ws_server = WebSocketServer::new(mcp_host.clone(), mcp_port);
+    // Create WebSocket server with MCP server instance
+    let ws_server = WebSocketServer::with_mcp_server(mcp_host.clone(), mcp_port, Arc::new(server.clone()));
     let _bind_address = ws_server.bind_address();
 
     // Port conflict checking is now handled by the HTTP server with fallback
@@ -686,7 +686,7 @@ async fn generate_mcp_configuration(cli: &Cli) -> anyhow::Result<()> {
                 .ok()
                 .and_then(|s| s.parse().ok())
         })
-        .unwrap_or(vibe_ensemble_mcp::transport::WebSocketServer::DEFAULT_PORT);
+        .unwrap_or(8082);
 
     // Validate transport type
     let transport = cli.transport.to_lowercase();
@@ -705,21 +705,27 @@ async fn generate_mcp_configuration(cli: &Cli) -> anyhow::Result<()> {
 
     let mut mcp_servers = HashMap::new();
 
-    if cli.setup_workers {
-        // Generate multi-worker configuration
-        let num_workers = cli.workers;
-        println!("  Workers: {}", num_workers);
-
-        for i in 1..=num_workers {
-            let server_name = format!("vibe-ensemble-worker-{}", i);
-            let server_config = create_server_config(&transport, &mcp_host, mcp_port)?;
-            mcp_servers.insert(server_name, server_config);
+    // Generate dual HTTP and SSE transport configurations
+    let http_config = serde_json::json!({
+        "type": "http",
+        "url": format!("http://{}:{}/mcp", mcp_host, mcp_port),
+        "headers": {
+            "Content-Type": "application/json"
         }
-    } else {
-        // Generate single server configuration
-        let server_config = create_server_config(&transport, &mcp_host, mcp_port)?;
-        mcp_servers.insert("vibe-ensemble".to_string(), server_config);
-    }
+    });
+
+    let sse_config = serde_json::json!({
+        "type": "sse", 
+        "url": format!("http://{}:{}/events", mcp_host, mcp_port),
+        "headers": {
+            "Accept": "text/event-stream",
+            "Cache-Control": "no-cache"
+        }
+    });
+
+    // Insert both HTTP and SSE configurations
+    mcp_servers.insert("vibe-ensemble-http".to_string(), http_config);
+    mcp_servers.insert("vibe-ensemble-sse".to_string(), sse_config);
 
     // Create the complete configuration structure
     let mcp_config = serde_json::json!({
@@ -734,14 +740,8 @@ async fn generate_mcp_configuration(cli: &Cli) -> anyhow::Result<()> {
 
     println!("✓ Configuration written to {}", config_path);
     println!("✓ Ready for Claude Code integration!");
-
-    if transport == "websocket" {
-        println!("  Connect to: ws://{}:{}/ws", mcp_host, mcp_port);
-    } else if transport == "http" {
-        println!("  Connect to: http://{}:{}/mcp", mcp_host, mcp_port);
-    } else if transport == "sse" {
-        println!("  Connect to: http://{}:{}/events", mcp_host, mcp_port);
-    }
+    println!("  HTTP endpoint: http://{}:{}/mcp", mcp_host, mcp_port);
+    println!("  SSE endpoint: http://{}:{}/events", mcp_host, mcp_port);
 
     Ok(())
 }
@@ -800,20 +800,20 @@ mod tests {
 
     #[tokio::test]
     async fn test_create_server_config_websocket() {
-        let config = create_server_config("websocket", "127.0.0.1", 22360).unwrap();
+        let config = create_server_config("websocket", "127.0.0.1", 8082).unwrap();
 
         assert_eq!(config["command"], "vibe-ensemble");
         assert_eq!(config["args"][0], "--mcp-only");
         assert_eq!(config["transport"]["type"], "websocket");
-        assert_eq!(config["transport"]["url"], "ws://127.0.0.1:22360/ws");
+        assert_eq!(config["transport"]["url"], "ws://127.0.0.1:8082/ws");
     }
 
     #[tokio::test]
     async fn test_create_server_config_http() {
-        let config = create_server_config("http", "127.0.0.1", 22360).unwrap();
+        let config = create_server_config("http", "127.0.0.1", 8082).unwrap();
 
         assert_eq!(config["transport"]["type"], "http");
-        assert_eq!(config["transport"]["url"], "http://127.0.0.1:22360/mcp");
+        assert_eq!(config["transport"]["url"], "http://127.0.0.1:8082/mcp");
         assert_eq!(
             config["transport"]["headers"]["Content-Type"],
             "application/json"
@@ -822,10 +822,10 @@ mod tests {
 
     #[tokio::test]
     async fn test_create_server_config_sse() {
-        let config = create_server_config("sse", "127.0.0.1", 22360).unwrap();
+        let config = create_server_config("sse", "127.0.0.1", 8082).unwrap();
 
         assert_eq!(config["transport"]["type"], "sse");
-        assert_eq!(config["transport"]["url"], "http://127.0.0.1:22360/events");
+        assert_eq!(config["transport"]["url"], "http://127.0.0.1:8082/events");
         assert_eq!(
             config["transport"]["headers"]["Accept"],
             "text/event-stream"
@@ -835,7 +835,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_create_server_config_invalid() {
-        let result = create_server_config("invalid", "127.0.0.1", 22360);
+        let result = create_server_config("invalid", "127.0.0.1", 8082);
         assert!(result.is_err());
     }
 

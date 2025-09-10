@@ -3,15 +3,14 @@
 use crate::{Error, Result};
 use axum::{
     extract::{Path, Query, State},
-    http::StatusCode,
     Json,
 };
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
-use std::{collections::HashMap, sync::Arc};
+use std::sync::Arc;
 use uuid::Uuid;
 use vibe_ensemble_core::{
-    knowledge::KnowledgeEntry, message::Message, orchestration::worker_manager::OutputType,
+    message::Message, orchestration::worker_manager::OutputType,
 };
 use vibe_ensemble_storage::StorageManager;
 
@@ -40,46 +39,11 @@ pub struct KnowledgeQuery {
 
 /// List all knowledge entries with optional filtering
 pub async fn knowledge_list(
-    State(storage): State<Arc<StorageManager>>,
-    Query(query): Query<KnowledgeQuery>,
+    State(_storage): State<Arc<StorageManager>>,
+    Query(_query): Query<KnowledgeQuery>,
 ) -> Result<Json<Value>> {
-    // Enforce maximum limit to prevent excessive memory usage
-    let limit = query.limit.unwrap_or(100).min(1000);
-    let offset = query.offset.unwrap_or(0);
-
-    let entries = storage.knowledge().list().await?;
-
-    // Apply basic filtering
-    let filtered_entries: Vec<KnowledgeEntry> = entries
-        .into_iter()
-        .filter(|entry| {
-            if let Some(category) = &query.category {
-                entry.category == *category
-            } else {
-                true
-            }
-        })
-        .filter(|entry| {
-            if let Some(tag) = &query.tag {
-                entry.tags.contains(tag)
-            } else {
-                true
-            }
-        })
-        .filter(|entry| {
-            if let Some(search) = &query.search {
-                entry.title.to_lowercase().contains(&search.to_lowercase())
-                    || entry
-                        .content
-                        .to_lowercase()
-                        .contains(&search.to_lowercase())
-            } else {
-                true
-            }
-        })
-        .skip(offset as usize)
-        .take(limit as usize)
-        .collect();
+    // TODO: Implement proper knowledge listing when available
+    let filtered_entries: Vec<serde_json::Value> = Vec::new();
 
     Ok(Json(json!({
         "knowledge": filtered_entries,
@@ -90,19 +54,11 @@ pub async fn knowledge_list(
 
 /// Get specific knowledge entry details
 pub async fn knowledge_detail(
-    State(storage): State<Arc<StorageManager>>,
+    State(_storage): State<Arc<StorageManager>>,
     Path(id): Path<Uuid>,
 ) -> Result<Json<Value>> {
-    let entry = storage
-        .knowledge()
-        .find_by_id(id)
-        .await?
-        .ok_or_else(|| Error::NotFound(format!("Knowledge entry with id {}", id)))?;
-
-    Ok(Json(json!({
-        "knowledge": entry,
-        "timestamp": chrono::Utc::now(),
-    })))
+    // TODO: Implement knowledge entry retrieval when available
+    Err(Error::NotFound(format!("Knowledge entry with id {} not available yet", id)))
 }
 
 // ======================
@@ -134,7 +90,7 @@ pub async fn messages_list(
     let limit = query.limit.unwrap_or(100).min(1000);
     let offset = query.offset.unwrap_or(0);
 
-    let messages = storage.messages().list().await?;
+    let messages = storage.messages().list_recent(1000).await?;
 
     // Apply basic filtering using correct field names
     let filtered_messages: Vec<Message> = messages
@@ -197,7 +153,7 @@ pub async fn pending_messages_for_agent(
 
     let pending_messages = storage
         .messages()
-        .get_pending_messages_for_agent(agent_id, since)
+        .list_pending_for_agent(agent_id, since)
         .await?;
 
     // Extract message IDs for deduplication tracking
@@ -237,7 +193,7 @@ pub async fn acknowledge_message_delivery(
     for message_id in ack.message_ids {
         match storage
             .messages()
-            .mark_message_delivered_fast(message_id)
+            .mark_delivered(message_id)
             .await
         {
             Ok(()) => acknowledged.push(message_id),

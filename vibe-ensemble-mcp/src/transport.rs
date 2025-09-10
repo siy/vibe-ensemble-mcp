@@ -6,10 +6,11 @@
 pub mod automated_runner;
 pub mod testing;
 
-use crate::{Error, Result};
+use crate::{Error, Result, server::McpServer};
 use axum::{
     extract::ws::WebSocketUpgrade,
     extract::Json as JsonExtract,
+    extract::State,
     http::StatusCode,
     response::Sse,
     routing::{get, post},
@@ -18,6 +19,7 @@ use axum::{
 use futures_util::{SinkExt, StreamExt};
 use serde_json::Value;
 use std::net::SocketAddr;
+use std::sync::Arc;
 use tokio::sync::mpsc;
 use tokio::time::{timeout, Duration};
 use tokio_tungstenite::tungstenite::Message;
@@ -774,7 +776,7 @@ impl TransportFactory {
 /// - HTTP POST endpoint at /mcp for direct JSON-RPC 2.0 requests
 /// - Server-Sent Events at /events endpoint for streaming transport
 /// - Health check endpoint at /health for service discovery
-/// - Implements auto-discovery port fallback (22360, 22361, 22362, 9090, 8081)
+/// - Uses port 8082 for HTTP and SSE endpoints
 /// - Creates appropriate transports for each connected agent
 /// - Manages connection lifecycle and cleanup
 /// - Integrates with the existing MCP server architecture
@@ -787,14 +789,16 @@ pub struct MultiTransportServer {
     read_timeout: Duration,
     /// Write timeout for WebSocket connections
     write_timeout: Duration,
+    /// MCP server instance for handling HTTP requests
+    mcp_server: Option<Arc<McpServer>>,
 }
 
 impl MultiTransportServer {
     /// Port fallback sequence for auto-discovery (in priority order)
-    pub const PORT_FALLBACK_SEQUENCE: &'static [u16] = &[22360, 22361, 22362, 9090, 8081];
+    pub const PORT_FALLBACK_SEQUENCE: &'static [u16] = &[8082, 8083, 8084, 9090, 8081];
 
     /// Default WebSocket server port (first in fallback sequence)
-    pub const DEFAULT_PORT: u16 = 22360;
+    pub const DEFAULT_PORT: u16 = 8082;
 
     /// Create a new WebSocket server with default settings
     pub fn new(host: String, port: u16) -> Self {
@@ -803,6 +807,18 @@ impl MultiTransportServer {
             port,
             read_timeout: Duration::from_secs(30),
             write_timeout: Duration::from_secs(10),
+            mcp_server: None,
+        }
+    }
+
+    /// Create a new server with MCP server instance for HTTP endpoints
+    pub fn with_mcp_server(host: String, port: u16, mcp_server: Arc<McpServer>) -> Self {
+        Self {
+            host,
+            port,
+            read_timeout: Duration::from_secs(30),
+            write_timeout: Duration::from_secs(10),
+            mcp_server: Some(mcp_server),
         }
     }
 
@@ -818,6 +834,7 @@ impl MultiTransportServer {
             port,
             read_timeout,
             write_timeout,
+            mcp_server: None,
         }
     }
 
@@ -828,7 +845,7 @@ impl MultiTransportServer {
 
     /// Start the HTTP server with WebSocket upgrade and return a channel receiver for new connections
     ///
-    /// This implements port fallback (22360, 22361, 22362, 9090, 8081) and creates an HTTP server
+    /// This implements port fallback (8082, 8083, 8084, 9090, 8081) and creates an HTTP server
     /// with a /ws endpoint that handles WebSocket upgrade requests. Each connection yields a
     /// ready-to-use WebSocket transport that can be used with the MCP server.
     pub async fn start(
@@ -905,22 +922,44 @@ impl MultiTransportServer {
         let write_timeout = self.write_timeout;
         let connection_tx_clone = connection_tx.clone();
 
-        let app = Router::new()
-            .route(
-                "/ws",
-                get(move |ws: WebSocketUpgrade| async move {
-                    handle_websocket_upgrade(ws, connection_tx_clone, read_timeout, write_timeout)
-                        .await
-                }),
-            )
-            .route("/mcp", post(handle_mcp_http_request))
-            .route("/events", get(handle_sse_connection))
-            .route("/health", get(handle_health_check))
-            .layer(
-                ServiceBuilder::new()
-                    .layer(CorsLayer::permissive()) // Allow cross-origin WebSocket connections
-                    .into_inner(),
-            );
+        let app = if let Some(mcp_server) = self.mcp_server {
+            // Router with MCP server state for HTTP endpoints
+            Router::new()
+                .route(
+                    "/ws",
+                    get(move |ws: WebSocketUpgrade| async move {
+                        handle_websocket_upgrade(ws, connection_tx_clone, read_timeout, write_timeout)
+                            .await
+                    }),
+                )
+                .route("/mcp", post(handle_mcp_http_request))
+                .route("/events", get(handle_sse_connection))
+                .route("/health", get(handle_health_check))
+                .with_state(mcp_server)
+                .layer(
+                    ServiceBuilder::new()
+                        .layer(CorsLayer::permissive()) // Allow cross-origin WebSocket connections
+                        .into_inner(),
+                )
+        } else {
+            // Router without MCP server state (HTTP endpoints will return errors)
+            Router::new()
+                .route(
+                    "/ws",
+                    get(move |ws: WebSocketUpgrade| async move {
+                        handle_websocket_upgrade(ws, connection_tx_clone, read_timeout, write_timeout)
+                            .await
+                    }),
+                )
+                .route("/mcp", post(handle_mcp_http_request_no_server))
+                .route("/events", get(handle_sse_connection_no_server))
+                .route("/health", get(handle_health_check))
+                .layer(
+                    ServiceBuilder::new()
+                        .layer(CorsLayer::permissive()) // Allow cross-origin WebSocket connections
+                        .into_inner(),
+                )
+        };
 
         // Spawn the HTTP server
         tokio::spawn(async move {
@@ -1164,8 +1203,9 @@ async fn handle_axum_websocket_task(
     info!("WebSocket background task ended");
 }
 
-/// Handle HTTP MCP request (POST /mcp)
+/// Handle HTTP MCP request (POST /mcp) with MCP server
 async fn handle_mcp_http_request(
+    State(mcp_server): State<Arc<McpServer>>,
     JsonExtract(payload): JsonExtract<Value>,
 ) -> std::result::Result<Json<Value>, StatusCode> {
     // Validate JSON-RPC 2.0 format
@@ -1174,19 +1214,62 @@ async fn handle_mcp_http_request(
         return Err(StatusCode::BAD_REQUEST);
     }
 
-    // TODO: Process MCP request through server
-    // For now, return a basic error response indicating the method is not implemented
+    // Convert payload to JSON string
+    let message = serde_json::to_string(&payload)
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+
+    debug!("Processing HTTP MCP request: {}", message);
+
+    // Process the request through the MCP server
+    match mcp_server.handle_message(&message).await {
+        Ok(Some(response)) => {
+            debug!("HTTP MCP response: {}", response);
+            // Parse response back to JSON
+            match serde_json::from_str::<Value>(&response) {
+                Ok(json_response) => Ok(Json(json_response)),
+                Err(e) => {
+                    error!("Failed to parse MCP server response as JSON: {}", e);
+                    Err(StatusCode::INTERNAL_SERVER_ERROR)
+                }
+            }
+        }
+        Ok(None) => {
+            // No response needed (notification)
+            debug!("HTTP MCP request processed as notification (no response)");
+            Err(StatusCode::NO_CONTENT)
+        }
+        Err(e) => {
+            error!("Error processing HTTP MCP request: {}", e);
+            // Return JSON-RPC error response
+            let error_response = serde_json::json!({
+                "jsonrpc": "2.0",
+                "id": payload.get("id").cloned().unwrap_or(Value::Null),
+                "error": {
+                    "code": -32603,
+                    "message": "Internal error",
+                    "data": format!("MCP server error: {}", e)
+                }
+            });
+            Ok(Json(error_response))
+        }
+    }
+}
+
+/// Handle HTTP MCP request when no server is available
+async fn handle_mcp_http_request_no_server(
+    JsonExtract(payload): JsonExtract<Value>,
+) -> std::result::Result<Json<Value>, StatusCode> {
+    // Return error indicating server is not configured
     let error_response = serde_json::json!({
         "jsonrpc": "2.0",
         "id": payload.get("id").cloned().unwrap_or(Value::Null),
         "error": {
             "code": -32601,
             "message": "Method not found",
-            "data": "HTTP MCP endpoint is not fully implemented yet"
+            "data": "HTTP MCP endpoint requires server configuration"
         }
     });
-
-    debug!("Returning HTTP MCP response: {:?}", error_response);
+    debug!("Returning HTTP MCP no-server response: {:?}", error_response);
     Ok(Json(error_response))
 }
 
@@ -1214,6 +1297,23 @@ async fn handle_sse_connection() -> Sse<
             .interval(Duration::from_secs(15))
             .text("keep-alive-text"),
     )
+}
+
+/// Handle SSE connection when no server is available (GET /events)
+async fn handle_sse_connection_no_server() -> Sse<
+    impl futures_util::Stream<Item = std::result::Result<axum::response::sse::Event, serde_json::Error>>,
+> {
+    debug!("SSE connection established (no server)");
+    use axum::response::sse::Event;
+    use futures_util::stream;
+    
+    // Return error stream
+    let stream = stream::iter(vec![Ok(Event::default()
+        .event("error")
+        .data("SSE endpoint requires server configuration"))]);
+
+    debug!("Returning SSE no-server stream");
+    Sse::new(stream)
 }
 
 /// Handle health check (GET /health)
@@ -1402,19 +1502,19 @@ mod tests {
 
     #[tokio::test]
     async fn test_multi_transport_server_creation() {
-        let server = MultiTransportServer::new("127.0.0.1".to_string(), 22360);
+        let server = MultiTransportServer::new("127.0.0.1".to_string(), 8082);
 
         assert_eq!(server.host, "127.0.0.1");
-        assert_eq!(server.port, 22360);
-        assert_eq!(server.bind_address(), "127.0.0.1:22360");
+        assert_eq!(server.port, 8082);
+        assert_eq!(server.bind_address(), "127.0.0.1:8082");
     }
 
     #[tokio::test]
     async fn test_transport_server_port_constants() {
-        assert_eq!(MultiTransportServer::DEFAULT_PORT, 22360);
+        assert_eq!(MultiTransportServer::DEFAULT_PORT, 8082);
         assert_eq!(
             MultiTransportServer::PORT_FALLBACK_SEQUENCE,
-            &[22360, 22361, 22362, 9090, 8081]
+            &[8082, 8083, 8084, 9090, 8081]
         );
     }
 }

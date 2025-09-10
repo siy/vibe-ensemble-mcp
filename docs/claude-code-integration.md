@@ -15,7 +15,7 @@ This document provides comprehensive information about integrating Vibe Ensemble
 
 ### No Port Scanning
 - No automatic network scanning for endpoints like `/ws`
-- No port range scanning (e.g., 3000-4000, 22360-22362)
+- No port range scanning (e.g., 3000-4000, 8082-8084)
 - Connection establishment requires manual server registration
 - All connections must be explicitly configured
 
@@ -32,20 +32,6 @@ Located at project root directory:
       "args": ["--mcp-only"],
       "env": {
         "RUST_LOG": "vibe_ensemble=info"
-      }
-    },
-    "vibe-ensemble-http": {
-      "transport": {
-        "type": "http",
-        "url": "http://127.0.0.1:22360/mcp",
-        "headers": { "Content-Type": "application/json" }
-      }
-    },
-    "vibe-ensemble-sse": {
-      "transport": {
-        "type": "sse",
-        "url": "http://127.0.0.1:22360/events",
-        "headers": { "X-API-Key": "${VIBE_API_KEY:-default}" }
       }
     }
   }
@@ -68,8 +54,8 @@ Located at project root directory:
 Vibe Ensemble uses intelligent port fallback for reliable connectivity:
 
 - **Default Host**: `127.0.0.1` (localhost)
-- **Default Port**: `22360` (`DEFAULT_PORT`)
-- **Port Fallback Sequence**: `[22360, 22361, 22362, 9090, 8081]`
+- **Default Port**: `8082` (`DEFAULT_PORT`)
+- **Port Fallback Sequence**: `[8082, 8083, 8084, 9090, 8081]`
 - **Excluded Port**: `8080` (high risk of conflicts with development servers)
 
 The server attempts to bind to each port in sequence until successful. This ensures reliable startup even if some ports are occupied by other services.
@@ -274,7 +260,7 @@ Create a bridge process that Claude Code can spawn:
 
 ```bash
 # Claude Code spawns this
-vibe-ensemble-bridge --connect ws://127.0.0.1:22360/ws
+vibe-ensemble-bridge --connect ws://127.0.0.1:8082/ws
 
 # Bridge translates stdio <-> WebSocket
 ```
