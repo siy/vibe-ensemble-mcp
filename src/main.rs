@@ -31,7 +31,9 @@ async fn main() -> Result<()> {
 
     // Initialize tracing
     tracing_subscriber::fmt()
-        .with_env_filter(EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new(&args.log_level)))
+        .with_env_filter(
+            EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new(&args.log_level)),
+        )
         .init();
 
     info!("Starting Vibe-Ensemble MCP Server");

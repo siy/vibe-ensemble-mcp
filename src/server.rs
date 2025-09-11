@@ -7,11 +7,7 @@ use axum::{
 };
 use serde_json::{json, Value};
 use std::sync::Arc;
-use tower_http::{
-    cors::CorsLayer,
-    limit::RequestBodyLimitLayer,
-    trace::TraceLayer,
-};
+use tower_http::{cors::CorsLayer, limit::RequestBodyLimitLayer, trace::TraceLayer};
 use tracing::{error, info};
 
 use crate::{
@@ -42,12 +38,16 @@ pub async fn run_server(config: Config) -> Result<()> {
     let cors = CorsLayer::new()
         .allow_methods([Method::GET, Method::POST])
         .allow_headers([axum::http::header::CONTENT_TYPE])
-        .allow_origin("http://localhost:3000".parse::<axum::http::HeaderValue>().unwrap());
+        .allow_origin(
+            "http://localhost:3000"
+                .parse::<axum::http::HeaderValue>()
+                .unwrap(),
+        );
 
     let app = Router::new()
         .route("/health", get(health_check))
         .route("/mcp", post(mcp_handler))
-        .layer(RequestBodyLimitLayer::new(1 * 1024 * 1024)) // 1 MiB
+        .layer(RequestBodyLimitLayer::new(1024 * 1024)) // 1 MiB
         .layer(TraceLayer::new_for_http())
         .layer(cors)
         .with_state(state);
