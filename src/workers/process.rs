@@ -37,7 +37,7 @@ impl ProcessManager {
                 })?;
 
         // Generate queue name
-        let queue_name = request.worker_id.replace("worker_", "queue_");
+        let queue_name = format!("queue_{}", request.worker_id.trim_start_matches("worker_"));
 
         // Create worker info
         let now = chrono::Utc::now();

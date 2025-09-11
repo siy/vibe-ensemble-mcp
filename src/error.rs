@@ -42,4 +42,10 @@ impl IntoResponse for AppError {
     }
 }
 
+impl From<axum::extract::rejection::JsonRejection> for AppError {
+    fn from(rej: axum::extract::rejection::JsonRejection) -> Self {
+        AppError::BadRequest(rej.to_string())
+    }
+}
+
 pub type Result<T> = std::result::Result<T, AppError>;

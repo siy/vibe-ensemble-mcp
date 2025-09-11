@@ -13,7 +13,7 @@ use tracing::info;
 pub type DbPool = Pool<Sqlite>;
 
 pub async fn create_pool(database_url: &str) -> Result<DbPool> {
-    info!("Connecting to database: {}", database_url);
+    info!("Connecting to SQLite database");
 
     let pool = SqlitePool::connect(database_url).await?;
 
