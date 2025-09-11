@@ -29,10 +29,10 @@ pub struct JsonRpcError {
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct InitializeRequest {
-    #[serde(alias = "protocolVersion")]
+    #[serde(rename = "protocolVersion", alias = "protocol_version")]
     pub protocol_version: String,
     pub capabilities: ClientCapabilities,
-    #[serde(alias = "clientInfo")]
+    #[serde(rename = "clientInfo", alias = "client_info")]
     pub client_info: ClientInfo,
 }
 
@@ -44,7 +44,7 @@ pub struct ClientCapabilities {
 
 #[derive(Debug, Serialize, Deserialize, Default)]
 pub struct ToolsCapability {
-    #[serde(default)]
+    #[serde(rename = "listChanged", alias = "list_changed", default)]
     pub list_changed: bool,
 }
 
@@ -56,14 +56,23 @@ pub struct ClientInfo {
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct InitializeResponse {
+    #[serde(rename = "protocolVersion")]
     pub protocol_version: String,
     pub capabilities: ServerCapabilities,
+    #[serde(rename = "serverInfo")]
     pub server_info: ServerInfo,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct ServerCapabilities {
     pub tools: ToolsCapability,
+    pub prompts: PromptsCapability,
+}
+
+#[derive(Debug, Serialize, Deserialize, Default)]
+pub struct PromptsCapability {
+    #[serde(rename = "listChanged", alias = "list_changed", default)]
+    pub list_changed: bool,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -76,6 +85,7 @@ pub struct ServerInfo {
 pub struct Tool {
     pub name: String,
     pub description: String,
+    #[serde(rename = "inputSchema", alias = "input_schema")]
     pub input_schema: Value,
 }
 
@@ -93,12 +103,60 @@ pub struct CallToolRequest {
 #[derive(Debug, Serialize, Deserialize)]
 pub struct CallToolResponse {
     pub content: Vec<ToolContent>,
-    #[serde(skip_serializing_if = "Option::is_none")]
+    #[serde(
+        rename = "isError",
+        alias = "is_error",
+        skip_serializing_if = "Option::is_none"
+    )]
     pub is_error: Option<bool>,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct ToolContent {
+    #[serde(rename = "type")]
+    pub content_type: String,
+    pub text: String,
+}
+
+// Prompt-related types
+#[derive(Debug, Serialize, Deserialize)]
+pub struct Prompt {
+    pub name: String,
+    pub description: String,
+    pub arguments: Vec<PromptArgument>,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct PromptArgument {
+    pub name: String,
+    pub description: String,
+    pub required: bool,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct ListPromptsResponse {
+    pub prompts: Vec<Prompt>,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct GetPromptRequest {
+    pub name: String,
+    pub arguments: Option<Value>,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct GetPromptResponse {
+    pub messages: Vec<PromptMessage>,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct PromptMessage {
+    pub role: String,
+    pub content: PromptContent,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct PromptContent {
     #[serde(rename = "type")]
     pub content_type: String,
     pub text: String,

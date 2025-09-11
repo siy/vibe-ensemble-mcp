@@ -1,4 +1,6 @@
 use anyhow::{Context, Result};
+use serde_json::json;
+use std::fs;
 use std::process::{Command, Stdio};
 use tokio::time::Duration;
 use tracing::{debug, info, warn};
@@ -12,6 +14,23 @@ use crate::{
 pub struct ProcessManager;
 
 impl ProcessManager {
+    fn create_mcp_config(project_path: &str, worker_id: &str, server_port: u16) -> Result<String> {
+        let config = json!({
+            "mcpServers": {
+                "vibe-ensemble-mcp": {
+                    "type": "http",
+                    "url": format!("http://127.0.0.1:{}/mcp", server_port),
+                    "protocol_version": "2024-11-05"
+                }
+            }
+        });
+
+        let config_path = format!("{}/worker_{}_mcp_config.json", project_path, worker_id);
+        fs::write(&config_path, serde_json::to_string_pretty(&config)?)?;
+
+        info!("Generated MCP config file: {}", config_path);
+        Ok(config_path)
+    }
     pub async fn spawn_worker(
         state: &AppState,
         request: SpawnWorkerRequest,
@@ -36,8 +55,8 @@ impl ProcessManager {
                     )
                 })?;
 
-        // Generate queue name
-        let queue_name = format!("queue_{}", request.worker_id.trim_start_matches("worker_"));
+        // Use the provided queue name
+        let queue_name = request.queue_name.clone();
 
         // Create worker info
         let now = chrono::Utc::now();
@@ -69,19 +88,28 @@ impl ProcessManager {
         let worker_prompt =
             Self::build_worker_prompt(&worker_info, &worker_type_info.system_prompt, &queue_name);
 
+        // Generate MCP config file
+        let mcp_config_path =
+            Self::create_mcp_config(&project.path, &worker_info.worker_id, state.config.port)?;
+
+        // Create log file path
+        let log_file_path = format!("{}/worker_{}.log", project.path, worker_info.worker_id);
+        let log_file = fs::File::create(&log_file_path)?;
+
         // Spawn Claude Code process
         let mut cmd = Command::new("claude");
         cmd.arg("-p")
             .arg(&worker_prompt)
-            .arg("--database-path")
-            .arg(format!(
-                "{}/worker_{}.db",
-                project.path, worker_info.worker_id
-            ))
+            .arg("--debug")
+            .arg("--verbose")
+            .arg("--permission-mode")
+            .arg("bypassPermissions")
+            .arg("--mcp-config")
+            .arg(&mcp_config_path)
             .current_dir(&project.path)
             .stdin(Stdio::piped())
-            .stdout(Stdio::piped())
-            .stderr(Stdio::piped());
+            .stdout(Stdio::from(log_file.try_clone()?))
+            .stderr(Stdio::from(log_file));
 
         debug!("Executing command: {:?}", cmd);
 
@@ -91,8 +119,8 @@ impl ProcessManager {
 
         let pid = child.id();
         info!(
-            "Worker {} spawned with PID: {:?}",
-            worker_info.worker_id, pid
+            "Worker {} spawned with PID: {:?}, MCP config: {}, Log file: {}",
+            worker_info.worker_id, pid, mcp_config_path, log_file_path
         );
 
         // Update worker info with PID and status

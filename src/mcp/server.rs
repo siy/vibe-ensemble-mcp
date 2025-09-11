@@ -66,8 +66,11 @@ impl McpServer {
 
         let response = match request.method.as_str() {
             "initialize" => self.handle_initialize(request.params).await,
-            "list_tools" => self.handle_list_tools().await,
-            "call_tool" => self.handle_call_tool(state, request.params).await,
+            "notifications/initialized" => self.handle_initialized().await,
+            "list_tools" | "tools/list" => self.handle_list_tools().await,
+            "call_tool" | "tools/call" => self.handle_call_tool(state, request.params).await,
+            "list_prompts" | "prompts/list" => self.handle_list_prompts().await,
+            "get_prompt" | "prompts/get" => self.handle_get_prompt(request.params).await,
             _ => Err(JsonRpcError {
                 code: METHOD_NOT_FOUND,
                 message: format!("Method '{}' not found", request.method),
@@ -115,16 +118,16 @@ impl McpServer {
         // Log protocol version negotiation
         let client_version = &request.protocol_version;
         let server_supported_version = "2024-11-05";
-        
+
         info!(
-            "Protocol version negotiation - Client requested: {}, Server supports: {}", 
+            "Protocol version negotiation - Client requested: {}, Server supports: {}",
             client_version, server_supported_version
         );
 
         // We accept any client version but return what we actually support
         if client_version != server_supported_version {
             info!(
-                "Protocol version mismatch: client requested {}, negotiating down to {}", 
+                "Protocol version mismatch: client requested {}, negotiating down to {}",
                 client_version, server_supported_version
             );
         }
@@ -133,6 +136,9 @@ impl McpServer {
             protocol_version: server_supported_version.to_string(),
             capabilities: ServerCapabilities {
                 tools: ToolsCapability {
+                    list_changed: false,
+                },
+                prompts: PromptsCapability {
                     list_changed: false,
                 },
             },
@@ -149,6 +155,14 @@ impl McpServer {
         })?;
 
         Ok(result)
+    }
+
+    async fn handle_initialized(&self) -> std::result::Result<Value, JsonRpcError> {
+        info!("Handling notifications/initialized request");
+
+        // The notifications/initialized method requires no response according to MCP spec
+        // Return null/empty result to acknowledge
+        Ok(Value::Null)
     }
 
     async fn handle_list_tools(&self) -> std::result::Result<Value, JsonRpcError> {
@@ -205,6 +219,373 @@ impl McpServer {
 
         Ok(result)
     }
+
+    async fn handle_list_prompts(&self) -> std::result::Result<Value, JsonRpcError> {
+        info!("Handling list_prompts request");
+
+        let prompts = vec![
+            Prompt {
+                name: "vibe-ensemble-overview".to_string(),
+                description: "Comprehensive overview of the Vibe Ensemble MCP server capabilities, tools, and how to use them effectively for multi-agent coordination".to_string(),
+                arguments: vec![],
+            },
+            Prompt {
+                name: "project-setup".to_string(),
+                description: "Step-by-step guide for setting up a new project with worker types and initial configuration".to_string(),
+                arguments: vec![
+                    PromptArgument {
+                        name: "project_name".to_string(),
+                        description: "Name of the project to set up".to_string(),
+                        required: true,
+                    }
+                ],
+            },
+            Prompt {
+                name: "multi-agent-workflow".to_string(),
+                description: "Best practices and examples for coordinating multiple agents on complex tasks".to_string(),
+                arguments: vec![
+                    PromptArgument {
+                        name: "task_type".to_string(),
+                        description: "Type of task (development, analysis, testing, etc.)".to_string(),
+                        required: false,
+                    }
+                ],
+            },
+        ];
+
+        let response = ListPromptsResponse { prompts };
+
+        let result = serde_json::to_value(response).map_err(|e| JsonRpcError {
+            code: INTERNAL_ERROR,
+            message: format!("Failed to serialize prompts: {}", e),
+            data: None,
+        })?;
+
+        Ok(result)
+    }
+
+    async fn handle_get_prompt(
+        &self,
+        params: Option<Value>,
+    ) -> std::result::Result<Value, JsonRpcError> {
+        let request: GetPromptRequest = match params {
+            Some(params) => serde_json::from_value(params).map_err(|e| JsonRpcError {
+                code: INVALID_PARAMS,
+                message: format!("Invalid get_prompt params: {}", e),
+                data: None,
+            })?,
+            None => {
+                return Err(JsonRpcError {
+                    code: INVALID_PARAMS,
+                    message: "Missing get_prompt parameters".to_string(),
+                    data: None,
+                })
+            }
+        };
+
+        info!("Getting prompt: {}", request.name);
+
+        let messages = match request.name.as_str() {
+            "vibe-ensemble-overview" => vec![
+                PromptMessage {
+                    role: "user".to_string(),
+                    content: PromptContent {
+                        content_type: "text".to_string(),
+                        text: "You are now connected to the Vibe Ensemble MCP server - a sophisticated multi-agent coordination system. Here's what you need to know:
+
+# Vibe Ensemble Overview
+
+**Purpose**: Coordinate multiple specialized agents to prevent context drift and maintain focus across complex, multi-stage projects.
+
+## Core Concepts
+
+### 1. Projects
+- Create projects with `create_project` to establish workspaces
+- Each project can have multiple specialized worker types
+- Projects track all tickets, workers, and progress
+
+### 2. Worker Types & Agents
+- FIRST: Define specialized worker types with custom system prompts
+- THEN: Spawn workers using `spawn_worker` with specific queue assignments
+- Workers pull tasks from their designated queues automatically
+- Monitor worker status with `get_worker_status` and `list_workers`
+
+### 3. Ticketing System
+- Create tickets with execution plans using `create_ticket`
+- Tickets have multi-stage execution with progress tracking
+- Assign tickets to appropriate queues for worker processing
+- Monitor progress through comments and stage updates
+
+### 4. Task Queues
+- Create specialized queues (e.g., 'development', 'testing', 'review')
+- Workers are assigned to specific queues when spawned
+- Use `assign_task` to route tickets to the appropriate queue
+- Monitor queue status and progress
+
+## Available Tools (22 total)
+
+**Project Management**: create_project, list_projects, get_project, update_project, delete_project
+**Worker Management**: spawn_worker (now requires queue_name), stop_worker, list_workers, get_worker_status  
+**Tickets**: create_ticket, get_ticket, list_tickets, add_ticket_comment, update_ticket_stage, close_ticket
+**Queues**: create_queue, list_queues, get_queue_status, delete_queue
+**Events**: list_events, get_task_queue, assign_task
+
+## CRITICAL WORKFLOW SEQUENCE
+1. **Setup Phase**: Create project → Define worker types
+2. **Infrastructure Phase**: Create queues → Spawn workers with queue assignments  
+3. **Execution Phase**: Create tickets → Assign to queues → Monitor progress
+
+## Best Practices
+- Always define worker types BEFORE creating tickets
+- Assign workers to specific queues (development, testing, review, etc.)
+- Workers automatically pull from their assigned queues
+- Use descriptive queue names that match your workflow stages
+- Monitor progress through events and worker status checks
+
+## 🚨 CRITICAL COORDINATOR PRINCIPLE: DELEGATE EVERYTHING
+
+**As the coordinator, your role is ORCHESTRATION, not execution:**
+- **NEVER** write code, analyze requirements, or perform implementation tasks yourself
+- **NEVER** do project setup work directly - create tickets for setup workers instead
+- **ALWAYS** delegate ALL technical tasks to specialized workers
+- **FOCUS ONLY** on: creating projects, defining worker types, managing queues, creating tickets, and monitoring progress
+
+**Your job is to be a pure orchestrator - let workers handle ALL actual work, even seemingly simple tasks like creating folders or initial files.**
+
+The system prevents context drift by allowing each worker to focus on their specialty while you (the coordinator) manage the overall workflow through queue-based task distribution and delegation.".to_string(),
+                    },
+                }
+            ],
+            "project-setup" => {
+                let project_name = request.arguments
+                    .as_ref()
+                    .and_then(|args| args.get("project_name"))
+                    .and_then(|name| name.as_str())
+                    .unwrap_or("my-project");
+
+                vec![
+                    PromptMessage {
+                        role: "user".to_string(),
+                        content: PromptContent {
+                            content_type: "text".to_string(),
+                            text: format!("Here's a step-by-step guide to set up the '{}' project using Vibe Ensemble:
+
+# Project Setup Guide for '{}'
+
+## CRITICAL: Follow This Exact Sequence
+
+### Step 1: Create the Project
+```
+Use: create_project
+- repository_name: \"{}\"
+- path: \"/path/to/your/project\"
+- short_description: \"Brief description of your project\"
+```
+
+### Step 2: Define Worker Types FIRST (Essential!)
+**MUST BE DONE BEFORE CREATING TICKETS**
+
+Define specialized worker types with custom system prompts:
+- **analyzer**: Reviews code, identifies issues, suggests improvements
+- **implementer**: Writes code, implements features  
+- **tester**: Creates and runs tests, validates functionality
+- **documenter**: Writes documentation, updates README files
+- **reviewer**: Performs code reviews, ensures quality
+
+Each worker type needs its own system prompt tailored to its specialization.
+
+### Step 3: Create Task Queues
+**Before spawning workers, create organized queues:**
+```
+Use: create_queue
+- priority: For urgent/blocking tasks
+- development: For feature implementation 
+- testing: For validation and QA
+- review: For code reviews
+- documentation: For docs and guides
+```
+
+### Step 4: Spawn Queue-Aware Workers
+**Now spawn workers with specific queue assignments:**
+```
+Use: spawn_worker
+- worker_id: \"worker_analyzer_1\"
+- project_id: \"{}\"
+- worker_type: \"analyzer\"
+- queue_name: \"review\"  # REQUIRED: Specify which queue this worker pulls from
+```
+
+Workers automatically pull tasks from their assigned queue only.
+
+### Step 5: Create Tickets with Execution Plans
+**Only after worker types and queues are set up:**
+- Break work into tickets with 3-5 stages
+- Each stage should specify which worker type handles it
+- Include clear success criteria
+- Use `assign_task` to route tickets to appropriate queues
+
+### Step 6: Create Setup Tickets and Delegate
+**⚠️ CRITICAL: Even project setup should be delegated to workers!**
+
+Create tickets for setup tasks:
+- **Project structure ticket**: Let a setup worker create folders, initial files
+- **Configuration ticket**: Let a config worker set up build files, dependencies  
+- **Documentation ticket**: Let a docs worker create README, setup guides
+- **Infrastructure ticket**: Let an infra worker configure CI/CD, deployment
+
+### Step 7: Monitor and Coordinate (Your Only Direct Actions)
+- Use `list_events` to track progress
+- Use `get_queue_status` to monitor queues  
+- Use `get_worker_status` to check worker health
+- Coordinate handoffs between specialized agents
+- **RESIST** the urge to do tasks yourself - always create tickets instead
+
+## 🚨 DELEGATION PRINCIPLES
+1. **COORDINATOR NEVER CODES**: Create tickets for all implementation work
+2. **COORDINATOR NEVER ANALYZES**: Create tickets for all analysis work  
+3. **COORDINATOR NEVER SETS UP**: Create tickets for all setup/config work
+4. **COORDINATOR ONLY ORCHESTRATES**: Manages workflow, not actual tasks
+
+## Key Success Factors
+1. **Worker types MUST exist before creating tickets**
+2. **Queues MUST be created before spawning workers**  
+3. **Workers are assigned to specific queues at spawn time**
+4. **Tickets are assigned to queues, not directly to workers**
+5. **Workers automatically pull from their designated queue**
+6. **ALL technical work MUST be delegated through tickets**
+
+This delegation-first approach prevents context drift, ensures specialization, and maintains the coordinator's focus on orchestration rather than execution.", project_name, project_name, project_name, project_name),
+                        },
+                    }
+                ]
+            }
+            "multi-agent-workflow" => {
+                let task_type = request.arguments
+                    .as_ref()
+                    .and_then(|args| args.get("task_type"))
+                    .and_then(|t| t.as_str())
+                    .unwrap_or("development");
+
+                vec![
+                    PromptMessage {
+                        role: "user".to_string(),
+                        content: PromptContent {
+                            content_type: "text".to_string(),
+                            text: format!("# Multi-Agent Queue-Based Workflow for {} Tasks
+
+## PREREQUISITE: Proper Setup Sequence
+**CRITICAL: Before starting any workflow, ensure:**
+1. ✅ Project created
+2. ✅ Worker types defined with system prompts  
+3. ✅ Task queues created
+4. ✅ Workers spawned with queue assignments
+5. ✅ Only THEN create and assign tickets
+
+## Queue-Based Coordination Strategy
+
+### 1. Task Queue Architecture
+**For {} Tasks, organize work into specialized queues:**
+- **analysis-queue**: Requirements analysis, dependency mapping
+- **development-queue**: Feature implementation, coding
+- **testing-queue**: Validation, QA, automated testing
+- **review-queue**: Code reviews, optimization
+- **documentation-queue**: Docs, guides, README updates
+
+### 2. Worker-Queue Assignment Pattern
+```
+spawn_worker(\"worker_analyzer_1\", project_id, \"analyzer\", \"analysis-queue\")
+spawn_worker(\"worker_dev_1\", project_id, \"implementer\", \"development-queue\")  
+spawn_worker(\"worker_test_1\", project_id, \"tester\", \"testing-queue\")
+spawn_worker(\"worker_reviewer_1\", project_id, \"reviewer\", \"review-queue\")
+```
+
+Workers automatically pull tasks from their assigned queue only.
+
+### 3. Ticket-to-Queue Assignment Flow
+1. **Coordinator**: Create ticket with multi-stage execution plan
+2. **Coordinator**: Assign ticket to first queue: `assign_task(ticket_id, \"analysis-queue\")`
+3. **Analyzer Worker**: Automatically picks up task, completes analysis stage
+4. **Analyzer Worker**: Adds detailed report via `add_ticket_comment`
+5. **Coordinator**: Moves ticket to next queue: `assign_task(ticket_id, \"development-queue\")`
+6. **Developer Worker**: Continues from analysis, implements features
+7. **Repeat** through all stages until completion
+
+### 4. Queue-Aware Communication Protocol
+- Workers use `get_queue_tasks(queue_name)` to get their tasks
+- Workers use `add_ticket_comment` with stage reports
+- Workers use `complete_ticket_stage` when stage is done
+- Coordinator uses `get_queue_status` to monitor queue loads
+- Coordinator uses `list_events` to track overall progress
+
+### 5. Multi-Stage Handoff Best Practices
+- **Clear Stage Boundaries**: Each stage has specific deliverables
+- **Queue-Based Routing**: Tickets move between queues, not directly to workers
+- **Detailed Handoff Reports**: Workers document their work for next stage
+- **Coordinator Oversight**: Review progress before moving to next queue
+
+### 6. Quality & Context Control
+- Each worker specializes in their queue's task type only
+- Workers validate previous stage work when starting
+- All context preserved in ticket comments and stage updates
+- Coordinator maintains overall project vision and queue orchestration
+- Use `get_worker_status` to ensure workers are healthy and active
+
+### 7. Queue Load Balancing
+- Monitor queue status: `get_queue_status(queue_name)`
+- Spawn additional workers for overloaded queues
+- Workers automatically pull next available task from their queue
+- No manual task assignment to individual workers needed
+
+## 🚨 CRITICAL: COORDINATOR DELEGATION RULES
+
+**As coordinator, you must NEVER directly perform any technical work:**
+
+### ❌ What Coordinators MUST NOT Do:
+- Write code or scripts
+- Analyze requirements or technical specifications
+- Set up project files or configurations
+- Debug issues or troubleshoot problems
+- Create documentation or README files
+- Install dependencies or configure tools
+- Test features or run validation
+- Review code or provide technical feedback
+
+### ✅ What Coordinators SHOULD Do:
+- Create projects and define worker types
+- Create and manage task queues
+- Spawn workers with appropriate queue assignments
+- Create tickets for ALL technical tasks (no exceptions)
+- Assign tickets to appropriate queues
+- Monitor progress through events and queue status
+- Coordinate workflow between specialized workers
+- Ensure proper handoffs between stages
+
+**REMEMBER: Even seemingly simple tasks like \\\"create a README\\\" or \\\"set up initial files\\\" should be delegated to workers through tickets. Your job is pure orchestration.**
+
+This queue-based delegation approach prevents context drift, enables parallel processing, maintains clear separation of concerns, and ensures the coordinator stays focused on workflow management rather than task execution.", task_type, task_type),
+                        },
+                    }
+                ]
+            }
+            _ => {
+                return Err(JsonRpcError {
+                    code: INVALID_PARAMS,
+                    message: format!("Unknown prompt: {}", request.name),
+                    data: None,
+                })
+            }
+        };
+
+        let response = GetPromptResponse { messages };
+
+        let result = serde_json::to_value(response).map_err(|e| JsonRpcError {
+            code: INTERNAL_ERROR,
+            message: format!("Failed to serialize prompt response: {}", e),
+            data: None,
+        })?;
+
+        Ok(result)
+    }
 }
 
 pub async fn mcp_handler(
@@ -212,13 +593,17 @@ pub async fn mcp_handler(
     headers: HeaderMap,
     Json(request): Json<JsonRpcRequest>,
 ) -> Result<Json<JsonRpcResponse>> {
-    trace!("MCP request received: {}", serde_json::to_string_pretty(&request).unwrap_or_else(|_| "Failed to serialize request".to_string()));
-    
+    trace!(
+        "MCP request received: {}",
+        serde_json::to_string_pretty(&request)
+            .unwrap_or_else(|_| "Failed to serialize request".to_string())
+    );
+
     // Check for MCP-Protocol-Version header (2025-06-18 spec requirement)
     if let Some(header_version) = headers.get("MCP-Protocol-Version") {
         if let Ok(version_str) = header_version.to_str() {
             info!("MCP-Protocol-Version header received: {}", version_str);
-            
+
             // Validate the header version matches what we support
             if version_str != "2024-11-05" {
                 warn!(
@@ -232,11 +617,15 @@ pub async fn mcp_handler(
     } else {
         debug!("No MCP-Protocol-Version header present (optional for HTTP transport)");
     }
-    
+
     let mcp_server = McpServer::new();
     let response = mcp_server.handle_request(&state, request).await;
-    
-    trace!("MCP response: {}", serde_json::to_string_pretty(&response).unwrap_or_else(|_| "Failed to serialize response".to_string()));
-    
+
+    trace!(
+        "MCP response: {}",
+        serde_json::to_string_pretty(&response)
+            .unwrap_or_else(|_| "Failed to serialize response".to_string())
+    );
+
     Ok(Json(response))
 }
