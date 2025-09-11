@@ -7,7 +7,7 @@ pub struct Config {
 
 impl Config {
     pub fn database_url(&self) -> String {
-        format!("sqlite:{}", self.database_path)
+        format!("sqlite:{}?mode=rwc", self.database_path)
     }
 
     pub fn server_address(&self) -> String {
