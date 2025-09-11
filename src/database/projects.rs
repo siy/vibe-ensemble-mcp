@@ -1,7 +1,7 @@
 // use chrono::{DateTime, Utc}; // For future datetime parsing if needed
+use anyhow::Result;
 use serde::{Deserialize, Serialize};
 use sqlx::FromRow;
-use anyhow::Result;
 
 use super::DbPool;
 
@@ -29,11 +29,13 @@ pub struct UpdateProjectRequest {
 
 impl Project {
     pub async fn create(pool: &DbPool, req: CreateProjectRequest) -> Result<Project> {
-        let project = sqlx::query_as::<_, Project>(r#"
+        let project = sqlx::query_as::<_, Project>(
+            r#"
             INSERT INTO projects (repository_name, path, short_description)
             VALUES (?1, ?2, ?3)
             RETURNING repository_name, path, short_description, created_at, updated_at
-        "#)
+        "#,
+        )
         .bind(&req.repository_name)
         .bind(&req.path)
         .bind(&req.short_description)
@@ -44,11 +46,13 @@ impl Project {
     }
 
     pub async fn get_by_name(pool: &DbPool, repository_name: &str) -> Result<Option<Project>> {
-        let project = sqlx::query_as::<_, Project>(r#"
+        let project = sqlx::query_as::<_, Project>(
+            r#"
             SELECT repository_name, path, short_description, created_at, updated_at
             FROM projects
             WHERE repository_name = ?1
-        "#)
+        "#,
+        )
         .bind(repository_name)
         .fetch_optional(pool)
         .await?;
@@ -57,11 +61,13 @@ impl Project {
     }
 
     pub async fn list_all(pool: &DbPool) -> Result<Vec<Project>> {
-        let projects = sqlx::query_as::<_, Project>(r#"
+        let projects = sqlx::query_as::<_, Project>(
+            r#"
             SELECT repository_name, path, short_description, created_at, updated_at
             FROM projects
             ORDER BY created_at DESC
-        "#)
+        "#,
+        )
         .fetch_all(pool)
         .await?;
 
@@ -81,7 +87,7 @@ impl Project {
         // Build update query dynamically
         let mut set_clauses = Vec::new();
         let mut bind_values: Vec<&str> = Vec::new();
-        
+
         if let Some(ref path) = req.path {
             set_clauses.push("path = ?");
             bind_values.push(path);
@@ -90,16 +96,16 @@ impl Project {
             set_clauses.push("short_description = ?");
             bind_values.push(desc);
         }
-        
+
         set_clauses.push("updated_at = datetime('now')");
-        
+
         let query = format!(
             "UPDATE projects SET {} WHERE repository_name = ? RETURNING repository_name, path, short_description, created_at, updated_at",
             set_clauses.join(", ")
         );
 
         let mut query_builder = sqlx::query_as::<_, Project>(&query);
-        
+
         // Bind values in order
         for value in bind_values {
             query_builder = query_builder.bind(value);

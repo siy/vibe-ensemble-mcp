@@ -1,6 +1,6 @@
+use anyhow::Result;
 use serde::{Deserialize, Serialize};
 use sqlx::FromRow;
-use anyhow::Result;
 
 use super::DbPool;
 
@@ -105,7 +105,7 @@ impl WorkerType {
         // Build update query dynamically
         let mut set_clauses = Vec::new();
         let mut bind_values: Vec<String> = Vec::new();
-        
+
         if let Some(ref desc) = req.short_description {
             set_clauses.push("short_description = ?");
             bind_values.push(desc.clone());
@@ -114,16 +114,16 @@ impl WorkerType {
             set_clauses.push("system_prompt = ?");
             bind_values.push(prompt.clone());
         }
-        
+
         set_clauses.push("updated_at = datetime('now')");
-        
+
         let query = format!(
             "UPDATE worker_types SET {} WHERE project_id = ? AND worker_type = ? RETURNING id, project_id, worker_type, short_description, system_prompt, created_at, updated_at",
             set_clauses.join(", ")
         );
 
         let mut query_builder = sqlx::query_as::<_, WorkerType>(&query);
-        
+
         // Bind values in order
         for value in &bind_values {
             query_builder = query_builder.bind(value);
@@ -136,11 +136,12 @@ impl WorkerType {
     }
 
     pub async fn delete(pool: &DbPool, project_id: &str, worker_type: &str) -> Result<bool> {
-        let result = sqlx::query("DELETE FROM worker_types WHERE project_id = ?1 AND worker_type = ?2")
-            .bind(project_id)
-            .bind(worker_type)
-            .execute(pool)
-            .await?;
+        let result =
+            sqlx::query("DELETE FROM worker_types WHERE project_id = ?1 AND worker_type = ?2")
+                .bind(project_id)
+                .bind(worker_type)
+                .execute(pool)
+                .await?;
 
         Ok(result.rows_affected() > 0)
     }

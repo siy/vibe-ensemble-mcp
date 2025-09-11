@@ -1,5 +1,5 @@
-use axum::response::{IntoResponse, Response};
 use axum::http::StatusCode;
+use axum::response::{IntoResponse, Response};
 use serde_json::json;
 
 #[derive(Debug, thiserror::Error)]
@@ -26,16 +26,12 @@ pub enum AppError {
 impl IntoResponse for AppError {
     fn into_response(self) -> Response {
         let (status, error_message) = match self {
-            AppError::Database(ref err) => {
-                (StatusCode::INTERNAL_SERVER_ERROR, err.to_string())
-            }
+            AppError::Database(ref err) => (StatusCode::INTERNAL_SERVER_ERROR, err.to_string()),
             AppError::Json(ref err) => (StatusCode::BAD_REQUEST, err.to_string()),
             AppError::Io(ref err) => (StatusCode::INTERNAL_SERVER_ERROR, err.to_string()),
             AppError::BadRequest(ref message) => (StatusCode::BAD_REQUEST, message.clone()),
             AppError::NotFound(ref message) => (StatusCode::NOT_FOUND, message.clone()),
-            AppError::Internal(ref err) => {
-                (StatusCode::INTERNAL_SERVER_ERROR, err.to_string())
-            }
+            AppError::Internal(ref err) => (StatusCode::INTERNAL_SERVER_ERROR, err.to_string()),
         };
 
         let body = json!({

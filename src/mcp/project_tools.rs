@@ -1,13 +1,16 @@
 use async_trait::async_trait;
 use serde_json::{json, Value};
 
+use super::tools::{
+    create_error_response, create_success_response, extract_optional_param, extract_param,
+    ToolHandler,
+};
+use super::types::{CallToolResponse, Tool};
 use crate::{
-    database::projects::{Project, CreateProjectRequest, UpdateProjectRequest},
+    database::projects::{CreateProjectRequest, Project, UpdateProjectRequest},
     error::Result,
     server::AppState,
 };
-use super::tools::{ToolHandler, extract_param, extract_optional_param, create_success_response, create_error_response};
-use super::types::{CallToolResponse, Tool};
 
 pub struct CreateProjectTool;
 
@@ -32,9 +35,15 @@ impl ToolHandler for CreateProjectTool {
                     "description": project.short_description,
                     "created_at": project.created_at
                 });
-                Ok(create_success_response(&format!("Project created successfully: {}", response)))
+                Ok(create_success_response(&format!(
+                    "Project created successfully: {}",
+                    response
+                )))
             }
-            Err(e) => Ok(create_error_response(&format!("Failed to create project: {}", e))),
+            Err(e) => Ok(create_error_response(&format!(
+                "Failed to create project: {}",
+                e
+            ))),
         }
     }
 
@@ -72,9 +81,15 @@ impl ToolHandler for ListProjectsTool {
         match Project::list_all(&state.db).await {
             Ok(projects) => {
                 let projects_json = serde_json::to_string_pretty(&projects)?;
-                Ok(create_success_response(&format!("Projects:\n{}", projects_json)))
+                Ok(create_success_response(&format!(
+                    "Projects:\n{}",
+                    projects_json
+                )))
             }
-            Err(e) => Ok(create_error_response(&format!("Failed to list projects: {}", e))),
+            Err(e) => Ok(create_error_response(&format!(
+                "Failed to list projects: {}",
+                e
+            ))),
         }
     }
 
@@ -100,10 +115,19 @@ impl ToolHandler for GetProjectTool {
         match Project::get_by_name(&state.db, &repository_name).await {
             Ok(Some(project)) => {
                 let project_json = serde_json::to_string_pretty(&project)?;
-                Ok(create_success_response(&format!("Project:\n{}", project_json)))
+                Ok(create_success_response(&format!(
+                    "Project:\n{}",
+                    project_json
+                )))
             }
-            Ok(None) => Ok(create_error_response(&format!("Project '{}' not found", repository_name))),
-            Err(e) => Ok(create_error_response(&format!("Failed to get project: {}", e))),
+            Ok(None) => Ok(create_error_response(&format!(
+                "Project '{}' not found",
+                repository_name
+            ))),
+            Err(e) => Ok(create_error_response(&format!(
+                "Failed to get project: {}",
+                e
+            ))),
         }
     }
 
@@ -142,10 +166,19 @@ impl ToolHandler for UpdateProjectTool {
         match Project::update(&state.db, &repository_name, request).await {
             Ok(Some(project)) => {
                 let project_json = serde_json::to_string_pretty(&project)?;
-                Ok(create_success_response(&format!("Project updated:\n{}", project_json)))
+                Ok(create_success_response(&format!(
+                    "Project updated:\n{}",
+                    project_json
+                )))
             }
-            Ok(None) => Ok(create_error_response(&format!("Project '{}' not found", repository_name))),
-            Err(e) => Ok(create_error_response(&format!("Failed to update project: {}", e))),
+            Ok(None) => Ok(create_error_response(&format!(
+                "Project '{}' not found",
+                repository_name
+            ))),
+            Err(e) => Ok(create_error_response(&format!(
+                "Failed to update project: {}",
+                e
+            ))),
         }
     }
 
@@ -183,9 +216,18 @@ impl ToolHandler for DeleteProjectTool {
         let repository_name: String = extract_param(&arguments, "repository_name")?;
 
         match Project::delete(&state.db, &repository_name).await {
-            Ok(true) => Ok(create_success_response(&format!("Project '{}' deleted successfully", repository_name))),
-            Ok(false) => Ok(create_error_response(&format!("Project '{}' not found", repository_name))),
-            Err(e) => Ok(create_error_response(&format!("Failed to delete project: {}", e))),
+            Ok(true) => Ok(create_success_response(&format!(
+                "Project '{}' deleted successfully",
+                repository_name
+            ))),
+            Ok(false) => Ok(create_error_response(&format!(
+                "Project '{}' not found",
+                repository_name
+            ))),
+            Err(e) => Ok(create_error_response(&format!(
+                "Failed to delete project: {}",
+                e
+            ))),
         }
     }
 

@@ -31,7 +31,7 @@ Thumbs.db
 # Log files
 *.log
 .vibe-ensemble/
-vibe-ensemble.db
+vibe-ensemble*.db
 .claude/
 !agent-templates/**/.claude/
 !agent-templates/**/.claude/**

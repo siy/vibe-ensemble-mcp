@@ -1,6 +1,6 @@
+use anyhow::Result;
 use serde::{Deserialize, Serialize};
 use sqlx::FromRow;
-use anyhow::Result;
 
 use super::DbPool;
 
@@ -26,11 +26,13 @@ pub struct CreateCommentRequest {
 
 impl Comment {
     pub async fn create(pool: &DbPool, req: CreateCommentRequest) -> Result<Comment> {
-        let comment = sqlx::query_as::<_, Comment>(r#"
+        let comment = sqlx::query_as::<_, Comment>(
+            r#"
             INSERT INTO comments (ticket_id, worker_type, worker_id, stage_number, content)
             VALUES (?1, ?2, ?3, ?4, ?5)
             RETURNING id, ticket_id, worker_type, worker_id, stage_number, content, created_at
-        "#)
+        "#,
+        )
         .bind(&req.ticket_id)
         .bind(&req.worker_type)
         .bind(&req.worker_id)
@@ -43,12 +45,14 @@ impl Comment {
     }
 
     pub async fn get_by_ticket_id(pool: &DbPool, ticket_id: &str) -> Result<Vec<Comment>> {
-        let comments = sqlx::query_as::<_, Comment>(r#"
+        let comments = sqlx::query_as::<_, Comment>(
+            r#"
             SELECT id, ticket_id, worker_type, worker_id, stage_number, content, created_at
             FROM comments
             WHERE ticket_id = ?1
             ORDER BY created_at ASC
-        "#)
+        "#,
+        )
         .bind(ticket_id)
         .fetch_all(pool)
         .await?;
@@ -64,11 +68,13 @@ impl Comment {
         let mut tx = pool.begin().await?;
 
         // Add comment
-        let comment = sqlx::query_as::<_, Comment>(r#"
+        let comment = sqlx::query_as::<_, Comment>(
+            r#"
             INSERT INTO comments (ticket_id, worker_type, worker_id, stage_number, content)
             VALUES (?1, ?2, ?3, ?4, ?5)
             RETURNING id, ticket_id, worker_type, worker_id, stage_number, content, created_at
-        "#)
+        "#,
+        )
         .bind(&req.ticket_id)
         .bind(&req.worker_type)
         .bind(&req.worker_id)
@@ -78,11 +84,13 @@ impl Comment {
         .await?;
 
         // Update ticket stage
-        let updated_rows = sqlx::query(r#"
+        let updated_rows = sqlx::query(
+            r#"
             UPDATE tickets 
             SET last_completed_stage = ?1, updated_at = datetime('now')
             WHERE ticket_id = ?2
-        "#)
+        "#,
+        )
         .bind(new_stage)
         .bind(&req.ticket_id)
         .execute(&mut *tx)

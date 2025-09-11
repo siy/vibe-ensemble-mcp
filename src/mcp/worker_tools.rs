@@ -1,19 +1,14 @@
 use async_trait::async_trait;
 use serde_json::{json, Value};
 
+use super::tools::{create_error_response, create_success_response, extract_param, ToolHandler};
+use super::types::{CallToolResponse, Tool};
 use crate::{
     database::workers::Worker,
     error::Result,
     server::AppState,
-    workers::{
-        process::ProcessManager,
-        types::SpawnWorkerRequest,
-    },
+    workers::{process::ProcessManager, types::SpawnWorkerRequest},
 };
-use super::tools::{
-    ToolHandler, extract_param, create_success_response, create_error_response
-};
-use super::types::{CallToolResponse, Tool};
 
 pub struct SpawnWorkerTool;
 
@@ -35,7 +30,10 @@ impl ToolHandler for SpawnWorkerTool {
                 // Create queue for the worker
                 let queue_name = &worker_process.info.queue_name;
                 if let Err(e) = state.queue_manager.create_queue(queue_name).await {
-                    return Ok(create_error_response(&format!("Worker spawned but failed to create queue: {}", e)));
+                    return Ok(create_error_response(&format!(
+                        "Worker spawned but failed to create queue: {}",
+                        e
+                    )));
                 }
 
                 let response = json!({
@@ -44,9 +42,15 @@ impl ToolHandler for SpawnWorkerTool {
                     "pid": worker_process.info.pid,
                     "queue_name": worker_process.info.queue_name
                 });
-                Ok(create_success_response(&format!("Worker spawned successfully: {}", response)))
+                Ok(create_success_response(&format!(
+                    "Worker spawned successfully: {}",
+                    response
+                )))
             }
-            Err(e) => Ok(create_error_response(&format!("Failed to spawn worker: {}", e))),
+            Err(e) => Ok(create_error_response(&format!(
+                "Failed to spawn worker: {}",
+                e
+            ))),
         }
     }
 
@@ -84,9 +88,18 @@ impl ToolHandler for StopWorkerTool {
         let worker_id: String = extract_param(&arguments, "worker_id")?;
 
         match ProcessManager::stop_worker(state, &worker_id).await {
-            Ok(true) => Ok(create_success_response(&format!("Worker '{}' stopped successfully", worker_id))),
-            Ok(false) => Ok(create_error_response(&format!("Worker '{}' not found", worker_id))),
-            Err(e) => Ok(create_error_response(&format!("Failed to stop worker: {}", e))),
+            Ok(true) => Ok(create_success_response(&format!(
+                "Worker '{}' stopped successfully",
+                worker_id
+            ))),
+            Ok(false) => Ok(create_error_response(&format!(
+                "Worker '{}' not found",
+                worker_id
+            ))),
+            Err(e) => Ok(create_error_response(&format!(
+                "Failed to stop worker: {}",
+                e
+            ))),
         }
     }
 
@@ -113,14 +126,21 @@ pub struct ListWorkersTool;
 #[async_trait]
 impl ToolHandler for ListWorkersTool {
     async fn call(&self, state: &AppState, arguments: Option<Value>) -> Result<CallToolResponse> {
-        let project_id: Option<String> = super::tools::extract_optional_param(&arguments, "project_id")?;
+        let project_id: Option<String> =
+            super::tools::extract_optional_param(&arguments, "project_id")?;
 
         match Worker::list_by_project(&state.db, project_id.as_deref()).await {
             Ok(workers) => {
                 let workers_json = serde_json::to_string_pretty(&workers)?;
-                Ok(create_success_response(&format!("Workers:\n{}", workers_json)))
+                Ok(create_success_response(&format!(
+                    "Workers:\n{}",
+                    workers_json
+                )))
             }
-            Err(e) => Ok(create_error_response(&format!("Failed to list workers: {}", e))),
+            Err(e) => Ok(create_error_response(&format!(
+                "Failed to list workers: {}",
+                e
+            ))),
         }
     }
 
@@ -159,12 +179,21 @@ impl ToolHandler for GetWorkerStatusTool {
                             "pid": worker.pid,
                             "last_activity": worker.last_activity
                         });
-                        Ok(create_success_response(&format!("Worker status: {}", response)))
+                        Ok(create_success_response(&format!(
+                            "Worker status: {}",
+                            response
+                        )))
                     }
-                    None => Ok(create_error_response(&format!("Worker '{}' not found", worker_id))),
+                    None => Ok(create_error_response(&format!(
+                        "Worker '{}' not found",
+                        worker_id
+                    ))),
                 }
             }
-            Err(e) => Ok(create_error_response(&format!("Failed to get worker status: {}", e))),
+            Err(e) => Ok(create_error_response(&format!(
+                "Failed to get worker status: {}",
+                e
+            ))),
         }
     }
 

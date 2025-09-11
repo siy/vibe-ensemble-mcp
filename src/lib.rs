@@ -1,8 +1,8 @@
 pub mod config;
-pub mod error;
-pub mod server;
 pub mod database;
+pub mod error;
 pub mod mcp;
+pub mod server;
 pub mod workers;
 
 pub mod tickets {

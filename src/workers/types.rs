@@ -15,7 +15,7 @@ impl WorkerStatus {
     pub fn as_str(&self) -> &'static str {
         match self {
             WorkerStatus::Spawning => "spawning",
-            WorkerStatus::Active => "active", 
+            WorkerStatus::Active => "active",
             WorkerStatus::Idle => "idle",
             WorkerStatus::Finished => "finished",
             WorkerStatus::Failed => "failed",

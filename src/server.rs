@@ -8,13 +8,10 @@ use axum::{
 use serde_json::{json, Value};
 use std::sync::Arc;
 use tower_http::cors::{Any, CorsLayer};
-use tracing::{info, error};
+use tracing::{error, info};
 
 use crate::{
-    config::Config, 
-    error::Result, 
-    database::DbPool, 
-    mcp::server::mcp_handler,
+    config::Config, database::DbPool, error::Result, mcp::server::mcp_handler,
     workers::queue::QueueManager,
 };
 
@@ -28,10 +25,10 @@ pub struct AppState {
 pub async fn run_server(config: Config) -> Result<()> {
     // Initialize database
     let db = crate::database::create_pool(&config.database_url()).await?;
-    
+
     // Initialize queue manager
     let queue_manager = Arc::new(QueueManager::new());
-    
+
     let state = AppState {
         config: config.clone(),
         db,
@@ -53,7 +50,7 @@ pub async fn run_server(config: Config) -> Result<()> {
     info!("Server listening on {}", address);
 
     let listener = tokio::net::TcpListener::bind(&address).await?;
-    
+
     match axum::serve(listener, app).await {
         Ok(_) => info!("Server stopped gracefully"),
         Err(e) => error!("Server error: {}", e),
@@ -87,4 +84,3 @@ async fn health_check(State(state): State<AppState>) -> Result<Json<Value>> {
         }
     })))
 }
-

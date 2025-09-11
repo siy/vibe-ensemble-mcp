@@ -2,8 +2,8 @@ use async_trait::async_trait;
 use serde_json::Value;
 use std::collections::HashMap;
 
-use crate::{error::Result, server::AppState};
 use super::types::{CallToolRequest, CallToolResponse, Tool, ToolContent};
+use crate::{error::Result, server::AppState};
 
 #[async_trait]
 pub trait ToolHandler: Send + Sync {
@@ -13,6 +13,12 @@ pub trait ToolHandler: Send + Sync {
 
 pub struct ToolRegistry {
     tools: HashMap<String, Box<dyn ToolHandler>>,
+}
+
+impl Default for ToolRegistry {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl ToolRegistry {
@@ -27,8 +33,8 @@ impl ToolRegistry {
         self.tools.insert(name, Box::new(tool));
     }
 
-    pub fn get_tool(&self, name: &str) -> Option<&Box<dyn ToolHandler>> {
-        self.tools.get(name)
+    pub fn get_tool(&self, name: &str) -> Option<&dyn ToolHandler> {
+        self.tools.get(name).map(|boxed| boxed.as_ref())
     }
 
     pub fn list_tools(&self) -> Vec<Tool> {
@@ -79,19 +85,17 @@ where
     T: for<'de> serde::Deserialize<'de>,
 {
     match arguments {
-        Some(Value::Object(map)) => {
-            match map.get(key) {
-                Some(value) => serde_json::from_value(value.clone())
-                    .map_err(|e| crate::error::AppError::BadRequest(
-                        format!("Invalid parameter '{}': {}", key, e)
-                    )),
-                None => Err(crate::error::AppError::BadRequest(
-                    format!("Missing required parameter '{}'", key)
-                )),
-            }
-        }
+        Some(Value::Object(map)) => match map.get(key) {
+            Some(value) => serde_json::from_value(value.clone()).map_err(|e| {
+                crate::error::AppError::BadRequest(format!("Invalid parameter '{}': {}", key, e))
+            }),
+            None => Err(crate::error::AppError::BadRequest(format!(
+                "Missing required parameter '{}'",
+                key
+            ))),
+        },
         _ => Err(crate::error::AppError::BadRequest(
-            "Arguments must be an object".to_string()
+            "Arguments must be an object".to_string(),
         )),
     }
 }
@@ -101,18 +105,18 @@ where
     T: for<'de> serde::Deserialize<'de>,
 {
     match arguments {
-        Some(Value::Object(map)) => {
-            match map.get(key) {
-                Some(value) if !value.is_null() => {
-                    let parsed: T = serde_json::from_value(value.clone())
-                        .map_err(|e| crate::error::AppError::BadRequest(
-                            format!("Invalid parameter '{}': {}", key, e)
-                        ))?;
-                    Ok(Some(parsed))
-                }
-                _ => Ok(None),
+        Some(Value::Object(map)) => match map.get(key) {
+            Some(value) if !value.is_null() => {
+                let parsed: T = serde_json::from_value(value.clone()).map_err(|e| {
+                    crate::error::AppError::BadRequest(format!(
+                        "Invalid parameter '{}': {}",
+                        key, e
+                    ))
+                })?;
+                Ok(Some(parsed))
             }
-        }
+            _ => Ok(None),
+        },
         _ => Ok(None),
     }
 }

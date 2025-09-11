@@ -1,45 +1,46 @@
 use axum::{extract::State, response::Json};
 use serde_json::Value;
-use tracing::{info, error, debug};
+use tracing::{debug, error, info};
 
-use crate::{error::Result, server::AppState};
 use super::{
-    types::*,
-    tools::ToolRegistry,
-    project_tools::*,
-    worker_tools::*,
-    queue_tools::*,
-    ticket_tools::*,
-    event_tools::*,
+    event_tools::*, project_tools::*, queue_tools::*, ticket_tools::*, tools::ToolRegistry,
+    types::*, worker_tools::*,
 };
+use crate::{error::Result, server::AppState};
 
 pub struct McpServer {
     pub tools: ToolRegistry,
 }
 
+impl Default for McpServer {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl McpServer {
     pub fn new() -> Self {
         let mut tools = ToolRegistry::new();
-        
+
         // Register project management tools
         tools.register(CreateProjectTool);
         tools.register(ListProjectsTool);
         tools.register(GetProjectTool);
         tools.register(UpdateProjectTool);
         tools.register(DeleteProjectTool);
-        
+
         // Register worker management tools
         tools.register(SpawnWorkerTool);
         tools.register(StopWorkerTool);
         tools.register(ListWorkersTool);
         tools.register(GetWorkerStatusTool);
-        
+
         // Register queue management tools
         tools.register(CreateQueueTool);
         tools.register(ListQueuesTool);
         tools.register(GetQueueStatusTool);
         tools.register(DeleteQueueTool);
-        
+
         // Register ticket management tools
         tools.register(CreateTicketTool);
         tools.register(GetTicketTool);
@@ -47,12 +48,12 @@ impl McpServer {
         tools.register(AddTicketCommentTool);
         tools.register(UpdateTicketStageTool);
         tools.register(CloseTicketTool);
-        
+
         // Register event and task management tools
         tools.register(ListEventsTool);
         tools.register(GetTaskQueueTool);
         tools.register(AssignTaskTool);
-        
+
         Self { tools }
     }
 
@@ -90,7 +91,10 @@ impl McpServer {
         }
     }
 
-    async fn handle_initialize(&self, params: Option<Value>) -> std::result::Result<Value, JsonRpcError> {
+    async fn handle_initialize(
+        &self,
+        params: Option<Value>,
+    ) -> std::result::Result<Value, JsonRpcError> {
         info!("Handling initialize request");
 
         let _request: InitializeRequest = match params {
@@ -99,11 +103,13 @@ impl McpServer {
                 message: format!("Invalid initialize params: {}", e),
                 data: None,
             })?,
-            None => return Err(JsonRpcError {
-                code: INVALID_PARAMS,
-                message: "Missing initialize parameters".to_string(),
-                data: None,
-            }),
+            None => {
+                return Err(JsonRpcError {
+                    code: INVALID_PARAMS,
+                    message: "Missing initialize parameters".to_string(),
+                    data: None,
+                })
+            }
         };
 
         let response = InitializeResponse {
@@ -154,11 +160,13 @@ impl McpServer {
                 message: format!("Invalid call_tool params: {}", e),
                 data: None,
             })?,
-            None => return Err(JsonRpcError {
-                code: INVALID_PARAMS,
-                message: "Missing call_tool parameters".to_string(),
-                data: None,
-            }),
+            None => {
+                return Err(JsonRpcError {
+                    code: INVALID_PARAMS,
+                    message: "Missing call_tool parameters".to_string(),
+                    data: None,
+                })
+            }
         };
 
         info!("Calling tool: {}", request.name);

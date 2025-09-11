@@ -1,6 +1,6 @@
+use anyhow::Result;
 use serde::{Deserialize, Serialize};
 use sqlx::FromRow;
-use anyhow::Result;
 
 use super::DbPool;
 
@@ -38,12 +38,14 @@ impl Worker {
     }
 
     pub async fn get_by_id(pool: &DbPool, worker_id: &str) -> Result<Option<Worker>> {
-        let worker = sqlx::query_as::<_, Worker>(r#"
+        let worker = sqlx::query_as::<_, Worker>(
+            r#"
             SELECT worker_id, project_id, worker_type, status, 
                    CAST(pid AS INTEGER) as pid, queue_name, started_at, last_activity
             FROM workers
             WHERE worker_id = ?1
-        "#)
+        "#,
+        )
         .bind(worker_id)
         .fetch_optional(pool)
         .await?;
@@ -53,23 +55,27 @@ impl Worker {
 
     pub async fn list_by_project(pool: &DbPool, project_id: Option<&str>) -> Result<Vec<Worker>> {
         let workers = if let Some(project_id) = project_id {
-            sqlx::query_as::<_, Worker>(r#"
+            sqlx::query_as::<_, Worker>(
+                r#"
                 SELECT worker_id, project_id, worker_type, status, 
                        CAST(pid AS INTEGER) as pid, queue_name, started_at, last_activity
                 FROM workers
                 WHERE project_id = ?1
                 ORDER BY started_at DESC
-            "#)
+            "#,
+            )
             .bind(project_id)
             .fetch_all(pool)
             .await?
         } else {
-            sqlx::query_as::<_, Worker>(r#"
+            sqlx::query_as::<_, Worker>(
+                r#"
                 SELECT worker_id, project_id, worker_type, status, 
                        CAST(pid AS INTEGER) as pid, queue_name, started_at, last_activity
                 FROM workers
                 ORDER BY project_id ASC, started_at DESC
-            "#)
+            "#,
+            )
             .fetch_all(pool)
             .await?
         };
@@ -78,13 +84,15 @@ impl Worker {
     }
 
     pub async fn list_by_type(pool: &DbPool, worker_type: &str) -> Result<Vec<Worker>> {
-        let workers = sqlx::query_as::<_, Worker>(r#"
+        let workers = sqlx::query_as::<_, Worker>(
+            r#"
             SELECT worker_id, project_id, worker_type, status, 
                    CAST(pid AS INTEGER) as pid, queue_name, started_at, last_activity
             FROM workers
             WHERE worker_type = ?1
             ORDER BY started_at DESC
-        "#)
+        "#,
+        )
         .bind(worker_type)
         .fetch_all(pool)
         .await?;
@@ -98,11 +106,13 @@ impl Worker {
         status: &str,
         pid: Option<u32>,
     ) -> Result<bool> {
-        let result = sqlx::query(r#"
+        let result = sqlx::query(
+            r#"
             UPDATE workers 
             SET status = ?1, pid = ?2, last_activity = datetime('now')
             WHERE worker_id = ?3
-        "#)
+        "#,
+        )
         .bind(status)
         .bind(pid.map(|p| p as i64))
         .bind(worker_id)
@@ -113,11 +123,13 @@ impl Worker {
     }
 
     pub async fn update_last_activity(pool: &DbPool, worker_id: &str) -> Result<bool> {
-        let result = sqlx::query(r#"
+        let result = sqlx::query(
+            r#"
             UPDATE workers 
             SET last_activity = datetime('now')
             WHERE worker_id = ?1
-        "#)
+        "#,
+        )
         .bind(worker_id)
         .execute(pool)
         .await?;

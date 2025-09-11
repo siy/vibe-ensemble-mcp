@@ -1,13 +1,19 @@
 use anyhow::Result;
 use std::collections::HashMap;
 use tokio::sync::RwLock;
-use tracing::{info, debug};
+use tracing::{debug, info};
 use uuid::Uuid;
 
-use super::types::{TaskItem, QueueRegistry};
+use super::types::{QueueRegistry, TaskItem};
 
 pub struct QueueManager {
     queues: QueueRegistry,
+}
+
+impl Default for QueueManager {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl QueueManager {
@@ -19,7 +25,7 @@ impl QueueManager {
 
     pub async fn create_queue(&self, queue_name: &str) -> Result<()> {
         info!("Creating queue: {}", queue_name);
-        
+
         let mut queues = self.queues.write().await;
         if !queues.contains_key(queue_name) {
             queues.insert(queue_name.to_string(), RwLock::new(Vec::new()));
@@ -27,20 +33,20 @@ impl QueueManager {
         } else {
             debug!("Queue '{}' already exists", queue_name);
         }
-        
+
         Ok(())
     }
 
     pub async fn delete_queue(&self, queue_name: &str) -> Result<bool> {
         info!("Deleting queue: {}", queue_name);
-        
+
         let mut queues = self.queues.write().await;
         let removed = queues.remove(queue_name).is_some();
-        
+
         if removed {
             info!("Queue '{}' deleted", queue_name);
         }
-        
+
         Ok(removed)
     }
 
@@ -96,7 +102,7 @@ impl QueueManager {
     pub async fn list_queues(&self) -> Result<Vec<QueueStatus>> {
         let queues = self.queues.read().await;
         let mut result = Vec::new();
-        
+
         for (queue_name, queue) in queues.iter() {
             let queue_items = queue.read().await;
             result.push(QueueStatus {
@@ -105,7 +111,7 @@ impl QueueManager {
                 tasks: queue_items.clone(),
             });
         }
-        
+
         Ok(result)
     }
 

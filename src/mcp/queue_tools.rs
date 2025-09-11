@@ -2,11 +2,9 @@ use async_trait::async_trait;
 use serde_json::{json, Value};
 use tracing::info;
 
-use crate::{error::Result, server::AppState};
-use super::tools::{
-    ToolHandler, extract_param, create_success_response, create_error_response
-};
+use super::tools::{create_error_response, create_success_response, extract_param, ToolHandler};
 use super::types::{CallToolResponse, Tool};
+use crate::{error::Result, server::AppState};
 
 pub struct CreateQueueTool;
 
@@ -19,7 +17,10 @@ impl ToolHandler for CreateQueueTool {
 
         state.queue_manager.create_queue(&queue_name).await?;
 
-        Ok(create_success_response(&format!("Queue '{}' created successfully", queue_name)))
+        Ok(create_success_response(&format!(
+            "Queue '{}' created successfully",
+            queue_name
+        )))
     }
 
     fn definition(&self) -> Tool {
@@ -48,9 +49,15 @@ impl ToolHandler for ListQueuesTool {
         match state.queue_manager.list_queues().await {
             Ok(queues) => {
                 let queues_json = serde_json::to_string_pretty(&queues)?;
-                Ok(create_success_response(&format!("Queues:\n{}", queues_json)))
+                Ok(create_success_response(&format!(
+                    "Queues:\n{}",
+                    queues_json
+                )))
             }
-            Err(e) => Ok(create_error_response(&format!("Failed to list queues: {}", e))),
+            Err(e) => Ok(create_error_response(&format!(
+                "Failed to list queues: {}",
+                e
+            ))),
         }
     }
 
@@ -76,10 +83,19 @@ impl ToolHandler for GetQueueStatusTool {
         match state.queue_manager.get_queue_status(&queue_name).await {
             Ok(Some(status)) => {
                 let status_json = serde_json::to_string_pretty(&status)?;
-                Ok(create_success_response(&format!("Queue status:\n{}", status_json)))
+                Ok(create_success_response(&format!(
+                    "Queue status:\n{}",
+                    status_json
+                )))
             }
-            Ok(None) => Ok(create_error_response(&format!("Queue '{}' not found", queue_name))),
-            Err(e) => Ok(create_error_response(&format!("Failed to get queue status: {}", e))),
+            Ok(None) => Ok(create_error_response(&format!(
+                "Queue '{}' not found",
+                queue_name
+            ))),
+            Err(e) => Ok(create_error_response(&format!(
+                "Failed to get queue status: {}",
+                e
+            ))),
         }
     }
 
@@ -109,9 +125,18 @@ impl ToolHandler for DeleteQueueTool {
         let queue_name: String = extract_param(&arguments, "queue_name")?;
 
         match state.queue_manager.delete_queue(&queue_name).await {
-            Ok(true) => Ok(create_success_response(&format!("Queue '{}' deleted successfully", queue_name))),
-            Ok(false) => Ok(create_error_response(&format!("Queue '{}' not found", queue_name))),
-            Err(e) => Ok(create_error_response(&format!("Failed to delete queue: {}", e))),
+            Ok(true) => Ok(create_success_response(&format!(
+                "Queue '{}' deleted successfully",
+                queue_name
+            ))),
+            Ok(false) => Ok(create_error_response(&format!(
+                "Queue '{}' not found",
+                queue_name
+            ))),
+            Err(e) => Ok(create_error_response(&format!(
+                "Failed to delete queue: {}",
+                e
+            ))),
         }
     }
 

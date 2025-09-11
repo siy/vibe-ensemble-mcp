@@ -2,28 +2,30 @@ use async_trait::async_trait;
 use serde_json::Value;
 use tracing::info;
 
-use crate::{
-    database::events::Event,
-    server::AppState,
-};
 use super::{
-    tools::{ToolHandler, extract_param, extract_optional_param, create_success_response},
-    types::{Tool, CallToolResponse, ToolContent},
+    tools::{create_success_response, extract_optional_param, extract_param, ToolHandler},
+    types::{CallToolResponse, Tool, ToolContent},
 };
+use crate::{database::events::Event, server::AppState};
 
 pub struct ListEventsTool;
 
 #[async_trait]
 impl ToolHandler for ListEventsTool {
-    async fn call(&self, state: &AppState, arguments: Option<Value>) -> crate::error::Result<CallToolResponse> {
+    async fn call(
+        &self,
+        state: &AppState,
+        arguments: Option<Value>,
+    ) -> crate::error::Result<CallToolResponse> {
         let args = arguments.unwrap_or_default();
-        
+
         let event_type: Option<String> = extract_optional_param(&Some(args.clone()), "event_type")?;
         let limit: i32 = extract_optional_param(&Some(args.clone()), "limit")?.unwrap_or(50);
 
         let events = Event::get_recent(&state.db, limit).await?;
 
-        let filtered_events: Vec<_> = events.into_iter()
+        let filtered_events: Vec<_> = events
+            .into_iter()
             .filter(|event| {
                 if let Some(ref type_filter) = event_type {
                     &event.event_type == type_filter
@@ -69,10 +71,13 @@ pub struct GetTaskQueueTool;
 
 #[async_trait]
 impl ToolHandler for GetTaskQueueTool {
-    async fn call(&self, state: &AppState, arguments: Option<Value>) -> crate::error::Result<CallToolResponse> {
-        let args = arguments.ok_or_else(|| {
-            crate::error::AppError::BadRequest("Missing arguments".to_string())
-        })?;
+    async fn call(
+        &self,
+        state: &AppState,
+        arguments: Option<Value>,
+    ) -> crate::error::Result<CallToolResponse> {
+        let args = arguments
+            .ok_or_else(|| crate::error::AppError::BadRequest("Missing arguments".to_string()))?;
 
         let queue_name: String = extract_param(&Some(args.clone()), "queue_name")?;
 
@@ -111,22 +116,31 @@ pub struct AssignTaskTool;
 
 #[async_trait]
 impl ToolHandler for AssignTaskTool {
-    async fn call(&self, state: &AppState, arguments: Option<Value>) -> crate::error::Result<CallToolResponse> {
-        let args = arguments.ok_or_else(|| {
-            crate::error::AppError::BadRequest("Missing arguments".to_string())
-        })?;
+    async fn call(
+        &self,
+        state: &AppState,
+        arguments: Option<Value>,
+    ) -> crate::error::Result<CallToolResponse> {
+        let args = arguments
+            .ok_or_else(|| crate::error::AppError::BadRequest("Missing arguments".to_string()))?;
 
         let ticket_id: String = extract_param(&Some(args.clone()), "ticket_id")?;
         let queue_name: String = extract_param(&Some(args.clone()), "queue_name")?;
 
         info!("Assigning ticket {} to queue {}", ticket_id, queue_name);
 
-        let task_id = state.queue_manager.add_task(&queue_name, &ticket_id).await?;
+        let task_id = state
+            .queue_manager
+            .add_task(&queue_name, &ticket_id)
+            .await?;
 
         // Create event for task assignment
         Event::create_task_assigned(&state.db, &ticket_id, &queue_name).await?;
 
-        Ok(create_success_response(&format!("Assigned ticket {} to queue {} with task ID: {}", ticket_id, queue_name, task_id)))
+        Ok(create_success_response(&format!(
+            "Assigned ticket {} to queue {} with task ID: {}",
+            ticket_id, queue_name, task_id
+        )))
     }
 
     fn definition(&self) -> Tool {

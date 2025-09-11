@@ -1,13 +1,13 @@
 use anyhow::{Context, Result};
 use std::process::{Command, Stdio};
 use tokio::time::Duration;
-use tracing::{info, warn, debug};
+use tracing::{debug, info, warn};
 
+use super::types::{SpawnWorkerRequest, WorkerInfo, WorkerProcess, WorkerStatus};
 use crate::{
     database::{worker_types::WorkerType, workers::Worker},
     server::AppState,
 };
-use super::types::{WorkerInfo, WorkerProcess, WorkerStatus, SpawnWorkerRequest};
 
 pub struct ProcessManager;
 
@@ -19,23 +19,22 @@ impl ProcessManager {
         info!("Spawning worker: {}", request.worker_id);
 
         // Get project info
-        let project = crate::database::projects::Project::get_by_name(
-            &state.db,
-            &request.project_id
-        ).await?
-        .ok_or_else(|| anyhow::anyhow!("Project '{}' not found", request.project_id))?;
+        let project =
+            crate::database::projects::Project::get_by_name(&state.db, &request.project_id)
+                .await?
+                .ok_or_else(|| anyhow::anyhow!("Project '{}' not found", request.project_id))?;
 
         // Get worker type info
-        let worker_type_info = WorkerType::get_by_type(
-            &state.db,
-            &request.project_id,
-            &request.worker_type,
-        ).await?
-        .ok_or_else(|| anyhow::anyhow!(
-            "Worker type '{}' not found for project '{}'",
-            request.worker_type,
-            request.project_id
-        ))?;
+        let worker_type_info =
+            WorkerType::get_by_type(&state.db, &request.project_id, &request.worker_type)
+                .await?
+                .ok_or_else(|| {
+                    anyhow::anyhow!(
+                        "Worker type '{}' not found for project '{}'",
+                        request.worker_type,
+                        request.project_id
+                    )
+                })?;
 
         // Generate queue name
         let queue_name = request.worker_id.replace("worker_", "queue_");
@@ -67,22 +66,22 @@ impl ProcessManager {
         Worker::create(&state.db, db_worker).await?;
 
         // Build worker prompt
-        let worker_prompt = Self::build_worker_prompt(
-            &worker_info,
-            &worker_type_info.system_prompt,
-            &queue_name,
-        );
+        let worker_prompt =
+            Self::build_worker_prompt(&worker_info, &worker_type_info.system_prompt, &queue_name);
 
         // Spawn Claude Code process
         let mut cmd = Command::new("claude");
         cmd.arg("-p")
-           .arg(&worker_prompt)
-           .arg("--database-path")
-           .arg(&format!("{}/worker_{}.db", project.path, worker_info.worker_id))
-           .current_dir(&project.path)
-           .stdin(Stdio::piped())
-           .stdout(Stdio::piped())
-           .stderr(Stdio::piped());
+            .arg(&worker_prompt)
+            .arg("--database-path")
+            .arg(format!(
+                "{}/worker_{}.db",
+                project.path, worker_info.worker_id
+            ))
+            .current_dir(&project.path)
+            .stdin(Stdio::piped())
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped());
 
         debug!("Executing command: {:?}", cmd);
 
@@ -91,7 +90,10 @@ impl ProcessManager {
             .context("Failed to spawn Claude Code process")?;
 
         let pid = child.id();
-        info!("Worker {} spawned with PID: {:?}", worker_info.worker_id, pid);
+        info!(
+            "Worker {} spawned with PID: {:?}",
+            worker_info.worker_id, pid
+        );
 
         // Update worker info with PID and status
         let mut updated_info = worker_info.clone();
@@ -156,24 +158,21 @@ Remember: You are working autonomously. Process tasks thoroughly and provide det
         )
     }
 
-    pub async fn stop_worker(
-        state: &AppState,
-        worker_id: &str,
-    ) -> Result<bool> {
+    pub async fn stop_worker(state: &AppState, worker_id: &str) -> Result<bool> {
         info!("Stopping worker: {}", worker_id);
 
         // Check if worker exists and get PID
         let worker = Worker::get_by_id(&state.db, worker_id).await?;
-        
+
         match worker {
             Some(worker) if worker.pid.is_some() => {
                 let pid = worker.pid.unwrap();
-                
+
                 // Try to terminate process gracefully
                 if let Ok(mut child) = tokio::process::Command::new("kill")
                     .arg("-TERM")
                     .arg(pid.to_string())
-                    .spawn() 
+                    .spawn()
                 {
                     let _ = child.wait().await;
                 }
@@ -195,7 +194,8 @@ Remember: You are working autonomously. Process tasks thoroughly and provide det
                     &state.db,
                     worker_id,
                     "stopped by coordinator",
-                ).await?;
+                )
+                .await?;
 
                 info!("Worker {} stopped", worker_id);
                 Ok(true)
@@ -214,7 +214,7 @@ Remember: You are working autonomously. Process tasks thoroughly and provide det
 
     pub async fn check_worker_health(state: &AppState, worker_id: &str) -> Result<WorkerStatus> {
         let worker = Worker::get_by_id(&state.db, worker_id).await?;
-        
+
         match worker {
             Some(worker) => {
                 if let Some(pid) = worker.pid {
@@ -234,13 +234,14 @@ Remember: You are working autonomously. Process tasks thoroughly and provide det
                     } else {
                         // Process died, update status
                         Worker::update_status(&state.db, worker_id, "failed", None).await?;
-                        
+
                         // Create event
                         crate::database::events::Event::create_worker_stopped(
                             &state.db,
                             worker_id,
                             "process died unexpectedly",
-                        ).await?;
+                        )
+                        .await?;
 
                         Ok(WorkerStatus::Failed)
                     }

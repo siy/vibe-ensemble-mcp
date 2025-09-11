@@ -1,6 +1,6 @@
-use sqlx::{sqlite::SqlitePool, Row};
 use anyhow::Result;
-use tracing::{info, debug};
+use sqlx::{sqlite::SqlitePool, Row};
+use tracing::{debug, info};
 
 pub async fn run_migrations(pool: &SqlitePool) -> Result<()> {
     info!("Running database migrations");
@@ -19,7 +19,8 @@ pub async fn run_migrations(pool: &SqlitePool) -> Result<()> {
 
 async fn create_projects_table(pool: &SqlitePool) -> Result<()> {
     debug!("Creating projects table");
-    sqlx::query(r#"
+    sqlx::query(
+        r#"
         CREATE TABLE IF NOT EXISTS projects (
             repository_name TEXT PRIMARY KEY,
             path TEXT NOT NULL,
@@ -27,7 +28,8 @@ async fn create_projects_table(pool: &SqlitePool) -> Result<()> {
             created_at TEXT NOT NULL DEFAULT (datetime('now')),
             updated_at TEXT NOT NULL DEFAULT (datetime('now'))
         )
-    "#)
+    "#,
+    )
     .execute(pool)
     .await?;
     Ok(())
@@ -35,7 +37,8 @@ async fn create_projects_table(pool: &SqlitePool) -> Result<()> {
 
 async fn create_worker_types_table(pool: &SqlitePool) -> Result<()> {
     debug!("Creating worker_types table");
-    sqlx::query(r#"
+    sqlx::query(
+        r#"
         CREATE TABLE IF NOT EXISTS worker_types (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             project_id TEXT NOT NULL,
@@ -47,7 +50,8 @@ async fn create_worker_types_table(pool: &SqlitePool) -> Result<()> {
             FOREIGN KEY (project_id) REFERENCES projects(repository_name) ON DELETE CASCADE,
             UNIQUE(project_id, worker_type)
         )
-    "#)
+    "#,
+    )
     .execute(pool)
     .await?;
     Ok(())
@@ -55,7 +59,8 @@ async fn create_worker_types_table(pool: &SqlitePool) -> Result<()> {
 
 async fn create_tickets_table(pool: &SqlitePool) -> Result<()> {
     debug!("Creating tickets table");
-    sqlx::query(r#"
+    sqlx::query(
+        r#"
         CREATE TABLE IF NOT EXISTS tickets (
             ticket_id TEXT PRIMARY KEY,
             project_id TEXT NOT NULL,
@@ -67,7 +72,8 @@ async fn create_tickets_table(pool: &SqlitePool) -> Result<()> {
             closed_at TEXT NULL,
             FOREIGN KEY (project_id) REFERENCES projects(repository_name) ON DELETE CASCADE
         )
-    "#)
+    "#,
+    )
     .execute(pool)
     .await?;
     Ok(())
@@ -75,7 +81,8 @@ async fn create_tickets_table(pool: &SqlitePool) -> Result<()> {
 
 async fn create_comments_table(pool: &SqlitePool) -> Result<()> {
     debug!("Creating comments table");
-    sqlx::query(r#"
+    sqlx::query(
+        r#"
         CREATE TABLE IF NOT EXISTS comments (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             ticket_id TEXT NOT NULL,
@@ -86,7 +93,8 @@ async fn create_comments_table(pool: &SqlitePool) -> Result<()> {
             created_at TEXT NOT NULL DEFAULT (datetime('now')),
             FOREIGN KEY (ticket_id) REFERENCES tickets(ticket_id) ON DELETE CASCADE
         )
-    "#)
+    "#,
+    )
     .execute(pool)
     .await?;
     Ok(())
@@ -135,7 +143,7 @@ pub async fn get_database_info(pool: &SqlitePool) -> Result<String> {
     let row = sqlx::query("SELECT sqlite_version() as version")
         .fetch_one(pool)
         .await?;
-    
+
     let version: String = row.get("version");
     Ok(version)
 }

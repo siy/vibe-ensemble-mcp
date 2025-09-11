@@ -1,6 +1,6 @@
+use anyhow::Result;
 use serde::{Deserialize, Serialize};
 use sqlx::FromRow;
-use anyhow::Result;
 
 use super::DbPool;
 
@@ -23,11 +23,13 @@ impl Event {
         stage: &str,
         worker_id: &str,
     ) -> Result<Event> {
-        let event = sqlx::query_as::<_, Event>(r#"
+        let event = sqlx::query_as::<_, Event>(
+            r#"
             INSERT INTO events (event_type, ticket_id, worker_id, stage)
             VALUES ('ticket_stage_completed', ?1, ?2, ?3)
             RETURNING id, event_type, ticket_id, worker_id, stage, reason, created_at, processed
-        "#)
+        "#,
+        )
         .bind(ticket_id)
         .bind(worker_id)
         .bind(stage)
@@ -42,11 +44,13 @@ impl Event {
         worker_id: &str,
         reason: &str,
     ) -> Result<Event> {
-        let event = sqlx::query_as::<_, Event>(r#"
+        let event = sqlx::query_as::<_, Event>(
+            r#"
             INSERT INTO events (event_type, worker_id, reason)
             VALUES ('worker_stopped', ?1, ?2)
             RETURNING id, event_type, ticket_id, worker_id, stage, reason, created_at, processed
-        "#)
+        "#,
+        )
         .bind(worker_id)
         .bind(reason)
         .fetch_one(pool)
@@ -60,11 +64,13 @@ impl Event {
         ticket_id: &str,
         queue_name: &str,
     ) -> Result<Event> {
-        let event = sqlx::query_as::<_, Event>(r#"
+        let event = sqlx::query_as::<_, Event>(
+            r#"
             INSERT INTO events (event_type, ticket_id, reason)
             VALUES ('task_assigned', ?1, ?2)
             RETURNING id, event_type, ticket_id, worker_id, stage, reason, created_at, processed
-        "#)
+        "#,
+        )
         .bind(ticket_id)
         .bind(queue_name)
         .fetch_one(pool)
@@ -74,12 +80,14 @@ impl Event {
     }
 
     pub async fn get_recent(pool: &DbPool, limit: i32) -> Result<Vec<Event>> {
-        let events = sqlx::query_as::<_, Event>(r#"
+        let events = sqlx::query_as::<_, Event>(
+            r#"
             SELECT id, event_type, ticket_id, worker_id, stage, reason, created_at, processed
             FROM events
             ORDER BY created_at DESC
             LIMIT ?1
-        "#)
+        "#,
+        )
         .bind(limit)
         .fetch_all(pool)
         .await?;
@@ -88,12 +96,14 @@ impl Event {
     }
 
     pub async fn get_unprocessed(pool: &DbPool) -> Result<Vec<Event>> {
-        let events = sqlx::query_as::<_, Event>(r#"
+        let events = sqlx::query_as::<_, Event>(
+            r#"
             SELECT id, event_type, ticket_id, worker_id, stage, reason, created_at, processed
             FROM events
             WHERE processed = 0
             ORDER BY created_at ASC
-        "#)
+        "#,
+        )
         .fetch_all(pool)
         .await?;
 
@@ -132,17 +142,21 @@ impl Event {
             return Ok(0);
         }
 
-        let placeholders = event_ids.iter()
+        let placeholders = event_ids
+            .iter()
             .enumerate()
             .map(|(i, _)| format!("?{}", i + 1))
             .collect::<Vec<_>>()
             .join(",");
 
-        let query = format!(r#"
+        let query = format!(
+            r#"
             UPDATE events 
             SET processed = 1 
             WHERE id IN ({})
-        "#, placeholders);
+        "#,
+            placeholders
+        );
 
         let mut query_builder = sqlx::query(&query);
         for id in event_ids {
