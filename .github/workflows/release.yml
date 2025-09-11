@@ -1,0 +1,104 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+jobs:
+  release:
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        include:
+          - os: ubuntu-latest
+            target: x86_64-unknown-linux-gnu
+            packages: deb,rpm
+          - os: macos-latest
+            target: x86_64-apple-darwin
+            packages: ""
+          - os: macos-latest
+            target: aarch64-apple-darwin
+            packages: ""
+          - os: windows-latest
+            target: x86_64-pc-windows-msvc
+            packages: ""
+
+    steps:
+    - uses: actions/checkout@v4
+    - uses: dtolnay/rust-toolchain@stable
+      with:
+        targets: ${{ matrix.target }}
+    - uses: Swatinem/rust-cache@v2
+
+    - name: Install cargo-generate-rpm (Linux)
+      if: matrix.os == 'ubuntu-latest'
+      run: cargo install cargo-generate-rpm
+
+    - name: Install cargo-deb (Linux)
+      if: matrix.os == 'ubuntu-latest'
+      run: cargo install cargo-deb
+
+    - name: Build release
+      run: cargo build --release --target ${{ matrix.target }}
+      env:
+        SQLX_OFFLINE: true
+
+    - name: Create archive
+      shell: bash
+      run: |
+        if [[ "${{ matrix.os }}" == "windows-latest" ]]; then
+          exe_suffix=".exe"
+        else
+          exe_suffix=""
+        fi
+        
+        binary_name="vibe-ensemble-mcp${exe_suffix}"
+        archive_name="vibe-ensemble-mcp-${{ matrix.target }}"
+        
+        mkdir "${archive_name}"
+        cp "target/${{ matrix.target }}/release/${binary_name}" "${archive_name}/"
+        cp README.md LICENSE "${archive_name}/" 2>/dev/null || true
+        
+        if [[ "${{ matrix.os }}" == "windows-latest" ]]; then
+          7z a "${archive_name}.zip" "${archive_name}"
+          echo "ASSET=${archive_name}.zip" >> $GITHUB_ENV
+        else
+          tar -czf "${archive_name}.tar.gz" "${archive_name}"
+          echo "ASSET=${archive_name}.tar.gz" >> $GITHUB_ENV
+        fi
+
+    - name: Generate DEB package (Linux)
+      if: matrix.os == 'ubuntu-latest' && contains(matrix.packages, 'deb')
+      run: |
+        cargo deb --target ${{ matrix.target }}
+        echo "DEB_ASSET=$(ls target/${{ matrix.target }}/debian/*.deb)" >> $GITHUB_ENV
+
+    - name: Generate RPM package (Linux)
+      if: matrix.os == 'ubuntu-latest' && contains(matrix.packages, 'rpm')
+      run: |
+        cargo generate-rpm --target ${{ matrix.target }}
+        echo "RPM_ASSET=$(ls target/${{ matrix.target }}/generate-rpm/*.rpm)" >> $GITHUB_ENV
+
+    - name: Upload release assets
+      uses: actions/upload-artifact@v4
+      with:
+        name: ${{ matrix.target }}-assets
+        path: |
+          ${{ env.ASSET }}
+          ${{ env.DEB_ASSET }}
+          ${{ env.RPM_ASSET }}
+
+  publish:
+    needs: release
+    runs-on: ubuntu-latest
+    steps:
+    - name: Download all artifacts
+      uses: actions/download-artifact@v4
+
+    - name: Create release
+      uses: ncipollo/release-action@v1
+      with:
+        artifacts: "*-assets/*"
+        token: ${{ secrets.GITHUB_TOKEN }}
+        generateReleaseNotes: true

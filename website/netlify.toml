@@ -1,0 +1,66 @@
+[build]
+  # Build directory
+  publish = "."
+  
+  # Since this is a static site, no build command needed
+  command = "echo 'Static site - no build required'"
+
+# Handle get subdomain routing - default to install.sh
+[[redirects]]
+  from = "/"
+  to = "/install.sh"
+  status = 200
+  force = true
+  conditions = {Host = ["get.vibeensemble.dev"]}
+
+[[redirects]]
+  from = "/install.sh"
+  to = "/install.sh"
+  status = 200
+  force = true
+  conditions = {Host = ["get.vibeensemble.dev"]}
+  
+[[redirects]]
+  from = "/install.ps1" 
+  to = "/install.ps1"
+  status = 200
+  force = true
+  conditions = {Host = ["get.vibeensemble.dev"]}
+
+# Serve scripts with proper content type
+[[headers]]
+  for = "/*.sh"
+  [headers.values]
+    Content-Type = "text/plain; charset=utf-8"
+    Cache-Control = "public, max-age=3600"
+    Access-Control-Allow-Origin = "*"
+
+[[headers]]
+  for = "/*.ps1"
+  [headers.values]
+    Content-Type = "text/plain; charset=utf-8"
+    Cache-Control = "public, max-age=3600"
+    Access-Control-Allow-Origin = "*"
+
+[[headers]]
+  for = "/get/*"
+  [headers.values]
+    Content-Type = "text/plain; charset=utf-8"
+    Cache-Control = "public, max-age=3600"
+    Access-Control-Allow-Origin = "*"
+
+# HTML security headers
+[[headers]]
+  for = "/*.html"
+  [headers.values]
+    Cache-Control = "public, max-age=3600"
+    X-Content-Type-Options = "nosniff"
+    X-Frame-Options = "DENY"
+    X-XSS-Protection = "1; mode=block"
+    Referrer-Policy = "strict-origin-when-cross-origin"
+
+# Static assets caching
+[[headers]]
+  for = "/static/*"
+  [headers.values]
+    Cache-Control = "public, max-age=31536000, immutable"
