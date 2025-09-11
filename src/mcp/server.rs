@@ -66,8 +66,9 @@ impl McpServer {
 
         let response = match request.method.as_str() {
             "initialize" => self.handle_initialize(request.params).await,
-            "list_tools" => self.handle_list_tools().await,
-            "call_tool" => self.handle_call_tool(state, request.params).await,
+            "notifications/initialized" => self.handle_initialized().await,
+            "list_tools" | "tools/list" => self.handle_list_tools().await,
+            "call_tool" | "tools/call" => self.handle_call_tool(state, request.params).await,
             _ => Err(JsonRpcError {
                 code: METHOD_NOT_FOUND,
                 message: format!("Method '{}' not found", request.method),
@@ -149,6 +150,14 @@ impl McpServer {
         })?;
 
         Ok(result)
+    }
+
+    async fn handle_initialized(&self) -> std::result::Result<Value, JsonRpcError> {
+        info!("Handling notifications/initialized request");
+        
+        // The notifications/initialized method requires no response according to MCP spec
+        // Return null/empty result to acknowledge
+        Ok(Value::Null)
     }
 
     async fn handle_list_tools(&self) -> std::result::Result<Value, JsonRpcError> {
