@@ -1,6 +1,6 @@
 use anyhow::{Context, Result};
 use serde_json::json;
-use std::fs;
+use std::fs::{self, OpenOptions};
 use std::process::{Command, Stdio};
 use tokio::time::Duration;
 use tracing::{debug, info, warn};
@@ -92,9 +92,12 @@ impl ProcessManager {
         let mcp_config_path =
             Self::create_mcp_config(&project.path, &worker_info.worker_id, state.config.port)?;
 
-        // Create log file path
-        let log_file_path = format!("{}/worker_{}.log", project.path, worker_info.worker_id);
-        let log_file = fs::File::create(&log_file_path)?;
+        // Create log file path using worker type (since only one worker per queue/type can be active)
+        let log_file_path = format!("{}/worker_{}.log", project.path, worker_info.worker_type);
+        let log_file = OpenOptions::new()
+            .create(true)
+            .append(true)
+            .open(&log_file_path)?;
 
         // Spawn Claude Code process
         let mut cmd = Command::new("claude");
