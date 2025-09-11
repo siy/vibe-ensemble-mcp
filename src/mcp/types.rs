@@ -29,8 +29,10 @@ pub struct JsonRpcError {
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct InitializeRequest {
+    #[serde(alias = "protocolVersion")]
     pub protocol_version: String,
     pub capabilities: ClientCapabilities,
+    #[serde(alias = "clientInfo")]
     pub client_info: ClientInfo,
 }
 

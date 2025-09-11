@@ -1,6 +1,6 @@
-use axum::{extract::State, response::Json};
+use axum::{extract::State, http::HeaderMap, response::Json};
 use serde_json::Value;
-use tracing::{debug, error, info};
+use tracing::{debug, error, info, trace, warn};
 
 use super::{
     event_tools::*, project_tools::*, queue_tools::*, ticket_tools::*, tools::ToolRegistry,
@@ -97,7 +97,7 @@ impl McpServer {
     ) -> std::result::Result<Value, JsonRpcError> {
         info!("Handling initialize request");
 
-        let _request: InitializeRequest = match params {
+        let request: InitializeRequest = match params {
             Some(params) => serde_json::from_value(params).map_err(|e| JsonRpcError {
                 code: INVALID_PARAMS,
                 message: format!("Invalid initialize params: {}", e),
@@ -112,8 +112,25 @@ impl McpServer {
             }
         };
 
+        // Log protocol version negotiation
+        let client_version = &request.protocol_version;
+        let server_supported_version = "2024-11-05";
+        
+        info!(
+            "Protocol version negotiation - Client requested: {}, Server supports: {}", 
+            client_version, server_supported_version
+        );
+
+        // We accept any client version but return what we actually support
+        if client_version != server_supported_version {
+            info!(
+                "Protocol version mismatch: client requested {}, negotiating down to {}", 
+                client_version, server_supported_version
+            );
+        }
+
         let response = InitializeResponse {
-            protocol_version: "2024-11-05".to_string(),
+            protocol_version: server_supported_version.to_string(),
             capabilities: ServerCapabilities {
                 tools: ToolsCapability {
                     list_changed: false,
@@ -192,9 +209,34 @@ impl McpServer {
 
 pub async fn mcp_handler(
     State(state): State<AppState>,
+    headers: HeaderMap,
     Json(request): Json<JsonRpcRequest>,
 ) -> Result<Json<JsonRpcResponse>> {
+    trace!("MCP request received: {}", serde_json::to_string_pretty(&request).unwrap_or_else(|_| "Failed to serialize request".to_string()));
+    
+    // Check for MCP-Protocol-Version header (2025-06-18 spec requirement)
+    if let Some(header_version) = headers.get("MCP-Protocol-Version") {
+        if let Ok(version_str) = header_version.to_str() {
+            info!("MCP-Protocol-Version header received: {}", version_str);
+            
+            // Validate the header version matches what we support
+            if version_str != "2024-11-05" {
+                warn!(
+                    "MCP-Protocol-Version header mismatch: client sent {}, server supports 2024-11-05", 
+                    version_str
+                );
+            }
+        } else {
+            warn!("Invalid MCP-Protocol-Version header value");
+        }
+    } else {
+        debug!("No MCP-Protocol-Version header present (optional for HTTP transport)");
+    }
+    
     let mcp_server = McpServer::new();
     let response = mcp_server.handle_request(&state, request).await;
+    
+    trace!("MCP response: {}", serde_json::to_string_pretty(&response).unwrap_or_else(|_| "Failed to serialize response".to_string()));
+    
     Ok(Json(response))
 }
