@@ -1,6 +1,7 @@
 use anyhow::Result;
 use clap::Parser;
 use tracing::info;
+use tracing_subscriber::EnvFilter;
 use vibe_ensemble_mcp::{config::Config, server::run_server};
 
 #[derive(Parser)]
@@ -30,7 +31,7 @@ async fn main() -> Result<()> {
 
     // Initialize tracing
     tracing_subscriber::fmt()
-        .with_env_filter(&args.log_level)
+        .with_env_filter(EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new(&args.log_level)))
         .init();
 
     info!("Starting Vibe-Ensemble MCP Server");
@@ -42,6 +43,13 @@ async fn main() -> Result<()> {
         host: args.host,
         port: args.port,
     };
+
+    // Ensure DB directory exists before opening SQLite file
+    if let Some(dir) = std::path::Path::new(&config.database_path).parent() {
+        if !dir.as_os_str().is_empty() {
+            tokio::fs::create_dir_all(dir).await?;
+        }
+    }
 
     run_server(config).await?;
 
