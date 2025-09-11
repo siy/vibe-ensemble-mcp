@@ -58,7 +58,8 @@ impl ToolHandler for SpawnWorkerTool {
     fn definition(&self) -> Tool {
         Tool {
             name: "spawn_worker".to_string(),
-            description: "Spawn a new worker process with a specific queue for task management".to_string(),
+            description: "Spawn a new worker process with a specific queue for task management"
+                .to_string(),
             input_schema: json!({
                 "type": "object",
                 "properties": {

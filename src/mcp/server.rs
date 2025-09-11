@@ -118,16 +118,16 @@ impl McpServer {
         // Log protocol version negotiation
         let client_version = &request.protocol_version;
         let server_supported_version = "2024-11-05";
-        
+
         info!(
-            "Protocol version negotiation - Client requested: {}, Server supports: {}", 
+            "Protocol version negotiation - Client requested: {}, Server supports: {}",
             client_version, server_supported_version
         );
 
         // We accept any client version but return what we actually support
         if client_version != server_supported_version {
             info!(
-                "Protocol version mismatch: client requested {}, negotiating down to {}", 
+                "Protocol version mismatch: client requested {}, negotiating down to {}",
                 client_version, server_supported_version
             );
         }
@@ -159,7 +159,7 @@ impl McpServer {
 
     async fn handle_initialized(&self) -> std::result::Result<Value, JsonRpcError> {
         info!("Handling notifications/initialized request");
-        
+
         // The notifications/initialized method requires no response according to MCP spec
         // Return null/empty result to acknowledge
         Ok(Value::Null)
@@ -560,7 +560,7 @@ Workers automatically pull tasks from their assigned queue only.
 - Coordinate workflow between specialized workers
 - Ensure proper handoffs between stages
 
-**REMEMBER: Even seemingly simple tasks like "create a README" or "set up initial files" should be delegated to workers through tickets. Your job is pure orchestration.**
+**REMEMBER: Even seemingly simple tasks like \\\"create a README\\\" or \\\"set up initial files\\\" should be delegated to workers through tickets. Your job is pure orchestration.**
 
 This queue-based delegation approach prevents context drift, enables parallel processing, maintains clear separation of concerns, and ensures the coordinator stays focused on workflow management rather than task execution.", task_type, task_type),
                         },
@@ -593,13 +593,17 @@ pub async fn mcp_handler(
     headers: HeaderMap,
     Json(request): Json<JsonRpcRequest>,
 ) -> Result<Json<JsonRpcResponse>> {
-    trace!("MCP request received: {}", serde_json::to_string_pretty(&request).unwrap_or_else(|_| "Failed to serialize request".to_string()));
-    
+    trace!(
+        "MCP request received: {}",
+        serde_json::to_string_pretty(&request)
+            .unwrap_or_else(|_| "Failed to serialize request".to_string())
+    );
+
     // Check for MCP-Protocol-Version header (2025-06-18 spec requirement)
     if let Some(header_version) = headers.get("MCP-Protocol-Version") {
         if let Ok(version_str) = header_version.to_str() {
             info!("MCP-Protocol-Version header received: {}", version_str);
-            
+
             // Validate the header version matches what we support
             if version_str != "2024-11-05" {
                 warn!(
@@ -613,11 +617,15 @@ pub async fn mcp_handler(
     } else {
         debug!("No MCP-Protocol-Version header present (optional for HTTP transport)");
     }
-    
+
     let mcp_server = McpServer::new();
     let response = mcp_server.handle_request(&state, request).await;
-    
-    trace!("MCP response: {}", serde_json::to_string_pretty(&response).unwrap_or_else(|_| "Failed to serialize response".to_string()));
-    
+
+    trace!(
+        "MCP response: {}",
+        serde_json::to_string_pretty(&response)
+            .unwrap_or_else(|_| "Failed to serialize response".to_string())
+    );
+
     Ok(Json(response))
 }

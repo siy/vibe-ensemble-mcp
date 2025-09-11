@@ -103,7 +103,11 @@ pub struct CallToolRequest {
 #[derive(Debug, Serialize, Deserialize)]
 pub struct CallToolResponse {
     pub content: Vec<ToolContent>,
-    #[serde(rename = "isError", alias = "is_error", skip_serializing_if = "Option::is_none")]
+    #[serde(
+        rename = "isError",
+        alias = "is_error",
+        skip_serializing_if = "Option::is_none"
+    )]
     pub is_error: Option<bool>,
 }
 

@@ -27,7 +27,7 @@ impl ProcessManager {
 
         let config_path = format!("{}/worker_{}_mcp_config.json", project_path, worker_id);
         fs::write(&config_path, serde_json::to_string_pretty(&config)?)?;
-        
+
         info!("Generated MCP config file: {}", config_path);
         Ok(config_path)
     }
@@ -89,12 +89,13 @@ impl ProcessManager {
             Self::build_worker_prompt(&worker_info, &worker_type_info.system_prompt, &queue_name);
 
         // Generate MCP config file
-        let mcp_config_path = Self::create_mcp_config(&project.path, &worker_info.worker_id, state.config.port)?;
-        
+        let mcp_config_path =
+            Self::create_mcp_config(&project.path, &worker_info.worker_id, state.config.port)?;
+
         // Create log file path
         let log_file_path = format!("{}/worker_{}.log", project.path, worker_info.worker_id);
         let log_file = fs::File::create(&log_file_path)?;
-        
+
         // Spawn Claude Code process
         let mut cmd = Command::new("claude");
         cmd.arg("-p")
