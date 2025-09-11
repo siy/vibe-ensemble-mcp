@@ -145,4 +145,19 @@ impl Worker {
 
         Ok(result.rows_affected() > 0)
     }
+
+    pub async fn has_active_worker_for_queue(pool: &DbPool, queue_name: &str) -> Result<bool> {
+        let count = sqlx::query_scalar::<_, i64>(
+            r#"
+            SELECT COUNT(*) 
+            FROM workers 
+            WHERE queue_name = ?1 AND status IN ('spawning', 'active', 'idle')
+        "#,
+        )
+        .bind(queue_name)
+        .fetch_one(pool)
+        .await?;
+
+        Ok(count > 0)
+    }
 }
