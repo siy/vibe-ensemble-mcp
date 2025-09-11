@@ -29,10 +29,10 @@ pub struct JsonRpcError {
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct InitializeRequest {
-    #[serde(alias = "protocolVersion")]
+    #[serde(rename = "protocolVersion", alias = "protocol_version")]
     pub protocol_version: String,
     pub capabilities: ClientCapabilities,
-    #[serde(alias = "clientInfo")]
+    #[serde(rename = "clientInfo", alias = "client_info")]
     pub client_info: ClientInfo,
 }
 
@@ -44,7 +44,7 @@ pub struct ClientCapabilities {
 
 #[derive(Debug, Serialize, Deserialize, Default)]
 pub struct ToolsCapability {
-    #[serde(default)]
+    #[serde(rename = "listChanged", alias = "list_changed", default)]
     pub list_changed: bool,
 }
 
@@ -56,8 +56,10 @@ pub struct ClientInfo {
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct InitializeResponse {
+    #[serde(rename = "protocolVersion")]
     pub protocol_version: String,
     pub capabilities: ServerCapabilities,
+    #[serde(rename = "serverInfo")]
     pub server_info: ServerInfo,
 }
 
@@ -76,6 +78,7 @@ pub struct ServerInfo {
 pub struct Tool {
     pub name: String,
     pub description: String,
+    #[serde(rename = "inputSchema", alias = "input_schema")]
     pub input_schema: Value,
 }
 
@@ -93,7 +96,7 @@ pub struct CallToolRequest {
 #[derive(Debug, Serialize, Deserialize)]
 pub struct CallToolResponse {
     pub content: Vec<ToolContent>,
-    #[serde(skip_serializing_if = "Option::is_none")]
+    #[serde(rename = "isError", alias = "is_error", skip_serializing_if = "Option::is_none")]
     pub is_error: Option<bool>,
 }
 
