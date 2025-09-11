@@ -92,8 +92,15 @@ impl ProcessManager {
         let mcp_config_path =
             Self::create_mcp_config(&project.path, &worker_info.worker_id, state.config.port)?;
 
-        // Create log file path using worker type (since only one worker per queue/type can be active)
-        let log_file_path = format!("{}/worker_{}.log", project.path, worker_info.worker_type);
+        // Create log file path in centralized logs directory
+        let project_logs_dir = crate::database::get_project_logs_dir(
+            &state.config.database_path,
+            &project.repository_name,
+        )?;
+        let log_file_path = format!(
+            "{}/worker_{}.log",
+            project_logs_dir, worker_info.worker_type
+        );
         let log_file = OpenOptions::new()
             .create(true)
             .append(true)

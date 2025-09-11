@@ -9,7 +9,7 @@ use vibe_ensemble_mcp::{config::Config, server::run_server};
 #[command(about = "A multi-agent coordination MCP server")]
 struct Args {
     /// Database file path
-    #[arg(long, default_value = "./vibe-ensemble.db")]
+    #[arg(long, default_value = "./.vibe-ensemble-mcp/vibe-ensemble.db")]
     database_path: String,
 
     /// Server host
