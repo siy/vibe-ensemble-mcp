@@ -54,18 +54,24 @@ impl WorkerOutputProcessor {
         target_stage: &str,
     ) -> Result<String> {
         // Get ticket to find project_id
-        let ticket_with_comments = Ticket::get_by_id(&state.db, ticket_id).await?
+        let ticket_with_comments = Ticket::get_by_id(&state.db, ticket_id)
+            .await?
             .ok_or_else(|| anyhow::anyhow!("Ticket '{}' not found", ticket_id))?;
 
         // Check if worker type exists for this project and stage
-        let worker_type_exists = WorkerType::get_by_type(&state.db, &ticket_with_comments.ticket.project_id, target_stage)
-            .await?
-            .is_some();
+        let worker_type_exists = WorkerType::get_by_type(
+            &state.db,
+            &ticket_with_comments.ticket.project_id,
+            target_stage,
+        )
+        .await?
+        .is_some();
 
         if !worker_type_exists {
             return Err(anyhow::anyhow!(
                 "Unknown worker type '{}'. Please, register '{}' first.",
-                target_stage, target_stage
+                target_stage,
+                target_stage
             ));
         }
 
@@ -136,25 +142,31 @@ impl WorkerOutputProcessor {
                 "Updating pipeline for ticket {} to: {:?}",
                 ticket_id, new_pipeline
             );
-            
+
             // Get ticket to find project_id for pipeline validation
-            let ticket_with_comments = Ticket::get_by_id(&state.db, ticket_id).await?
+            let ticket_with_comments = Ticket::get_by_id(&state.db, ticket_id)
+                .await?
                 .ok_or_else(|| anyhow::anyhow!("Ticket '{}' not found", ticket_id))?;
-            
+
             // Validate all stages in the new pipeline have registered worker types
             for stage in new_pipeline {
-                let worker_type_exists = WorkerType::get_by_type(&state.db, &ticket_with_comments.ticket.project_id, stage)
-                    .await?
-                    .is_some();
-                    
+                let worker_type_exists = WorkerType::get_by_type(
+                    &state.db,
+                    &ticket_with_comments.ticket.project_id,
+                    stage,
+                )
+                .await?
+                .is_some();
+
                 if !worker_type_exists {
                     return Err(anyhow::anyhow!(
                         "Unknown worker type '{}'. Please, register '{}' first.",
-                        stage, stage
+                        stage,
+                        stage
                     ));
                 }
             }
-            
+
             // Update the ticket's execution_plan (pipeline)
             let pipeline_json = serde_json::to_string(new_pipeline)?;
             sqlx::query(
