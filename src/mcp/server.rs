@@ -467,10 +467,9 @@ This delegation-first approach prevents context drift, ensures specialization, a
 ## PREREQUISITE: Proper Setup Sequence
 **CRITICAL: Before starting any workflow, ensure:**
 1. ✅ Project created
-2. ✅ Worker types defined with system prompts  
-3. ✅ Task queues created
-4. ✅ Workers spawned with queue assignments
-5. ✅ Only THEN create and assign tickets
+2. ✅ Worker types defined with system prompts
+3. ✅ Create tickets with execution plans
+4. ✅ Assign tickets to queues (queues/workers auto-managed on assignment)
 
 ## Queue-Based Coordination Strategy
 

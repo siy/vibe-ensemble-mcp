@@ -63,13 +63,6 @@ async fn main() -> Result<()> {
         port: args.port,
     };
 
-    // Ensure DB directory exists before opening SQLite file
-    if let Some(dir) = std::path::Path::new(&config.database_path).parent() {
-        if !dir.as_os_str().is_empty() {
-            tokio::fs::create_dir_all(dir).await?;
-        }
-    }
-
     run_server(config).await?;
 
     Ok(())

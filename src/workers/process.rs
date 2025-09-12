@@ -97,9 +97,31 @@ impl ProcessManager {
             &state.config.database_path,
             &project.repository_name,
         )?;
+        // Sanitize to safe filename fragments
+        let safe_type = worker_info
+            .worker_type
+            .chars()
+            .map(|c| {
+                if c.is_ascii_alphanumeric() || c == '-' || c == '_' {
+                    c
+                } else {
+                    '_'
+                }
+            })
+            .collect::<String>();
+        let safe_queue = queue_name
+            .chars()
+            .map(|c| {
+                if c.is_ascii_alphanumeric() || c == '-' || c == '_' {
+                    c
+                } else {
+                    '_'
+                }
+            })
+            .collect::<String>();
         let log_file_path = format!(
-            "{}/worker_{}.log",
-            project_logs_dir, worker_info.worker_type
+            "{}/worker_{}__{}.log",
+            project_logs_dir, safe_type, safe_queue
         );
         let log_file = OpenOptions::new()
             .create(true)
@@ -175,7 +197,7 @@ Use the vibe-ensemble MCP server to:
 - Get tasks from your queue: get_queue_tasks("{queue_name}")
 - Get ticket details: get_ticket(ticket_id)
 - Add your report: add_ticket_comment(ticket_id, worker_type, worker_id, stage_number, content)
-- Update stage completion: complete_ticket_stage(ticket_id, stage)
+- Update stage completion: update_ticket_stage(ticket_id, stage)
 - Mark yourself finished: finish_worker(worker_id, "optional reason")
 
 COORDINATOR WORKFLOW:
