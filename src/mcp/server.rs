@@ -57,10 +57,10 @@ impl McpServer {
         tools.register(UpdateTicketStageTool);
         tools.register(CloseTicketTool);
 
-        // Register event and task management tools
+        // Register event and stage management tools
         tools.register(ListEventsTool);
-        tools.register(GetTaskQueueTool);
-        tools.register(AssignTaskTool);
+        tools.register(GetTicketsByStageTool);
+        tools.register(SpawnWorkerForStageTool);
 
         Self { tools }
     }

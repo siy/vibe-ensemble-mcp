@@ -30,12 +30,7 @@ Thumbs.db
 
 # Log files
 *.log
-.vibe-ensemble/
+.vibe-ensemble-mcp/
+.mcp.json
 .claude/
-!agent-templates/**/.claude/
-!agent-templates/**/.claude/**
 CLAUDE.md
-code-review-*.md
-
-/vibe-ensemble-core/.vibe-worker-config.json
-/vibe-ensemble-core/.mcp.json

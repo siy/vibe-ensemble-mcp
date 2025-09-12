@@ -72,10 +72,10 @@ impl ToolHandler for ListEventsTool {
     }
 }
 
-pub struct GetTaskQueueTool;
+pub struct GetTicketsByStageTool;
 
 #[async_trait]
-impl ToolHandler for GetTaskQueueTool {
+impl ToolHandler for GetTicketsByStageTool {
     async fn call(
         &self,
         state: &AppState,
@@ -84,16 +84,36 @@ impl ToolHandler for GetTaskQueueTool {
         let args = arguments
             .ok_or_else(|| crate::error::AppError::BadRequest("Missing arguments".to_string()))?;
 
-        let queue_name: String = extract_param(&Some(args.clone()), "queue_name")?;
+        let stage: String = extract_param(&Some(args.clone()), "stage")?;
 
-        info!("Getting tasks from queue: {}", queue_name);
+        info!("Getting tickets for stage: {}", stage);
 
-        let tasks = state.queue_manager.get_queue_tasks(&queue_name).await?;
+        // Get tickets with matching current_stage
+        let tickets = sqlx::query_as::<_, Ticket>(
+            r#"
+            SELECT ticket_id, project_id, title, execution_plan, current_stage, state, priority,
+                   created_at, updated_at, closed_at
+            FROM tickets
+            WHERE current_stage = ?1 AND state = 'open'
+            ORDER BY 
+                CASE priority 
+                    WHEN 'urgent' THEN 1
+                    WHEN 'high' THEN 2  
+                    WHEN 'medium' THEN 3
+                    WHEN 'low' THEN 4
+                    ELSE 5
+                END,
+                created_at ASC
+        "#,
+        )
+        .bind(&stage)
+        .fetch_all(&state.db)
+        .await?;
 
         Ok(CallToolResponse {
             content: vec![ToolContent {
                 content_type: "text".to_string(),
-                text: serde_json::to_string_pretty(&tasks)?,
+                text: serde_json::to_string_pretty(&tickets)?,
             }],
             is_error: Some(false),
         })
@@ -101,26 +121,27 @@ impl ToolHandler for GetTaskQueueTool {
 
     fn definition(&self) -> Tool {
         Tool {
-            name: "get_queue_tasks".to_string(),
-            description: "Get all tasks in a specific queue without removing them".to_string(),
+            name: "get_tickets_by_stage".to_string(),
+            description: "Get all open tickets currently in a specific stage, ordered by priority"
+                .to_string(),
             input_schema: serde_json::json!({
                 "type": "object",
                 "properties": {
-                    "queue_name": {
+                    "stage": {
                         "type": "string",
-                        "description": "Name of the queue"
+                        "description": "Name of the stage (e.g., 'planning', 'design', 'coding', 'testing')"
                     }
                 },
-                "required": ["queue_name"]
+                "required": ["stage"]
             }),
         }
     }
 }
 
-pub struct AssignTaskTool;
+pub struct SpawnWorkerForStageTool;
 
 #[async_trait]
-impl ToolHandler for AssignTaskTool {
+impl ToolHandler for SpawnWorkerForStageTool {
     async fn call(
         &self,
         state: &AppState,
@@ -129,105 +150,95 @@ impl ToolHandler for AssignTaskTool {
         let args = arguments
             .ok_or_else(|| crate::error::AppError::BadRequest("Missing arguments".to_string()))?;
 
-        let ticket_id: String = extract_param(&Some(args.clone()), "ticket_id")?;
-        let queue_name: String = extract_param(&Some(args.clone()), "queue_name")?;
+        let stage: String = extract_param(&Some(args.clone()), "stage")?;
+        let project_id: String = extract_param(&Some(args.clone()), "project_id")?;
 
-        info!("Assigning ticket {} to queue {}", ticket_id, queue_name);
+        info!(
+            "Spawning worker for stage: {} in project: {}",
+            stage, project_id
+        );
 
-        // Create queue if it doesn't exist
-        state.queue_manager.create_queue(&queue_name).await?;
+        // Check if there's already an active worker for this stage
+        let existing_workers = sqlx::query_as::<_, Worker>(
+            r#"
+            SELECT worker_id, project_id, worker_type, status, pid, queue_name, started_at, last_activity
+            FROM workers 
+            WHERE project_id = ?1 AND worker_type = ?2 AND status IN ('spawning', 'active', 'idle')
+        "#,
+        )
+        .bind(&project_id)
+        .bind(&stage)
+        .fetch_all(&state.db)
+        .await?;
 
-        // Check if there's an active worker for this queue
-        let has_active_worker = Worker::has_active_worker_for_queue(&state.db, &queue_name).await?;
+        // Check if any existing workers are actually running
+        for worker in &existing_workers {
+            if let Some(pid) = worker.pid {
+                let is_running = tokio::process::Command::new("kill")
+                    .arg("-0")
+                    .arg(pid.to_string())
+                    .status()
+                    .await
+                    .map(|status| status.success())
+                    .unwrap_or(false);
 
-        if !has_active_worker {
-            info!(
-                "No active worker found for queue {}. Auto-spawning worker.",
-                queue_name
-            );
-
-            // Get ticket to find project_id
-            if let Some(ticket) = Ticket::get_by_id(&state.db, &ticket_id).await? {
-                // Extract worker type from queue name (e.g., "architect-queue" -> "architect")
-                let worker_type = if queue_name.ends_with("-queue") {
-                    queue_name.strip_suffix("-queue").unwrap_or(&queue_name)
-                } else if queue_name.starts_with("queue-") {
-                    queue_name.strip_prefix("queue-").unwrap_or(&queue_name)
-                } else {
-                    &queue_name
+                if is_running {
+                    return Ok(create_success_response(&format!(
+                        "Worker {} already active for stage {} in project {}",
+                        worker.worker_id, stage, project_id
+                    )));
                 }
-                .to_string();
-
-                // Generate unique worker ID
-                let worker_id =
-                    format!("auto-{}-{}", worker_type, &Uuid::new_v4().to_string()[..8]);
-
-                let spawn_request = SpawnWorkerRequest {
-                    worker_id: worker_id.clone(),
-                    project_id: ticket.ticket.project_id,
-                    worker_type,
-                    queue_name: queue_name.clone(),
-                };
-
-                match ProcessManager::spawn_worker(state, spawn_request).await {
-                    Ok(_worker_process) => {
-                        info!("Auto-spawned worker {} for queue {}", worker_id, queue_name);
-                    }
-                    Err(e) => {
-                        warn!(
-                            "Failed to auto-spawn worker for queue {}: {}",
-                            queue_name, e
-                        );
-                        // Continue with task assignment even if worker spawn fails
-                    }
-                }
-            } else {
-                warn!(
-                    "Ticket {} not found, cannot determine project for auto-spawn",
-                    ticket_id
-                );
             }
         }
 
-        // Add task to queue
-        let task_id = state
-            .queue_manager
-            .add_task(&queue_name, &ticket_id)
-            .await?;
+        // Generate unique worker ID
+        let worker_id = format!("{}-{}", stage, &Uuid::new_v4().to_string()[..8]);
 
-        // Create event for task assignment
-        Event::create_task_assigned(&state.db, &ticket_id, &queue_name).await?;
+        let spawn_request = SpawnWorkerRequest {
+            worker_id: worker_id.clone(),
+            project_id: project_id.clone(),
+            worker_type: stage.clone(),
+            queue_name: format!("{}-queue", stage), // Keep queue for internal implementation
+        };
 
-        Ok(create_success_response(&format!(
-            "Assigned ticket {} to queue {} with task ID: {}{}",
-            ticket_id,
-            queue_name,
-            task_id,
-            if !has_active_worker {
-                " (auto-spawned worker)"
-            } else {
-                ""
+        match ProcessManager::spawn_worker(state, spawn_request).await {
+            Ok(_worker_process) => {
+                info!(
+                    "Spawned worker {} for stage {} in project {}",
+                    worker_id, stage, project_id
+                );
+                Ok(create_success_response(&format!(
+                    "Successfully spawned worker {} for stage {} in project {}",
+                    worker_id, stage, project_id
+                )))
             }
-        )))
+            Err(e) => {
+                warn!(
+                    "Failed to spawn worker for stage {} in project {}: {}",
+                    stage, project_id, e
+                );
+                Err(e.into())
+            }
+        }
     }
 
     fn definition(&self) -> Tool {
         Tool {
-            name: "assign_task".to_string(),
-            description: "Assign a ticket to a worker queue as a task".to_string(),
+            name: "spawn_worker_for_stage".to_string(),
+            description: "Spawn a worker for a specific stage in a project".to_string(),
             input_schema: serde_json::json!({
                 "type": "object",
                 "properties": {
-                    "ticket_id": {
+                    "stage": {
                         "type": "string",
-                        "description": "Ticket identifier to assign"
+                        "description": "Stage name (e.g., 'planning', 'design', 'coding', 'testing')"
                     },
-                    "queue_name": {
+                    "project_id": {
                         "type": "string",
-                        "description": "Target queue name (should match worker queue)"
+                        "description": "Project identifier"
                     }
                 },
-                "required": ["ticket_id", "queue_name"]
+                "required": ["stage", "project_id"]
             }),
         }
     }

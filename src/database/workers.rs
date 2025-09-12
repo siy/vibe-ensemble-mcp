@@ -19,7 +19,7 @@ pub struct Worker {
 impl Worker {
     pub async fn create(pool: &DbPool, worker: Worker) -> Result<Worker> {
         let worker = sqlx::query_as::<_, Worker>(r#"
-            INSERT INTO workers (worker_id, project_id, worker_type, status, pid, queue_name, started_at, last_activity)
+            INSERT OR REPLACE INTO workers (worker_id, project_id, worker_type, status, pid, queue_name, started_at, last_activity)
             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)
             RETURNING worker_id, project_id, worker_type, status, pid, queue_name, started_at, last_activity
         "#)

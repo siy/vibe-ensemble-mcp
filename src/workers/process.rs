@@ -15,6 +15,11 @@ pub struct ProcessManager;
 
 impl ProcessManager {
     fn create_mcp_config(project_path: &str, worker_id: &str, server_port: u16) -> Result<String> {
+        debug!(
+            "Creating MCP config for worker {} in project path: {}",
+            worker_id, project_path
+        );
+
         let config = json!({
             "mcpServers": {
                 "vibe-ensemble-mcp": {
@@ -24,9 +29,21 @@ impl ProcessManager {
                 }
             }
         });
+        debug!("MCP config JSON created successfully");
 
         let config_path = format!("{}/worker_{}_mcp_config.json", project_path, worker_id);
-        fs::write(&config_path, serde_json::to_string_pretty(&config)?)?;
+        debug!("Target config file path: {}", config_path);
+
+        debug!("Serializing config to pretty JSON...");
+        let config_json = serde_json::to_string_pretty(&config)?;
+        debug!(
+            "JSON serialization successful, length: {} bytes",
+            config_json.len()
+        );
+
+        debug!("Writing config file to: {}", config_path);
+        fs::write(&config_path, config_json)?;
+        debug!("File write successful");
 
         info!("Generated MCP config file: {}", config_path);
         Ok(config_path)
@@ -63,7 +80,10 @@ impl ProcessManager {
                         request.project_id
                     )
                 })?;
-        debug!("Found worker type with system prompt length: {}", worker_type_info.system_prompt.len());
+        debug!(
+            "Found worker type with system prompt length: {}",
+            worker_type_info.system_prompt.len()
+        );
 
         // Use the provided queue name
         let queue_name = request.queue_name.clone();
@@ -93,20 +113,27 @@ impl ProcessManager {
             last_activity: worker_info.last_activity.to_rfc3339(),
         };
         Worker::create(&state.db, db_worker).await?;
+        debug!("✓ Worker saved to database, proceeding with setup");
 
         // Build worker prompt
+        debug!("Building worker prompt...");
         let worker_prompt =
-            Self::build_worker_prompt(&worker_info, &worker_type_info.system_prompt, &queue_name);
+            Self::build_worker_prompt(&worker_info, &worker_type_info.system_prompt);
+        debug!("✓ Worker prompt built successfully");
 
         // Generate MCP config file
+        debug!("Creating MCP config file...");
         let mcp_config_path =
             Self::create_mcp_config(&project.path, &worker_info.worker_id, state.config.port)?;
+        debug!("✓ MCP config created at: {}", mcp_config_path);
 
         // Create log file path in centralized logs directory
+        debug!("Getting project logs directory...");
         let project_logs_dir = crate::database::get_project_logs_dir(
             &state.config.database_path,
             &project.repository_name,
         )?;
+        debug!("✓ Project logs directory: {}", project_logs_dir);
         // Sanitize to safe filename fragments
         let safe_type = worker_info
             .worker_type
@@ -133,13 +160,16 @@ impl ProcessManager {
             "{}/worker_{}__{}.log",
             project_logs_dir, safe_type, safe_queue
         );
+        debug!("Opening log file: {}", log_file_path);
         let log_file = OpenOptions::new()
             .create(true)
             .append(true)
             .open(&log_file_path)?;
+        debug!("✓ Log file opened successfully");
 
-        // Check if claude command exists in PATH
-        debug!("Checking if 'claude' command is available in PATH");
+        // DIAGNOSTIC: Enhanced logging for worker spawning
+        info!("Starting worker spawn diagnostics");
+        debug!("About to check for 'claude' command in PATH");
         match tokio::process::Command::new("which")
             .arg("claude")
             .output()
@@ -147,21 +177,31 @@ impl ProcessManager {
         {
             Ok(output) if output.status.success() => {
                 let claude_path = String::from_utf8_lossy(&output.stdout).trim().to_string();
-                info!("Found Claude Code at: {}", claude_path);
+                info!("✓ Found Claude Code at: {}", claude_path);
             }
             Ok(_) => {
-                warn!("'claude' command not found in PATH - this will likely cause spawn failure");
+                error!("✗ 'claude' command not found in PATH - this will cause spawn failure");
             }
             Err(e) => {
-                warn!("Failed to check for 'claude' command: {}", e);
+                error!("✗ Failed to check for 'claude' command: {}", e);
             }
         }
 
         // Log environment and working directory
-        debug!("Current working directory: {}", std::env::current_dir().unwrap_or_else(|_| std::path::PathBuf::from("unknown")).display());
-        debug!("Project working directory: {}", project.path);
+        debug!(
+            "Current working directory: {}",
+            std::env::current_dir()
+                .unwrap_or_else(|_| std::path::PathBuf::from("unknown"))
+                .display()
+        );
+        debug!(
+            "Project working directory (where Claude will run): {}",
+            project.path
+        );
         if let Ok(path_var) = std::env::var("PATH") {
             debug!("PATH environment variable: {}", path_var);
+        } else {
+            error!("PATH environment variable not found!");
         }
 
         // Spawn Claude Code process
@@ -174,24 +214,29 @@ impl ProcessManager {
             .arg("bypassPermissions")
             .arg("--mcp-config")
             .arg(&mcp_config_path)
+            .arg("--output-format")
+            .arg("json")
             .current_dir(&project.path)
             .stdin(Stdio::piped())
             .stdout(Stdio::from(log_file.try_clone()?))
             .stderr(Stdio::from(log_file));
 
-        info!(
-            "Executing Claude Code command: {:?} in directory: {}",
-            format!("claude -p '{}' --debug --verbose --permission-mode bypassPermissions --mcp-config '{}'", 
-                    worker_prompt.chars().take(50).collect::<String>() + "...", 
-                    mcp_config_path),
-            project.path
+        info!("Executing Claude Code command");
+        debug!("Command: claude");
+        debug!("Arguments: -p [prompt] --debug --verbose --permission-mode bypassPermissions --mcp-config {} --output-format json", mcp_config_path);
+        debug!("Working directory: {}", project.path);
+        debug!("MCP config file: {}", mcp_config_path);
+        debug!("Log file path: {}", log_file_path);
+        debug!(
+            "Prompt preview: {}",
+            worker_prompt.chars().take(100).collect::<String>()
         );
+        debug!("Attempting to spawn process...");
 
-        let child = match tokio::process::Command::from(cmd)
-            .spawn()
-        {
+        let child = match tokio::process::Command::from(cmd).spawn() {
             Ok(child) => {
-                info!("Successfully spawned Claude Code process");
+                info!("✓ Successfully spawned Claude Code process");
+                debug!("Worker spawn diagnostics completed");
                 child
             }
             Err(e) => {
@@ -224,11 +269,7 @@ impl ProcessManager {
         })
     }
 
-    fn build_worker_prompt(
-        worker_info: &WorkerInfo,
-        system_prompt: &str,
-        queue_name: &str,
-    ) -> String {
+    fn build_worker_prompt(worker_info: &WorkerInfo, system_prompt: &str) -> String {
         format!(
             r#"{system_prompt}
 
@@ -236,45 +277,72 @@ WORKER CONFIGURATION:
 - Worker ID: {worker_id}
 - Project: {project_id}
 - Worker Type: {worker_type}
-- Queue Name: {queue_name}
+- Stage: {worker_type}
 
-TASK PROCESSING INSTRUCTIONS:
-1. You are a specialized worker for the vibe-ensemble multi-agent system
-2. Your queue is: {queue_name}
-3. Process tasks from your queue one by one
-4. When queue is empty, call finish_worker() with your worker_id and then exit gracefully
-5. For each task, read the full ticket content including previous worker reports
-6. Complete your stage and add a detailed report as a comment
-7. Update the ticket's completed stage when done
-8. Continue to next task or exit when queue is empty
+STAGE-BASED MULTI-AGENT SYSTEM:
+You are a specialized worker in a stage-based pipeline where:
+- Pipeline stage names == ticket current_stage == worker names (e.g., "planning", "design", "coding", "testing")
+- All tickets start in "planning" stage with single-stage pipeline: ["planning"]
+- Workers output structured JSON with exactly one of three outcomes:
+  1. "next_stage": Task completed, move ticket to specified next stage
+  2. "prev_stage": Issues found, move ticket back to specified previous stage  
+  3. "coordinator_attention": Critical issues requiring human coordinator intervention
 
-Use the vibe-ensemble MCP server to:
-- Get tasks from your queue: get_queue_tasks("{queue_name}")
-- Get ticket details: get_ticket(ticket_id)
-- Add your report: add_ticket_comment(ticket_id, worker_type, worker_id, stage_number, content)
-- Update stage completion: update_ticket_stage(ticket_id, stage)
-- Mark yourself finished: finish_worker(worker_id, "optional reason")
+TASK PROCESSING WORKFLOW:
+1. Check for tickets in your stage: get_tickets_by_stage("{worker_type}")
+2. Process tickets one by one in priority order (urgent > high > medium > low)
+3. For each ticket:
+   - Read full ticket content including all comments from previous stages
+   - Perform your specialized work for this stage
+   - Add a detailed report as a comment with your findings/work
+   - Output exactly ONE structured JSON decision (see OUTPUT FORMAT below)
+4. When no more tickets in your stage, call finish_worker() and exit gracefully
 
-COORDINATOR WORKFLOW:
-The coordinator uses this streamlined workflow to manage the multi-agent system:
-1. Create project: create_project(project_id, name, path, description)
-2. Define worker types: create_worker_type(project_id, worker_type, system_prompt, description)
-3. Create tickets: create_ticket(project_id, title, description)
-4. Assign tasks: assign_task(ticket_id, queue_name) - workers auto-spawn on first task assignment
-5. Monitor progress: list_events(), get_queue_status(queue_name), get_ticket(ticket_id)
+OUTPUT FORMAT (JSON only, no additional text):
+```json
+{{
+  "outcome": "next_stage|prev_stage|coordinator_attention",
+  "target_stage": "stage_name_or_null",
+  "pipeline_update": ["stage1", "stage2", "..."] or null,
+  "comment": "Your detailed report/findings",
+  "reason": "Brief reason for the decision"
+}}
+```
 
-IMPORTANT: Workers are now AUTO-SPAWNED when tasks are assigned to queues! 
-- No need to manually spawn workers or create queues
-- Simply assign tasks to appropriate queue names (e.g., "architect-queue", "developer-queue")
-- The system automatically detects if a worker exists for the queue and spawns one if needed
-- Workers stop automatically when their queue becomes empty
+OUTCOME DESCRIPTIONS:
+- "next_stage": Work completed successfully, ticket should advance
+  - target_stage: Name of next stage to move to
+  - pipeline_update: Optional - new complete pipeline if extending it
+- "prev_stage": Issues found that require earlier stage rework
+  - target_stage: Stage to return ticket to (must be earlier in pipeline)
+  - pipeline_update: Should be null for backward moves
+- "coordinator_attention": Critical issues requiring human intervention
+  - target_stage: Should be null
+  - pipeline_update: Should be null
 
-Remember: You are working autonomously. Process tasks thoroughly and provide detailed reports for the next worker or coordinator.
+PIPELINE MANAGEMENT:
+- Only "planning" workers can extend pipelines by adding new stages
+- Other workers can only move tickets forward/backward in existing pipeline
+- When extending pipeline, provide the complete new pipeline array
+- Pipeline modifications have constraints: cannot modify stages that tickets have already passed through
+
+MCP TOOLS AVAILABLE:
+- get_tickets_by_stage(stage): Get all tickets currently in your stage
+- get_ticket(ticket_id): Get full ticket details with all comments
+- add_ticket_comment(ticket_id, worker_type, worker_id, stage_number, content): Add your work report
+- update_ticket_stage(ticket_id, new_stage): Move ticket to different stage
+- update_ticket_pipeline(ticket_id, new_pipeline): Extend ticket pipeline (planning workers only)
+- finish_worker(worker_id, "reason"): Mark yourself as finished and exit
+
+PRIORITY HANDLING:
+Process tickets in order: urgent → high → medium → low
+Focus on completing higher priority tickets before moving to lower priority ones.
+
+Remember: Output ONLY the JSON structure above. No additional commentary or explanation.
 "#,
             worker_id = worker_info.worker_id,
             project_id = worker_info.project_id,
             worker_type = worker_info.worker_type,
-            queue_name = queue_name,
             system_prompt = system_prompt
         )
     }

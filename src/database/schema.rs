@@ -66,7 +66,9 @@ async fn create_tickets_table(pool: &SqlitePool) -> Result<()> {
             project_id TEXT NOT NULL,
             title TEXT NOT NULL,
             execution_plan TEXT NOT NULL,
-            last_completed_stage TEXT NOT NULL DEFAULT 'Planned',
+            current_stage TEXT NOT NULL DEFAULT 'planning',
+            state TEXT NOT NULL DEFAULT 'open' CHECK (state IN ('open', 'closed', 'on_hold')),
+            priority TEXT NOT NULL DEFAULT 'medium' CHECK (priority IN ('low', 'medium', 'high', 'urgent')),
             created_at TEXT NOT NULL DEFAULT (datetime('now')),
             updated_at TEXT NOT NULL DEFAULT (datetime('now')),
             closed_at TEXT NULL,
@@ -76,6 +78,26 @@ async fn create_tickets_table(pool: &SqlitePool) -> Result<()> {
     )
     .execute(pool)
     .await?;
+
+    // Migration: Add new columns to existing tickets table if they don't exist
+    // This handles the case where the table already exists but with the old schema
+    let _ = sqlx::query("ALTER TABLE tickets ADD COLUMN current_stage TEXT DEFAULT 'planning'")
+        .execute(pool)
+        .await;
+
+    let _ = sqlx::query("ALTER TABLE tickets ADD COLUMN state TEXT DEFAULT 'open' CHECK (state IN ('open', 'closed', 'on_hold'))")
+        .execute(pool)
+        .await;
+
+    let _ = sqlx::query("ALTER TABLE tickets ADD COLUMN priority TEXT DEFAULT 'medium' CHECK (priority IN ('low', 'medium', 'high', 'urgent'))")
+        .execute(pool)
+        .await;
+
+    // Migration: Copy data from last_completed_stage to current_stage if needed
+    let _ = sqlx::query("UPDATE tickets SET current_stage = last_completed_stage WHERE current_stage = 'planning' AND last_completed_stage != 'Planned'")
+        .execute(pool)
+        .await;
+
     Ok(())
 }
 
