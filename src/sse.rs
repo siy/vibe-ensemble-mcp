@@ -15,6 +15,12 @@ pub struct EventBroadcaster {
     sender: Arc<broadcast::Sender<String>>,
 }
 
+impl Default for EventBroadcaster {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl EventBroadcaster {
     pub fn new() -> Self {
         let (sender, _) = broadcast::channel(100);
