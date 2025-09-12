@@ -12,7 +12,7 @@ use tracing::{error, info};
 
 use crate::{
     config::Config, database::DbPool, error::Result, mcp::server::mcp_handler,
-    workers::queue::QueueManager,
+    sse::sse_handler, workers::queue::QueueManager,
 };
 
 #[derive(Clone)]
@@ -47,6 +47,7 @@ pub async fn run_server(config: Config) -> Result<()> {
     let app = Router::new()
         .route("/health", get(health_check))
         .route("/mcp", post(mcp_handler))
+        .route("/sse", get(sse_handler))
         .layer(RequestBodyLimitLayer::new(1024 * 1024)) // 1 MiB
         .layer(TraceLayer::new_for_http())
         .layer(cors)
