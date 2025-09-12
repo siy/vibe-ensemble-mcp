@@ -11,8 +11,8 @@ use tower_http::{cors::CorsLayer, limit::RequestBodyLimitLayer, trace::TraceLaye
 use tracing::{error, info};
 
 use crate::{
-    config::Config, database::DbPool, error::Result, mcp::server::mcp_handler,
-    sse::sse_handler, workers::queue::QueueManager,
+    config::Config, database::DbPool, error::Result, mcp::server::mcp_handler, sse::sse_handler,
+    workers::queue::QueueManager,
 };
 
 #[derive(Clone)]

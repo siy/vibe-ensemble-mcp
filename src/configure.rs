@@ -8,12 +8,12 @@ pub async fn configure_claude_code(host: &str, port: u16) -> Result<()> {
 
     // Create .mcp.json file
     create_mcp_config(host, port).await?;
-    
+
     // Create .claude directory and files
     create_claude_directory().await?;
     create_claude_settings().await?;
     create_vibe_ensemble_command(host, port).await?;
-    
+
     println!("✅ Claude Code integration configured successfully!");
     println!("📁 Generated files:");
     println!("  - .mcp.json (MCP server configuration)");
@@ -21,10 +21,13 @@ pub async fn configure_claude_code(host: &str, port: u16) -> Result<()> {
     println!("  - .claude/commands/vibe-ensemble.md (Coordinator initialization)");
     println!();
     println!("🚀 To use with Claude Code:");
-    println!("  1. Start the vibe-ensemble server: vibe-ensemble-mcp --host {} --port {}", host, port);
+    println!(
+        "  1. Start the vibe-ensemble server: vibe-ensemble-mcp --host {} --port {}",
+        host, port
+    );
     println!("  2. Open Claude Code in this directory");
     println!("  3. Run the 'vibe-ensemble' command to initialize as coordinator");
-    
+
     Ok(())
 }
 
@@ -37,13 +40,13 @@ async fn create_mcp_config(host: &str, port: u16) -> Result<()> {
                 "protocol_version": "2024-11-05"
             },
             "vibe-ensemble-sse": {
-                "type": "sse", 
+                "type": "sse",
                 "url": format!("http://{}:{}/sse", host, port),
                 "protocol_version": "2024-11-05"
             }
         }
     });
-    
+
     fs::write(".mcp.json", serde_json::to_string_pretty(&config)?)?;
     Ok(())
 }
@@ -63,18 +66,22 @@ async fn create_claude_settings() -> Result<()> {
             },
             "vibe-ensemble-sse": {
                 "tools": {
-                    "*": "allowed" 
+                    "*": "allowed"
                 }
             }
         }
     });
-    
-    fs::write(".claude/settings.local.json", serde_json::to_string_pretty(&settings)?)?;
+
+    fs::write(
+        ".claude/settings.local.json",
+        serde_json::to_string_pretty(&settings)?,
+    )?;
     Ok(())
 }
 
 async fn create_vibe_ensemble_command(host: &str, port: u16) -> Result<()> {
-    let command_content = format!(r#"# Vibe-Ensemble Coordinator Initialization
+    let command_content = format!(
+        r#"# Vibe-Ensemble Coordinator Initialization
 
 **System:** You are a coordinator in the vibe-ensemble multi-agent system. Your primary role is to:
 
@@ -160,8 +167,10 @@ async fn create_vibe_ensemble_command(host: &str, port: u16) -> Result<()> {
 **ABSOLUTE RULE: Even tasks that seem "too simple" like "create a folder" or "write one line of code" MUST be delegated through tickets. Your role is 100% orchestration - workers handle 100% of execution.**
 
 **Remember:** You coordinate and delegate. Workers implement. Focus on breaking down complex requests into manageable tickets and ensuring smooth handoffs between specialized workers.
-"#, host, port, host, port, host, port);
-    
+"#,
+        host, port, host, port, host, port
+    );
+
     fs::write(".claude/commands/vibe-ensemble.md", command_content)?;
     Ok(())
 }
