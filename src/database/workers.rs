@@ -147,17 +147,56 @@ impl Worker {
     }
 
     pub async fn has_active_worker_for_queue(pool: &DbPool, queue_name: &str) -> Result<bool> {
-        let count = sqlx::query_scalar::<_, i64>(
+        // Get workers that appear active in database
+        let workers = sqlx::query_as::<_, Worker>(
             r#"
-            SELECT COUNT(*) 
+            SELECT worker_id, project_id, worker_type, status, pid, queue_name, started_at, last_activity
             FROM workers 
             WHERE queue_name = ?1 AND status IN ('spawning', 'active', 'idle')
         "#,
         )
         .bind(queue_name)
-        .fetch_one(pool)
+        .fetch_all(pool)
         .await?;
 
-        Ok(count > 0)
+        // Check if any of the workers are actually running
+        for worker in workers {
+            if let Some(pid) = worker.pid {
+                // Check if process is still running using kill -0
+                let is_running = tokio::process::Command::new("kill")
+                    .arg("-0")
+                    .arg(pid.to_string())
+                    .status()
+                    .await
+                    .map(|status| status.success())
+                    .unwrap_or(false);
+
+                if is_running {
+                    return Ok(true);
+                } else {
+                    // Process died, update its status to failed
+                    tracing::warn!(
+                        "Worker {} (PID {}) marked as {} but process is dead, updating status",
+                        worker.worker_id,
+                        pid,
+                        worker.status
+                    );
+                    Self::update_status(pool, &worker.worker_id, "failed", None).await?;
+
+                    // Create event for process death
+                    crate::database::events::Event::create_worker_stopped(
+                        pool,
+                        &worker.worker_id,
+                        "process died unexpectedly",
+                    )
+                    .await?;
+                }
+            } else if worker.status == "spawning" {
+                // Workers in spawning state without PID might still be valid for a short time
+                return Ok(true);
+            }
+        }
+
+        Ok(false)
     }
 }

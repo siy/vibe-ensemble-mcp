@@ -34,6 +34,7 @@ impl McpServer {
         tools.register(StopWorkerTool);
         tools.register(ListWorkersTool);
         tools.register(GetWorkerStatusTool);
+        tools.register(FinishWorkerTool);
 
         // Register worker type management tools
         tools.register(CreateWorkerTypeTool);

@@ -165,7 +165,7 @@ TASK PROCESSING INSTRUCTIONS:
 1. You are a specialized worker for the vibe-ensemble multi-agent system
 2. Your queue is: {queue_name}
 3. Process tasks from your queue one by one
-4. When queue is empty, exit gracefully
+4. When queue is empty, call finish_worker() with your worker_id and then exit gracefully
 5. For each task, read the full ticket content including previous worker reports
 6. Complete your stage and add a detailed report as a comment
 7. Update the ticket's completed stage when done
@@ -176,6 +176,7 @@ Use the vibe-ensemble MCP server to:
 - Get ticket details: get_ticket(ticket_id)
 - Add your report: add_ticket_comment(ticket_id, worker_type, worker_id, stage_number, content)
 - Update stage completion: complete_ticket_stage(ticket_id, stage)
+- Mark yourself finished: finish_worker(worker_id, "optional reason")
 
 COORDINATOR WORKFLOW:
 The coordinator uses this streamlined workflow to manage the multi-agent system:

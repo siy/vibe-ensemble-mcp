@@ -125,7 +125,7 @@ async fn create_events_table(pool: &SqlitePool) -> Result<()> {
     sqlx::query(r#"
         CREATE TABLE IF NOT EXISTS events (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
-            event_type TEXT NOT NULL CHECK (event_type IN ('ticket_stage_completed', 'worker_stopped')),
+            event_type TEXT NOT NULL CHECK (event_type IN ('ticket_stage_completed', 'worker_stopped', 'task_assigned')),
             ticket_id TEXT,
             worker_id TEXT,
             stage TEXT,
