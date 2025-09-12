@@ -305,7 +305,7 @@ iwr -useb https://get.vibeensemble.dev/install.ps1 | iex
             </div>
             
             <h3 style="color: white;">Usage</h3>
-            <p>After installation, start the MCP server:</p>
+            <p>After installation, configure Claude Code integration:</p>
             
             <div class="command-section">
                 <div class="command-tabs">
@@ -314,38 +314,50 @@ iwr -useb https://get.vibeensemble.dev/install.ps1 | iex
                 </div>
                 
                 <div id="usage-unix" class="command-content active">
-                    <p style="color: white; margin-bottom: 1rem;"><strong>1. Start the server:</strong></p>
+                    <p style="color: white; margin-bottom: 1rem;"><strong>1. Generate Claude Code configuration:</strong></p>
+                    <div class="code-block">
+                        <button class="copy-btn" onclick="copyToClipboard('vibe-ensemble-mcp --configure-claude-code --host 127.0.0.1 --port 3000', this)">Copy</button>
+vibe-ensemble-mcp --configure-claude-code --host 127.0.0.1 --port 3000
+                    </div>
+                    
+                    <p style="color: white; margin: 1.5rem 0 1rem;"><strong>2. Start the server:</strong></p>
                     <div class="code-block">
                         <button class="copy-btn" onclick="copyToClipboard('vibe-ensemble-mcp --port 3000', this)">Copy</button>
 vibe-ensemble-mcp --port 3000
                     </div>
                     
-                    <p style="color: white; margin: 1.5rem 0 1rem;"><strong>2. Connect from Claude Code:</strong></p>
+                    <p style="color: white; margin: 1.5rem 0 1rem;"><strong>3. Open Claude Code and run:</strong></p>
                     <div class="code-block">
-                        <button class="copy-btn" onclick="copyToClipboard('claude mcp add --transport http vibe-ensemble http://localhost:3000/mcp', this)">Copy</button>
-claude mcp add --transport http vibe-ensemble http://localhost:3000/mcp
+                        <button class="copy-btn" onclick="copyToClipboard('vibe-ensemble', this)">Copy</button>
+vibe-ensemble
                     </div>
                     
                     <p style="color: white; margin: 1.5rem 0 0.5rem; font-size: 0.9rem; opacity: 0.8;">
-                        Or add the MCP server through Claude Code settings: <code style="font-size: 0.8rem;">http://localhost:3000/mcp</code>
+                        Alternatively, configure manually: <code style="font-size: 0.8rem;">claude mcp add --transport http vibe-ensemble http://localhost:3000/mcp</code>
                     </p>
                 </div>
                 
                 <div id="usage-windows" class="command-content">
-                    <p style="color: white; margin-bottom: 1rem;"><strong>1. Start the server:</strong></p>
+                    <p style="color: white; margin-bottom: 1rem;"><strong>1. Generate Claude Code configuration:</strong></p>
+                    <div class="code-block">
+                        <button class="copy-btn" onclick="copyToClipboard('vibe-ensemble-mcp.exe --configure-claude-code --host 127.0.0.1 --port 3000', this)">Copy</button>
+vibe-ensemble-mcp.exe --configure-claude-code --host 127.0.0.1 --port 3000
+                    </div>
+                    
+                    <p style="color: white; margin: 1.5rem 0 1rem;"><strong>2. Start the server:</strong></p>
                     <div class="code-block">
                         <button class="copy-btn" onclick="copyToClipboard('vibe-ensemble-mcp.exe --port 3000', this)">Copy</button>
 vibe-ensemble-mcp.exe --port 3000
                     </div>
                     
-                    <p style="color: white; margin: 1.5rem 0 1rem;"><strong>2. Connect from Claude Code:</strong></p>
+                    <p style="color: white; margin: 1.5rem 0 1rem;"><strong>3. Open Claude Code and run:</strong></p>
                     <div class="code-block">
-                        <button class="copy-btn" onclick="copyToClipboard('claude mcp add --transport http vibe-ensemble http://localhost:3000/mcp', this)">Copy</button>
-claude mcp add --transport http vibe-ensemble http://localhost:3000/mcp
+                        <button class="copy-btn" onclick="copyToClipboard('vibe-ensemble', this)">Copy</button>
+vibe-ensemble
                     </div>
                     
                     <p style="color: white; margin: 1.5rem 0 0.5rem; font-size: 0.9rem; opacity: 0.8;">
-                        Or add the MCP server through Claude Code settings: <code style="font-size: 0.8rem;">http://localhost:3000/mcp</code>
+                        Alternatively, configure manually: <code style="font-size: 0.8rem;">claude mcp add --transport http vibe-ensemble http://localhost:3000/mcp</code>
                     </p>
                 </div>
             </div>
