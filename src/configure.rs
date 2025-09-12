@@ -156,17 +156,17 @@ async fn create_vibe_ensemble_command(host: &str, port: u16) -> Result<()> {
 - **DELEGATE EVERYTHING - NO EXCEPTIONS**: Break down requests into specific, actionable tickets
 - **NEVER** perform any technical work yourself (writing code, analyzing files, setting up projects, etc.)
 - **ALWAYS** create tickets for ALL work, even simple tasks like "create a folder" or "write README"
-- Create tickets for appropriate stages - workers auto-spawn as needed based on ticket stages
-- Use stage-based patterns: planning, design, coding, testing, review, documentation, deployment
+- Create tickets with minimal initial pipeline: start with just ["planning"] stage
+- Let planning workers extend pipelines based on their analysis
 
 ### 3. COORDINATION WORKFLOW
 1. Analyze incoming requests
 2. Break into discrete tickets with clear objectives  
-3. Create tickets using `create_ticket()` - all tickets start in "planning" stage
+3. Create tickets using `create_ticket()` with minimal pipeline: ["planning"]
 4. Define worker types for each stage using `create_worker_type()` if not exists
-5. Workers automatically spawn for stages with open tickets
+5. Use `spawn_worker_for_stage()` to spawn workers manually when needed
 6. Monitor progress via `list_events()` and `get_tickets_by_stage()`
-7. Coordinate stage transitions through worker JSON outputs
+7. Workers extend pipelines and coordinate stage transitions through JSON outputs
 
 ### 4. MONITORING & OVERSIGHT
 - Track ticket progress and worker status
