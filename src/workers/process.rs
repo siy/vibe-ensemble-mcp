@@ -1,9 +1,9 @@
-use anyhow::{Context, Result};
+use anyhow::Result;
 use serde_json::json;
 use std::fs::{self, OpenOptions};
 use std::process::{Command, Stdio};
 use tokio::time::Duration;
-use tracing::{debug, info, warn};
+use tracing::{debug, error, info, warn};
 
 use super::types::{SpawnWorkerRequest, WorkerInfo, WorkerProcess, WorkerStatus};
 use crate::{
@@ -35,15 +35,24 @@ impl ProcessManager {
         state: &AppState,
         request: SpawnWorkerRequest,
     ) -> Result<WorkerProcess> {
-        info!("Spawning worker: {}", request.worker_id);
+        info!(
+            "Spawning worker: {} (project: {}, type: {}, queue: {})",
+            request.worker_id, request.project_id, request.worker_type, request.queue_name
+        );
 
         // Get project info
+        debug!("Looking up project: {}", request.project_id);
         let project =
             crate::database::projects::Project::get_by_name(&state.db, &request.project_id)
                 .await?
                 .ok_or_else(|| anyhow::anyhow!("Project '{}' not found", request.project_id))?;
+        info!("Found project at path: {}", project.path);
 
         // Get worker type info
+        debug!(
+            "Looking up worker type: {} for project: {}",
+            request.worker_type, request.project_id
+        );
         let worker_type_info =
             WorkerType::get_by_type(&state.db, &request.project_id, &request.worker_type)
                 .await?
@@ -54,6 +63,7 @@ impl ProcessManager {
                         request.project_id
                     )
                 })?;
+        debug!("Found worker type with system prompt length: {}", worker_type_info.system_prompt.len());
 
         // Use the provided queue name
         let queue_name = request.queue_name.clone();
@@ -128,6 +138,32 @@ impl ProcessManager {
             .append(true)
             .open(&log_file_path)?;
 
+        // Check if claude command exists in PATH
+        debug!("Checking if 'claude' command is available in PATH");
+        match tokio::process::Command::new("which")
+            .arg("claude")
+            .output()
+            .await
+        {
+            Ok(output) if output.status.success() => {
+                let claude_path = String::from_utf8_lossy(&output.stdout).trim().to_string();
+                info!("Found Claude Code at: {}", claude_path);
+            }
+            Ok(_) => {
+                warn!("'claude' command not found in PATH - this will likely cause spawn failure");
+            }
+            Err(e) => {
+                warn!("Failed to check for 'claude' command: {}", e);
+            }
+        }
+
+        // Log environment and working directory
+        debug!("Current working directory: {}", std::env::current_dir().unwrap_or_else(|_| std::path::PathBuf::from("unknown")).display());
+        debug!("Project working directory: {}", project.path);
+        if let Ok(path_var) = std::env::var("PATH") {
+            debug!("PATH environment variable: {}", path_var);
+        }
+
         // Spawn Claude Code process
         let mut cmd = Command::new("claude");
         cmd.arg("-p")
@@ -143,11 +179,30 @@ impl ProcessManager {
             .stdout(Stdio::from(log_file.try_clone()?))
             .stderr(Stdio::from(log_file));
 
-        debug!("Executing command: {:?}", cmd);
+        info!(
+            "Executing Claude Code command: {:?} in directory: {}",
+            format!("claude -p '{}' --debug --verbose --permission-mode bypassPermissions --mcp-config '{}'", 
+                    worker_prompt.chars().take(50).collect::<String>() + "...", 
+                    mcp_config_path),
+            project.path
+        );
 
-        let child = tokio::process::Command::from(cmd)
+        let child = match tokio::process::Command::from(cmd)
             .spawn()
-            .context("Failed to spawn Claude Code process")?;
+        {
+            Ok(child) => {
+                info!("Successfully spawned Claude Code process");
+                child
+            }
+            Err(e) => {
+                let error_msg = format!(
+                    "Failed to spawn Claude Code process: {} (error code: {:?}). This usually means 'claude' command is not installed or not in PATH",
+                    e, e.kind()
+                );
+                error!("{}", error_msg);
+                return Err(anyhow::anyhow!("{}", error_msg));
+            }
+        };
 
         let pid = child.id();
         info!(
