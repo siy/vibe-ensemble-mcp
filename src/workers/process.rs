@@ -5,6 +5,7 @@ use std::process::{Command, Stdio};
 use tokio::time::Duration;
 use tracing::{debug, error, info, warn};
 
+use super::json_output::WorkerOutputProcessor;
 use super::types::{SpawnWorkerRequest, WorkerInfo, WorkerProcess, WorkerStatus};
 use crate::{
     database::{worker_types::WorkerType, workers::Worker},
@@ -263,6 +264,23 @@ impl ProcessManager {
         // Update database
         Worker::update_status(&state.db, &updated_info.worker_id, "active", pid).await?;
 
+        // Spawn monitoring task for worker output processing
+        let worker_id_clone = updated_info.worker_id.clone();
+        let worker_type_clone = updated_info.worker_type.clone();
+        let log_file_path_clone = log_file_path.clone();
+        let state_clone = state.clone();
+
+        tokio::spawn(async move {
+            Self::monitor_worker_output(
+                &state_clone,
+                &worker_id_clone,
+                &worker_type_clone,
+                &log_file_path_clone,
+                pid,
+            )
+            .await;
+        });
+
         Ok(WorkerProcess {
             info: updated_info,
             process: Some(child),
@@ -282,7 +300,7 @@ WORKER CONFIGURATION:
 STAGE-BASED MULTI-AGENT SYSTEM:
 You are a specialized worker in a stage-based pipeline where:
 - Pipeline stage names == ticket current_stage == worker names (e.g., "planning", "design", "coding", "testing")
-- All tickets start in "planning" stage with single-stage pipeline: ["planning"]
+- All tickets start in "planning" stage with minimal pipeline: ["planning"]
 - Workers output structured JSON with exactly one of three outcomes:
   1. "next_stage": Task completed, move ticket to specified next stage
   2. "prev_stage": Issues found, move ticket back to specified previous stage  
@@ -440,5 +458,144 @@ Remember: Output ONLY the JSON structure above. No additional commentary or expl
             }
             None => Err(anyhow::anyhow!("Worker '{}' not found", worker_id)),
         }
+    }
+
+    async fn monitor_worker_output(
+        state: &AppState,
+        worker_id: &str,
+        worker_type: &str,
+        log_file_path: &str,
+        pid: Option<u32>,
+    ) {
+        info!("Starting output monitoring for worker {}", worker_id);
+
+        let mut last_position = 0;
+        let mut check_interval = tokio::time::interval(Duration::from_secs(2));
+
+        loop {
+            check_interval.tick().await;
+
+            // Check if worker process is still running
+            if let Some(pid) = pid {
+                let is_running = tokio::process::Command::new("kill")
+                    .arg("-0")
+                    .arg(pid.to_string())
+                    .status()
+                    .await
+                    .map(|status| status.success())
+                    .unwrap_or(false);
+
+                if !is_running {
+                    debug!(
+                        "Worker {} process finished, checking final output",
+                        worker_id
+                    );
+                    // Process any remaining output and exit
+                    if let Err(e) = Self::process_new_output(
+                        state,
+                        worker_id,
+                        worker_type,
+                        log_file_path,
+                        &mut last_position,
+                    )
+                    .await
+                    {
+                        error!(
+                            "Failed to process final output for worker {}: {}",
+                            worker_id, e
+                        );
+                    }
+                    break;
+                }
+            }
+
+            // Process new log content
+            if let Err(e) = Self::process_new_output(
+                state,
+                worker_id,
+                worker_type,
+                log_file_path,
+                &mut last_position,
+            )
+            .await
+            {
+                warn!("Failed to process output for worker {}: {}", worker_id, e);
+            }
+        }
+
+        info!("Output monitoring completed for worker {}", worker_id);
+    }
+
+    async fn process_new_output(
+        state: &AppState,
+        worker_id: &str,
+        worker_type: &str,
+        log_file_path: &str,
+        last_position: &mut u64,
+    ) -> Result<()> {
+        let content = tokio::fs::read_to_string(log_file_path).await?;
+
+        if content.len() as u64 > *last_position {
+            let new_content = &content[*last_position as usize..];
+            *last_position = content.len() as u64;
+
+            // Look for JSON outcome in the new content
+            if let Some(json_start) = new_content.rfind('{') {
+                if let Some(json_end) = new_content[json_start..].find('}') {
+                    let json_str = &new_content[json_start..json_start + json_end + 1];
+
+                    // Try to parse as worker output
+                    match WorkerOutputProcessor::parse_output(json_str) {
+                        Ok(output) => {
+                            info!(
+                                "Found worker output for {}: {:?}",
+                                worker_id, output.outcome
+                            );
+
+                            // Find ticket ID from worker output - we need to search for ticket context
+                            if let Some(ticket_id) =
+                                Self::extract_ticket_id_from_log(&content).await
+                            {
+                                if let Err(e) = WorkerOutputProcessor::process_output(
+                                    state,
+                                    &ticket_id,
+                                    worker_id,
+                                    worker_type,
+                                    output,
+                                )
+                                .await
+                                {
+                                    error!("Failed to process worker output: {}", e);
+                                }
+                            } else {
+                                debug!("No ticket ID found in worker output for {}", worker_id);
+                            }
+                        }
+                        Err(_) => {
+                            // Not a worker output JSON, continue monitoring
+                        }
+                    }
+                }
+            }
+        }
+
+        Ok(())
+    }
+
+    async fn extract_ticket_id_from_log(log_content: &str) -> Option<String> {
+        // Look for ticket ID patterns in the log content
+        if let Some(start) = log_content.find("ticket_id") {
+            let after_start = &log_content[start..];
+            if let Some(colon_pos) = after_start.find(':') {
+                let after_colon = &after_start[colon_pos + 1..];
+                if let Some(quote_start) = after_colon.find('"') {
+                    let after_quote = &after_colon[quote_start + 1..];
+                    if let Some(quote_end) = after_quote.find('"') {
+                        return Some(after_quote[..quote_end].to_string());
+                    }
+                }
+            }
+        }
+        None
     }
 }
