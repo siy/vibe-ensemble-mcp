@@ -27,6 +27,10 @@ struct Args {
     /// Log level
     #[arg(long, default_value = "info")]
     log_level: String,
+
+    /// Disable automatic respawning of workers on startup for unfinished tasks
+    #[arg(long)]
+    no_respawn: bool,
 }
 
 #[tokio::main]
@@ -71,6 +75,7 @@ async fn main() -> Result<()> {
         database_path: args.database_path,
         host: args.host,
         port: args.port,
+        no_respawn: args.no_respawn,
     };
 
     run_server(config).await?;
