@@ -61,7 +61,45 @@ async fn create_claude_settings() -> Result<()> {
         "permissions": {
             "vibe-ensemble-mcp": {
                 "tools": {
-                    "*": "allowed"
+                    // Project Management Tools
+                    "create_project": "allowed",
+                    "list_projects": "allowed",
+                    "get_project": "allowed",
+                    "update_project": "allowed",
+                    "delete_project": "allowed",
+                    
+                    // Worker Management Tools  
+                    "spawn_worker": "allowed",
+                    "stop_worker": "allowed",
+                    "list_workers": "allowed",
+                    "get_worker_status": "allowed",
+                    "finish_worker": "allowed",
+                    
+                    // Worker Type Management Tools
+                    "create_worker_type": "allowed",
+                    "list_worker_types": "allowed",
+                    "get_worker_type": "allowed",
+                    "update_worker_type": "allowed",
+                    "delete_worker_type": "allowed",
+                    
+                    // Queue Management Tools
+                    "create_queue": "allowed",
+                    "list_queues": "allowed",
+                    "get_queue_status": "allowed",
+                    "delete_queue": "allowed",
+                    
+                    // Ticket Management Tools
+                    "create_ticket": "allowed",
+                    "get_ticket": "allowed",
+                    "list_tickets": "allowed",
+                    "add_ticket_comment": "allowed",
+                    "update_ticket_stage": "allowed",
+                    "close_ticket": "allowed",
+                    
+                    // Event and Task Management Tools
+                    "list_events": "allowed",
+                    "get_task_queue": "allowed",
+                    "assign_task": "allowed"
                 }
             },
             "vibe-ensemble-sse": {
