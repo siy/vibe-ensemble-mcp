@@ -3,7 +3,7 @@ use serde::{Deserialize, Serialize};
 use tracing::{debug, error, info, warn};
 
 use crate::{
-    database::{comments::CreateCommentRequest, tickets::Ticket},
+    database::{comments::CreateCommentRequest, tickets::Ticket, worker_types::WorkerType},
     server::AppState,
 };
 
@@ -45,6 +45,31 @@ impl WorkerOutputProcessor {
                 Err(anyhow::anyhow!("No valid JSON found in worker output"))
             }
         }
+    }
+
+    /// Validate that a target stage has a corresponding worker type registration
+    async fn validate_target_stage(
+        state: &AppState,
+        ticket_id: &str,
+        target_stage: &str,
+    ) -> Result<String> {
+        // Get ticket to find project_id
+        let ticket_with_comments = Ticket::get_by_id(&state.db, ticket_id).await?
+            .ok_or_else(|| anyhow::anyhow!("Ticket '{}' not found", ticket_id))?;
+
+        // Check if worker type exists for this project and stage
+        let worker_type_exists = WorkerType::get_by_type(&state.db, &ticket_with_comments.ticket.project_id, target_stage)
+            .await?
+            .is_some();
+
+        if !worker_type_exists {
+            return Err(anyhow::anyhow!(
+                "Unknown worker type '{}'. Please, register '{}' first.",
+                target_stage, target_stage
+            ));
+        }
+
+        Ok(ticket_with_comments.ticket.project_id)
     }
 
     /// Process the parsed worker output and take appropriate actions
@@ -97,17 +122,39 @@ impl WorkerOutputProcessor {
             .target_stage
             .ok_or_else(|| anyhow::anyhow!("next_stage outcome requires target_stage"))?;
 
+        // Validate that the target stage has a registered worker type
+        Self::validate_target_stage(state, ticket_id, &target_stage).await?;
+
         info!(
             "Moving ticket {} to next stage: {}",
             ticket_id, target_stage
         );
 
-        // Update pipeline if provided
+        // Update pipeline if provided - validate all stages in the new pipeline
         if let Some(new_pipeline) = &output.pipeline_update {
             info!(
                 "Updating pipeline for ticket {} to: {:?}",
                 ticket_id, new_pipeline
             );
+            
+            // Get ticket to find project_id for pipeline validation
+            let ticket_with_comments = Ticket::get_by_id(&state.db, ticket_id).await?
+                .ok_or_else(|| anyhow::anyhow!("Ticket '{}' not found", ticket_id))?;
+            
+            // Validate all stages in the new pipeline have registered worker types
+            for stage in new_pipeline {
+                let worker_type_exists = WorkerType::get_by_type(&state.db, &ticket_with_comments.ticket.project_id, stage)
+                    .await?
+                    .is_some();
+                    
+                if !worker_type_exists {
+                    return Err(anyhow::anyhow!(
+                        "Unknown worker type '{}'. Please, register '{}' first.",
+                        stage, stage
+                    ));
+                }
+            }
+            
             // Update the ticket's execution_plan (pipeline)
             let pipeline_json = serde_json::to_string(new_pipeline)?;
             sqlx::query(
@@ -137,6 +184,9 @@ impl WorkerOutputProcessor {
         let target_stage = output
             .target_stage
             .ok_or_else(|| anyhow::anyhow!("prev_stage outcome requires target_stage"))?;
+
+        // Validate that the target stage has a registered worker type
+        Self::validate_target_stage(state, ticket_id, &target_stage).await?;
 
         warn!(
             "Moving ticket {} back to previous stage: {} (reason: {})",
