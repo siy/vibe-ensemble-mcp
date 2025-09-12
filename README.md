@@ -54,19 +54,34 @@ cargo build --release
 ./target/release/vibe-ensemble-mcp --database-path ./my-project.db
 ```
 
-### 2. Connect from Claude Code
+### 2. Configure Claude Code Integration
 
+**Automated Setup (Recommended):**
+```bash
+# Generate all necessary Claude Code configuration files
+./target/release/vibe-ensemble-mcp --configure-claude-code --host 127.0.0.1 --port 3000
+```
+
+This command automatically creates:
+- `.mcp.json` - MCP server configuration (HTTP + SSE transports)
+- `.claude/settings.local.json` - Claude Code permissions
+- `.claude/commands/vibe-ensemble.md` - Coordinator initialization command
+
+**Manual Setup (Alternative):**
 ```bash
 claude mcp add --transport http vibe-ensemble http://localhost:3000/mcp
 ```
 
 ### 3. Basic Workflow
 
-1. **Create a project**: Define your development project
-2. **Define worker types**: Set up specialized workers (architect, developer, tester, etc.)
-3. **Create tickets**: Define multi-stage tasks with execution plans
-4. **Spawn workers**: Launch specialized agents for each worker type
-5. **Monitor progress**: Track ticket progression through events
+1. **Configure integration**: Use `--configure-claude-code` to set up Claude Code
+2. **Start the server**: Run `vibe-ensemble-mcp` with your chosen settings  
+3. **Open Claude Code**: Launch in the configured directory
+4. **Initialize as coordinator**: Run the `vibe-ensemble` command in Claude Code
+5. **Create a project**: Define your development project
+6. **Define worker types**: Set up specialized workers (architect, developer, tester, etc.)
+7. **Create tickets**: Define multi-stage tasks with execution plans
+8. **Monitor progress**: Track ticket progression through events and SSE notifications
 
 ## Available Tools
 
@@ -89,6 +104,7 @@ The server provides 22 MCP tools organized into categories:
 
 The server accepts the following command-line options:
 
+- `--configure-claude-code`: Generate Claude Code integration files and exit
 - `--database-path`: SQLite database file path (default: `./vibe-ensemble.db`)
 - `--host`: Server bind address (default: `127.0.0.1`)
 - `--port`: Server port (default: `3000`)
@@ -110,6 +126,7 @@ The system maintains separation between high-level coordination and detailed tas
 
 - `GET /health` - Health check with database status
 - `POST /mcp` - MCP protocol endpoint (JSON-RPC 2.0)
+- `GET /sse` - Server-Sent Events endpoint for real-time notifications
 
 ## Contributing
 
