@@ -1,6 +1,6 @@
 use async_trait::async_trait;
 use serde_json::{json, Value};
-use tracing::info;
+use tracing::{info, warn};
 use uuid::Uuid;
 
 use super::{
@@ -16,6 +16,7 @@ use crate::{
         tickets::{CreateTicketRequest, Ticket},
     },
     server::AppState,
+    workers::json_output::WorkerOutputProcessor,
 };
 
 pub struct CreateTicketTool;
@@ -42,12 +43,7 @@ impl ToolHandler for CreateTicketTool {
         info!("Creating ticket: {} in project {}", title, project_id);
 
         let ticket_id = Uuid::new_v4().to_string();
-        let execution_plan = vec![
-            "Planning".to_string(),
-            "Implementation".to_string(),
-            "Testing".to_string(),
-            "Review".to_string(),
-        ];
+        let execution_plan = vec!["planning".to_string()];
 
         let req = CreateTicketRequest {
             ticket_id: ticket_id.clone(),
@@ -58,6 +54,13 @@ impl ToolHandler for CreateTicketTool {
         };
 
         let ticket = Ticket::create(&state.db, req).await?;
+
+        // Automatically spawn a planning worker for the new ticket
+        if let Err(e) =
+            WorkerOutputProcessor::auto_spawn_worker_for_stage(state, &project_id, "planning").await
+        {
+            warn!("Failed to auto-spawn planning worker: {}", e);
+        }
 
         Ok(CallToolResponse {
             content: vec![ToolContent {
