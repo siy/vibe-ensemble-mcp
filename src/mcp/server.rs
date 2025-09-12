@@ -4,7 +4,7 @@ use tracing::{debug, error, info, trace, warn};
 
 use super::{
     event_tools::*, project_tools::*, queue_tools::*, ticket_tools::*, tools::ToolRegistry,
-    types::*, worker_tools::*,
+    types::*, worker_tools::*, worker_type_tools::*,
 };
 use crate::{error::Result, server::AppState};
 
@@ -34,6 +34,14 @@ impl McpServer {
         tools.register(StopWorkerTool);
         tools.register(ListWorkersTool);
         tools.register(GetWorkerStatusTool);
+        tools.register(FinishWorkerTool);
+
+        // Register worker type management tools
+        tools.register(CreateWorkerTypeTool);
+        tools.register(ListWorkerTypesTool);
+        tools.register(GetWorkerTypeTool);
+        tools.register(UpdateWorkerTypeTool);
+        tools.register(DeleteWorkerTypeTool);
 
         // Register queue management tools
         tools.register(CreateQueueTool);
@@ -394,46 +402,29 @@ Define specialized worker types with custom system prompts:
 
 Each worker type needs its own system prompt tailored to its specialization.
 
-### Step 3: Create Task Queues
-**Before spawning workers, create organized queues:**
-```
-Use: create_queue
-- priority: For urgent/blocking tasks
-- development: For feature implementation 
-- testing: For validation and QA
-- review: For code reviews
-- documentation: For docs and guides
-```
-
-### Step 4: Spawn Queue-Aware Workers
-**Now spawn workers with specific queue assignments:**
-```
-Use: spawn_worker
-- worker_id: \"worker_analyzer_1\"
-- project_id: \"{}\"
-- worker_type: \"analyzer\"
-- queue_name: \"review\"  # REQUIRED: Specify which queue this worker pulls from
-```
-
-Workers automatically pull tasks from their assigned queue only.
-
-### Step 5: Create Tickets with Execution Plans
-**Only after worker types and queues are set up:**
+### Step 3: Create Tickets with Execution Plans
+**After worker types are defined (workers auto-spawn when tasks are assigned):**
 - Break work into tickets with 3-5 stages
 - Each stage should specify which worker type handles it
 - Include clear success criteria
 - Use `assign_task` to route tickets to appropriate queues
 
-### Step 6: Create Setup Tickets and Delegate
-**⚠️ CRITICAL: Even project setup should be delegated to workers!**
+### Step 4: Assign Tasks to Queues (Workers Auto-Spawn)
+**⚠️ CRITICAL: Workers are now AUTO-SPAWNED when tasks are assigned!**
 
-Create tickets for setup tasks:
-- **Project structure ticket**: Let a setup worker create folders, initial files
-- **Configuration ticket**: Let a config worker set up build files, dependencies  
-- **Documentation ticket**: Let a docs worker create README, setup guides
-- **Infrastructure ticket**: Let an infra worker configure CI/CD, deployment
+Simply assign tasks to appropriate queue names:
+- **\"architect-queue\"**: For design and planning tickets
+- **\"developer-queue\"**: For implementation tickets
+- **\"tester-queue\"**: For validation tickets
+- **\"reviewer-queue\"**: For code review tickets
+- **\"docs-queue\"**: For documentation tickets
 
-### Step 7: Monitor and Coordinate (Your Only Direct Actions)
+The system automatically:
+- Detects if a worker exists for the queue
+- Spawns a new worker if needed
+- Workers stop when their queue becomes empty
+
+### Step 5: Monitor and Coordinate (Your Only Direct Actions)
 - Use `list_events` to track progress
 - Use `get_queue_status` to monitor queues  
 - Use `get_worker_status` to check worker health
@@ -448,13 +439,13 @@ Create tickets for setup tasks:
 
 ## Key Success Factors
 1. **Worker types MUST exist before creating tickets**
-2. **Queues MUST be created before spawning workers**  
-3. **Workers are assigned to specific queues at spawn time**
-4. **Tickets are assigned to queues, not directly to workers**
-5. **Workers automatically pull from their designated queue**
+2. **Workers AUTO-SPAWN when tasks are assigned to queues**  
+3. **Simply assign tasks to queue names (e.g., \"architect-queue\", \"developer-queue\")**
+4. **No need to manually create queues or spawn workers**
+5. **Workers automatically pull from their designated queue and stop when empty**
 6. **ALL technical work MUST be delegated through tickets**
 
-This delegation-first approach prevents context drift, ensures specialization, and maintains the coordinator's focus on orchestration rather than execution.", project_name, project_name, project_name, project_name),
+This delegation-first approach prevents context drift, ensures specialization, and maintains the coordinator's focus on orchestration rather than execution.", project_name, project_name, project_name),
                         },
                     }
                 ]
@@ -476,10 +467,9 @@ This delegation-first approach prevents context drift, ensures specialization, a
 ## PREREQUISITE: Proper Setup Sequence
 **CRITICAL: Before starting any workflow, ensure:**
 1. ✅ Project created
-2. ✅ Worker types defined with system prompts  
-3. ✅ Task queues created
-4. ✅ Workers spawned with queue assignments
-5. ✅ Only THEN create and assign tickets
+2. ✅ Worker types defined with system prompts
+3. ✅ Create tickets with execution plans
+4. ✅ Assign tickets to queues (queues/workers auto-managed on assignment)
 
 ## Queue-Based Coordination Strategy
 
@@ -491,15 +481,16 @@ This delegation-first approach prevents context drift, ensures specialization, a
 - **review-queue**: Code reviews, optimization
 - **documentation-queue**: Docs, guides, README updates
 
-### 2. Worker-Queue Assignment Pattern
+### 2. Auto-Spawn Worker Pattern
+Workers are automatically spawned when tasks are assigned to queues:
 ```
-spawn_worker(\"worker_analyzer_1\", project_id, \"analyzer\", \"analysis-queue\")
-spawn_worker(\"worker_dev_1\", project_id, \"implementer\", \"development-queue\")  
-spawn_worker(\"worker_test_1\", project_id, \"tester\", \"testing-queue\")
-spawn_worker(\"worker_reviewer_1\", project_id, \"reviewer\", \"review-queue\")
+assign_task(ticket_id, \"analysis-queue\")    # Auto-spawns analyzer worker if needed
+assign_task(ticket_id, \"development-queue\") # Auto-spawns implementer worker if needed  
+assign_task(ticket_id, \"testing-queue\")     # Auto-spawns tester worker if needed
+assign_task(ticket_id, \"review-queue\")      # Auto-spawns reviewer worker if needed
 ```
 
-Workers automatically pull tasks from their assigned queue only.
+Workers automatically pull tasks from their assigned queue and stop when queue becomes empty.
 
 ### 3. Ticket-to-Queue Assignment Flow
 1. **Coordinator**: Create ticket with multi-stage execution plan
@@ -532,9 +523,9 @@ Workers automatically pull tasks from their assigned queue only.
 
 ### 7. Queue Load Balancing
 - Monitor queue status: `get_queue_status(queue_name)`
-- Spawn additional workers for overloaded queues
+- Workers auto-spawn when tasks are assigned to queues
 - Workers automatically pull next available task from their queue
-- No manual task assignment to individual workers needed
+- Workers stop automatically when their queue becomes empty
 
 ## 🚨 CRITICAL: COORDINATOR DELEGATION RULES
 
@@ -552,11 +543,8 @@ Workers automatically pull tasks from their assigned queue only.
 
 ### ✅ What Coordinators SHOULD Do:
 - Create projects and define worker types
-- Create and manage task queues
-- Spawn workers with appropriate queue assignments
 - Create tickets for ALL technical tasks (no exceptions)
-- Assign tickets to appropriate queues
-- Monitor progress through events and queue status
+- Assign tickets to appropriate queues (workers auto-spawn as needed)
 - Coordinate workflow between specialized workers
 - Ensure proper handoffs between stages
 

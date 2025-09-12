@@ -6,3 +6,4 @@ pub mod ticket_tools;
 pub mod tools;
 pub mod types;
 pub mod worker_tools;
+pub mod worker_type_tools;

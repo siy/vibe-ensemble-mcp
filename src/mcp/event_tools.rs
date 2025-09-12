@@ -1,12 +1,17 @@
 use async_trait::async_trait;
 use serde_json::Value;
-use tracing::info;
+use tracing::{info, warn};
+use uuid::Uuid;
 
 use super::{
     tools::{create_success_response, extract_optional_param, extract_param, ToolHandler},
     types::{CallToolResponse, Tool, ToolContent},
 };
-use crate::{database::events::Event, server::AppState};
+use crate::{
+    database::{events::Event, tickets::Ticket, workers::Worker},
+    server::AppState,
+    workers::{process::ProcessManager, types::SpawnWorkerRequest},
+};
 
 pub struct ListEventsTool;
 
@@ -129,6 +134,62 @@ impl ToolHandler for AssignTaskTool {
 
         info!("Assigning ticket {} to queue {}", ticket_id, queue_name);
 
+        // Create queue if it doesn't exist
+        state.queue_manager.create_queue(&queue_name).await?;
+
+        // Check if there's an active worker for this queue
+        let has_active_worker = Worker::has_active_worker_for_queue(&state.db, &queue_name).await?;
+
+        if !has_active_worker {
+            info!(
+                "No active worker found for queue {}. Auto-spawning worker.",
+                queue_name
+            );
+
+            // Get ticket to find project_id
+            if let Some(ticket) = Ticket::get_by_id(&state.db, &ticket_id).await? {
+                // Extract worker type from queue name (e.g., "architect-queue" -> "architect")
+                let worker_type = if queue_name.ends_with("-queue") {
+                    queue_name.strip_suffix("-queue").unwrap_or(&queue_name)
+                } else if queue_name.starts_with("queue-") {
+                    queue_name.strip_prefix("queue-").unwrap_or(&queue_name)
+                } else {
+                    &queue_name
+                }
+                .to_string();
+
+                // Generate unique worker ID
+                let worker_id =
+                    format!("auto-{}-{}", worker_type, &Uuid::new_v4().to_string()[..8]);
+
+                let spawn_request = SpawnWorkerRequest {
+                    worker_id: worker_id.clone(),
+                    project_id: ticket.ticket.project_id,
+                    worker_type,
+                    queue_name: queue_name.clone(),
+                };
+
+                match ProcessManager::spawn_worker(state, spawn_request).await {
+                    Ok(_worker_process) => {
+                        info!("Auto-spawned worker {} for queue {}", worker_id, queue_name);
+                    }
+                    Err(e) => {
+                        warn!(
+                            "Failed to auto-spawn worker for queue {}: {}",
+                            queue_name, e
+                        );
+                        // Continue with task assignment even if worker spawn fails
+                    }
+                }
+            } else {
+                warn!(
+                    "Ticket {} not found, cannot determine project for auto-spawn",
+                    ticket_id
+                );
+            }
+        }
+
+        // Add task to queue
         let task_id = state
             .queue_manager
             .add_task(&queue_name, &ticket_id)
@@ -138,8 +199,15 @@ impl ToolHandler for AssignTaskTool {
         Event::create_task_assigned(&state.db, &ticket_id, &queue_name).await?;
 
         Ok(create_success_response(&format!(
-            "Assigned ticket {} to queue {} with task ID: {}",
-            ticket_id, queue_name, task_id
+            "Assigned ticket {} to queue {} with task ID: {}{}",
+            ticket_id,
+            queue_name,
+            task_id,
+            if !has_active_worker {
+                " (auto-spawned worker)"
+            } else {
+                ""
+            }
         )))
     }
 

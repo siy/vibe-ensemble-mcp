@@ -1,6 +1,6 @@
 use anyhow::{Context, Result};
 use serde_json::json;
-use std::fs;
+use std::fs::{self, OpenOptions};
 use std::process::{Command, Stdio};
 use tokio::time::Duration;
 use tracing::{debug, info, warn};
@@ -92,9 +92,41 @@ impl ProcessManager {
         let mcp_config_path =
             Self::create_mcp_config(&project.path, &worker_info.worker_id, state.config.port)?;
 
-        // Create log file path
-        let log_file_path = format!("{}/worker_{}.log", project.path, worker_info.worker_id);
-        let log_file = fs::File::create(&log_file_path)?;
+        // Create log file path in centralized logs directory
+        let project_logs_dir = crate::database::get_project_logs_dir(
+            &state.config.database_path,
+            &project.repository_name,
+        )?;
+        // Sanitize to safe filename fragments
+        let safe_type = worker_info
+            .worker_type
+            .chars()
+            .map(|c| {
+                if c.is_ascii_alphanumeric() || c == '-' || c == '_' {
+                    c
+                } else {
+                    '_'
+                }
+            })
+            .collect::<String>();
+        let safe_queue = queue_name
+            .chars()
+            .map(|c| {
+                if c.is_ascii_alphanumeric() || c == '-' || c == '_' {
+                    c
+                } else {
+                    '_'
+                }
+            })
+            .collect::<String>();
+        let log_file_path = format!(
+            "{}/worker_{}__{}.log",
+            project_logs_dir, safe_type, safe_queue
+        );
+        let log_file = OpenOptions::new()
+            .create(true)
+            .append(true)
+            .open(&log_file_path)?;
 
         // Spawn Claude Code process
         let mut cmd = Command::new("claude");
@@ -155,7 +187,7 @@ TASK PROCESSING INSTRUCTIONS:
 1. You are a specialized worker for the vibe-ensemble multi-agent system
 2. Your queue is: {queue_name}
 3. Process tasks from your queue one by one
-4. When queue is empty, exit gracefully
+4. When queue is empty, call finish_worker() with your worker_id and then exit gracefully
 5. For each task, read the full ticket content including previous worker reports
 6. Complete your stage and add a detailed report as a comment
 7. Update the ticket's completed stage when done
@@ -165,16 +197,22 @@ Use the vibe-ensemble MCP server to:
 - Get tasks from your queue: get_queue_tasks("{queue_name}")
 - Get ticket details: get_ticket(ticket_id)
 - Add your report: add_ticket_comment(ticket_id, worker_type, worker_id, stage_number, content)
-- Update stage completion: complete_ticket_stage(ticket_id, stage)
+- Update stage completion: update_ticket_stage(ticket_id, stage)
+- Mark yourself finished: finish_worker(worker_id, "optional reason")
 
 COORDINATOR WORKFLOW:
-The coordinator uses this workflow to manage the multi-agent system:
+The coordinator uses this streamlined workflow to manage the multi-agent system:
 1. Create project: create_project(project_id, name, path, description)
-2. Create tickets: create_ticket(project_id, title, description)
-3. Create queues: create_queue(queue_name) - proactively before spawning workers
-4. Assign tasks: assign_task(ticket_id, queue_name) - add tickets to queues
-5. Spawn workers: spawn_worker(worker_id, project_id, worker_type)
-6. Monitor progress: list_events(), get_queue_status(queue_name), get_ticket(ticket_id)
+2. Define worker types: create_worker_type(project_id, worker_type, system_prompt, description)
+3. Create tickets: create_ticket(project_id, title, description)
+4. Assign tasks: assign_task(ticket_id, queue_name) - workers auto-spawn on first task assignment
+5. Monitor progress: list_events(), get_queue_status(queue_name), get_ticket(ticket_id)
+
+IMPORTANT: Workers are now AUTO-SPAWNED when tasks are assigned to queues! 
+- No need to manually spawn workers or create queues
+- Simply assign tasks to appropriate queue names (e.g., "architect-queue", "developer-queue")
+- The system automatically detects if a worker exists for the queue and spawns one if needed
+- Workers stop automatically when their queue becomes empty
 
 Remember: You are working autonomously. Process tasks thoroughly and provide detailed reports for the next worker or coordinator.
 "#,

@@ -1,7 +1,7 @@
 use anyhow::Result;
 use clap::Parser;
 use tracing::info;
-use tracing_subscriber::EnvFilter;
+use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt, EnvFilter, Layer};
 use vibe_ensemble_mcp::{config::Config, server::run_server};
 
 #[derive(Parser)]
@@ -9,7 +9,7 @@ use vibe_ensemble_mcp::{config::Config, server::run_server};
 #[command(about = "A multi-agent coordination MCP server")]
 struct Args {
     /// Database file path
-    #[arg(long, default_value = "./vibe-ensemble.db")]
+    #[arg(long, default_value = "./.vibe-ensemble-mcp/vibe-ensemble.db")]
     database_path: String,
 
     /// Server host
@@ -29,10 +29,27 @@ struct Args {
 async fn main() -> Result<()> {
     let args = Args::parse();
 
-    // Initialize tracing
-    tracing_subscriber::fmt()
-        .with_env_filter(
-            EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new(&args.log_level)),
+    // Initialize tracing with both console and file logging
+    let env_filter =
+        EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new(&args.log_level));
+
+    // Create logs directory
+    let logs_dir = std::path::Path::new(".vibe-ensemble-mcp/logs");
+    std::fs::create_dir_all(logs_dir)?;
+
+    let file_appender = tracing_appender::rolling::daily(logs_dir, "server.log");
+    let (non_blocking, guard) = tracing_appender::non_blocking(file_appender);
+
+    // Keep the guard alive by leaking it (necessary for the file writer to work)
+    std::mem::forget(guard);
+
+    tracing_subscriber::registry()
+        .with(tracing_subscriber::fmt::layer().with_filter(env_filter.clone()))
+        .with(
+            tracing_subscriber::fmt::layer()
+                .with_writer(non_blocking)
+                .with_ansi(false)
+                .with_filter(env_filter),
         )
         .init();
 
@@ -45,13 +62,6 @@ async fn main() -> Result<()> {
         host: args.host,
         port: args.port,
     };
-
-    // Ensure DB directory exists before opening SQLite file
-    if let Some(dir) = std::path::Path::new(&config.database_path).parent() {
-        if !dir.as_os_str().is_empty() {
-            tokio::fs::create_dir_all(dir).await?;
-        }
-    }
 
     run_server(config).await?;
 
