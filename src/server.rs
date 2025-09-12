@@ -36,13 +36,13 @@ pub async fn run_server(config: Config) -> Result<()> {
     };
 
     let cors = CorsLayer::new()
-        .allow_methods([Method::GET, Method::POST])
-        .allow_headers([axum::http::header::CONTENT_TYPE])
-        .allow_origin(
-            "http://localhost:3000"
-                .parse::<axum::http::HeaderValue>()
-                .unwrap(),
-        );
+        .allow_methods([Method::GET, Method::POST, Method::OPTIONS])
+        .allow_headers([
+            axum::http::header::CONTENT_TYPE,
+            axum::http::header::ACCEPT,
+            axum::http::header::CACHE_CONTROL,
+        ])
+        .allow_origin(axum::http::header::HeaderValue::from_static("*"));
 
     let app = Router::new()
         .route("/health", get(health_check))
