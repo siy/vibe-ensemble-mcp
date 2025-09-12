@@ -59,6 +59,31 @@ async fn create_claude_directory() -> Result<()> {
 async fn create_claude_settings() -> Result<()> {
     let settings = json!({
         "permissions": {
+            "allow": [
+                "mcp__vibe-ensemble-mcp__create_project",
+                "mcp__vibe-ensemble-mcp__list_projects",
+                "mcp__vibe-ensemble-mcp__get_project",
+                "mcp__vibe-ensemble-mcp__update_project",
+                "mcp__vibe-ensemble-mcp__delete_project",
+                "mcp__vibe-ensemble-mcp__spawn_worker_for_stage",
+                "mcp__vibe-ensemble-mcp__stop_worker",
+                "mcp__vibe-ensemble-mcp__list_workers",
+                "mcp__vibe-ensemble-mcp__get_worker_status",
+                "mcp__vibe-ensemble-mcp__finish_worker",
+                "mcp__vibe-ensemble-mcp__create_worker_type",
+                "mcp__vibe-ensemble-mcp__list_worker_types",
+                "mcp__vibe-ensemble-mcp__get_worker_type",
+                "mcp__vibe-ensemble-mcp__update_worker_type",
+                "mcp__vibe-ensemble-mcp__delete_worker_type",
+                "mcp__vibe-ensemble-mcp__create_ticket",
+                "mcp__vibe-ensemble-mcp__get_ticket",
+                "mcp__vibe-ensemble-mcp__list_tickets",
+                "mcp__vibe-ensemble-mcp__get_tickets_by_stage",
+                "mcp__vibe-ensemble-mcp__add_ticket_comment",
+                "mcp__vibe-ensemble-mcp__update_ticket_stage",
+                "mcp__vibe-ensemble-mcp__close_ticket",
+                "mcp__vibe-ensemble-mcp__list_events"
+            ],
             "vibe-ensemble-mcp": {
                 "tools": {
                     // Project Management Tools
@@ -69,7 +94,7 @@ async fn create_claude_settings() -> Result<()> {
                     "delete_project": "allowed",
 
                     // Worker Management Tools
-                    "spawn_worker": "allowed",
+                    "spawn_worker_for_stage": "allowed",
                     "stop_worker": "allowed",
                     "list_workers": "allowed",
                     "get_worker_status": "allowed",
@@ -82,24 +107,17 @@ async fn create_claude_settings() -> Result<()> {
                     "update_worker_type": "allowed",
                     "delete_worker_type": "allowed",
 
-                    // Queue Management Tools
-                    "create_queue": "allowed",
-                    "list_queues": "allowed",
-                    "get_queue_status": "allowed",
-                    "delete_queue": "allowed",
-
                     // Ticket Management Tools
                     "create_ticket": "allowed",
                     "get_ticket": "allowed",
                     "list_tickets": "allowed",
+                    "get_tickets_by_stage": "allowed",
                     "add_ticket_comment": "allowed",
                     "update_ticket_stage": "allowed",
                     "close_ticket": "allowed",
 
-                    // Event and Task Management Tools
-                    "list_events": "allowed",
-                    "get_task_queue": "allowed",
-                    "assign_task": "allowed"
+                    // Event Management Tools
+                    "list_events": "allowed"
                 }
             },
             "vibe-ensemble-sse": {
@@ -107,7 +125,11 @@ async fn create_claude_settings() -> Result<()> {
                     "*": "allowed"
                 }
             }
-        }
+        },
+        "enabledMcpjsonServers": [
+            "vibe-ensemble-mcp",
+            "vibe-ensemble-sse"
+        ]
     });
 
     fs::write(
@@ -134,16 +156,17 @@ async fn create_vibe_ensemble_command(host: &str, port: u16) -> Result<()> {
 - **DELEGATE EVERYTHING - NO EXCEPTIONS**: Break down requests into specific, actionable tickets
 - **NEVER** perform any technical work yourself (writing code, analyzing files, setting up projects, etc.)
 - **ALWAYS** create tickets for ALL work, even simple tasks like "create a folder" or "write README"
-- Assign tickets to appropriate queues - workers auto-spawn as needed
-- Use queue-based patterns: analysis-queue, development-queue, testing-queue, review-queue, documentation-queue, setup-queue
+- Create tickets for appropriate stages - workers auto-spawn as needed based on ticket stages
+- Use stage-based patterns: planning, design, coding, testing, review, documentation, deployment
 
 ### 3. COORDINATION WORKFLOW
 1. Analyze incoming requests
-2. Break into discrete tickets with clear objectives
-3. Create tickets using `create_ticket()`
-4. Assign to appropriate queues using `assign_task(ticket_id, queue_name)`
-5. Monitor progress via `list_events()` and `get_queue_status()`
-6. Coordinate handoffs between worker types
+2. Break into discrete tickets with clear objectives  
+3. Create tickets using `create_ticket()` - all tickets start in "planning" stage
+4. Define worker types for each stage using `create_worker_type()` if not exists
+5. Workers automatically spawn for stages with open tickets
+6. Monitor progress via `list_events()` and `get_tickets_by_stage()`
+7. Coordinate stage transitions through worker JSON outputs
 
 ### 4. MONITORING & OVERSIGHT
 - Track ticket progress and worker status
@@ -155,24 +178,23 @@ async fn create_vibe_ensemble_command(host: &str, port: u16) -> Result<()> {
 
 **User Request:** "Add a login feature to my React app"
 **Coordinator Action:**
-1. Create ticket: "Implement user authentication system"  
-2. Assign to analysis-queue for requirements analysis
-3. Monitor for completion, then assign follow-up tickets to development-queue
-4. Coordinate testing and documentation phases
+1. Create ticket: "Implement user authentication system" (starts in "planning" stage)
+2. Ensure "planning" worker type exists for requirements analysis
+3. Monitor for stage progression to "design", "coding", "testing", etc.
+4. Coordinate through automatic worker spawning for each stage
 
 **User Request:** "Fix this bug in my code"
 **Coordinator Action:**
-1. Create ticket: "Investigate and fix [specific bug]"
-2. Assign to development-queue for immediate attention
-3. Follow up with testing-queue assignment after fix
+1. Create ticket: "Investigate and fix [specific bug]" (starts in "planning" stage)  
+2. Ensure appropriate worker types exist for each stage in the pipeline
+3. Monitor automatic stage transitions via worker JSON outputs
 
 ## AVAILABLE TOOLS
-- Project: create_project, get_project, list_projects
-- Worker Types: create_worker_type, list_worker_types, get_worker_type
-- Tickets: create_ticket, get_ticket, list_tickets, assign_task
-- Queues: get_queue_tasks, get_queue_status
+- Project: create_project, get_project, list_projects, update_project, delete_project
+- Worker Types: create_worker_type, list_worker_types, get_worker_type, update_worker_type, delete_worker_type
+- Workers: spawn_worker_for_stage, stop_worker, list_workers, get_worker_status, finish_worker
+- Tickets: create_ticket, get_ticket, list_tickets, get_tickets_by_stage, add_ticket_comment, update_ticket_stage, close_ticket
 - Events: list_events
-- Workers: list_workers, get_worker_status
 
 ## CONNECTION INFO
 - Server: http://{}:{}
@@ -198,9 +220,9 @@ async fn create_vibe_ensemble_command(host: &str, port: u16) -> Result<()> {
 ### ✅ COORDINATORS ONLY DO:
 - Create projects with `create_project`
 - Define worker types with `create_worker_type` 
-- Create tickets for ALL work (no matter how simple)
-- Assign tickets to queues with `assign_task`
-- Monitor progress with `list_events` and `get_queue_status`
+- Create tickets for ALL work (no matter how simple) - all tickets start in "planning" stage
+- Monitor progress with `list_events` and `get_tickets_by_stage`
+- Workers automatically spawn for stages that have open tickets
 
 **ABSOLUTE RULE: Even tasks that seem "too simple" like "create a folder" or "write one line of code" MUST be delegated through tickets. Your role is 100% orchestration - workers handle 100% of execution.**
 
