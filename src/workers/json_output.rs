@@ -260,7 +260,7 @@ impl WorkerOutputProcessor {
         }
 
         // Now validate that the target stage has a registered worker type
-        Self::validate_target_stage(state, ticket_id, &target_stage).await?;
+        let _project_id = Self::validate_target_stage(state, ticket_id, &target_stage).await?;
 
         info!(
             "Moving ticket {} to next stage: {}",
@@ -283,7 +283,8 @@ impl WorkerOutputProcessor {
         .await?;
 
         // TODO: Auto-spawn worker for the new stage (disabled due to Send constraint)
-        // This will be handled by coordinator monitoring instead
+        // This will be handled by coordinator monitoring instead. The coordinator should
+        // periodically check for tickets in new stages without active workers and spawn them.
         info!(
             "Successfully moved ticket {} to stage {} - coordinator should spawn worker for this stage",
             ticket_id, target_stage
@@ -301,7 +302,7 @@ impl WorkerOutputProcessor {
             .ok_or_else(|| anyhow::anyhow!("prev_stage outcome requires target_stage"))?;
 
         // Validate that the target stage has a registered worker type
-        Self::validate_target_stage(state, ticket_id, &target_stage).await?;
+        let _project_id = Self::validate_target_stage(state, ticket_id, &target_stage).await?;
 
         warn!(
             "Moving ticket {} back to previous stage: {} (reason: {})",
@@ -323,8 +324,10 @@ impl WorkerOutputProcessor {
         )
         .await?;
 
+        // TODO: Auto-spawn worker for the rollback stage (disabled due to Send constraint)
+        // This will be handled by coordinator monitoring instead.
         info!(
-            "Successfully moved ticket {} back to stage {}",
+            "Successfully moved ticket {} back to stage {} - coordinator should spawn worker for this stage",
             ticket_id, target_stage
         );
         Ok(())
