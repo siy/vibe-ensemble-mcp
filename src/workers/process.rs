@@ -307,14 +307,19 @@ You are a specialized worker in a stage-based pipeline where:
   3. "coordinator_attention": Critical issues requiring human coordinator intervention
 
 TASK PROCESSING WORKFLOW:
-1. Check for tickets in your stage: get_tickets_by_stage("{worker_type}")
-2. Process tickets one by one in priority order (urgent > high > medium > low)
-3. For each ticket:
+1. Run continuously in a loop, checking for new tickets every few seconds
+2. Check for tickets in your stage: get_tickets_by_stage("{worker_type}")
+3. Process tickets one by one in priority order (urgent > high > medium > low)
+4. For each ticket:
+   - FIRST: Claim the ticket: claim_ticket(ticket_id, "{worker_id}")
+   - If claim fails (ticket already claimed), skip to next ticket
    - Read full ticket content including all comments from previous stages
    - Perform your specialized work for this stage
    - Add a detailed report as a comment with your findings/work
    - Output exactly ONE structured JSON decision (see OUTPUT FORMAT below)
-4. When no more tickets in your stage, call finish_worker() and exit gracefully
+   - NOTE: Do NOT manually release the ticket - it will be automatically released when the stage changes
+5. When no tickets are currently available, wait and check again for new tickets
+6. Continue this loop indefinitely - do NOT call finish_worker()
 
 OUTPUT FORMAT (JSON only, no additional text):
 ```json
@@ -346,11 +351,11 @@ PIPELINE MANAGEMENT:
 
 MCP TOOLS AVAILABLE:
 - get_tickets_by_stage(stage): Get all tickets currently in your stage
+- claim_ticket(ticket_id, worker_id): Claim a ticket for exclusive processing
 - get_ticket(ticket_id): Get full ticket details with all comments
 - add_ticket_comment(ticket_id, worker_type, worker_id, stage_number, content): Add your work report
-- update_ticket_stage(ticket_id, new_stage): Move ticket to different stage
-- update_ticket_pipeline(ticket_id, new_pipeline): Extend ticket pipeline (planning workers only)
-- finish_worker(worker_id, "reason"): Mark yourself as finished and exit
+- release_ticket(ticket_id, worker_id): Release a claimed ticket (only if needed manually)
+- finish_worker(worker_id, "reason"): Mark yourself as finished and exit (DO NOT USE)
 
 PRIORITY HANDLING:
 Process tickets in order: urgent → high → medium → low
@@ -539,40 +544,66 @@ Remember: Output ONLY the JSON structure above. No additional commentary or expl
             let new_content = &content[*last_position as usize..];
             *last_position = content.len() as u64;
 
-            // Look for JSON outcome in the new content
-            if let Some(json_start) = new_content.rfind('{') {
-                if let Some(json_end) = new_content[json_start..].find('}') {
-                    let json_str = &new_content[json_start..json_start + json_end + 1];
+            // Look for JSON array output lines starting with '[{'
+            let lines: Vec<&str> = new_content.lines().collect();
+            for line in lines.iter() {
+                if line.starts_with("[{") {
+                    // This is a JSON array line from Claude Code worker output
+                    // Parse the JSON array and look for assistant messages with outcome
+                    if let Ok(json_array) = serde_json::from_str::<serde_json::Value>(line) {
+                        if let Some(array) = json_array.as_array() {
+                            for item in array {
+                                if let Some(message) = item.get("message") {
+                                    if let Some(content_array) =
+                                        message.get("content").and_then(|c| c.as_array())
+                                    {
+                                        for content_item in content_array {
+                                            if let Some(text) =
+                                                content_item.get("text").and_then(|t| t.as_str())
+                                            {
+                                                if text.contains("\"outcome\"") {
+                                                    // Try to parse as worker output
+                                                    match WorkerOutputProcessor::parse_output(text)
+                                                    {
+                                                        Ok(output) => {
+                                                            info!(
+                                                                "Found worker output for {}: {:?}",
+                                                                worker_id, output.outcome
+                                                            );
 
-                    // Try to parse as worker output
-                    match WorkerOutputProcessor::parse_output(json_str) {
-                        Ok(output) => {
-                            info!(
-                                "Found worker output for {}: {:?}",
-                                worker_id, output.outcome
-                            );
-
-                            // Find ticket ID from worker output - we need to search for ticket context
-                            if let Some(ticket_id) =
-                                Self::extract_ticket_id_from_log(&content).await
-                            {
-                                if let Err(e) = WorkerOutputProcessor::process_output(
-                                    state,
-                                    &ticket_id,
-                                    worker_id,
-                                    worker_type,
-                                    output,
-                                )
-                                .await
-                                {
-                                    error!("Failed to process worker output: {}", e);
+                                                            // Find ticket ID from worker output - we need to search for ticket context
+                                                            if let Some(ticket_id) =
+                                                                Self::extract_ticket_id_from_log(
+                                                                    &content,
+                                                                )
+                                                                .await
+                                                            {
+                                                                if let Err(e) = WorkerOutputProcessor::process_output(
+                                                                    state,
+                                                                    &ticket_id,
+                                                                    worker_id,
+                                                                    worker_type,
+                                                                    output,
+                                                                )
+                                                                .await
+                                                                {
+                                                                    error!("Failed to process worker output: {}", e);
+                                                                }
+                                                            } else {
+                                                                debug!("No ticket ID found in worker output for {}", worker_id);
+                                                            }
+                                                            return Ok(()); // Found and processed JSON, exit
+                                                        }
+                                                        Err(_) => {
+                                                            // Not a worker output JSON, continue looking
+                                                        }
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    }
                                 }
-                            } else {
-                                debug!("No ticket ID found in worker output for {}", worker_id);
                             }
-                        }
-                        Err(_) => {
-                            // Not a worker output JSON, continue monitoring
                         }
                     }
                 }

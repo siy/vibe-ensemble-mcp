@@ -250,6 +250,9 @@ impl WorkerOutputProcessor {
             .await?;
         }
 
+        // Release ticket from current worker (if claimed)
+        Self::release_ticket_if_claimed(state, ticket_id).await?;
+
         // Move ticket to target stage
         Ticket::update_stage(&state.db, ticket_id, &target_stage).await?;
 
@@ -278,6 +281,9 @@ impl WorkerOutputProcessor {
             "Moving ticket {} back to previous stage: {} (reason: {})",
             ticket_id, target_stage, output.reason
         );
+
+        // Release ticket from current worker (if claimed)
+        Self::release_ticket_if_claimed(state, ticket_id).await?;
 
         // Move ticket back to target stage
         Ticket::update_stage(&state.db, ticket_id, &target_stage).await?;
@@ -334,6 +340,30 @@ impl WorkerOutputProcessor {
             "Set ticket {} to on_hold status for coordinator attention",
             ticket_id
         );
+        Ok(())
+    }
+
+    /// Release a ticket if it's currently claimed by any worker
+    async fn release_ticket_if_claimed(state: &AppState, ticket_id: &str) -> Result<()> {
+        debug!("Releasing ticket {} if claimed", ticket_id);
+
+        let result = sqlx::query(
+            r#"
+            UPDATE tickets 
+            SET processing_worker_id = NULL, updated_at = datetime('now')
+            WHERE ticket_id = ?1 AND processing_worker_id IS NOT NULL
+            "#,
+        )
+        .bind(ticket_id)
+        .execute(&state.db)
+        .await?;
+
+        if result.rows_affected() > 0 {
+            info!("Released claimed ticket {} for stage transition", ticket_id);
+        } else {
+            debug!("Ticket {} was not claimed, no release needed", ticket_id);
+        }
+
         Ok(())
     }
 }

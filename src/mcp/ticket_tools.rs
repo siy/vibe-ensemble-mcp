@@ -342,6 +342,138 @@ impl ToolHandler for UpdateTicketStageTool {
     }
 }
 
+pub struct ClaimTicketTool;
+
+#[async_trait]
+impl ToolHandler for ClaimTicketTool {
+    async fn call(
+        &self,
+        state: &AppState,
+        arguments: Option<Value>,
+    ) -> crate::error::Result<CallToolResponse> {
+        let args = arguments
+            .ok_or_else(|| crate::error::AppError::BadRequest("Missing arguments".to_string()))?;
+
+        let ticket_id: String = extract_param(&Some(args.clone()), "ticket_id")?;
+        let worker_id: String = extract_param(&Some(args.clone()), "worker_id")?;
+
+        info!("Worker {} claiming ticket {}", worker_id, ticket_id);
+
+        // Try to claim the ticket atomically - only if it's not already claimed
+        let result = sqlx::query(
+            r#"
+            UPDATE tickets 
+            SET processing_worker_id = ?1, updated_at = datetime('now')
+            WHERE ticket_id = ?2 AND (processing_worker_id IS NULL OR processing_worker_id = '')
+            "#,
+        )
+        .bind(&worker_id)
+        .bind(&ticket_id)
+        .execute(&state.db)
+        .await?;
+
+        if result.rows_affected() > 0 {
+            Ok(create_success_response(&format!(
+                "Successfully claimed ticket {} for worker {}",
+                ticket_id, worker_id
+            )))
+        } else {
+            Ok(create_error_response(&format!(
+                "Ticket {} is already being processed by another worker",
+                ticket_id
+            )))
+        }
+    }
+
+    fn definition(&self) -> Tool {
+        Tool {
+            name: "claim_ticket".to_string(),
+            description:
+                "Claim a ticket for processing to prevent other workers from picking it up"
+                    .to_string(),
+            input_schema: json!({
+                "type": "object",
+                "properties": {
+                    "ticket_id": {
+                        "type": "string",
+                        "description": "Ticket identifier"
+                    },
+                    "worker_id": {
+                        "type": "string",
+                        "description": "Worker identifier claiming the ticket"
+                    }
+                },
+                "required": ["ticket_id", "worker_id"]
+            }),
+        }
+    }
+}
+
+pub struct ReleaseTicketTool;
+
+#[async_trait]
+impl ToolHandler for ReleaseTicketTool {
+    async fn call(
+        &self,
+        state: &AppState,
+        arguments: Option<Value>,
+    ) -> crate::error::Result<CallToolResponse> {
+        let args = arguments
+            .ok_or_else(|| crate::error::AppError::BadRequest("Missing arguments".to_string()))?;
+
+        let ticket_id: String = extract_param(&Some(args.clone()), "ticket_id")?;
+        let worker_id: String = extract_param(&Some(args.clone()), "worker_id")?;
+
+        info!("Worker {} releasing ticket {}", worker_id, ticket_id);
+
+        // Release the ticket only if claimed by this specific worker
+        let result = sqlx::query(
+            r#"
+            UPDATE tickets 
+            SET processing_worker_id = NULL, updated_at = datetime('now')
+            WHERE ticket_id = ?1 AND processing_worker_id = ?2
+            "#,
+        )
+        .bind(&ticket_id)
+        .bind(&worker_id)
+        .execute(&state.db)
+        .await?;
+
+        if result.rows_affected() > 0 {
+            Ok(create_success_response(&format!(
+                "Successfully released ticket {} from worker {}",
+                ticket_id, worker_id
+            )))
+        } else {
+            Ok(create_error_response(&format!(
+                "Ticket {} was not claimed by worker {} or doesn't exist",
+                ticket_id, worker_id
+            )))
+        }
+    }
+
+    fn definition(&self) -> Tool {
+        Tool {
+            name: "release_ticket".to_string(),
+            description: "Release a claimed ticket so other workers can process it".to_string(),
+            input_schema: json!({
+                "type": "object",
+                "properties": {
+                    "ticket_id": {
+                        "type": "string",
+                        "description": "Ticket identifier"
+                    },
+                    "worker_id": {
+                        "type": "string",
+                        "description": "Worker identifier releasing the ticket"
+                    }
+                },
+                "required": ["ticket_id", "worker_id"]
+            }),
+        }
+    }
+}
+
 pub struct CloseTicketTool;
 
 #[async_trait]
