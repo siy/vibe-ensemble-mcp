@@ -1,5 +1,7 @@
 use async_trait::async_trait;
 use serde_json::{json, Value};
+use std::fs;
+use tracing::{debug, info};
 
 use super::tools::{
     create_error_response, create_success_response, extract_optional_param, extract_param,
@@ -20,6 +22,21 @@ impl ToolHandler for CreateProjectTool {
         let repository_name: String = extract_param(&arguments, "repository_name")?;
         let path: String = extract_param(&arguments, "path")?;
         let short_description: Option<String> = extract_optional_param(&arguments, "description")?;
+
+        // Create the project directory if it doesn't exist
+        debug!("Checking if project directory exists: {}", path);
+        if !std::path::Path::new(&path).exists() {
+            info!("Creating project directory: {}", path);
+            if let Err(e) = fs::create_dir_all(&path) {
+                return Ok(create_error_response(&format!(
+                    "Failed to create project directory '{}': {}",
+                    path, e
+                )));
+            }
+            info!("✓ Successfully created project directory: {}", path);
+        } else {
+            debug!("Project directory already exists: {}", path);
+        }
 
         let request = CreateProjectRequest {
             repository_name: repository_name.clone(),

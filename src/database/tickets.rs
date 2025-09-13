@@ -10,7 +10,10 @@ pub struct Ticket {
     pub project_id: String,
     pub title: String,
     pub execution_plan: String, // JSON array
-    pub last_completed_stage: String,
+    pub current_stage: String,
+    pub state: String,
+    pub priority: String,
+    pub processing_worker_id: Option<String>,
     pub created_at: String,
     pub updated_at: String,
     pub closed_at: Option<String>,
@@ -45,10 +48,10 @@ impl Ticket {
 
         let ticket = sqlx::query_as::<_, Ticket>(
             r#"
-            INSERT INTO tickets (ticket_id, project_id, title, execution_plan, last_completed_stage)
-            VALUES (?1, ?2, ?3, ?4, 'Planned')
-            RETURNING ticket_id, project_id, title, execution_plan, last_completed_stage, 
-                     created_at, updated_at, closed_at
+            INSERT INTO tickets (ticket_id, project_id, title, execution_plan, current_stage, state, priority)
+            VALUES (?1, ?2, ?3, ?4, 'planning', 'open', 'medium')
+            RETURNING ticket_id, project_id, title, execution_plan, current_stage, state, priority,
+                     processing_worker_id, created_at, updated_at, closed_at
         "#,
         )
         .bind(&req.ticket_id)
@@ -77,8 +80,8 @@ impl Ticket {
     pub async fn get_by_id(pool: &DbPool, ticket_id: &str) -> Result<Option<TicketWithComments>> {
         let ticket = sqlx::query_as::<_, Ticket>(
             r#"
-            SELECT ticket_id, project_id, title, execution_plan, last_completed_stage,
-                   created_at, updated_at, closed_at
+            SELECT ticket_id, project_id, title, execution_plan, current_stage, state, priority,
+                   processing_worker_id, created_at, updated_at, closed_at
             FROM tickets
             WHERE ticket_id = ?1
         "#,
@@ -103,8 +106,8 @@ impl Ticket {
     ) -> Result<Vec<Ticket>> {
         let mut query = String::from(
             r#"
-            SELECT ticket_id, project_id, title, execution_plan, last_completed_stage,
-                   created_at, updated_at, closed_at
+            SELECT ticket_id, project_id, title, execution_plan, current_stage, state, priority,
+                   processing_worker_id, created_at, updated_at, closed_at
             FROM tickets
         "#,
         );
@@ -153,10 +156,10 @@ impl Ticket {
         let ticket = sqlx::query_as::<_, Ticket>(
             r#"
             UPDATE tickets 
-            SET last_completed_stage = ?1, updated_at = datetime('now')
+            SET current_stage = ?1, updated_at = datetime('now')
             WHERE ticket_id = ?2
-            RETURNING ticket_id, project_id, title, execution_plan, last_completed_stage,
-                     created_at, updated_at, closed_at
+            RETURNING ticket_id, project_id, title, execution_plan, current_stage, state, priority,
+                     processing_worker_id, created_at, updated_at, closed_at
         "#,
         )
         .bind(new_stage)
@@ -178,10 +181,10 @@ impl Ticket {
         let ticket = sqlx::query_as::<_, Ticket>(
             r#"
             UPDATE tickets 
-            SET last_completed_stage = ?1, updated_at = datetime('now'), closed_at = datetime('now')
+            SET current_stage = ?1, state = 'closed', updated_at = datetime('now'), closed_at = datetime('now')
             WHERE ticket_id = ?2
-            RETURNING ticket_id, project_id, title, execution_plan, last_completed_stage,
-                     created_at, updated_at, closed_at
+            RETURNING ticket_id, project_id, title, execution_plan, current_stage, state, priority,
+                     processing_worker_id, created_at, updated_at, closed_at
         "#,
         )
         .bind(status)
@@ -220,13 +223,13 @@ impl Ticket {
     pub fn get_next_stage(&self) -> Result<Option<String>> {
         let plan = self.get_execution_plan()?;
 
-        if self.last_completed_stage == "Planned" {
+        if self.current_stage == "planning" {
             return Ok(plan.first().cloned());
         }
 
         // Find current stage index and return next
         for (i, stage) in plan.iter().enumerate() {
-            if stage == &self.last_completed_stage {
+            if stage == &self.current_stage {
                 return Ok(plan.get(i + 1).cloned());
             }
         }
@@ -236,5 +239,49 @@ impl Ticket {
 
     pub fn is_completed(&self) -> bool {
         self.closed_at.is_some()
+    }
+
+    pub async fn update_state(
+        pool: &DbPool,
+        ticket_id: &str,
+        state: &str,
+    ) -> Result<Option<Ticket>> {
+        let ticket = sqlx::query_as::<_, Ticket>(
+            r#"
+            UPDATE tickets 
+            SET state = ?1, updated_at = datetime('now')
+            WHERE ticket_id = ?2
+            RETURNING ticket_id, project_id, title, execution_plan, current_stage, state, priority,
+                     processing_worker_id, created_at, updated_at, closed_at
+        "#,
+        )
+        .bind(state)
+        .bind(ticket_id)
+        .fetch_optional(pool)
+        .await?;
+
+        Ok(ticket)
+    }
+
+    pub async fn update_priority(
+        pool: &DbPool,
+        ticket_id: &str,
+        priority: &str,
+    ) -> Result<Option<Ticket>> {
+        let ticket = sqlx::query_as::<_, Ticket>(
+            r#"
+            UPDATE tickets 
+            SET priority = ?1, updated_at = datetime('now')
+            WHERE ticket_id = ?2
+            RETURNING ticket_id, project_id, title, execution_plan, current_stage, state, priority,
+                     processing_worker_id, created_at, updated_at, closed_at
+        "#,
+        )
+        .bind(priority)
+        .bind(ticket_id)
+        .fetch_optional(pool)
+        .await?;
+
+        Ok(ticket)
     }
 }

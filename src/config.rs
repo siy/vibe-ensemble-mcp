@@ -3,6 +3,7 @@ pub struct Config {
     pub database_path: String,
     pub host: String,
     pub port: u16,
+    pub no_respawn: bool,
 }
 
 impl Config {

@@ -87,7 +87,7 @@ impl Comment {
         let updated_rows = sqlx::query(
             r#"
             UPDATE tickets 
-            SET last_completed_stage = ?1, updated_at = datetime('now')
+            SET current_stage = ?1, updated_at = datetime('now')
             WHERE ticket_id = ?2
         "#,
         )

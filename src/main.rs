@@ -2,12 +2,16 @@ use anyhow::Result;
 use clap::Parser;
 use tracing::info;
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt, EnvFilter, Layer};
-use vibe_ensemble_mcp::{config::Config, server::run_server};
+use vibe_ensemble_mcp::{config::Config, configure::configure_claude_code, server::run_server};
 
 #[derive(Parser)]
 #[command(name = "vibe-ensemble-mcp")]
 #[command(about = "A multi-agent coordination MCP server")]
 struct Args {
+    /// Configure Claude Code integration (generates .mcp.json and .claude/ files)
+    #[arg(long)]
+    configure_claude_code: bool,
+
     /// Database file path
     #[arg(long, default_value = "./.vibe-ensemble-mcp/vibe-ensemble.db")]
     database_path: String,
@@ -23,11 +27,21 @@ struct Args {
     /// Log level
     #[arg(long, default_value = "info")]
     log_level: String,
+
+    /// Disable automatic respawning of workers on startup for unfinished tasks
+    #[arg(long)]
+    no_respawn: bool,
 }
 
 #[tokio::main]
 async fn main() -> Result<()> {
     let args = Args::parse();
+
+    // Handle configuration mode
+    if args.configure_claude_code {
+        configure_claude_code(&args.host, args.port).await?;
+        return Ok(());
+    }
 
     // Initialize tracing with both console and file logging
     let env_filter =
@@ -61,6 +75,7 @@ async fn main() -> Result<()> {
         database_path: args.database_path,
         host: args.host,
         port: args.port,
+        no_respawn: args.no_respawn,
     };
 
     run_server(config).await?;

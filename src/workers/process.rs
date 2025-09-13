@@ -1,10 +1,11 @@
-use anyhow::{Context, Result};
+use anyhow::Result;
 use serde_json::json;
 use std::fs::{self, OpenOptions};
 use std::process::{Command, Stdio};
 use tokio::time::Duration;
-use tracing::{debug, info, warn};
+use tracing::{debug, error, info, warn};
 
+use super::json_output::WorkerOutputProcessor;
 use super::types::{SpawnWorkerRequest, WorkerInfo, WorkerProcess, WorkerStatus};
 use crate::{
     database::{worker_types::WorkerType, workers::Worker},
@@ -15,6 +16,11 @@ pub struct ProcessManager;
 
 impl ProcessManager {
     fn create_mcp_config(project_path: &str, worker_id: &str, server_port: u16) -> Result<String> {
+        debug!(
+            "Creating MCP config for worker {} in project path: {}",
+            worker_id, project_path
+        );
+
         let config = json!({
             "mcpServers": {
                 "vibe-ensemble-mcp": {
@@ -24,9 +30,21 @@ impl ProcessManager {
                 }
             }
         });
+        debug!("MCP config JSON created successfully");
 
         let config_path = format!("{}/worker_{}_mcp_config.json", project_path, worker_id);
-        fs::write(&config_path, serde_json::to_string_pretty(&config)?)?;
+        debug!("Target config file path: {}", config_path);
+
+        debug!("Serializing config to pretty JSON...");
+        let config_json = serde_json::to_string_pretty(&config)?;
+        debug!(
+            "JSON serialization successful, length: {} bytes",
+            config_json.len()
+        );
+
+        debug!("Writing config file to: {}", config_path);
+        fs::write(&config_path, config_json)?;
+        debug!("File write successful");
 
         info!("Generated MCP config file: {}", config_path);
         Ok(config_path)
@@ -35,15 +53,24 @@ impl ProcessManager {
         state: &AppState,
         request: SpawnWorkerRequest,
     ) -> Result<WorkerProcess> {
-        info!("Spawning worker: {}", request.worker_id);
+        info!(
+            "Spawning worker: {} (project: {}, type: {}, queue: {})",
+            request.worker_id, request.project_id, request.worker_type, request.queue_name
+        );
 
         // Get project info
+        debug!("Looking up project: {}", request.project_id);
         let project =
             crate::database::projects::Project::get_by_name(&state.db, &request.project_id)
                 .await?
                 .ok_or_else(|| anyhow::anyhow!("Project '{}' not found", request.project_id))?;
+        info!("Found project at path: {}", project.path);
 
         // Get worker type info
+        debug!(
+            "Looking up worker type: {} for project: {}",
+            request.worker_type, request.project_id
+        );
         let worker_type_info =
             WorkerType::get_by_type(&state.db, &request.project_id, &request.worker_type)
                 .await?
@@ -54,6 +81,10 @@ impl ProcessManager {
                         request.project_id
                     )
                 })?;
+        debug!(
+            "Found worker type with system prompt length: {}",
+            worker_type_info.system_prompt.len()
+        );
 
         // Use the provided queue name
         let queue_name = request.queue_name.clone();
@@ -83,20 +114,27 @@ impl ProcessManager {
             last_activity: worker_info.last_activity.to_rfc3339(),
         };
         Worker::create(&state.db, db_worker).await?;
+        debug!("✓ Worker saved to database, proceeding with setup");
 
         // Build worker prompt
+        debug!("Building worker prompt...");
         let worker_prompt =
-            Self::build_worker_prompt(&worker_info, &worker_type_info.system_prompt, &queue_name);
+            Self::build_worker_prompt(&worker_info, &worker_type_info.system_prompt);
+        debug!("✓ Worker prompt built successfully");
 
         // Generate MCP config file
+        debug!("Creating MCP config file...");
         let mcp_config_path =
             Self::create_mcp_config(&project.path, &worker_info.worker_id, state.config.port)?;
+        debug!("✓ MCP config created at: {}", mcp_config_path);
 
         // Create log file path in centralized logs directory
+        debug!("Getting project logs directory...");
         let project_logs_dir = crate::database::get_project_logs_dir(
             &state.config.database_path,
             &project.repository_name,
         )?;
+        debug!("✓ Project logs directory: {}", project_logs_dir);
         // Sanitize to safe filename fragments
         let safe_type = worker_info
             .worker_type
@@ -123,10 +161,49 @@ impl ProcessManager {
             "{}/worker_{}__{}.log",
             project_logs_dir, safe_type, safe_queue
         );
+        debug!("Opening log file: {}", log_file_path);
         let log_file = OpenOptions::new()
             .create(true)
             .append(true)
             .open(&log_file_path)?;
+        debug!("✓ Log file opened successfully");
+
+        // DIAGNOSTIC: Enhanced logging for worker spawning
+        info!("Starting worker spawn diagnostics");
+        debug!("About to check for 'claude' command in PATH");
+        match tokio::process::Command::new("which")
+            .arg("claude")
+            .output()
+            .await
+        {
+            Ok(output) if output.status.success() => {
+                let claude_path = String::from_utf8_lossy(&output.stdout).trim().to_string();
+                info!("✓ Found Claude Code at: {}", claude_path);
+            }
+            Ok(_) => {
+                error!("✗ 'claude' command not found in PATH - this will cause spawn failure");
+            }
+            Err(e) => {
+                error!("✗ Failed to check for 'claude' command: {}", e);
+            }
+        }
+
+        // Log environment and working directory
+        debug!(
+            "Current working directory: {}",
+            std::env::current_dir()
+                .unwrap_or_else(|_| std::path::PathBuf::from("unknown"))
+                .display()
+        );
+        debug!(
+            "Project working directory (where Claude will run): {}",
+            project.path
+        );
+        if let Ok(path_var) = std::env::var("PATH") {
+            debug!("PATH environment variable: {}", path_var);
+        } else {
+            error!("PATH environment variable not found!");
+        }
 
         // Spawn Claude Code process
         let mut cmd = Command::new("claude");
@@ -138,16 +215,40 @@ impl ProcessManager {
             .arg("bypassPermissions")
             .arg("--mcp-config")
             .arg(&mcp_config_path)
+            .arg("--output-format")
+            .arg("json")
             .current_dir(&project.path)
             .stdin(Stdio::piped())
             .stdout(Stdio::from(log_file.try_clone()?))
             .stderr(Stdio::from(log_file));
 
-        debug!("Executing command: {:?}", cmd);
+        info!("Executing Claude Code command");
+        debug!("Command: claude");
+        debug!("Arguments: -p [prompt] --debug --verbose --permission-mode bypassPermissions --mcp-config {} --output-format json", mcp_config_path);
+        debug!("Working directory: {}", project.path);
+        debug!("MCP config file: {}", mcp_config_path);
+        debug!("Log file path: {}", log_file_path);
+        debug!(
+            "Prompt preview: {}",
+            worker_prompt.chars().take(100).collect::<String>()
+        );
+        debug!("Attempting to spawn process...");
 
-        let child = tokio::process::Command::from(cmd)
-            .spawn()
-            .context("Failed to spawn Claude Code process")?;
+        let child = match tokio::process::Command::from(cmd).spawn() {
+            Ok(child) => {
+                info!("✓ Successfully spawned Claude Code process");
+                debug!("Worker spawn diagnostics completed");
+                child
+            }
+            Err(e) => {
+                let error_msg = format!(
+                    "Failed to spawn Claude Code process: {} (error code: {:?}). This usually means 'claude' command is not installed or not in PATH",
+                    e, e.kind()
+                );
+                error!("{}", error_msg);
+                return Err(anyhow::anyhow!("{}", error_msg));
+            }
+        };
 
         let pid = child.id();
         info!(
@@ -163,17 +264,30 @@ impl ProcessManager {
         // Update database
         Worker::update_status(&state.db, &updated_info.worker_id, "active", pid).await?;
 
+        // Spawn monitoring task for worker output processing
+        let worker_id_clone = updated_info.worker_id.clone();
+        let worker_type_clone = updated_info.worker_type.clone();
+        let log_file_path_clone = log_file_path.clone();
+        let state_clone = state.clone();
+
+        tokio::spawn(async move {
+            Self::monitor_worker_output(
+                &state_clone,
+                &worker_id_clone,
+                &worker_type_clone,
+                &log_file_path_clone,
+                pid,
+            )
+            .await;
+        });
+
         Ok(WorkerProcess {
             info: updated_info,
             process: Some(child),
         })
     }
 
-    fn build_worker_prompt(
-        worker_info: &WorkerInfo,
-        system_prompt: &str,
-        queue_name: &str,
-    ) -> String {
+    fn build_worker_prompt(worker_info: &WorkerInfo, system_prompt: &str) -> String {
         format!(
             r#"{system_prompt}
 
@@ -181,45 +295,77 @@ WORKER CONFIGURATION:
 - Worker ID: {worker_id}
 - Project: {project_id}
 - Worker Type: {worker_type}
-- Queue Name: {queue_name}
+- Stage: {worker_type}
 
-TASK PROCESSING INSTRUCTIONS:
-1. You are a specialized worker for the vibe-ensemble multi-agent system
-2. Your queue is: {queue_name}
-3. Process tasks from your queue one by one
-4. When queue is empty, call finish_worker() with your worker_id and then exit gracefully
-5. For each task, read the full ticket content including previous worker reports
-6. Complete your stage and add a detailed report as a comment
-7. Update the ticket's completed stage when done
-8. Continue to next task or exit when queue is empty
+STAGE-BASED MULTI-AGENT SYSTEM:
+You are a specialized worker in a stage-based pipeline where:
+- Pipeline stage names == ticket current_stage == worker names (e.g., "planning", "design", "coding", "testing")
+- All tickets start in "planning" stage with minimal pipeline: ["planning"]
+- Workers output structured JSON with exactly one of three outcomes:
+  1. "next_stage": Task completed, move ticket to specified next stage
+  2. "prev_stage": Issues found, move ticket back to specified previous stage  
+  3. "coordinator_attention": Critical issues requiring human coordinator intervention
 
-Use the vibe-ensemble MCP server to:
-- Get tasks from your queue: get_queue_tasks("{queue_name}")
-- Get ticket details: get_ticket(ticket_id)
-- Add your report: add_ticket_comment(ticket_id, worker_type, worker_id, stage_number, content)
-- Update stage completion: update_ticket_stage(ticket_id, stage)
-- Mark yourself finished: finish_worker(worker_id, "optional reason")
+TASK PROCESSING WORKFLOW:
+1. Run continuously in a loop, checking for new tickets every few seconds
+2. Check for tickets in your stage: get_tickets_by_stage("{worker_type}")
+3. Process tickets one by one in priority order (urgent > high > medium > low)
+4. For each ticket:
+   - FIRST: Claim the ticket: claim_ticket(ticket_id, "{worker_id}")
+   - If claim fails (ticket already claimed), skip to next ticket
+   - Read full ticket content including all comments from previous stages
+   - Perform your specialized work for this stage
+   - Add a detailed report as a comment with your findings/work
+   - Output exactly ONE structured JSON decision (see OUTPUT FORMAT below)
+   - NOTE: Do NOT manually release the ticket - it will be automatically released when the stage changes
+5. When no tickets are currently available, wait and check again for new tickets
+6. Continue this loop indefinitely - do NOT call finish_worker()
 
-COORDINATOR WORKFLOW:
-The coordinator uses this streamlined workflow to manage the multi-agent system:
-1. Create project: create_project(project_id, name, path, description)
-2. Define worker types: create_worker_type(project_id, worker_type, system_prompt, description)
-3. Create tickets: create_ticket(project_id, title, description)
-4. Assign tasks: assign_task(ticket_id, queue_name) - workers auto-spawn on first task assignment
-5. Monitor progress: list_events(), get_queue_status(queue_name), get_ticket(ticket_id)
+OUTPUT FORMAT (JSON only, no additional text):
+```json
+{{
+  "outcome": "next_stage|prev_stage|coordinator_attention",
+  "target_stage": "stage_name_or_null",
+  "pipeline_update": ["stage1", "stage2", "..."] or null,
+  "comment": "Your detailed report/findings",
+  "reason": "Brief reason for the decision"
+}}
+```
 
-IMPORTANT: Workers are now AUTO-SPAWNED when tasks are assigned to queues! 
-- No need to manually spawn workers or create queues
-- Simply assign tasks to appropriate queue names (e.g., "architect-queue", "developer-queue")
-- The system automatically detects if a worker exists for the queue and spawns one if needed
-- Workers stop automatically when their queue becomes empty
+OUTCOME DESCRIPTIONS:
+- "next_stage": Work completed successfully, ticket should advance
+  - target_stage: Name of next stage to move to
+  - pipeline_update: Optional - new complete pipeline if extending it
+- "prev_stage": Issues found that require earlier stage rework
+  - target_stage: Stage to return ticket to (must be earlier in pipeline)
+  - pipeline_update: Should be null for backward moves
+- "coordinator_attention": Critical issues requiring human intervention
+  - target_stage: Should be null
+  - pipeline_update: Should be null
 
-Remember: You are working autonomously. Process tasks thoroughly and provide detailed reports for the next worker or coordinator.
+PIPELINE MANAGEMENT:
+- Only "planning" workers can extend pipelines by adding new stages
+- Other workers can only move tickets forward/backward in existing pipeline
+- When extending pipeline, provide the complete new pipeline array
+- Pipeline modifications have constraints: cannot modify stages that tickets have already passed through
+
+MCP TOOLS AVAILABLE:
+- get_tickets_by_stage(stage): Get all tickets currently in your stage
+- claim_ticket(ticket_id, worker_id): Claim a ticket for exclusive processing
+- get_ticket(ticket_id): Get full ticket details with all comments
+- add_ticket_comment(ticket_id, worker_type, worker_id, stage_number, content): Add your work report
+- release_ticket(ticket_id, worker_id): Release a claimed ticket (only if needed manually)
+- finish_worker(worker_id, "reason"): Mark yourself as finished and exit (DO NOT USE)
+
+PRIORITY HANDLING:
+Process tickets in order: urgent → high → medium → low
+Focus on completing higher priority tickets before moving to lower priority ones.
+
+Remember: Output ONLY the JSON structure above. No additional commentary or explanation.
 "#,
             worker_id = worker_info.worker_id,
             project_id = worker_info.project_id,
             worker_type = worker_info.worker_type,
-            queue_name = queue_name,
             system_prompt = system_prompt
         )
     }
@@ -317,5 +463,170 @@ Remember: You are working autonomously. Process tasks thoroughly and provide det
             }
             None => Err(anyhow::anyhow!("Worker '{}' not found", worker_id)),
         }
+    }
+
+    async fn monitor_worker_output(
+        state: &AppState,
+        worker_id: &str,
+        worker_type: &str,
+        log_file_path: &str,
+        pid: Option<u32>,
+    ) {
+        info!("Starting output monitoring for worker {}", worker_id);
+
+        let mut last_position = 0;
+        let mut check_interval = tokio::time::interval(Duration::from_secs(2));
+
+        loop {
+            check_interval.tick().await;
+
+            // Check if worker process is still running
+            if let Some(pid) = pid {
+                let is_running = tokio::process::Command::new("kill")
+                    .arg("-0")
+                    .arg(pid.to_string())
+                    .status()
+                    .await
+                    .map(|status| status.success())
+                    .unwrap_or(false);
+
+                if !is_running {
+                    debug!(
+                        "Worker {} process finished, checking final output",
+                        worker_id
+                    );
+                    // Process any remaining output and exit
+                    if let Err(e) = Self::process_new_output(
+                        state,
+                        worker_id,
+                        worker_type,
+                        log_file_path,
+                        &mut last_position,
+                    )
+                    .await
+                    {
+                        error!(
+                            "Failed to process final output for worker {}: {}",
+                            worker_id, e
+                        );
+                    }
+                    break;
+                }
+            }
+
+            // Process new log content
+            if let Err(e) = Self::process_new_output(
+                state,
+                worker_id,
+                worker_type,
+                log_file_path,
+                &mut last_position,
+            )
+            .await
+            {
+                warn!("Failed to process output for worker {}: {}", worker_id, e);
+            }
+        }
+
+        info!("Output monitoring completed for worker {}", worker_id);
+    }
+
+    async fn process_new_output(
+        state: &AppState,
+        worker_id: &str,
+        worker_type: &str,
+        log_file_path: &str,
+        last_position: &mut u64,
+    ) -> Result<()> {
+        let content = tokio::fs::read_to_string(log_file_path).await?;
+
+        if content.len() as u64 > *last_position {
+            let new_content = &content[*last_position as usize..];
+            *last_position = content.len() as u64;
+
+            // Look for JSON array output lines starting with '[{'
+            let lines: Vec<&str> = new_content.lines().collect();
+            for line in lines.iter() {
+                if line.starts_with("[{") {
+                    // This is a JSON array line from Claude Code worker output
+                    // Parse the JSON array and look for assistant messages with outcome
+                    if let Ok(json_array) = serde_json::from_str::<serde_json::Value>(line) {
+                        if let Some(array) = json_array.as_array() {
+                            for item in array {
+                                if let Some(message) = item.get("message") {
+                                    if let Some(content_array) =
+                                        message.get("content").and_then(|c| c.as_array())
+                                    {
+                                        for content_item in content_array {
+                                            if let Some(text) =
+                                                content_item.get("text").and_then(|t| t.as_str())
+                                            {
+                                                if text.contains("\"outcome\"") {
+                                                    // Try to parse as worker output
+                                                    match WorkerOutputProcessor::parse_output(text)
+                                                    {
+                                                        Ok(output) => {
+                                                            info!(
+                                                                "Found worker output for {}: {:?}",
+                                                                worker_id, output.outcome
+                                                            );
+
+                                                            // Find ticket ID from worker output - we need to search for ticket context
+                                                            if let Some(ticket_id) =
+                                                                Self::extract_ticket_id_from_log(
+                                                                    &content,
+                                                                )
+                                                                .await
+                                                            {
+                                                                if let Err(e) = WorkerOutputProcessor::process_output(
+                                                                    state,
+                                                                    &ticket_id,
+                                                                    worker_id,
+                                                                    worker_type,
+                                                                    output,
+                                                                )
+                                                                .await
+                                                                {
+                                                                    error!("Failed to process worker output: {}", e);
+                                                                }
+                                                            } else {
+                                                                debug!("No ticket ID found in worker output for {}", worker_id);
+                                                            }
+                                                            return Ok(()); // Found and processed JSON, exit
+                                                        }
+                                                        Err(_) => {
+                                                            // Not a worker output JSON, continue looking
+                                                        }
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        Ok(())
+    }
+
+    async fn extract_ticket_id_from_log(log_content: &str) -> Option<String> {
+        // Look for ticket ID patterns in the log content
+        if let Some(start) = log_content.find("ticket_id") {
+            let after_start = &log_content[start..];
+            if let Some(colon_pos) = after_start.find(':') {
+                let after_colon = &after_start[colon_pos + 1..];
+                if let Some(quote_start) = after_colon.find('"') {
+                    let after_quote = &after_colon[quote_start + 1..];
+                    if let Some(quote_end) = after_quote.find('"') {
+                        return Some(after_quote[..quote_end].to_string());
+                    }
+                }
+            }
+        }
+        None
     }
 }
