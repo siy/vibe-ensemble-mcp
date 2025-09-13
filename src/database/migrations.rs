@@ -31,7 +31,10 @@ impl MigrationRunner {
         let mut applied_count = 0;
         for migration in migration_files {
             if !applied_versions.contains(&migration.version) {
-                info!("Applying migration {}: {}", migration.version, migration.name);
+                info!(
+                    "Applying migration {}: {}",
+                    migration.version, migration.name
+                );
                 self.apply_migration(&migration).await?;
                 applied_count += 1;
             }
@@ -62,9 +65,10 @@ impl MigrationRunner {
     }
 
     async fn get_applied_migrations(&self) -> Result<Vec<i64>> {
-        let rows = sqlx::query_as::<_, (i64,)>("SELECT version FROM schema_migrations ORDER BY version")
-            .fetch_all(&self.pool)
-            .await?;
+        let rows =
+            sqlx::query_as::<_, (i64,)>("SELECT version FROM schema_migrations ORDER BY version")
+                .fetch_all(&self.pool)
+                .await?;
 
         Ok(rows.into_iter().map(|(version,)| version).collect())
     }
@@ -82,7 +86,7 @@ impl MigrationRunner {
         for entry in entries {
             let entry = entry?;
             let path = entry.path();
-            
+
             if let Some(filename) = path.file_name().and_then(|n| n.to_str()) {
                 if filename.ends_with(".sql") {
                     if let Some(migration) = self.parse_migration_filename(filename)? {
@@ -106,9 +110,9 @@ impl MigrationRunner {
             return Ok(None);
         }
 
-        let version = parts[0].parse::<i64>().map_err(|_| {
-            anyhow::anyhow!("Invalid migration version in filename: {}", filename)
-        })?;
+        let version = parts[0]
+            .parse::<i64>()
+            .map_err(|_| anyhow::anyhow!("Invalid migration version in filename: {}", filename))?;
 
         let name = parts[1].replace('_', " ");
 
@@ -124,17 +128,13 @@ impl MigrationRunner {
         let sql_content = fs::read_to_string(&migration_path)?;
 
         debug!("Executing migration SQL: {}", migration_path);
-        
+
         // Execute the migration SQL
         sqlx::query(&sql_content)
             .execute(&self.pool)
             .await
             .map_err(|e| {
-                anyhow::anyhow!(
-                    "Failed to execute migration {}: {}",
-                    migration_path,
-                    e
-                )
+                anyhow::anyhow!("Failed to execute migration {}: {}", migration_path, e)
             })?;
 
         // Record successful application (unless already recorded by the migration itself)
@@ -143,7 +143,10 @@ impl MigrationRunner {
             .execute(&self.pool)
             .await?;
 
-        info!("Successfully applied migration {}: {}", migration.version, migration.name);
+        info!(
+            "Successfully applied migration {}: {}",
+            migration.version, migration.name
+        );
         Ok(())
     }
 }

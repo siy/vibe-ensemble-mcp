@@ -3,8 +3,8 @@ use serde_json::Value;
 use tracing::{debug, error, info, trace, warn};
 
 use super::{
-    event_tools::*, project_tools::*, ticket_tools::*, tools::ToolRegistry,
-    types::*, worker_tools::*, worker_type_tools::*,
+    event_tools::*, project_tools::*, ticket_tools::*, tools::ToolRegistry, types::*,
+    worker_tools::*, worker_type_tools::*,
 };
 use crate::{error::Result, server::AppState};
 

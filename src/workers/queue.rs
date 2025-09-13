@@ -69,7 +69,12 @@ impl QueueManager {
     }
 
     /// Add task to project-worker type specific queue
-    pub async fn add_task_to_worker_queue(&self, project_id: &str, worker_type: &str, ticket_id: &str) -> Result<String> {
+    pub async fn add_task_to_worker_queue(
+        &self,
+        project_id: &str,
+        worker_type: &str,
+        ticket_id: &str,
+    ) -> Result<String> {
         let queue_name = Self::generate_queue_name(project_id, worker_type);
         self.add_task(&queue_name, ticket_id).await
     }
@@ -94,7 +99,11 @@ impl QueueManager {
     }
 
     /// Get next task from project-worker type specific queue
-    pub async fn get_next_task_from_worker_queue(&self, project_id: &str, worker_type: &str) -> Result<Option<TaskItem>> {
+    pub async fn get_next_task_from_worker_queue(
+        &self,
+        project_id: &str,
+        worker_type: &str,
+    ) -> Result<Option<TaskItem>> {
         let queue_name = Self::generate_queue_name(project_id, worker_type);
         self.get_next_task(&queue_name).await
     }
@@ -149,7 +158,7 @@ impl QueueManager {
     pub async fn get_project_queues(&self, project_id: &str) -> Result<Vec<(String, QueueStatus)>> {
         let queues = self.queues.read().await;
         let mut result = Vec::new();
-        
+
         for (queue_name, queue) in queues.iter() {
             if let Some((queue_project_id, worker_type)) = Self::parse_queue_name(queue_name) {
                 if queue_project_id == project_id {
@@ -165,7 +174,7 @@ impl QueueManager {
                 }
             }
         }
-        
+
         Ok(result)
     }
 

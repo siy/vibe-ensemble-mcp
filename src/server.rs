@@ -12,11 +12,7 @@ use tower_http::{cors::CorsLayer, limit::RequestBodyLimitLayer, trace::TraceLaye
 use tracing::{error, info};
 
 use crate::{
-    config::Config,
-    database::DbPool,
-    error::Result,
-    mcp::server::mcp_handler,
-    sse::sse_handler,
+    config::Config, database::DbPool, error::Result, mcp::server::mcp_handler, sse::sse_handler,
     workers::queue::QueueManager,
 };
 
@@ -44,9 +40,7 @@ pub async fn run_server(config: Config) -> Result<()> {
         config: config.clone(),
         db,
         queue_manager,
-        server_info: ServerInfo {
-            port: config.port,
-        },
+        server_info: ServerInfo { port: config.port },
     };
 
     // Respawn workers for unfinished tasks if enabled
@@ -154,10 +148,7 @@ async fn respawn_workers_for_unfinished_tasks(state: &AppState) -> Result<()> {
                 tickets_recovered += 1;
             }
             Err(e) => {
-                error!(
-                    "Failed to add ticket {} to queue: {}",
-                    ticket_id, e
-                );
+                error!("Failed to add ticket {} to queue: {}", ticket_id, e);
                 continue;
             }
         }
@@ -175,10 +166,7 @@ async fn respawn_workers_for_unfinished_tasks(state: &AppState) -> Result<()> {
             let consumer_key_clone = consumer_key.clone();
             tokio::spawn(async move {
                 if let Err(e) = consumer.start().await {
-                    error!(
-                        "Consumer thread for {} failed: {}",
-                        consumer_key_clone, e
-                    );
+                    error!("Consumer thread for {} failed: {}", consumer_key_clone, e);
                 }
             });
 

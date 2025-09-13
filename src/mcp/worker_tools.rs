@@ -20,7 +20,8 @@ impl ToolHandler for SpawnWorkerTool {
         let worker_type: String = extract_param(&arguments, "worker_type")?;
 
         // Generate standardized queue name
-        let queue_name = crate::workers::queue::QueueManager::generate_queue_name(&project_id, &worker_type);
+        let queue_name =
+            crate::workers::queue::QueueManager::generate_queue_name(&project_id, &worker_type);
 
         let request = SpawnWorkerRequest {
             worker_id: worker_id.clone(),
@@ -32,7 +33,11 @@ impl ToolHandler for SpawnWorkerTool {
         match ProcessManager::spawn_worker(state, request).await {
             Ok(worker_process) => {
                 // Create queue for the worker
-                if let Err(e) = state.queue_manager.create_queue(&project_id, &worker_type).await {
+                if let Err(e) = state
+                    .queue_manager
+                    .create_queue(&project_id, &worker_type)
+                    .await
+                {
                     return Ok(create_error_response(&format!(
                         "Worker spawned but failed to create queue '{}': {}",
                         queue_name, e
