@@ -178,7 +178,7 @@ impl WorkerOutputProcessor {
         // Process based on outcome
         match output.outcome {
             WorkerOutcome::NextStage => {
-                Self::handle_next_stage(state, ticket_id, output).await?;
+                Self::handle_next_stage(state, ticket_id, worker_id, output).await?;
             }
             WorkerOutcome::PrevStage => {
                 Self::handle_prev_stage(state, ticket_id, output).await?;
@@ -194,6 +194,7 @@ impl WorkerOutputProcessor {
     async fn handle_next_stage(
         state: &AppState,
         ticket_id: &str,
+        worker_id: &str,
         output: WorkerOutput,
     ) -> Result<()> {
         let target_stage = output
@@ -255,6 +256,15 @@ impl WorkerOutputProcessor {
 
         // Move ticket to target stage
         Ticket::update_stage(&state.db, ticket_id, &target_stage).await?;
+
+        // Create an event for successful stage completion
+        crate::database::events::Event::create_stage_completed(
+            &state.db,
+            ticket_id,
+            &target_stage,
+            worker_id,
+        )
+        .await?;
 
         // TODO: Auto-spawn worker for the new stage (disabled due to Send constraint)
         // This will be handled by coordinator monitoring instead
