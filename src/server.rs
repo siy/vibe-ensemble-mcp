@@ -126,7 +126,6 @@ async fn respawn_workers_for_unfinished_tasks(state: &AppState) -> Result<()> {
     }
 
     let mut tickets_recovered = 0;
-    let mut consumer_threads_started = std::collections::HashSet::new();
 
     // Step 2: Submit tickets to their appropriate queues and start consumer threads
     for ticket_row in open_tickets {
@@ -134,61 +133,28 @@ async fn respawn_workers_for_unfinished_tasks(state: &AppState) -> Result<()> {
         let project_id: String = ticket_row.get("project_id");
         let current_stage: String = ticket_row.get("current_stage");
 
-        // Create queue for this project-stage combination if needed
+        // Submit ticket to queue - creates queue and consumer if needed
         if let Err(e) = state
             .queue_manager
-            .create_queue(&project_id, &current_stage)
+            .submit_task(&project_id, &current_stage, &ticket_id, &state.db)
             .await
         {
-            error!("Failed to create queue for project={}, stage={}: {}", project_id, current_stage, e);
-            continue;
-        }
-
-        // Add ticket to the appropriate queue
-        if let Err(e) = state
-            .queue_manager
-            .add_task_to_worker_queue(&project_id, &current_stage, &ticket_id)
-            .await
-        {
-            error!("Failed to add ticket {} to queue: {}", ticket_id, e);
+            error!("Failed to submit ticket {} to queue: {}", ticket_id, e);
             continue;
         }
 
         info!(
-            "Added ticket {} to queue for project={}, stage={}",
+            "Submitted ticket {} to queue for project={}, stage={}",
             ticket_id, project_id, current_stage
         );
         tickets_recovered += 1;
 
-        // Start consumer thread for this project-worker type combination if not already started
-        let consumer_key = format!("{}-{}", project_id, current_stage);
-        if !consumer_threads_started.contains(&consumer_key) {
-            let consumer = crate::workers::consumer::WorkerConsumer::new(
-                project_id.clone(),
-                current_stage.clone(),
-                std::sync::Arc::new(state.clone()),
-            );
-
-            // Start consumer in background
-            let consumer_key_clone = consumer_key.clone();
-            tokio::spawn(async move {
-                if let Err(e) = consumer.start().await {
-                    error!("Consumer thread for {} failed: {}", consumer_key_clone, e);
-                }
-            });
-
-            consumer_threads_started.insert(consumer_key);
-            info!(
-                "Started consumer thread for project={}, worker_type={}",
-                project_id, current_stage
-            );
-        }
+        // Consumer thread is automatically created by submit_task if needed
     }
 
     info!(
-        "Ticket recovery completed: {} tickets added to queues, {} consumer threads started",
-        tickets_recovered,
-        consumer_threads_started.len()
+        "Ticket recovery completed: {} tickets recovered",
+        tickets_recovered
     );
 
     Ok(())

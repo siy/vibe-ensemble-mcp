@@ -32,17 +32,7 @@ impl ToolHandler for SpawnWorkerTool {
 
         match ProcessManager::spawn_worker(state, request).await {
             Ok(worker_process) => {
-                // Create queue for the worker
-                if let Err(e) = state
-                    .queue_manager
-                    .create_queue(&project_id, &worker_type)
-                    .await
-                {
-                    return Ok(create_error_response(&format!(
-                        "Worker spawned but failed to create queue '{}': {}",
-                        queue_name, e
-                    )));
-                }
+                // Note: Queue will be automatically created when tasks are submitted
 
                 let response = json!({
                     "worker_id": worker_process.info.worker_id,

@@ -1,13 +1,14 @@
 use anyhow::Result;
-use std::collections::HashMap;
-use tokio::sync::RwLock;
-use tracing::{debug, info, trace};
+use dashmap::DashMap;
+use tokio::sync::mpsc;
+use tracing::{debug, error, info, trace, warn};
 use uuid::Uuid;
 
-use super::types::{QueueRegistry, TaskItem};
+use super::types::TaskItem;
+use crate::database::DbPool;
 
 pub struct QueueManager {
-    queues: QueueRegistry,
+    queues: DashMap<String, mpsc::UnboundedSender<TaskItem>>,
 }
 
 impl Default for QueueManager {
@@ -19,7 +20,7 @@ impl Default for QueueManager {
 impl QueueManager {
     pub fn new() -> Self {
         Self {
-            queues: RwLock::new(HashMap::new()),
+            queues: DashMap::new(),
         }
     }
 
@@ -28,80 +29,21 @@ impl QueueManager {
         format!("{}-{}-queue", project_id, worker_type)
     }
 
-    /// Parse queue name to extract project_id and worker_type
-    pub fn parse_queue_name(queue_name: &str) -> Option<(String, String)> {
-        if let Some(name_without_suffix) = queue_name.strip_suffix("-queue") {
-            if let Some(dash_pos) = name_without_suffix.rfind('-') {
-                let project_id = name_without_suffix[..dash_pos].to_string();
-                let worker_type = name_without_suffix[dash_pos + 1..].to_string();
-                return Some((project_id, worker_type));
-            }
-        }
-        None
-    }
-
-    pub async fn create_queue(&self, project_id: &str, worker_type: &str) -> Result<String> {
-        let queue_name = Self::generate_queue_name(project_id, worker_type);
-        trace!(
-            "[QueueManager] create_queue called: project_id={}, worker_type={}, queue_name={}",
-            project_id,
-            worker_type,
-            queue_name
-        );
-        info!("Creating queue: {}", queue_name);
-
-        let mut queues = self.queues.write().await;
-        trace!("[QueueManager] Acquired write lock for queue creation");
-
-        if !queues.contains_key(&queue_name) {
-            queues.insert(queue_name.clone(), RwLock::new(Vec::new()));
-            info!("Queue '{}' created", queue_name);
-            trace!(
-                "[QueueManager] Queue '{}' successfully inserted into registry",
-                queue_name
-            );
-        } else {
-            debug!("Queue '{}' already exists", queue_name);
-            trace!(
-                "[QueueManager] Queue '{}' already exists, skipping creation",
-                queue_name
-            );
-        }
-
-        Ok(queue_name)
-    }
-
-    pub async fn delete_queue(&self, queue_name: &str) -> Result<bool> {
-        info!("Deleting queue: {}", queue_name);
-
-        let mut queues = self.queues.write().await;
-        let removed = queues.remove(queue_name).is_some();
-
-        if removed {
-            info!("Queue '{}' deleted", queue_name);
-        }
-
-        Ok(removed)
-    }
-
-    /// Add task to project-worker type specific queue
-    pub async fn add_task_to_worker_queue(
+    /// Submit task to worker queue - creates queue and spawns consumer if needed
+    pub async fn submit_task(
         &self,
         project_id: &str,
         worker_type: &str,
         ticket_id: &str,
+        db: &DbPool,
     ) -> Result<String> {
         let queue_name = Self::generate_queue_name(project_id, worker_type);
-        trace!("[QueueManager] add_task_to_worker_queue called: project_id={}, worker_type={}, ticket_id={}, resolved_queue_name={}", 
-               project_id, worker_type, ticket_id, queue_name);
-        self.add_task(&queue_name, ticket_id).await
-    }
-
-    pub async fn add_task(&self, queue_name: &str, ticket_id: &str) -> Result<String> {
         let task_id = Uuid::new_v4().to_string();
+
         trace!(
-            "[QueueManager] add_task called: queue_name={}, ticket_id={}, generated_task_id={}",
-            queue_name,
+            "[QueueManager] submit_task: project_id={}, worker_type={}, ticket_id={}, task_id={}",
+            project_id,
+            worker_type,
             ticket_id,
             task_id
         );
@@ -111,166 +53,326 @@ impl QueueManager {
             ticket_id: ticket_id.to_string(),
             created_at: chrono::Utc::now(),
         };
-        trace!("[QueueManager] Created task item: {:?}", task);
 
-        let queues = self.queues.read().await;
-        trace!("[QueueManager] Acquired read lock for queue registry");
+        // Get or create queue with consumer
+        let sender = self
+            .get_or_create_queue(&queue_name, project_id, worker_type, db)
+            .await?;
 
-        if let Some(queue) = queues.get(queue_name) {
-            trace!(
-                "[QueueManager] Found queue '{}', acquiring write lock",
-                queue_name
-            );
-            let mut queue_items = queue.write().await;
-            let queue_size_before = queue_items.len();
-            queue_items.push(task);
-            let queue_size_after = queue_items.len();
-
-            info!("Task {} added to queue {}", task_id, queue_name);
-            trace!(
-                "[QueueManager] Task added successfully: queue_size {} -> {}",
-                queue_size_before,
-                queue_size_after
-            );
-            Ok(task_id)
-        } else {
-            trace!(
-                "[QueueManager] Queue '{}' not found in registry",
-                queue_name
-            );
-            Err(anyhow::anyhow!("Queue '{}' not found", queue_name))
+        // Send task to queue
+        if sender.send(task).is_err() {
+            return Err(anyhow::anyhow!("Queue {} is closed", queue_name));
         }
+
+        info!(
+            "[QueueManager] Task {} submitted to queue {}",
+            task_id, queue_name
+        );
+        Ok(task_id)
     }
 
-    /// Get next task from project-worker type specific queue
-    pub async fn get_next_task_from_worker_queue(
+    /// Get existing queue sender or create new queue with consumer
+    async fn get_or_create_queue(
         &self,
+        queue_name: &str,
         project_id: &str,
         worker_type: &str,
-    ) -> Result<Option<TaskItem>> {
-        let queue_name = Self::generate_queue_name(project_id, worker_type);
-        trace!("[QueueManager] get_next_task_from_worker_queue called: project_id={}, worker_type={}, resolved_queue_name={}", 
-               project_id, worker_type, queue_name);
-        self.get_next_task(&queue_name).await
-    }
+        db: &DbPool,
+    ) -> Result<mpsc::UnboundedSender<TaskItem>> {
+        // Check if queue already exists
+        if let Some(sender) = self.queues.get(queue_name) {
+            trace!("[QueueManager] Using existing queue: {}", queue_name);
+            return Ok(sender.clone());
+        }
 
-    pub async fn get_next_task(&self, queue_name: &str) -> Result<Option<TaskItem>> {
-        trace!(
-            "[QueueManager] get_next_task called: queue_name={}",
+        // Create new queue and consumer
+        info!(
+            "[QueueManager] Creating new queue and consumer: {}",
             queue_name
         );
+        let (sender, receiver) = mpsc::unbounded_channel();
 
-        let queues = self.queues.read().await;
-        trace!("[QueueManager] Acquired read lock for queue registry");
+        // Insert sender into map
+        self.queues.insert(queue_name.to_string(), sender.clone());
 
-        if let Some(queue) = queues.get(queue_name) {
-            trace!(
-                "[QueueManager] Found queue '{}', acquiring write lock",
-                queue_name
+        // Spawn consumer thread
+        let queue_name_clone = queue_name.to_string();
+        let project_id_clone = project_id.to_string();
+        let worker_type_clone = worker_type.to_string();
+
+        let db_clone = db.clone();
+        let queue_name_for_error = queue_name_clone.clone();
+        tokio::spawn(async move {
+            let consumer = WorkerConsumer::new(
+                project_id_clone,
+                worker_type_clone,
+                queue_name_clone,
+                receiver,
+                db_clone,
             );
-            let mut queue_items = queue.write().await;
-            let queue_size_before = queue_items.len();
-            trace!(
-                "[QueueManager] Queue '{}' current size: {}",
-                queue_name,
-                queue_size_before
-            );
 
-            if queue_items.is_empty() {
-                trace!(
-                    "[QueueManager] Queue '{}' is empty, returning None",
-                    queue_name
-                );
-                Ok(None)
-            } else {
-                let task = queue_items.remove(0);
-                let queue_size_after = queue_items.len();
-                debug!("Task {} retrieved from queue {}", task.task_id, queue_name);
-                trace!(
-                    "[QueueManager] Task retrieved: {:?}, queue_size {} -> {}",
-                    task,
-                    queue_size_before,
-                    queue_size_after
-                );
-                Ok(Some(task))
+            if let Err(e) = consumer.start().await {
+                error!("Consumer failed for queue {}: {}", queue_name_for_error, e);
             }
-        } else {
-            trace!(
-                "[QueueManager] Queue '{}' not found in registry",
-                queue_name
-            );
-            Err(anyhow::anyhow!("Queue '{}' not found", queue_name))
-        }
+        });
+
+        info!("[QueueManager] Started consumer for queue: {}", queue_name);
+        Ok(sender)
     }
 
-    pub async fn get_queue_status(&self, queue_name: &str) -> Result<Option<QueueStatus>> {
-        let queues = self.queues.read().await;
-        if let Some(queue) = queues.get(queue_name) {
-            let queue_items = queue.read().await;
-            Ok(Some(QueueStatus {
-                queue_name: queue_name.to_string(),
-                task_count: queue_items.len(),
-                tasks: queue_items.clone(),
-            }))
-        } else {
-            Ok(None)
-        }
+    /// Get queue statistics (for monitoring)
+    pub fn get_queue_count(&self) -> usize {
+        self.queues.len()
     }
 
-    pub async fn list_queues(&self) -> Result<Vec<QueueStatus>> {
-        let queues = self.queues.read().await;
-        let mut result = Vec::new();
-
-        for (queue_name, queue) in queues.iter() {
-            let queue_items = queue.read().await;
-            result.push(QueueStatus {
-                queue_name: queue_name.clone(),
-                task_count: queue_items.len(),
-                tasks: queue_items.clone(),
-            });
-        }
-
-        Ok(result)
-    }
-
-    /// Get all queues for a specific project
-    pub async fn get_project_queues(&self, project_id: &str) -> Result<Vec<(String, QueueStatus)>> {
-        let queues = self.queues.read().await;
-        let mut result = Vec::new();
-
-        for (queue_name, queue) in queues.iter() {
-            if let Some((queue_project_id, worker_type)) = Self::parse_queue_name(queue_name) {
-                if queue_project_id == project_id {
-                    let queue_items = queue.read().await;
-                    result.push((
-                        worker_type,
-                        QueueStatus {
-                            queue_name: queue_name.clone(),
-                            task_count: queue_items.len(),
-                            tasks: queue_items.clone(),
-                        },
-                    ));
-                }
-            }
-        }
-
-        Ok(result)
-    }
-
-    pub async fn get_queue_tasks(&self, queue_name: &str) -> Result<Vec<TaskItem>> {
-        let queues = self.queues.read().await;
-        if let Some(queue) = queues.get(queue_name) {
-            let queue_items = queue.read().await;
-            Ok(queue_items.clone())
-        } else {
-            Err(anyhow::anyhow!("Queue '{}' not found", queue_name))
-        }
+    /// List all active queue names
+    pub fn list_queue_names(&self) -> Vec<String> {
+        self.queues
+            .iter()
+            .map(|entry| entry.key().clone())
+            .collect()
     }
 }
 
-#[derive(Debug, Clone, serde::Serialize)]
-pub struct QueueStatus {
-    pub queue_name: String,
-    pub task_count: usize,
-    pub tasks: Vec<TaskItem>,
+/// Simplified consumer that processes tasks from mpsc channel
+struct WorkerConsumer {
+    project_id: String,
+    worker_type: String,
+    queue_name: String,
+    receiver: mpsc::UnboundedReceiver<TaskItem>,
+    db: DbPool,
+}
+
+impl WorkerConsumer {
+    fn new(
+        project_id: String,
+        worker_type: String,
+        queue_name: String,
+        receiver: mpsc::UnboundedReceiver<TaskItem>,
+        db: DbPool,
+    ) -> Self {
+        Self {
+            project_id,
+            worker_type,
+            queue_name,
+            receiver,
+            db,
+        }
+    }
+
+    async fn start(mut self) -> Result<()> {
+        info!(
+            "[WorkerConsumer] Starting consumer for {}-{} (queue: {})",
+            self.project_id, self.worker_type, self.queue_name
+        );
+
+        while let Some(task) = self.receiver.recv().await {
+            trace!(
+                "[WorkerConsumer] Received task {} for ticket {}",
+                task.task_id,
+                task.ticket_id
+            );
+
+            if let Err(e) = self.process_task(&task).await {
+                error!("Failed to process task {}: {}", task.task_id, e);
+                // Continue processing other tasks even if one fails
+            }
+        }
+
+        info!(
+            "[WorkerConsumer] Consumer shut down for queue: {}",
+            self.queue_name
+        );
+        Ok(())
+    }
+
+    async fn process_task(&self, task: &TaskItem) -> Result<()> {
+        trace!(
+            "[WorkerConsumer] Processing task {} for ticket {}",
+            task.task_id,
+            task.ticket_id
+        );
+
+        // Claim the ticket
+        if !self.claim_ticket(&task.ticket_id).await? {
+            debug!(
+                "Ticket {} already claimed by another worker",
+                task.ticket_id
+            );
+            return Ok(());
+        }
+
+        info!(
+            "[WorkerConsumer] Processing ticket {} with worker type {}",
+            task.ticket_id, self.worker_type
+        );
+
+        // For now, use placeholder worker logic
+        let worker_result = self.simulate_worker(&task.ticket_id).await;
+
+        match worker_result {
+            Ok(output) => {
+                info!(
+                    "Worker completed successfully for ticket {}",
+                    task.ticket_id
+                );
+                self.handle_worker_success(&task.ticket_id, &output).await?;
+            }
+            Err(e) => {
+                error!("Worker failed for ticket {}: {}", task.ticket_id, e);
+                self.handle_worker_failure(&task.ticket_id, &e.to_string())
+                    .await?;
+            }
+        }
+
+        Ok(())
+    }
+
+    async fn claim_ticket(&self, ticket_id: &str) -> Result<bool> {
+        use crate::database::tickets::Ticket;
+
+        let worker_id = format!(
+            "consumer-{}-{}",
+            self.worker_type,
+            &Uuid::new_v4().to_string()[..8]
+        );
+
+        trace!(
+            "[WorkerConsumer] Attempting to claim ticket {} with worker {}",
+            ticket_id,
+            worker_id
+        );
+        let updated = Ticket::claim_for_processing(&self.db, ticket_id, &worker_id).await?;
+
+        Ok(updated > 0)
+    }
+
+    async fn simulate_worker(&self, ticket_id: &str) -> Result<WorkerOutput> {
+        // Placeholder worker implementation
+        info!(
+            "Simulating worker for ticket {} - placeholder implementation",
+            ticket_id
+        );
+
+        Ok(WorkerOutput {
+            outcome: "next_stage".to_string(),
+            target_stage: Some("completed".to_string()),
+            comment: format!(
+                "Processed ticket {} with worker type {}",
+                ticket_id, self.worker_type
+            ),
+            reason: "Placeholder implementation".to_string(),
+        })
+    }
+
+    async fn handle_worker_success(&self, ticket_id: &str, output: &WorkerOutput) -> Result<()> {
+        use crate::database::tickets::Ticket;
+
+        match output.outcome.as_str() {
+            "next_stage" => {
+                if let Some(target_stage) = &output.target_stage {
+                    trace!(
+                        "[WorkerConsumer] Transitioning ticket {} to stage {}",
+                        ticket_id,
+                        target_stage
+                    );
+
+                    // Update ticket stage
+                    Ticket::update_stage(&self.db, ticket_id, target_stage).await?;
+
+                    // Add comment
+                    crate::database::comments::Comment::create(
+                        &self.db,
+                        ticket_id,
+                        Some(&self.worker_type),
+                        None,
+                        None,
+                        &format!("Stage completed: {}", output.comment),
+                    )
+                    .await?;
+
+                    // Submit to next stage queue
+                    // Note: Cannot submit to next stage from here without QueueManager reference
+                    // This will need to be handled differently in the new architecture
+
+                    info!(
+                        "[WorkerConsumer] Ticket {} moved to stage {}",
+                        ticket_id, target_stage
+                    );
+                }
+            }
+            "coordinator_attention" => {
+                trace!(
+                    "[WorkerConsumer] Processing coordinator_attention outcome for ticket {}",
+                    ticket_id
+                );
+                
+                // Put ticket on hold
+                Ticket::update_state(&self.db, ticket_id, "on_hold").await?;
+                
+                // Create coordinator attention event using the reason field
+                crate::database::events::Event::create(
+                    &self.db,
+                    "coordinator_attention",
+                    Some(ticket_id),
+                    None,
+                    Some(&self.worker_type),
+                    Some(&output.reason),
+                ).await?;
+                
+                // Add comment about coordinator attention
+                crate::database::comments::Comment::create(
+                    &self.db,
+                    ticket_id,
+                    Some(&self.worker_type),
+                    None,
+                    None,
+                    &format!("Coordinator attention required: {}", output.comment),
+                )
+                .await?;
+                
+                warn!(
+                    "Ticket {} requires coordinator attention: {}",
+                    ticket_id, output.reason
+                );
+            }
+            _ => {
+                warn!("Unknown worker outcome: {}", output.outcome);
+            }
+        }
+
+        Ok(())
+    }
+
+    async fn handle_worker_failure(&self, ticket_id: &str, error: &str) -> Result<()> {
+        use crate::database::tickets::Ticket;
+
+        // Put ticket on hold
+        Ticket::update_state(&self.db, ticket_id, "on_hold").await?;
+
+        // Create event
+        crate::database::events::Event::create(
+            &self.db,
+            "worker_failure",
+            Some(ticket_id),
+            None,
+            Some(&self.worker_type),
+            Some(error),
+        )
+        .await?;
+
+        warn!(
+            "Ticket {} put on hold due to worker failure: {}",
+            ticket_id, error
+        );
+        Ok(())
+    }
+}
+
+#[derive(Debug, Clone)]
+struct WorkerOutput {
+    pub outcome: String,
+    pub target_stage: Option<String>,
+    pub comment: String,
+    pub reason: String,
 }

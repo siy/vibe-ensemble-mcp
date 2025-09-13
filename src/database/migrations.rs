@@ -1,7 +1,6 @@
 use anyhow::Result;
 use sqlx::sqlite::SqlitePool;
-use std::fs;
-use tracing::{debug, info, warn};
+use tracing::{debug, info};
 
 pub struct MigrationRunner {
     pool: SqlitePool,
@@ -74,67 +73,35 @@ impl MigrationRunner {
     }
 
     fn discover_migrations(&self) -> Result<Vec<Migration>> {
-        let migrations_dir = "migrations";
-        let mut migrations = Vec::new();
-
-        if !std::path::Path::new(migrations_dir).exists() {
-            warn!("Migrations directory '{}' does not exist", migrations_dir);
-            return Ok(migrations);
-        }
-
-        let entries = fs::read_dir(migrations_dir)?;
-        for entry in entries {
-            let entry = entry?;
-            let path = entry.path();
-
-            if let Some(filename) = path.file_name().and_then(|n| n.to_str()) {
-                if filename.ends_with(".sql") {
-                    if let Some(migration) = self.parse_migration_filename(filename)? {
-                        migration.validate_file_exists(&path)?;
-                        migrations.push(migration);
-                    }
-                }
-            }
-        }
+        // Embed migration files directly in binary to avoid path issues
+        let migrations = vec![
+            Migration {
+                version: 1,
+                name: "initial schema".to_string(),
+                content: include_str!("../../migrations/001_initial_schema.sql").to_string(),
+            },
+            Migration {
+                version: 2,
+                name: "expand event types".to_string(),
+                content: include_str!("../../migrations/002_expand_event_types.sql").to_string(),
+            },
+        ];
 
         Ok(migrations)
     }
 
-    fn parse_migration_filename(&self, filename: &str) -> Result<Option<Migration>> {
-        // Expected format: 001_initial_schema.sql
-        let stem = filename.strip_suffix(".sql").unwrap_or(filename);
-        let parts: Vec<&str> = stem.splitn(2, '_').collect();
-
-        if parts.len() != 2 {
-            debug!("Skipping invalid migration filename: {}", filename);
-            return Ok(None);
-        }
-
-        let version = parts[0]
-            .parse::<i64>()
-            .map_err(|_| anyhow::anyhow!("Invalid migration version in filename: {}", filename))?;
-
-        let name = parts[1].replace('_', " ");
-
-        Ok(Some(Migration {
-            version,
-            name,
-            filename: filename.to_string(),
-        }))
-    }
-
     async fn apply_migration(&self, migration: &Migration) -> Result<()> {
-        let migration_path = format!("migrations/{}", migration.filename);
-        let sql_content = fs::read_to_string(&migration_path)?;
-
-        debug!("Executing migration SQL: {}", migration_path);
+        debug!(
+            "Executing migration {}: {}",
+            migration.version, migration.name
+        );
 
         // Execute the migration SQL
-        sqlx::query(&sql_content)
+        sqlx::query(&migration.content)
             .execute(&self.pool)
             .await
             .map_err(|e| {
-                anyhow::anyhow!("Failed to execute migration {}: {}", migration_path, e)
+                anyhow::anyhow!("Failed to execute migration {}: {}", migration.version, e)
             })?;
 
         // Record successful application (unless already recorded by the migration itself)
@@ -155,14 +122,5 @@ impl MigrationRunner {
 struct Migration {
     version: i64,
     name: String,
-    filename: String,
-}
-
-impl Migration {
-    fn validate_file_exists(&self, path: &std::path::Path) -> Result<()> {
-        if !path.exists() {
-            return Err(anyhow::anyhow!("Migration file does not exist: {:?}", path));
-        }
-        Ok(())
-    }
+    content: String,
 }
