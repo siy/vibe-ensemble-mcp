@@ -18,19 +18,21 @@ impl ToolHandler for SpawnWorkerTool {
         let worker_id: String = extract_param(&arguments, "worker_id")?;
         let project_id: String = extract_param(&arguments, "project_id")?;
         let worker_type: String = extract_param(&arguments, "worker_type")?;
-        let queue_name: String = extract_param(&arguments, "queue_name")?;
+
+        // Generate standardized queue name
+        let queue_name = crate::workers::queue::QueueManager::generate_queue_name(&project_id, &worker_type);
 
         let request = SpawnWorkerRequest {
             worker_id: worker_id.clone(),
-            project_id,
-            worker_type,
+            project_id: project_id.clone(),
+            worker_type: worker_type.clone(),
             queue_name: queue_name.clone(),
         };
 
         match ProcessManager::spawn_worker(state, request).await {
             Ok(worker_process) => {
-                // Create queue for the worker (using the specified queue name)
-                if let Err(e) = state.queue_manager.create_queue(&queue_name).await {
+                // Create queue for the worker
+                if let Err(e) = state.queue_manager.create_queue(&project_id, &worker_type).await {
                     return Ok(create_error_response(&format!(
                         "Worker spawned but failed to create queue '{}': {}",
                         queue_name, e
@@ -58,7 +60,7 @@ impl ToolHandler for SpawnWorkerTool {
     fn definition(&self) -> Tool {
         Tool {
             name: "spawn_worker".to_string(),
-            description: "Spawn a new worker process with a specific queue for task management"
+            description: "Spawn a new worker process with automatically generated queue for project-worker type coordination"
                 .to_string(),
             input_schema: json!({
                 "type": "object",
@@ -73,14 +75,10 @@ impl ToolHandler for SpawnWorkerTool {
                     },
                     "worker_type": {
                         "type": "string",
-                        "description": "Worker type identifier"
-                    },
-                    "queue_name": {
-                        "type": "string",
-                        "description": "Queue name for this worker to pull tasks from (e.g., 'development', 'testing', 'review')"
+                        "description": "Worker type identifier (e.g., 'designer', 'implementer', 'tester')"
                     }
                 },
-                "required": ["worker_id", "project_id", "worker_type", "queue_name"]
+                "required": ["worker_id", "project_id", "worker_type"]
             }),
         }
     }

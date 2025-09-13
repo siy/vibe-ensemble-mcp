@@ -11,11 +11,12 @@ pub struct CreateQueueTool;
 #[async_trait]
 impl ToolHandler for CreateQueueTool {
     async fn call(&self, state: &AppState, arguments: Option<Value>) -> Result<CallToolResponse> {
-        let queue_name: String = extract_param(&arguments, "queue_name")?;
+        let project_id: String = extract_param(&arguments, "project_id")?;
+        let worker_type: String = extract_param(&arguments, "worker_type")?;
 
-        info!("Creating queue: {}", queue_name);
+        info!("Creating queue for project: {}, worker_type: {}", project_id, worker_type);
 
-        state.queue_manager.create_queue(&queue_name).await?;
+        let queue_name = state.queue_manager.create_queue(&project_id, &worker_type).await?;
 
         Ok(create_success_response(&format!(
             "Queue '{}' created successfully",
@@ -26,16 +27,20 @@ impl ToolHandler for CreateQueueTool {
     fn definition(&self) -> Tool {
         Tool {
             name: "create_queue".to_string(),
-            description: "Create a new task queue for workers".to_string(),
+            description: "Create a new task queue for a specific project and worker type".to_string(),
             input_schema: json!({
                 "type": "object",
                 "properties": {
-                    "queue_name": {
+                    "project_id": {
                         "type": "string",
-                        "description": "Name of the queue to create"
+                        "description": "ID of the project"
+                    },
+                    "worker_type": {
+                        "type": "string",
+                        "description": "Type of worker (e.g., 'designer', 'implementer', 'tester')"
                     }
                 },
-                "required": ["queue_name"]
+                "required": ["project_id", "worker_type"]
             }),
         }
     }
