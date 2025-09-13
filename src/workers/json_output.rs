@@ -13,6 +13,7 @@ use crate::{
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct WorkerOutput {
+    pub ticket_id: Option<String>,
     pub outcome: WorkerOutcome,
     pub target_stage: Option<String>,
     pub pipeline_update: Option<Vec<String>>,
@@ -153,18 +154,24 @@ impl WorkerOutputProcessor {
     /// Process the parsed worker output and take appropriate actions
     pub async fn process_output(
         state: &AppState,
-        ticket_id: &str,
+        external_ticket_id: &str, // Used as fallback when worker output doesn't include ticket_id
         worker_id: &str,
         worker_type: &str,
         output: WorkerOutput,
     ) -> Result<()> {
+        // Use ticket ID from worker output if provided, otherwise fallback to external parameter
+        let ticket_id = output
+            .ticket_id
+            .clone()
+            .unwrap_or_else(|| external_ticket_id.to_string());
+
         info!(
             "Processing worker output for ticket {}: outcome={:?}, target_stage={:?}",
             ticket_id, output.outcome, output.target_stage
         );
 
         // First, validate that the ticket exists
-        let ticket_exists = Ticket::get_by_id(&state.db, ticket_id).await?.is_some();
+        let ticket_exists = Ticket::get_by_id(&state.db, &ticket_id).await?.is_some();
 
         if !ticket_exists {
             return Err(anyhow::anyhow!("Ticket '{}' not found", ticket_id));
@@ -185,13 +192,13 @@ impl WorkerOutputProcessor {
         // Process based on outcome
         match output.outcome {
             WorkerOutcome::NextStage => {
-                Self::handle_next_stage(state, ticket_id, worker_id, output).await?;
+                Self::handle_next_stage(state, &ticket_id, worker_id, output).await?;
             }
             WorkerOutcome::PrevStage => {
-                Self::handle_prev_stage(state, ticket_id, output).await?;
+                Self::handle_prev_stage(state, &ticket_id, output).await?;
             }
             WorkerOutcome::CoordinatorAttention => {
-                Self::handle_coordinator_attention(state, ticket_id, output).await?;
+                Self::handle_coordinator_attention(state, &ticket_id, output).await?;
             }
         }
 
