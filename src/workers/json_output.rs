@@ -200,15 +200,7 @@ impl WorkerOutputProcessor {
             .target_stage
             .ok_or_else(|| anyhow::anyhow!("next_stage outcome requires target_stage"))?;
 
-        // Validate that the target stage has a registered worker type
-        Self::validate_target_stage(state, ticket_id, &target_stage).await?;
-
-        info!(
-            "Moving ticket {} to next stage: {}",
-            ticket_id, target_stage
-        );
-
-        // Update pipeline if provided - validate all stages in the new pipeline
+        // Update pipeline FIRST if provided - this allows worker types to be created during planning
         if let Some(new_pipeline) = &output.pipeline_update {
             info!(
                 "Updating pipeline for ticket {} to: {:?}",
@@ -249,6 +241,14 @@ impl WorkerOutputProcessor {
             .execute(&state.db)
             .await?;
         }
+
+        // Now validate that the target stage has a registered worker type
+        Self::validate_target_stage(state, ticket_id, &target_stage).await?;
+
+        info!(
+            "Moving ticket {} to next stage: {}",
+            ticket_id, target_stage
+        );
 
         // Release ticket from current worker (if claimed)
         Self::release_ticket_if_claimed(state, ticket_id).await?;
