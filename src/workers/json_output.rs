@@ -160,10 +160,12 @@ impl WorkerOutputProcessor {
         output: WorkerOutput,
     ) -> Result<()> {
         // Use ticket ID from worker output if provided, otherwise fallback to external parameter
+        // Sanitize external ticket ID by removing trailing backslashes that cause parsing issues
+        let sanitized_external_id = external_ticket_id.trim_end_matches('\\');
         let ticket_id = output
             .ticket_id
             .clone()
-            .unwrap_or_else(|| external_ticket_id.to_string());
+            .unwrap_or_else(|| sanitized_external_id.to_string());
 
         info!(
             "Processing worker output for ticket {}: outcome={:?}, target_stage={:?}",
