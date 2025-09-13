@@ -92,7 +92,7 @@ impl ToolHandler for GetTicketsByStageTool {
         let tickets = sqlx::query_as::<_, Ticket>(
             r#"
             SELECT ticket_id, project_id, title, execution_plan, current_stage, state, priority,
-                   created_at, updated_at, closed_at
+                   processing_worker_id, created_at, updated_at, closed_at
             FROM tickets
             WHERE current_stage = ?1 AND state = 'open'
             ORDER BY 

@@ -13,6 +13,7 @@ pub struct Ticket {
     pub current_stage: String,
     pub state: String,
     pub priority: String,
+    pub processing_worker_id: Option<String>,
     pub created_at: String,
     pub updated_at: String,
     pub closed_at: Option<String>,
@@ -50,7 +51,7 @@ impl Ticket {
             INSERT INTO tickets (ticket_id, project_id, title, execution_plan, current_stage, state, priority)
             VALUES (?1, ?2, ?3, ?4, 'planning', 'open', 'medium')
             RETURNING ticket_id, project_id, title, execution_plan, current_stage, state, priority,
-                     created_at, updated_at, closed_at
+                     processing_worker_id, created_at, updated_at, closed_at
         "#,
         )
         .bind(&req.ticket_id)
@@ -80,7 +81,7 @@ impl Ticket {
         let ticket = sqlx::query_as::<_, Ticket>(
             r#"
             SELECT ticket_id, project_id, title, execution_plan, current_stage, state, priority,
-                   created_at, updated_at, closed_at
+                   processing_worker_id, created_at, updated_at, closed_at
             FROM tickets
             WHERE ticket_id = ?1
         "#,
@@ -106,7 +107,7 @@ impl Ticket {
         let mut query = String::from(
             r#"
             SELECT ticket_id, project_id, title, execution_plan, current_stage, state, priority,
-                   created_at, updated_at, closed_at
+                   processing_worker_id, created_at, updated_at, closed_at
             FROM tickets
         "#,
         );
@@ -158,7 +159,7 @@ impl Ticket {
             SET current_stage = ?1, updated_at = datetime('now')
             WHERE ticket_id = ?2
             RETURNING ticket_id, project_id, title, execution_plan, current_stage, state, priority,
-                     created_at, updated_at, closed_at
+                     processing_worker_id, created_at, updated_at, closed_at
         "#,
         )
         .bind(new_stage)
@@ -183,7 +184,7 @@ impl Ticket {
             SET current_stage = ?1, state = 'closed', updated_at = datetime('now'), closed_at = datetime('now')
             WHERE ticket_id = ?2
             RETURNING ticket_id, project_id, title, execution_plan, current_stage, state, priority,
-                     created_at, updated_at, closed_at
+                     processing_worker_id, created_at, updated_at, closed_at
         "#,
         )
         .bind(status)
@@ -251,7 +252,7 @@ impl Ticket {
             SET state = ?1, updated_at = datetime('now')
             WHERE ticket_id = ?2
             RETURNING ticket_id, project_id, title, execution_plan, current_stage, state, priority,
-                     created_at, updated_at, closed_at
+                     processing_worker_id, created_at, updated_at, closed_at
         "#,
         )
         .bind(state)
@@ -273,7 +274,7 @@ impl Ticket {
             SET priority = ?1, updated_at = datetime('now')
             WHERE ticket_id = ?2
             RETURNING ticket_id, project_id, title, execution_plan, current_stage, state, priority,
-                     created_at, updated_at, closed_at
+                     processing_worker_id, created_at, updated_at, closed_at
         "#,
         )
         .bind(priority)

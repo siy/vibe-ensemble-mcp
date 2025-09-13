@@ -98,6 +98,11 @@ async fn create_tickets_table(pool: &SqlitePool) -> Result<()> {
         .execute(pool)
         .await;
 
+    // Migration: Add processing_worker_id column for ticket claiming functionality
+    let _ = sqlx::query("ALTER TABLE tickets ADD COLUMN processing_worker_id TEXT")
+        .execute(pool)
+        .await;
+
     Ok(())
 }
 
