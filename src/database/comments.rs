@@ -25,7 +25,33 @@ pub struct CreateCommentRequest {
 }
 
 impl Comment {
-    pub async fn create(pool: &DbPool, req: CreateCommentRequest) -> Result<Comment> {
+    pub async fn create(
+        pool: &DbPool,
+        ticket_id: &str,
+        worker_type: Option<&str>,
+        worker_id: Option<&str>,
+        stage_number: Option<i32>,
+        content: &str,
+    ) -> Result<Comment> {
+        let comment = sqlx::query_as::<_, Comment>(
+            r#"
+            INSERT INTO comments (ticket_id, worker_type, worker_id, stage_number, content)
+            VALUES (?1, ?2, ?3, ?4, ?5)
+            RETURNING id, ticket_id, worker_type, worker_id, stage_number, content, created_at
+        "#,
+        )
+        .bind(ticket_id)
+        .bind(worker_type)
+        .bind(worker_id)
+        .bind(stage_number)
+        .bind(content)
+        .fetch_one(pool)
+        .await?;
+
+        Ok(comment)
+    }
+
+    pub async fn create_from_request(pool: &DbPool, req: CreateCommentRequest) -> Result<Comment> {
         let comment = sqlx::query_as::<_, Comment>(
             r#"
             INSERT INTO comments (ticket_id, worker_type, worker_id, stage_number, content)

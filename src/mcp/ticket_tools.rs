@@ -244,7 +244,7 @@ impl ToolHandler for AddTicketCommentTool {
             content: content.clone(),
         };
 
-        let comment = Comment::create(&state.db, req).await?;
+        let comment = Comment::create_from_request(&state.db, req).await?;
 
         Ok(CallToolResponse {
             content: vec![ToolContent {

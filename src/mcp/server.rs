@@ -3,7 +3,7 @@ use serde_json::Value;
 use tracing::{debug, error, info, trace, warn};
 
 use super::{
-    event_tools::*, project_tools::*, queue_tools::*, ticket_tools::*, tools::ToolRegistry,
+    event_tools::*, project_tools::*, ticket_tools::*, tools::ToolRegistry,
     types::*, worker_tools::*, worker_type_tools::*,
 };
 use crate::{error::Result, server::AppState};
@@ -42,12 +42,6 @@ impl McpServer {
         tools.register(GetWorkerTypeTool);
         tools.register(UpdateWorkerTypeTool);
         tools.register(DeleteWorkerTypeTool);
-
-        // Register queue management tools
-        tools.register(CreateQueueTool);
-        tools.register(ListQueuesTool);
-        tools.register(GetQueueStatusTool);
-        tools.register(DeleteQueueTool);
 
         // Register ticket management tools
         tools.register(CreateTicketTool);

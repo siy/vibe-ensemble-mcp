@@ -9,15 +9,15 @@ use serde_json::{json, Value};
 use sqlx::Row;
 use std::sync::Arc;
 use tower_http::{cors::CorsLayer, limit::RequestBodyLimitLayer, trace::TraceLayer};
-use tracing::{error, info, warn};
+use tracing::{error, info};
 
 use crate::{
     config::Config,
-    database::{workers::Worker, DbPool},
+    database::DbPool,
     error::Result,
     mcp::server::mcp_handler,
     sse::sse_handler,
-    workers::{process::ProcessManager, queue::QueueManager, types::SpawnWorkerRequest},
+    workers::queue::QueueManager,
 };
 
 #[derive(Clone)]
@@ -25,6 +25,12 @@ pub struct AppState {
     pub config: Config,
     pub db: DbPool,
     pub queue_manager: Arc<QueueManager>,
+    pub server_info: ServerInfo,
+}
+
+#[derive(Clone)]
+pub struct ServerInfo {
+    pub port: u16,
 }
 
 pub async fn run_server(config: Config) -> Result<()> {
@@ -38,6 +44,9 @@ pub async fn run_server(config: Config) -> Result<()> {
         config: config.clone(),
         db,
         queue_manager,
+        server_info: ServerInfo {
+            port: config.port,
+        },
     };
 
     // Respawn workers for unfinished tasks if enabled
@@ -103,151 +112,89 @@ async fn health_check(State(state): State<AppState>) -> Result<Json<Value>> {
 }
 
 async fn respawn_workers_for_unfinished_tasks(state: &AppState) -> Result<()> {
-    info!("Checking for stage-based workers to respawn...");
+    info!("Starting queue-based ticket recovery system...");
 
-    // First, clean up any dead workers
-    let workers = Worker::list_by_project(&state.db, None).await?;
-    let mut dead_workers_cleaned = 0;
-
-    for worker in workers {
-        // Only check workers that were marked as active but might have died
-        if worker.status == "active" || worker.status == "spawning" {
-            if let Some(pid) = worker.pid {
-                // Check if process is still running using kill -0
-                let is_running = tokio::process::Command::new("kill")
-                    .arg("-0")
-                    .arg(pid.to_string())
-                    .status()
-                    .await
-                    .map(|status| status.success())
-                    .unwrap_or(false);
-
-                if !is_running {
-                    info!(
-                        "Worker '{}' (PID: {}) for stage '{}' was marked as active but process died. Cleaning up...", 
-                        worker.worker_id, pid, worker.worker_type
-                    );
-
-                    // Update the dead worker's status in database
-                    Worker::update_status(&state.db, &worker.worker_id, "failed", None).await?;
-
-                    // Create event for dead worker
-                    crate::database::events::Event::create_worker_stopped(
-                        &state.db,
-                        &worker.worker_id,
-                        "process died, cleaned up on startup",
-                    )
-                    .await?;
-
-                    dead_workers_cleaned += 1;
-                }
-            } else {
-                // Worker has no PID, probably failed to start
-                warn!(
-                    "Worker '{}' has no PID, marking as failed",
-                    worker.worker_id
-                );
-                Worker::update_status(&state.db, &worker.worker_id, "failed", None).await?;
-                dead_workers_cleaned += 1;
-            }
-        }
-    }
-
-    if dead_workers_cleaned > 0 {
-        info!("Cleaned up {} dead workers", dead_workers_cleaned);
-    }
-
-    // Now check for stages that need workers
-    // Get all unique stages that have open tickets
-    let stages_with_tickets = sqlx::query(
+    // Step 1: Find all open tickets and group them by project/stage
+    let open_tickets = sqlx::query(
         r#"
-        SELECT DISTINCT current_stage, project_id
+        SELECT ticket_id, project_id, current_stage
         FROM tickets 
-        WHERE state = 'open'
-        ORDER BY project_id, current_stage
+        WHERE state = 'open' AND processing_worker_id IS NULL
+        ORDER BY project_id, current_stage, priority DESC, created_at ASC
         "#,
     )
     .fetch_all(&state.db)
     .await?;
 
-    let mut workers_spawned = 0;
+    if open_tickets.is_empty() {
+        info!("No open tickets found for recovery");
+        return Ok(());
+    }
 
-    for stage_row in stages_with_tickets {
-        let stage: String = stage_row.get("current_stage");
-        let project_id: String = stage_row.get("project_id");
+    let mut tickets_recovered = 0;
+    let mut consumer_threads_started = std::collections::HashSet::new();
 
-        // Check if there's an active worker for this stage/project
-        let active_workers = sqlx::query(
-            r#"
-            SELECT worker_id, pid, status
-            FROM workers 
-            WHERE project_id = ?1 AND worker_type = ?2 AND status IN ('spawning', 'active', 'idle')
-            "#,
-        )
-        .bind(&project_id)
-        .bind(&stage)
-        .fetch_all(&state.db)
-        .await?;
+    // Step 2: Submit tickets to their appropriate queues and start consumer threads
+    for ticket_row in open_tickets {
+        let ticket_id: String = ticket_row.get("ticket_id");
+        let project_id: String = ticket_row.get("project_id");
+        let current_stage: String = ticket_row.get("current_stage");
 
-        let has_active_worker = active_workers.iter().any(|w| {
-            let pid_val: Option<i64> = w.try_get("pid").ok();
-            let status: String = w.get("status");
-
-            if let Some(pid) = pid_val {
-                // Double-check the process is actually running
-                std::process::Command::new("kill")
-                    .arg("-0")
-                    .arg(pid.to_string())
-                    .status()
-                    .map(|status| status.success())
-                    .unwrap_or(false)
-            } else {
-                status == "spawning" // Allow spawning workers without PID yet
+        // Add ticket to the appropriate queue
+        match state
+            .queue_manager
+            .add_task_to_worker_queue(&project_id, &current_stage, &ticket_id)
+            .await
+        {
+            Ok(_) => {
+                info!(
+                    "Added ticket {} to queue for project={}, stage={}",
+                    ticket_id, project_id, current_stage
+                );
+                tickets_recovered += 1;
             }
-        });
+            Err(e) => {
+                error!(
+                    "Failed to add ticket {} to queue: {}",
+                    ticket_id, e
+                );
+                continue;
+            }
+        }
 
-        if !has_active_worker {
-            info!(
-                "Stage '{}' in project '{}' has open tickets but no active worker. Spawning...",
-                stage, project_id
+        // Start consumer thread for this project-worker type combination if not already started
+        let consumer_key = format!("{}-{}", project_id, current_stage);
+        if !consumer_threads_started.contains(&consumer_key) {
+            let consumer = crate::workers::consumer::WorkerConsumer::new(
+                project_id.clone(),
+                current_stage.clone(),
+                std::sync::Arc::new(state.clone()),
             );
 
-            // Generate a unique worker ID
-            let worker_id = format!("{}-{}", stage, chrono::Utc::now().timestamp());
-
-            let spawn_request = SpawnWorkerRequest {
-                worker_id: worker_id.clone(),
-                project_id: project_id.clone(),
-                worker_type: stage.clone(),
-                queue_name: format!("{}-queue", stage), // Keep queue for internal implementation
-            };
-
-            match ProcessManager::spawn_worker(state, spawn_request).await {
-                Ok(_) => {
-                    info!(
-                        "Successfully spawned worker '{}' for stage '{}' in project '{}'",
-                        worker_id, stage, project_id
-                    );
-                    workers_spawned += 1;
-                }
-                Err(e) => {
+            // Start consumer in background
+            let consumer_key_clone = consumer_key.clone();
+            tokio::spawn(async move {
+                if let Err(e) = consumer.start().await {
                     error!(
-                        "Failed to spawn worker for stage '{}' in project '{}': {}",
-                        stage, project_id, e
+                        "Consumer thread for {} failed: {}",
+                        consumer_key_clone, e
                     );
                 }
-            }
+            });
+
+            consumer_threads_started.insert(consumer_key);
+            info!(
+                "Started consumer thread for project={}, worker_type={}",
+                project_id, current_stage
+            );
         }
     }
 
-    if workers_spawned > 0 {
-        info!(
-            "Spawned {} new workers for stages with open tickets",
-            workers_spawned
-        );
-    } else {
-        info!("No new workers needed - all stages with open tickets have active workers");
-    }
+    info!(
+        "Ticket recovery completed: {} tickets added to queues, {} consumer threads started",
+        tickets_recovered,
+        consumer_threads_started.len()
+    );
 
     Ok(())
 }

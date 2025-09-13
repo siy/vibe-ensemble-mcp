@@ -188,7 +188,7 @@ impl WorkerOutputProcessor {
             content: output.comment.clone(),
         };
 
-        crate::database::comments::Comment::create(&state.db, comment_request).await?;
+        crate::database::comments::Comment::create_from_request(&state.db, comment_request).await?;
         info!("Added worker comment for ticket {}", ticket_id);
 
         // Process based on outcome
@@ -363,7 +363,7 @@ impl WorkerOutputProcessor {
             stage_number: 999, // Special stage for system messages
             content: format!("⚠️ COORDINATOR ATTENTION REQUIRED: {}", output.reason),
         };
-        crate::database::comments::Comment::create(&state.db, coord_comment).await?;
+        crate::database::comments::Comment::create_from_request(&state.db, coord_comment).await?;
 
         info!(
             "Set ticket {} to on_hold status for coordinator attention",

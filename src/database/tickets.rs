@@ -284,4 +284,51 @@ impl Ticket {
 
         Ok(ticket)
     }
+
+    pub async fn get_by_stage_unclaimed(
+        pool: &DbPool,
+        project_id: &str,
+        stage: &str,
+    ) -> Result<Vec<Ticket>> {
+        let tickets = sqlx::query_as::<_, Ticket>(
+            r#"
+            SELECT ticket_id, project_id, title, execution_plan, current_stage, state, priority,
+                   processing_worker_id, created_at, updated_at, closed_at
+            FROM tickets
+            WHERE project_id = ?1 
+              AND current_stage = ?2 
+              AND processing_worker_id IS NULL 
+              AND state = 'open'
+            ORDER BY priority DESC, created_at ASC
+        "#,
+        )
+        .bind(project_id)
+        .bind(stage)
+        .fetch_all(pool)
+        .await?;
+
+        Ok(tickets)
+    }
+
+    pub async fn claim_for_processing(
+        pool: &DbPool,
+        ticket_id: &str,
+        worker_id: &str,
+    ) -> Result<u64> {
+        let result = sqlx::query(
+            r#"
+            UPDATE tickets 
+            SET processing_worker_id = ?1, updated_at = datetime('now')
+            WHERE ticket_id = ?2 
+              AND processing_worker_id IS NULL 
+              AND state = 'open'
+        "#,
+        )
+        .bind(worker_id)
+        .bind(ticket_id)
+        .execute(pool)
+        .await?;
+
+        Ok(result.rows_affected())
+    }
 }

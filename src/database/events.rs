@@ -17,6 +17,32 @@ pub struct Event {
 }
 
 impl Event {
+    pub async fn create(
+        pool: &DbPool,
+        event_type: &str,
+        ticket_id: Option<&str>,
+        worker_id: Option<&str>,
+        stage: Option<&str>,
+        reason: Option<&str>,
+    ) -> Result<Event> {
+        let event = sqlx::query_as::<_, Event>(
+            r#"
+            INSERT INTO events (event_type, ticket_id, worker_id, stage, reason)
+            VALUES (?1, ?2, ?3, ?4, ?5)
+            RETURNING id, event_type, ticket_id, worker_id, stage, reason, created_at, processed
+        "#,
+        )
+        .bind(event_type)
+        .bind(ticket_id)
+        .bind(worker_id)
+        .bind(stage)
+        .bind(reason)
+        .fetch_one(pool)
+        .await?;
+
+        Ok(event)
+    }
+
     pub async fn create_stage_completed(
         pool: &DbPool,
         ticket_id: &str,
