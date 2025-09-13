@@ -163,7 +163,14 @@ impl WorkerOutputProcessor {
             ticket_id, output.outcome, output.target_stage
         );
 
-        // First, add the worker's comment
+        // First, validate that the ticket exists
+        let ticket_exists = Ticket::get_by_id(&state.db, ticket_id).await?.is_some();
+
+        if !ticket_exists {
+            return Err(anyhow::anyhow!("Ticket '{}' not found", ticket_id));
+        }
+
+        // Now add the worker's comment
         let comment_request = CreateCommentRequest {
             ticket_id: ticket_id.to_string(),
             worker_type: worker_type.to_string(),
