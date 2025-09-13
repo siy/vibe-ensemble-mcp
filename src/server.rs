@@ -134,24 +134,31 @@ async fn respawn_workers_for_unfinished_tasks(state: &AppState) -> Result<()> {
         let project_id: String = ticket_row.get("project_id");
         let current_stage: String = ticket_row.get("current_stage");
 
+        // Create queue for this project-stage combination if needed
+        if let Err(e) = state
+            .queue_manager
+            .create_queue(&project_id, &current_stage)
+            .await
+        {
+            error!("Failed to create queue for project={}, stage={}: {}", project_id, current_stage, e);
+            continue;
+        }
+
         // Add ticket to the appropriate queue
-        match state
+        if let Err(e) = state
             .queue_manager
             .add_task_to_worker_queue(&project_id, &current_stage, &ticket_id)
             .await
         {
-            Ok(_) => {
-                info!(
-                    "Added ticket {} to queue for project={}, stage={}",
-                    ticket_id, project_id, current_stage
-                );
-                tickets_recovered += 1;
-            }
-            Err(e) => {
-                error!("Failed to add ticket {} to queue: {}", ticket_id, e);
-                continue;
-            }
+            error!("Failed to add ticket {} to queue: {}", ticket_id, e);
+            continue;
         }
+
+        info!(
+            "Added ticket {} to queue for project={}, stage={}",
+            ticket_id, project_id, current_stage
+        );
+        tickets_recovered += 1;
 
         // Start consumer thread for this project-worker type combination if not already started
         let consumer_key = format!("{}-{}", project_id, current_stage);
