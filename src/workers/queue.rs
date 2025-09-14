@@ -158,6 +158,7 @@ impl QueueManager {
 
         let queue_name_for_error = queue_name_clone.clone();
         let output_sender = self.output_sender.clone();
+        let db_clone = _db.clone();
 
         tokio::spawn(async move {
             let consumer = WorkerConsumer::new(
@@ -166,6 +167,7 @@ impl QueueManager {
                 queue_name_clone,
                 receiver,
                 output_sender,
+                db_clone,
             );
 
             if let Err(e) = consumer.start().await {
@@ -499,6 +501,7 @@ struct WorkerConsumer {
     queue_name: String,
     receiver: mpsc::UnboundedReceiver<TaskItem>,
     output_sender: mpsc::UnboundedSender<WorkerOutput>,
+    db: DbPool,
 }
 
 impl WorkerConsumer {
@@ -508,6 +511,7 @@ impl WorkerConsumer {
         queue_name: String,
         receiver: mpsc::UnboundedReceiver<TaskItem>,
         output_sender: mpsc::UnboundedSender<WorkerOutput>,
+        db: DbPool,
     ) -> Self {
         Self {
             project_id,
@@ -515,6 +519,7 @@ impl WorkerConsumer {
             queue_name,
             receiver,
             output_sender,
+            db,
         }
     }
 
@@ -611,26 +616,35 @@ impl WorkerConsumer {
             ticket_id, self.worker_type
         );
 
-        // TODO: Need to gather required data for SpawnWorkerRequest:
-        // - worker_id (generate UUID)
-        // - project_id (from database via ticket)
-        // - worker_type (have it)
-        // - queue_name (have it)
-        // - ticket_id (have it)
-        // - project_path (from database via project)
-        // - system_prompt (from database via worker_type)
-        // - server_port (from configuration)
-
-        // For now, create minimal request with available data
+        // Gather required data for SpawnWorkerRequest from database
         let worker_id = format!("worker-{}", Uuid::new_v4());
+
+        // Get project path from database
+        let project = crate::database::projects::Project::get_by_name(&self.db, &self.project_id)
+            .await?
+            .ok_or_else(|| anyhow::anyhow!("Project '{}' not found", self.project_id))?;
+
+        // Get system prompt from worker type in database
+        let worker_type_info = crate::database::worker_types::WorkerType::get_by_type(
+            &self.db,
+            &self.project_id,
+            &self.worker_type,
+        )
+        .await?
+        .ok_or_else(|| anyhow::anyhow!(
+            "Worker type '{}' not found for project '{}'",
+            self.worker_type,
+            self.project_id
+        ))?;
+
         let spawn_request = SpawnWorkerRequest {
             worker_id,
             project_id: self.project_id.clone(),
             worker_type: self.worker_type.clone(),
             queue_name: self.queue_name.clone(),
             ticket_id: ticket_id.to_string(),
-            project_path: "/tmp/project".to_string(), // TODO: Get from database
-            system_prompt: "You are a helpful assistant worker.".to_string(), // TODO: Get from database
+            project_path: project.path,
+            system_prompt: worker_type_info.system_prompt,
             server_port: 3000, // TODO: Get from configuration
         };
 

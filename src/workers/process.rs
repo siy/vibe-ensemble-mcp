@@ -128,13 +128,40 @@ impl ProcessManager {
         debug!("Worker stdout: {}", stdout_str);
         debug!("Worker stderr: {}", stderr_str);
 
-        // Look for JSON output containing "outcome"
+        // Parse Claude CLI JSON output format
+        // Claude CLI with --output-format json wraps response in {"result": "...", ...}
         for line in stdout_str.lines() {
-            if line.contains("\"outcome\"") {
+            // First try to parse as Claude CLI wrapper format
+            if line.contains("\"result\"") && line.contains("\"type\"") {
+                debug!("Attempting to parse Claude CLI wrapper JSON: {}", line);
+                if let Ok(claude_output) = serde_json::from_str::<serde_json::Value>(line) {
+                    if let Some(result_str) = claude_output.get("result").and_then(|v| v.as_str()) {
+                        debug!("Extracted result string: {}", result_str);
+                        // Parse the inner result string as WorkerOutput JSON
+                        match Self::parse_output(result_str) {
+                            Ok(parsed_output) => {
+                                info!(
+                                    "Successfully parsed worker output for ticket {} (Claude CLI format)",
+                                    request.ticket_id
+                                );
+                                // Clean up
+                                let _ = std::fs::remove_file(&config_path);
+                                return Ok(parsed_output);
+                            }
+                            Err(e) => {
+                                debug!("Failed to parse inner JSON from result: {} - error: {}", result_str, e);
+                            }
+                        }
+                    }
+                }
+            }
+            // Fallback: try direct parsing for lines containing "outcome" (backwards compatibility)
+            else if line.contains("\"outcome\"") {
+                debug!("Attempting direct JSON parsing: {}", line);
                 match Self::parse_output(line) {
                     Ok(parsed_output) => {
                         info!(
-                            "Successfully parsed worker output for ticket {}",
+                            "Successfully parsed worker output for ticket {} (direct format)",
                             request.ticket_id
                         );
                         // Clean up
