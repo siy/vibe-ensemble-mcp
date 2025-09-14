@@ -30,6 +30,7 @@ pub enum WorkerOutcome {
 pub struct QueueManager {
     queues: DashMap<String, mpsc::UnboundedSender<TaskItem>>,
     output_sender: mpsc::UnboundedSender<WorkerOutput>,
+    #[allow(dead_code)]
     processor_handle: tokio::task::JoinHandle<()>,
 }
 
@@ -132,7 +133,7 @@ impl QueueManager {
         queue_name: &str,
         project_id: &str,
         worker_type: &str,
-        db: &DbPool,
+        _db: &DbPool,
     ) -> Result<mpsc::UnboundedSender<TaskItem>> {
         // Check if queue already exists
         if let Some(sender) = self.queues.get(queue_name) {

@@ -1,17 +1,12 @@
 use anyhow::Result;
 use serde_json::json;
-use std::fs::{self, OpenOptions};
+use std::fs;
 use std::process::Stdio;
 use tokio::process::Command;
-use tokio::time::Duration;
-use tracing::{debug, error, info, warn};
+use tracing::{debug, error, info};
 
-use super::queue::{WorkerOutcome, WorkerOutput};
-use super::types::{SpawnWorkerRequest, WorkerInfo, WorkerProcess, WorkerStatus};
-use crate::{
-    database::{worker_types::WorkerType, workers::Worker},
-    server::AppState,
-};
+use super::queue::WorkerOutput;
+use super::types::SpawnWorkerRequest;
 
 pub struct ProcessManager;
 

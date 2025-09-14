@@ -30,10 +30,7 @@ impl McpServer {
         tools.register(DeleteProjectTool);
 
         // Register worker management tools
-        tools.register(SpawnWorkerTool);
-        tools.register(StopWorkerTool);
         tools.register(ListWorkersTool);
-        tools.register(GetWorkerStatusTool);
         tools.register(FinishWorkerTool);
 
         // Register worker type management tools
@@ -56,7 +53,6 @@ impl McpServer {
         // Register event and stage management tools
         tools.register(ListEventsTool);
         tools.register(GetTicketsByStageTool);
-        tools.register(SpawnWorkerForStageTool);
 
         Self { tools }
     }

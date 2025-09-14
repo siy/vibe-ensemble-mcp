@@ -98,9 +98,13 @@ create_worker_type("todo-app", "tester", "You write comprehensive tests...")
 create_ticket("TODO-001", "todo-app", "Implement user authentication", 
   "Build JWT-based auth system", ["architect", "rust-dev", "tester"])
 
-# 4. Watch as workers automatically:
+# 4. Submit the ticket to start processing
+submit_task("todo-app", "architect", "TODO-001")
+
+# 5. Watch as the system automatically:
+#    - Creates queues and spawns workers as needed
 #    - Architecture worker designs the auth system
-#    - Rust developer implements the backend
+#    - Rust developer implements the backend  
 #    - Tester adds comprehensive tests
 #    - Each worker reports progress and hands off to the next
 ```

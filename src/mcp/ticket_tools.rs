@@ -16,7 +16,6 @@ use crate::{
         tickets::{CreateTicketRequest, Ticket},
     },
     server::AppState,
-    workers::json_output::WorkerOutputProcessor,
 };
 
 pub struct CreateTicketTool;
@@ -39,11 +38,13 @@ impl ToolHandler for CreateTicketTool {
             .unwrap_or_else(|| "task".to_string());
         let _priority: String = extract_optional_param(&Some(args.clone()), "priority")?
             .unwrap_or_else(|| "medium".to_string());
+        let initial_stage: String = extract_optional_param(&Some(args.clone()), "initial_stage")?
+            .unwrap_or_else(|| "planning".to_string());
 
         info!("Creating ticket: {} in project {}", title, project_id);
 
         let ticket_id = Uuid::new_v4().to_string();
-        let execution_plan = vec!["planning".to_string()];
+        let execution_plan = vec![initial_stage.clone()];
 
         let req = CreateTicketRequest {
             ticket_id: ticket_id.clone(),
@@ -55,11 +56,24 @@ impl ToolHandler for CreateTicketTool {
 
         let ticket = Ticket::create(&state.db, req).await?;
 
-        // Automatically spawn a planning worker for the new ticket
-        if let Err(e) =
-            WorkerOutputProcessor::auto_spawn_worker_for_stage(state, &project_id, "planning").await
+        // Automatically submit the ticket to the initial stage queue
+        match state
+            .queue_manager
+            .submit_task(&project_id, &initial_stage, &ticket_id, &state.db)
+            .await
         {
-            warn!("Failed to auto-spawn planning worker: {}", e);
+            Ok(task_id) => {
+                info!(
+                    "Successfully submitted ticket {} to {}-queue as task {}",
+                    ticket_id, initial_stage, task_id
+                );
+            }
+            Err(e) => {
+                warn!(
+                    "Failed to submit ticket {} to {}-queue: {}",
+                    ticket_id, initial_stage, e
+                );
+            }
         }
 
         Ok(CallToolResponse {
@@ -99,6 +113,11 @@ impl ToolHandler for CreateTicketTool {
                         "type": "string",
                         "description": "Priority level (low, medium, high, critical)",
                         "default": "medium"
+                    },
+                    "initial_stage": {
+                        "type": "string",
+                        "description": "Initial stage for ticket processing (must be a valid worker type)",
+                        "default": "planning"
                     }
                 },
                 "required": ["project_id", "title"]
