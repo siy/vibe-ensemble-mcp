@@ -47,6 +47,10 @@ pub struct SpawnWorkerRequest {
     pub project_id: String,
     pub worker_type: String,
     pub queue_name: String,
+    pub ticket_id: String,
+    pub project_path: String,
+    pub system_prompt: String,
+    pub server_port: u16,
 }
 
 pub type WorkerRegistry = RwLock<HashMap<String, WorkerProcess>>;

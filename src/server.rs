@@ -34,7 +34,7 @@ pub async fn run_server(config: Config) -> Result<()> {
     let db = crate::database::create_pool(&config.database_url()).await?;
 
     // Initialize queue manager
-    let queue_manager = Arc::new(QueueManager::new());
+    let queue_manager = Arc::new(QueueManager::new(db.clone()));
 
     let state = AppState {
         config: config.clone(),
