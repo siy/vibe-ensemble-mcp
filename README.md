@@ -92,6 +92,10 @@ Once you have Vibe-Ensemble configured and running with Claude Code, you can coo
 4. **Monitor Progress**: Workers automatically progress through stages, providing updates and handing off to the next worker
 5. **Handle Issues**: Use coordination tools to resume stalled work or adjust workflows as needed
 
+**WARNING:** Vibe-Ensemble is still work in progress. Some features may not be fully implemented or may have bugs. So, 
+periodically ask Claude Code to check ticket status and event queue. Sometimes it may report issues, but not address them.
+Sending prompt like "Act as a coordinator" usually helps.
+
 ### Example Project Types
 
 **Web Application Development:**
