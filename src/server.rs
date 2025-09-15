@@ -12,7 +12,11 @@ use tower_http::{cors::CorsLayer, limit::RequestBodyLimitLayer, trace::TraceLaye
 use tracing::{error, info};
 
 use crate::{
-    config::Config, database::DbPool, error::Result, mcp::server::mcp_handler, sse::{sse_handler, EventBroadcaster},
+    config::Config,
+    database::DbPool,
+    error::Result,
+    mcp::server::mcp_handler,
+    sse::{sse_handler, EventBroadcaster},
     workers::queue::QueueManager,
 };
 
@@ -36,9 +40,13 @@ pub async fn run_server(config: Config) -> Result<()> {
 
     // Initialize event broadcaster
     let event_broadcaster = EventBroadcaster::new();
-    
+
     // Initialize queue manager
-    let queue_manager = Arc::new(QueueManager::new(db.clone(), config.clone(), event_broadcaster.clone()));
+    let queue_manager = Arc::new(QueueManager::new(
+        db.clone(),
+        config.clone(),
+        event_broadcaster.clone(),
+    ));
 
     let state = AppState {
         config: config.clone(),

@@ -23,7 +23,8 @@ impl ToolHandler for CreateProjectTool {
         let path: String = extract_param(&arguments, "path")?;
         let short_description: Option<String> = extract_optional_param(&arguments, "description")?;
         let project_rules: Option<String> = extract_optional_param(&arguments, "project_rules")?;
-        let project_patterns: Option<String> = extract_optional_param(&arguments, "project_patterns")?;
+        let project_patterns: Option<String> =
+            extract_optional_param(&arguments, "project_patterns")?;
 
         // Create the project directory if it doesn't exist
         debug!("Checking if project directory exists: {}", path);
@@ -179,7 +180,8 @@ impl ToolHandler for UpdateProjectTool {
         let path: Option<String> = extract_optional_param(&arguments, "path")?;
         let short_description: Option<String> = extract_optional_param(&arguments, "description")?;
         let project_rules: Option<String> = extract_optional_param(&arguments, "project_rules")?;
-        let project_patterns: Option<String> = extract_optional_param(&arguments, "project_patterns")?;
+        let project_patterns: Option<String> =
+            extract_optional_param(&arguments, "project_patterns")?;
 
         let request = UpdateProjectRequest {
             path,

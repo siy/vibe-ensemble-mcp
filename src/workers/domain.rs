@@ -7,7 +7,7 @@ pub struct QueueName(String);
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub struct ProjectId(String);
 
-#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]  
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub struct WorkerType(String);
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
@@ -20,7 +20,7 @@ impl QueueName {
     pub fn new(project_id: &ProjectId, worker_type: &WorkerType) -> Self {
         Self(format!("{}-{}-queue", project_id.0, worker_type.0))
     }
-    
+
     pub fn as_str(&self) -> &str {
         &self.0
     }
@@ -33,7 +33,7 @@ impl ProjectId {
         }
         Ok(Self(id))
     }
-    
+
     pub fn as_str(&self) -> &str {
         &self.0
     }
@@ -46,7 +46,7 @@ impl WorkerType {
         }
         Ok(Self(type_name))
     }
-    
+
     pub fn as_str(&self) -> &str {
         &self.0
     }
@@ -59,7 +59,7 @@ impl TicketId {
         }
         Ok(Self(id))
     }
-    
+
     pub fn as_str(&self) -> &str {
         &self.0
     }
@@ -69,7 +69,7 @@ impl TaskId {
     pub fn new(id: String) -> Self {
         Self(id)
     }
-    
+
     pub fn as_str(&self) -> &str {
         &self.0
     }
@@ -112,7 +112,7 @@ pub enum WorkerCommand {
         pipeline_update: Option<Vec<WorkerType>>,
     },
     ReturnToStage {
-        target_stage: WorkerType, 
+        target_stage: WorkerType,
         reason: String,
     },
     RequestCoordinatorAttention {

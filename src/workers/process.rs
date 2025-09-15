@@ -149,7 +149,10 @@ impl ProcessManager {
                                 return Ok(parsed_output);
                             }
                             Err(e) => {
-                                debug!("Failed to parse inner JSON from result: {} - error: {}", result_str, e);
+                                debug!(
+                                    "Failed to parse inner JSON from result: {} - error: {}",
+                                    result_str, e
+                                );
                             }
                         }
                     }

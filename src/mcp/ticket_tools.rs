@@ -571,7 +571,7 @@ impl ToolHandler for ResumeTicketProcessingTool {
 
         // First get the current ticket
         let ticket = Ticket::get_by_id(&state.db, &ticket_id).await?;
-        
+
         let ticket_data = match ticket {
             Some(t) => t.ticket,
             None => {
@@ -584,19 +584,25 @@ impl ToolHandler for ResumeTicketProcessingTool {
 
         // Determine stage to use (provided or current)
         let target_stage = stage.unwrap_or(ticket_data.current_stage.clone());
-        
+
         // Determine state to use (provided or "open")
         let target_state = state_param.unwrap_or_else(|| "open".to_string());
 
         // Update ticket stage if different
         if target_stage != ticket_data.current_stage {
-            info!("Updating ticket {} stage from {} to {}", ticket_id, ticket_data.current_stage, target_stage);
+            info!(
+                "Updating ticket {} stage from {} to {}",
+                ticket_id, ticket_data.current_stage, target_stage
+            );
             Ticket::update_stage(&state.db, &ticket_id, &target_stage).await?;
         }
 
-        // Update ticket state if different  
+        // Update ticket state if different
         if target_state != ticket_data.state {
-            info!("Updating ticket {} state from {} to {}", ticket_id, ticket_data.state, target_state);
+            info!(
+                "Updating ticket {} state from {} to {}",
+                ticket_id, ticket_data.state, target_state
+            );
             Ticket::update_state(&state.db, &ticket_id, &target_state).await?;
         }
 
@@ -619,7 +625,12 @@ impl ToolHandler for ResumeTicketProcessingTool {
         if target_state == "open" {
             match state
                 .queue_manager
-                .submit_task(&ticket_data.project_id, &target_stage, &ticket_id, &state.db)
+                .submit_task(
+                    &ticket_data.project_id,
+                    &target_stage,
+                    &ticket_id,
+                    &state.db,
+                )
                 .await
             {
                 Ok(task_id) => {
@@ -627,7 +638,7 @@ impl ToolHandler for ResumeTicketProcessingTool {
                         "Successfully submitted ticket {} to {}-queue as task {}",
                         ticket_id, target_stage, task_id
                     );
-                    
+
                     Ok(create_success_response(&format!(
                         "Resumed processing for ticket {} at stage '{}' with state '{}' and submitted to queue as task {}",
                         ticket_id, target_stage, target_state, task_id
@@ -638,7 +649,7 @@ impl ToolHandler for ResumeTicketProcessingTool {
                         "Failed to submit ticket {} to {}-queue: {}",
                         ticket_id, target_stage, e
                     );
-                    
+
                     Ok(create_success_response(&format!(
                         "Resumed ticket {} at stage '{}' with state '{}' but failed to submit to queue: {}",
                         ticket_id, target_stage, target_state, e

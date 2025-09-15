@@ -1,7 +1,7 @@
 use super::handlers::OutputHandlers;
+use crate::database::DbPool;
 use crate::workers::domain::*;
 use crate::workers::queue::WorkerOutput; // Legacy type for compatibility
-use crate::database::DbPool;
 use anyhow::Result;
 use tokio::sync::mpsc;
 use tracing::{error, info, trace};
@@ -69,29 +69,35 @@ impl OutputProcessor {
 
     async fn process_completion_event(&self, event: &WorkerCompletionEvent) -> Result<()> {
         // Add worker comment first
-        self.add_worker_comment(&event.ticket_id, &event.comment).await?;
+        self.add_worker_comment(&event.ticket_id, &event.comment)
+            .await?;
 
         // Process the command
         match &event.command {
-            WorkerCommand::AdvanceToStage { target_stage, pipeline_update } => {
-                self.handlers.handle_advance_to_stage(
-                    &event.ticket_id, 
-                    target_stage, 
-                    pipeline_update.as_ref()
-                ).await
+            WorkerCommand::AdvanceToStage {
+                target_stage,
+                pipeline_update,
+            } => {
+                self.handlers
+                    .handle_advance_to_stage(
+                        &event.ticket_id,
+                        target_stage,
+                        pipeline_update.as_ref(),
+                    )
+                    .await
             }
-            WorkerCommand::ReturnToStage { target_stage, reason } => {
-                self.handlers.handle_return_to_stage(
-                    &event.ticket_id, 
-                    target_stage, 
-                    reason
-                ).await
+            WorkerCommand::ReturnToStage {
+                target_stage,
+                reason,
+            } => {
+                self.handlers
+                    .handle_return_to_stage(&event.ticket_id, target_stage, reason)
+                    .await
             }
             WorkerCommand::RequestCoordinatorAttention { reason } => {
-                self.handlers.handle_coordinator_attention(
-                    &event.ticket_id, 
-                    reason
-                ).await
+                self.handlers
+                    .handle_coordinator_attention(&event.ticket_id, reason)
+                    .await
             }
         }
     }
@@ -121,7 +127,8 @@ impl OutputProcessor {
         let ticket_id_domain = TicketId::new(ticket_id.clone())?;
 
         // Add worker comment
-        self.add_worker_comment(&ticket_id_domain, &output.comment).await?;
+        self.add_worker_comment(&ticket_id_domain, &output.comment)
+            .await?;
 
         // Convert legacy format to new command structure
         match output.outcome {
@@ -129,16 +136,19 @@ impl OutputProcessor {
                 if let Some(target_stage_str) = &output.target_stage {
                     let target_stage = WorkerType::new(target_stage_str.clone())?;
                     let pipeline_update = output.pipeline_update.as_ref().map(|pipeline| {
-                        pipeline.iter()
+                        pipeline
+                            .iter()
                             .filter_map(|s| WorkerType::new(s.clone()).ok())
                             .collect()
                     });
 
-                    self.handlers.handle_advance_to_stage(
-                        &ticket_id_domain,
-                        &target_stage,
-                        pipeline_update.as_ref()
-                    ).await?;
+                    self.handlers
+                        .handle_advance_to_stage(
+                            &ticket_id_domain,
+                            &target_stage,
+                            pipeline_update.as_ref(),
+                        )
+                        .await?;
                 } else {
                     return Err(anyhow::anyhow!("next_stage outcome requires target_stage"));
                 }
@@ -146,20 +156,17 @@ impl OutputProcessor {
             crate::workers::queue::WorkerOutcome::PrevStage => {
                 if let Some(target_stage_str) = &output.target_stage {
                     let target_stage = WorkerType::new(target_stage_str.clone())?;
-                    self.handlers.handle_return_to_stage(
-                        &ticket_id_domain,
-                        &target_stage,
-                        &output.reason
-                    ).await?;
+                    self.handlers
+                        .handle_return_to_stage(&ticket_id_domain, &target_stage, &output.reason)
+                        .await?;
                 } else {
                     return Err(anyhow::anyhow!("prev_stage outcome requires target_stage"));
                 }
             }
             crate::workers::queue::WorkerOutcome::CoordinatorAttention => {
-                self.handlers.handle_coordinator_attention(
-                    &ticket_id_domain,
-                    &output.reason
-                ).await?;
+                self.handlers
+                    .handle_coordinator_attention(&ticket_id_domain, &output.reason)
+                    .await?;
             }
         }
 
@@ -174,8 +181,9 @@ impl OutputProcessor {
             Some("system"),
             Some(1),
             comment,
-        ).await?;
-        
+        )
+        .await?;
+
         info!("Added worker comment for ticket {}", ticket_id.as_str());
         Ok(())
     }

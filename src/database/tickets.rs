@@ -340,7 +340,10 @@ impl Ticket {
     }
 
     /// Get a ticket with project rules and patterns included
-    pub async fn get_with_project_info(pool: &DbPool, ticket_id: &str) -> Result<Option<TicketWithProjectInfo>> {
+    pub async fn get_with_project_info(
+        pool: &DbPool,
+        ticket_id: &str,
+    ) -> Result<Option<TicketWithProjectInfo>> {
         let result = sqlx::query(
             r#"
             SELECT t.ticket_id, t.project_id, t.title, t.execution_plan, t.current_stage, 

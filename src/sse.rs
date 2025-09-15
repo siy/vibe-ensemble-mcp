@@ -51,7 +51,7 @@ pub async fn sse_handler(
     State(state): State<AppState>,
 ) -> Sse<impl Stream<Item = Result<Event, axum::Error>>> {
     let broadcaster = &state.event_broadcaster;
-    
+
     // Send a welcome event
     broadcaster.broadcast_event(
         "connection",
@@ -63,7 +63,7 @@ pub async fn sse_handler(
             }
         }),
     );
-    
+
     let mut receiver = broadcaster.subscribe();
 
     let stream = async_stream::stream! {
@@ -87,7 +87,6 @@ pub async fn sse_handler(
             .text("keep-alive-text"),
     )
 }
-
 
 /// Notify about event queue changes
 pub async fn notify_event_change(

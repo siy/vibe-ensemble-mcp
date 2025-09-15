@@ -7,7 +7,11 @@ use tracing::{debug, error, info, trace, warn};
 use uuid::Uuid;
 
 use super::types::TaskItem;
-use crate::{database::DbPool, config::Config, sse::{EventBroadcaster, notify_ticket_change, notify_queue_change}};
+use crate::{
+    config::Config,
+    database::DbPool,
+    sse::{notify_queue_change, notify_ticket_change, EventBroadcaster},
+};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct WorkerOutput {
@@ -191,10 +195,10 @@ impl QueueManager {
         });
 
         info!("[QueueManager] Started consumer for queue: {}", queue_name);
-        
+
         // Notify about new queue creation
         notify_queue_change(&self.event_broadcaster, queue_name, "created").await;
-        
+
         Ok(sender)
     }
 
@@ -239,13 +243,23 @@ impl QueueManager {
                 );
                 // Notify about processing failure if ticket_id is available
                 if let Some(ref ticket_id) = output.ticket_id {
-                    crate::sse::notify_ticket_change(&event_broadcaster, ticket_id, "processing_failed").await;
+                    crate::sse::notify_ticket_change(
+                        &event_broadcaster,
+                        ticket_id,
+                        "processing_failed",
+                    )
+                    .await;
                 }
                 // Continue processing other outputs even if one fails
             } else {
                 // Notify about successful processing completion if ticket_id is available
                 if let Some(ref ticket_id) = output.ticket_id {
-                    crate::sse::notify_ticket_change(&event_broadcaster, ticket_id, "processing_completed").await;
+                    crate::sse::notify_ticket_change(
+                        &event_broadcaster,
+                        ticket_id,
+                        "processing_completed",
+                    )
+                    .await;
                 }
             }
 
@@ -663,11 +677,13 @@ impl WorkerConsumer {
             &self.worker_type,
         )
         .await?
-        .ok_or_else(|| anyhow::anyhow!(
-            "Worker type '{}' not found for project '{}'",
-            self.worker_type,
-            self.project_id
-        ))?;
+        .ok_or_else(|| {
+            anyhow::anyhow!(
+                "Worker type '{}' not found for project '{}'",
+                self.worker_type,
+                self.project_id
+            )
+        })?;
 
         let spawn_request = SpawnWorkerRequest {
             worker_id,

@@ -4,7 +4,7 @@ use tracing::{debug, error, info, trace, warn};
 
 use super::{
     event_tools::*, project_tools::*, ticket_tools::*, tools::ToolRegistry, types::*,
-    worker_tools::*, worker_type_tools::*,
+    worker_type_tools::*,
 };
 use crate::{error::Result, server::AppState};
 
@@ -29,9 +29,7 @@ impl McpServer {
         tools.register(UpdateProjectTool);
         tools.register(DeleteProjectTool);
 
-        // Register worker management tools
-        tools.register(ListWorkersTool);
-        tools.register(FinishWorkerTool);
+        // Worker management is handled automatically by the queue system
 
         // Register worker type management tools
         tools.register(CreateWorkerTypeTool);

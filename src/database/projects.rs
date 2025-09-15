@@ -88,7 +88,11 @@ impl Project {
         req: UpdateProjectRequest,
     ) -> Result<Option<Project>> {
         // Check if any updates are needed
-        if req.path.is_none() && req.short_description.is_none() && req.project_rules.is_none() && req.project_patterns.is_none() {
+        if req.path.is_none()
+            && req.short_description.is_none()
+            && req.project_rules.is_none()
+            && req.project_patterns.is_none()
+        {
             return Self::get_by_name(pool, repository_name).await;
         }
 
