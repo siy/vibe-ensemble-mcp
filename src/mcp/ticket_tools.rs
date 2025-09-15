@@ -550,3 +550,132 @@ impl ToolHandler for CloseTicketTool {
         }
     }
 }
+
+pub struct ResumeTicketProcessingTool;
+
+#[async_trait]
+impl ToolHandler for ResumeTicketProcessingTool {
+    async fn call(
+        &self,
+        state: &AppState,
+        arguments: Option<Value>,
+    ) -> crate::error::Result<CallToolResponse> {
+        let args = arguments
+            .ok_or_else(|| crate::error::AppError::BadRequest("Missing arguments".to_string()))?;
+
+        let ticket_id: String = extract_param(&Some(args.clone()), "ticket_id")?;
+        let stage: Option<String> = extract_optional_param(&Some(args.clone()), "stage")?;
+        let state_param: Option<String> = extract_optional_param(&Some(args.clone()), "state")?;
+
+        info!("Resuming processing for ticket {}", ticket_id);
+
+        // First get the current ticket
+        let ticket = Ticket::get_by_id(&state.db, &ticket_id).await?;
+        
+        let ticket_data = match ticket {
+            Some(t) => t.ticket,
+            None => {
+                return Ok(create_error_response(&format!(
+                    "Ticket {} not found",
+                    ticket_id
+                )));
+            }
+        };
+
+        // Determine stage to use (provided or current)
+        let target_stage = stage.unwrap_or(ticket_data.current_stage.clone());
+        
+        // Determine state to use (provided or "open")
+        let target_state = state_param.unwrap_or_else(|| "open".to_string());
+
+        // Update ticket stage if different
+        if target_stage != ticket_data.current_stage {
+            info!("Updating ticket {} stage from {} to {}", ticket_id, ticket_data.current_stage, target_stage);
+            Ticket::update_stage(&state.db, &ticket_id, &target_stage).await?;
+        }
+
+        // Update ticket state if different  
+        if target_state != ticket_data.state {
+            info!("Updating ticket {} state from {} to {}", ticket_id, ticket_data.state, target_state);
+            Ticket::update_state(&state.db, &ticket_id, &target_state).await?;
+        }
+
+        // Release any worker claim to allow fresh processing
+        if ticket_data.processing_worker_id.is_some() {
+            info!("Releasing worker claim on ticket {}", ticket_id);
+            sqlx::query(
+                r#"
+                UPDATE tickets 
+                SET processing_worker_id = NULL, updated_at = datetime('now')
+                WHERE ticket_id = ?1
+                "#,
+            )
+            .bind(&ticket_id)
+            .execute(&state.db)
+            .await?;
+        }
+
+        // If state is "open", submit to queue for processing
+        if target_state == "open" {
+            match state
+                .queue_manager
+                .submit_task(&ticket_data.project_id, &target_stage, &ticket_id, &state.db)
+                .await
+            {
+                Ok(task_id) => {
+                    info!(
+                        "Successfully submitted ticket {} to {}-queue as task {}",
+                        ticket_id, target_stage, task_id
+                    );
+                    
+                    Ok(create_success_response(&format!(
+                        "Resumed processing for ticket {} at stage '{}' with state '{}' and submitted to queue as task {}",
+                        ticket_id, target_stage, target_state, task_id
+                    )))
+                }
+                Err(e) => {
+                    warn!(
+                        "Failed to submit ticket {} to {}-queue: {}",
+                        ticket_id, target_stage, e
+                    );
+                    
+                    Ok(create_success_response(&format!(
+                        "Resumed ticket {} at stage '{}' with state '{}' but failed to submit to queue: {}",
+                        ticket_id, target_stage, target_state, e
+                    )))
+                }
+            }
+        } else {
+            Ok(create_success_response(&format!(
+                "Resumed ticket {} at stage '{}' with state '{}' (not submitted to queue due to non-open state)",
+                ticket_id, target_stage, target_state
+            )))
+        }
+    }
+
+    fn definition(&self) -> Tool {
+        Tool {
+            name: "resume_ticket_processing".to_string(),
+            description: "Resume processing of a ticket that was put on hold or stopped, optionally changing stage and state".to_string(),
+            input_schema: json!({
+                "type": "object",
+                "properties": {
+                    "ticket_id": {
+                        "type": "string",
+                        "description": "Ticket identifier to resume"
+                    },
+                    "stage": {
+                        "type": "string",
+                        "description": "Optional stage to resume from (uses current stage if not specified)"
+                    },
+                    "state": {
+                        "type": "string",
+                        "description": "Optional ticket state (open/closed/on_hold, defaults to 'open')",
+                        "enum": ["open", "closed", "on_hold"]
+                    }
+                },
+                "required": ["ticket_id"]
+            }),
+        }
+    }
+}
