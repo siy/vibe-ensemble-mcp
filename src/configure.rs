@@ -68,11 +68,6 @@ async fn create_claude_settings() -> Result<()> {
                 "mcp__vibe-ensemble-mcp__get_project",
                 "mcp__vibe-ensemble-mcp__update_project",
                 "mcp__vibe-ensemble-mcp__delete_project",
-                "mcp__vibe-ensemble-mcp__spawn_worker_for_stage",
-                "mcp__vibe-ensemble-mcp__stop_worker",
-                "mcp__vibe-ensemble-mcp__list_workers",
-                "mcp__vibe-ensemble-mcp__get_worker_status",
-                "mcp__vibe-ensemble-mcp__finish_worker",
                 "mcp__vibe-ensemble-mcp__create_worker_type",
                 "mcp__vibe-ensemble-mcp__list_worker_types",
                 "mcp__vibe-ensemble-mcp__get_worker_type",
@@ -85,56 +80,14 @@ async fn create_claude_settings() -> Result<()> {
                 "mcp__vibe-ensemble-mcp__add_ticket_comment",
                 "mcp__vibe-ensemble-mcp__update_ticket_stage",
                 "mcp__vibe-ensemble-mcp__close_ticket",
+                "mcp__vibe-ensemble-mcp__claim_ticket",
+                "mcp__vibe-ensemble-mcp__release_ticket",
                 "mcp__vibe-ensemble-mcp__resume_ticket_processing",
-                "mcp__vibe-ensemble-mcp__list_events"
-            ],
-            "vibe-ensemble-mcp": {
-                "tools": {
-                    // Project Management Tools
-                    "create_project": "allowed",
-                    "list_projects": "allowed",
-                    "get_project": "allowed",
-                    "update_project": "allowed",
-                    "delete_project": "allowed",
-
-                    // Worker Management Tools
-                    "spawn_worker_for_stage": "allowed",
-                    "stop_worker": "allowed",
-                    "list_workers": "allowed",
-                    "get_worker_status": "allowed",
-                    "finish_worker": "allowed",
-
-                    // Worker Type Management Tools
-                    "create_worker_type": "allowed",
-                    "list_worker_types": "allowed",
-                    "get_worker_type": "allowed",
-                    "update_worker_type": "allowed",
-                    "delete_worker_type": "allowed",
-
-                    // Ticket Management Tools
-                    "create_ticket": "allowed",
-                    "get_ticket": "allowed",
-                    "list_tickets": "allowed",
-                    "get_tickets_by_stage": "allowed",
-                    "add_ticket_comment": "allowed",
-                    "update_ticket_stage": "allowed",
-                    "close_ticket": "allowed",
-                    "resume_ticket_processing": "allowed",
-
-                    // Event Management Tools
-                    "list_events": "allowed"
-                }
-            },
-            "vibe-ensemble-sse": {
-                "tools": {
-                    "*": "allowed"
-                }
-            }
+                "mcp__vibe-ensemble-mcp__list_events",
+                "mcp__vibe-ensemble-mcp__resolve_event"
+            ]
         },
-        "enabledMcpjsonServers": [
-            "vibe-ensemble-mcp",
-            "vibe-ensemble-sse"
-        ]
+        "enableAllProjectMcpServers": true
     });
 
     fs::write(
@@ -207,9 +160,8 @@ async fn create_vibe_ensemble_command(host: &str, port: u16) -> Result<()> {
 ## AVAILABLE TOOLS
 - Project: create_project, get_project, list_projects, update_project, delete_project
 - Worker Types: create_worker_type, list_worker_types, get_worker_type, update_worker_type, delete_worker_type
-- Workers: spawn_worker_for_stage, stop_worker, list_workers, get_worker_status, finish_worker
-- Tickets: create_ticket, get_ticket, list_tickets, get_tickets_by_stage, add_ticket_comment, update_ticket_stage, close_ticket, resume_ticket_processing
-- Events: list_events
+- Tickets: create_ticket, get_ticket, list_tickets, get_tickets_by_stage, add_ticket_comment, update_ticket_stage, close_ticket, claim_ticket, release_ticket, resume_ticket_processing
+- Events: list_events, resolve_event
 
 ## WORKER TEMPLATES
 High-quality, vibe-ensemble-aware worker templates are available in `.claude/worker-templates/`. These templates provide:
