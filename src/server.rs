@@ -12,7 +12,7 @@ use tower_http::{cors::CorsLayer, limit::RequestBodyLimitLayer, trace::TraceLaye
 use tracing::{error, info};
 
 use crate::{
-    config::Config, database::DbPool, error::Result, mcp::server::mcp_handler, sse::sse_handler,
+    config::Config, database::DbPool, error::Result, mcp::server::mcp_handler, sse::{sse_handler, EventBroadcaster},
     workers::queue::QueueManager,
 };
 
@@ -22,6 +22,7 @@ pub struct AppState {
     pub db: DbPool,
     pub queue_manager: Arc<QueueManager>,
     pub server_info: ServerInfo,
+    pub event_broadcaster: EventBroadcaster,
 }
 
 #[derive(Clone)]
@@ -41,6 +42,7 @@ pub async fn run_server(config: Config) -> Result<()> {
         db,
         queue_manager,
         server_info: ServerInfo { port: config.port },
+        event_broadcaster: EventBroadcaster::new(),
     };
 
     // Respawn workers for unfinished tasks if enabled

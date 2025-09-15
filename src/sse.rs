@@ -50,7 +50,20 @@ impl EventBroadcaster {
 pub async fn sse_handler(
     State(state): State<AppState>,
 ) -> Sse<impl Stream<Item = Result<Event, axum::Error>>> {
-    let broadcaster = get_or_create_broadcaster(&state).await;
+    let broadcaster = &state.event_broadcaster;
+    
+    // Send a welcome event
+    broadcaster.broadcast_event(
+        "connection",
+        serde_json::json!({
+            "message": "Connected to vibe-ensemble event stream",
+            "server_info": {
+                "host": state.config.host,
+                "port": state.config.port
+            }
+        }),
+    );
+    
     let mut receiver = broadcaster.subscribe();
 
     let stream = async_stream::stream! {
@@ -75,26 +88,6 @@ pub async fn sse_handler(
     )
 }
 
-/// Get or create the event broadcaster singleton
-async fn get_or_create_broadcaster(state: &AppState) -> EventBroadcaster {
-    // For simplicity, create a new broadcaster each time
-    // In production, you might want to store this in AppState
-    let broadcaster = EventBroadcaster::new();
-
-    // Send a welcome event
-    broadcaster.broadcast_event(
-        "connection",
-        json!({
-            "message": "Connected to vibe-ensemble event stream",
-            "server_info": {
-                "host": state.config.host,
-                "port": state.config.port
-            }
-        }),
-    );
-
-    broadcaster
-}
 
 /// Notify about event queue changes
 pub async fn notify_event_change(
