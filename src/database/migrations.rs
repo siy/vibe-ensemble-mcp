@@ -85,6 +85,11 @@ impl MigrationRunner {
                 name: "expand event types".to_string(),
                 content: include_str!("../../migrations/002_expand_event_types.sql").to_string(),
             },
+            Migration {
+                version: 3,
+                name: "add project rules and patterns".to_string(),
+                content: include_str!("../../migrations/003_add_project_rules_patterns.sql").to_string(),
+            },
         ];
 
         Ok(migrations)
