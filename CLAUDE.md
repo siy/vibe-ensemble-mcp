@@ -50,6 +50,7 @@ This is a multi-agent coordination MCP server that enables Claude Code instances
 - Tool-based API with trait system in `tools.rs`
 - Specialized tool handlers: `project_tools.rs`, `ticket_tools.rs`, `worker_tools.rs`, `worker_type_tools.rs`, `event_tools.rs`
 - Type definitions in `types.rs` for MCP protocol compliance
+- Key coordinator tools: `resume_ticket_processing` for restarting stalled or on-hold tickets
 
 **Real-time Updates** (`src/sse.rs`):
 - Server-Sent Events for live progress tracking

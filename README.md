@@ -135,6 +135,15 @@ create_ticket("TODO-002", "myorg/todo-app", "Create User Dashboard",
 # 7. Submit tickets to start the workflow
 submit_task("myorg/todo-app", "architect", "TODO-001")
 submit_task("myorg/todo-app", "architect", "TODO-002")
+
+# 8. Monitor and manage tickets
+list_tickets("myorg/todo-app")  # Check status of all tickets
+get_ticket("TODO-001")          # Get detailed progress on specific ticket
+
+# 9. Resume stalled processing if needed
+resume_ticket_processing("TODO-001")                    # Resume from current stage
+resume_ticket_processing("TODO-002", "frontend-dev")    # Resume from specific stage
+resume_ticket_processing("TODO-001", null, "open")      # Resume with specific state
 ```
 
 **What happens automatically:**
