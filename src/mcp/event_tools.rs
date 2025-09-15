@@ -27,14 +27,19 @@ impl ToolHandler for ListEventsTool {
 
         let events = Event::get_recent(&state.db, limit).await?;
 
+        // Filter out processed events by default, unless showing all
         let filtered_events: Vec<_> = events
             .into_iter()
             .filter(|event| {
-                if let Some(ref type_filter) = event_type {
+                // Filter by event type if specified
+                let type_match = if let Some(ref type_filter) = event_type {
                     &event.event_type == type_filter
                 } else {
                     true
-                }
+                };
+
+                // Only show unprocessed events by default
+                type_match && !event.processed
             })
             .collect();
 
@@ -50,7 +55,7 @@ impl ToolHandler for ListEventsTool {
     fn definition(&self) -> Tool {
         Tool {
             name: "list_events".to_string(),
-            description: "List recent system events, optionally filtered by type".to_string(),
+            description: "List recent unprocessed system events, optionally filtered by type. Processed events are those that have been resolved by a coordinator.".to_string(),
             input_schema: serde_json::json!({
                 "type": "object",
                 "properties": {
@@ -65,6 +70,59 @@ impl ToolHandler for ListEventsTool {
                     }
                 },
                 "required": []
+            }),
+        }
+    }
+}
+
+pub struct ResolveEventTool;
+
+#[async_trait]
+impl ToolHandler for ResolveEventTool {
+    async fn call(
+        &self,
+        state: &AppState,
+        arguments: Option<Value>,
+    ) -> crate::error::Result<CallToolResponse> {
+        let args = arguments
+            .ok_or_else(|| crate::error::AppError::BadRequest("Missing arguments".to_string()))?;
+
+        let event_id: i64 = extract_param(&Some(args.clone()), "event_id")?;
+        let resolution_summary: String = extract_param(&Some(args.clone()), "resolution_summary")?;
+
+        info!(
+            "Resolving event {} with summary: {}",
+            event_id, resolution_summary
+        );
+
+        Event::resolve_event(&state.db, event_id, &resolution_summary).await?;
+
+        Ok(CallToolResponse {
+            content: vec![ToolContent {
+                content_type: "text".to_string(),
+                text: format!("Event {} resolved successfully. The event has been marked as processed and will no longer appear in unprocessed event listings.", event_id),
+            }],
+            is_error: Some(false),
+        })
+    }
+
+    fn definition(&self) -> Tool {
+        Tool {
+            name: "resolve_event".to_string(),
+            description: "Mark an event as resolved with a summary of investigation and actions taken. This marks the event as processed so it no longer appears in active event listings.".to_string(),
+            input_schema: serde_json::json!({
+                "type": "object",
+                "properties": {
+                    "event_id": {
+                        "type": "integer",
+                        "description": "ID of the event to resolve"
+                    },
+                    "resolution_summary": {
+                        "type": "string",
+                        "description": "Summary of the investigation and actions taken to address the event"
+                    }
+                },
+                "required": ["event_id", "resolution_summary"]
             }),
         }
     }

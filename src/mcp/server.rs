@@ -51,6 +51,7 @@ impl McpServer {
 
         // Register event and stage management tools
         tools.register(ListEventsTool);
+        tools.register(ResolveEventTool);
         tools.register(GetTicketsByStageTool);
 
         Self { tools }
@@ -324,22 +325,22 @@ impl McpServer {
 ## Available Tools (22 total)
 
 **Project Management**: create_project, list_projects, get_project, update_project, delete_project
-**Worker Management**: spawn_worker (now requires queue_name), stop_worker, list_workers, get_worker_status  
-**Tickets**: create_ticket, get_ticket, list_tickets, add_ticket_comment, update_ticket_stage, close_ticket
-**Queues**: create_queue, list_queues, get_queue_status, delete_queue
-**Events**: list_events, get_task_queue, assign_task
+**Worker Types**: create_worker_type, list_worker_types, get_worker_type, update_worker_type, delete_worker_type
+**Tickets**: create_ticket, get_ticket, list_tickets, add_ticket_comment, update_ticket_stage, close_ticket, claim_ticket, release_ticket, resume_ticket_processing
+**Events**: list_events, resolve_event, get_tickets_by_stage
 
 ## CRITICAL WORKFLOW SEQUENCE
-1. **Setup Phase**: Create project → Define worker types
-2. **Infrastructure Phase**: Create queues → Spawn workers with queue assignments  
-3. **Execution Phase**: Create tickets → Assign to queues → Monitor progress
+1. **Setup Phase**: Create project → Define worker types with specialized system prompts
+2. **Execution Phase**: Create tickets → Workers are automatically spawned when needed  
+3. **Monitoring Phase**: Monitor progress through events and ticket comments
 
 ## Best Practices
 - Always define worker types BEFORE creating tickets
-- Assign workers to specific queues (development, testing, review, etc.)
-- Workers automatically pull from their assigned queues
-- Use descriptive queue names that match your workflow stages
+- Workers are automatically spawned by the queue system when tickets are assigned
+- Workers automatically process tickets based on their specialized role
+- Use descriptive worker type names that match your workflow stages
 - Monitor progress through events and worker status checks
+- Resolve system events with `resolve_event` after investigation
 
 ## 🚨 CRITICAL COORDINATOR PRINCIPLE: DELEGATE EVERYTHING - NO EXCEPTIONS
 
@@ -532,6 +533,7 @@ Workers automatically pull tasks from their assigned queue and stop when queue b
 - Workers use `complete_ticket_stage` when stage is done
 - Coordinator uses `get_queue_status` to monitor queue loads
 - Coordinator uses `list_events` to track overall progress
+- Coordinator uses `resolve_event` to mark events as resolved with investigation summary
 
 ### 5. Multi-Stage Handoff Best Practices
 - **Clear Stage Boundaries**: Each stage has specific deliverables
