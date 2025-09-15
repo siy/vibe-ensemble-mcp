@@ -34,15 +34,18 @@ pub async fn run_server(config: Config) -> Result<()> {
     // Initialize database
     let db = crate::database::create_pool(&config.database_url()).await?;
 
+    // Initialize event broadcaster
+    let event_broadcaster = EventBroadcaster::new();
+    
     // Initialize queue manager
-    let queue_manager = Arc::new(QueueManager::new(db.clone()));
+    let queue_manager = Arc::new(QueueManager::new(db.clone(), config.clone(), event_broadcaster.clone()));
 
     let state = AppState {
         config: config.clone(),
         db,
         queue_manager,
         server_info: ServerInfo { port: config.port },
-        event_broadcaster: EventBroadcaster::new(),
+        event_broadcaster,
     };
 
     // Respawn workers for unfinished tasks if enabled

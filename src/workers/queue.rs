@@ -7,7 +7,7 @@ use tracing::{debug, error, info, trace, warn};
 use uuid::Uuid;
 
 use super::types::TaskItem;
-use crate::database::DbPool;
+use crate::{database::DbPool, config::Config, sse::{EventBroadcaster, notify_ticket_change, notify_queue_change}};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct WorkerOutput {
@@ -30,28 +30,33 @@ pub enum WorkerOutcome {
 pub struct QueueManager {
     queues: DashMap<String, mpsc::UnboundedSender<TaskItem>>,
     output_sender: mpsc::UnboundedSender<WorkerOutput>,
+    config: Config,
+    event_broadcaster: EventBroadcaster,
     #[allow(dead_code)]
     processor_handle: tokio::task::JoinHandle<()>,
 }
 
 impl Default for QueueManager {
     fn default() -> Self {
-        panic!("QueueManager requires DbPool parameter - use QueueManager::new(db) instead of default()")
+        panic!("QueueManager requires DbPool and Config parameters - use QueueManager::new(db, config) instead of default()")
     }
 }
 
 impl QueueManager {
-    pub fn new(db: DbPool) -> Self {
+    pub fn new(db: DbPool, config: Config, event_broadcaster: EventBroadcaster) -> Self {
         let (output_sender, output_receiver) = mpsc::unbounded_channel();
 
         // Spawn the output processor thread
+        let event_broadcaster_clone = event_broadcaster.clone();
         let processor_handle = tokio::spawn(async move {
-            Self::output_processor_loop(output_receiver, db).await;
+            Self::output_processor_loop(output_receiver, db, event_broadcaster_clone).await;
         });
 
         Self {
             queues: DashMap::new(),
             output_sender,
+            config,
+            event_broadcaster,
             processor_handle,
         }
     }
@@ -104,6 +109,9 @@ impl QueueManager {
             ticket_id, worker_id
         );
 
+        // Notify about ticket being claimed for processing
+        notify_ticket_change(&self.event_broadcaster, ticket_id, "claimed").await;
+
         let task = TaskItem {
             task_id: task_id.clone(),
             ticket_id: ticket_id.to_string(),
@@ -124,6 +132,11 @@ impl QueueManager {
             "[QueueManager] Task {} submitted to queue {}",
             task_id, queue_name
         );
+
+        // Notify about task submission
+        notify_queue_change(&self.event_broadcaster, &queue_name, "task_submitted").await;
+        notify_ticket_change(&self.event_broadcaster, ticket_id, "queued").await;
+
         Ok(task_id)
     }
 
@@ -159,6 +172,7 @@ impl QueueManager {
         let queue_name_for_error = queue_name_clone.clone();
         let output_sender = self.output_sender.clone();
         let db_clone = _db.clone();
+        let server_port = self.config.port;
 
         tokio::spawn(async move {
             let consumer = WorkerConsumer::new(
@@ -168,6 +182,7 @@ impl QueueManager {
                 receiver,
                 output_sender,
                 db_clone,
+                server_port,
             );
 
             if let Err(e) = consumer.start().await {
@@ -176,6 +191,10 @@ impl QueueManager {
         });
 
         info!("[QueueManager] Started consumer for queue: {}", queue_name);
+        
+        // Notify about new queue creation
+        notify_queue_change(&self.event_broadcaster, queue_name, "created").await;
+        
         Ok(sender)
     }
 
@@ -197,6 +216,7 @@ impl QueueManager {
     async fn output_processor_loop(
         mut receiver: mpsc::UnboundedReceiver<WorkerOutput>,
         db: DbPool,
+        event_broadcaster: EventBroadcaster,
     ) {
         info!("[QueueManager] Starting centralized output processor");
 
@@ -217,7 +237,16 @@ impl QueueManager {
                     "[OutputProcessor] Failed to process output for ticket {:?}: {}",
                     output.ticket_id, e
                 );
+                // Notify about processing failure if ticket_id is available
+                if let Some(ref ticket_id) = output.ticket_id {
+                    crate::sse::notify_ticket_change(&event_broadcaster, ticket_id, "processing_failed").await;
+                }
                 // Continue processing other outputs even if one fails
+            } else {
+                // Notify about successful processing completion if ticket_id is available
+                if let Some(ref ticket_id) = output.ticket_id {
+                    crate::sse::notify_ticket_change(&event_broadcaster, ticket_id, "processing_completed").await;
+                }
             }
 
             info!(
@@ -502,6 +531,7 @@ struct WorkerConsumer {
     receiver: mpsc::UnboundedReceiver<TaskItem>,
     output_sender: mpsc::UnboundedSender<WorkerOutput>,
     db: DbPool,
+    server_port: u16,
 }
 
 impl WorkerConsumer {
@@ -512,6 +542,7 @@ impl WorkerConsumer {
         receiver: mpsc::UnboundedReceiver<TaskItem>,
         output_sender: mpsc::UnboundedSender<WorkerOutput>,
         db: DbPool,
+        server_port: u16,
     ) -> Self {
         Self {
             project_id,
@@ -520,6 +551,7 @@ impl WorkerConsumer {
             receiver,
             output_sender,
             db,
+            server_port,
         }
     }
 
@@ -645,7 +677,7 @@ impl WorkerConsumer {
             ticket_id: ticket_id.to_string(),
             project_path: project.path,
             system_prompt: worker_type_info.system_prompt,
-            server_port: 3000, // TODO: Get from configuration
+            server_port: self.server_port,
         };
 
         ProcessManager::spawn_worker(spawn_request).await
