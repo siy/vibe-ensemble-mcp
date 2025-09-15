@@ -82,107 +82,31 @@ claude mcp add --transport http vibe-ensemble http://localhost:3000/mcp
 4. **Initialize**: Run `/vibe-ensemble` command to become the coordinator
 5. **Create your first project** and define the work you want to accomplish
 
-## Example Workflows
+## Usage Workflow
 
-### Building a Web Application
+Once you have Vibe-Ensemble configured and running with Claude Code, you can coordinate complex development tasks:
 
-Here's a complete workflow for building a modern web application with authentication:
+1. **Start as Coordinator**: Use the `/vibe-ensemble` command in Claude Code to initialize your coordinator session
+2. **Define Your Project**: Create projects with specific rules, patterns, and worker types for your domain
+3. **Create Workflows**: Set up tickets that define work stages and which specialized workers handle each stage
+4. **Monitor Progress**: Workers automatically progress through stages, providing updates and handing off to the next worker
+5. **Handle Issues**: Use coordination tools to resume stalled work or adjust workflows as needed
 
-```bash
-# 1. Setup your development environment
-./vibe-ensemble-mcp --configure-claude-code --port 3000
-./vibe-ensemble-mcp &  # Start server in background
+### Example Project Types
 
-# 2. Initialize Claude Code in your project directory
-cd /path/to/your/project
-# Open Claude Code here and run: /vibe-ensemble
-```
+**Web Application Development:**
+- Workers: Architect, Frontend Developer, Backend Developer, Security Reviewer
+- Stages: Architecture Design → Implementation → Security Review → Testing
 
-**In Claude Code (as Coordinator):**
+**Documentation and DevOps:**
+- Workers: Technical Writer, DevOps Engineer, QA Tester
+- Stages: Documentation → CI/CD Setup → Deployment Testing
 
-```
-# 3. Create a new project with rules and patterns
-create_project("myorg/todo-app", "/path/to/project", "A modern todo application with JWT auth")
+**Debugging and Performance:**
+- Workers: Investigator, Performance Specialist, Code Reviewer
+- Stages: Issue Analysis → Optimization → Validation
 
-# 4. Set up project rules and coding patterns
-update_project("myorg/todo-app", {
-  "project_rules": "Use TypeScript for frontend, Rust for backend. Follow RESTful API design. All endpoints must have proper error handling.",
-  "project_patterns": "Components in /src/components, API routes in /api, database models in /models. Use async/await, proper error types."
-})
-
-# 5. Define specialized workers for your team
-create_worker_type("myorg/todo-app", "architect", 
-  "You are a senior software architect. Design system architecture, database schemas, and API contracts. Focus on scalability and maintainability.")
-
-create_worker_type("myorg/todo-app", "rust-backend-dev", 
-  "You implement Rust backend services using Axum and SQLx. Write clean, well-tested code following Rust best practices.")
-
-create_worker_type("myorg/todo-app", "frontend-dev", 
-  "You build React TypeScript interfaces. Create responsive, accessible UI components with proper state management.")
-
-create_worker_type("myorg/todo-app", "security-reviewer", 
-  "You review code for security vulnerabilities, especially auth systems, input validation, and data protection.")
-
-# 6. Create tickets with execution plans
-create_ticket("TODO-001", "myorg/todo-app", "Implement JWT Authentication System", 
-  "Build complete authentication with JWT tokens, password hashing, and session management",
-  ["architect", "rust-backend-dev", "security-reviewer"])
-
-create_ticket("TODO-002", "myorg/todo-app", "Create User Dashboard", 
-  "Build responsive dashboard with todo management, user profile, and settings",
-  ["architect", "frontend-dev", "security-reviewer"])
-
-# 7. Submit tickets to start the workflow
-submit_task("myorg/todo-app", "architect", "TODO-001")
-submit_task("myorg/todo-app", "architect", "TODO-002")
-
-# 8. Monitor and manage tickets
-list_tickets("myorg/todo-app")  # Check status of all tickets
-get_ticket("TODO-001")          # Get detailed progress on specific ticket
-
-# 9. Resume stalled processing if needed
-resume_ticket_processing("TODO-001")                    # Resume from current stage
-resume_ticket_processing("TODO-002", "frontend-dev")    # Resume from specific stage
-resume_ticket_processing("TODO-001", null, "open")      # Resume with specific state
-```
-
-**What happens automatically:**
-1. **Architect** designs auth system architecture and database schema
-2. **Rust Backend Dev** implements JWT endpoints, password hashing, middleware
-3. **Security Reviewer** audits implementation for vulnerabilities
-4. Each worker provides detailed progress reports and hands off to the next
-5. Real-time notifications keep you updated on progress
-
-### Debugging and Testing Workflow
-
-```
-# Create a debugging-focused ticket
-create_ticket("BUG-001", "myorg/todo-app", "Fix Performance Issues", 
-  "Investigate and resolve slow API responses",
-  ["investigator", "rust-backend-dev", "performance-tester"])
-
-# Specialized debugging workers
-create_worker_type("myorg/todo-app", "investigator", 
-  "You analyze performance issues, profile code, and identify bottlenecks.")
-
-create_worker_type("myorg/todo-app", "performance-tester", 
-  "You write performance tests and validate optimizations.")
-```
-
-### Documentation and DevOps Workflow
-
-```
-# Create infrastructure and documentation tickets
-create_ticket("DOCS-001", "myorg/todo-app", "Complete Project Documentation", 
-  "Write comprehensive API docs, deployment guides, and user manuals",
-  ["technical-writer", "devops-engineer"])
-
-create_worker_type("myorg/todo-app", "technical-writer", 
-  "You write clear, comprehensive documentation for developers and users.")
-
-create_worker_type("myorg/todo-app", "devops-engineer", 
-  "You set up CI/CD pipelines, containerization, and deployment automation.")
-```
+Each worker operates independently with their specialized knowledge, ensuring focused expertise at every stage while maintaining coordination across the entire workflow.
 
 ## Key Features
 
