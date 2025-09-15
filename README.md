@@ -2,6 +2,8 @@
 
 A multi-agent coordination system that enables Claude Code to manage specialized AI workers for complex development tasks.
 
+> **⚠️ Security Warning**: In version 0.7.0, workers have full access to all tools and permissions. Use this system at your own risk. A comprehensive permission system is planned for the next release.
+
 ## What It Does
 
 Vibe-Ensemble allows you to break down complex projects into specialized stages, with each stage handled by a dedicated AI worker:
@@ -80,30 +82,35 @@ claude mcp add --transport http vibe-ensemble http://localhost:3000/mcp
 4. **Initialize**: Run `/vibe-ensemble` command to become the coordinator
 5. **Create your first project** and define the work you want to accomplish
 
-## Example Workflow
+## Usage Workflow
 
-Here's how you might build a web application:
+Once you have Vibe-Ensemble configured and running with Claude Code, you can coordinate complex development tasks:
 
-```bash
-# 1. Create a new project
-create_project("todo-app", "/path/to/project", "A modern todo application")
+1. **Start as Coordinator**: Use the `/vibe-ensemble` command in Claude Code to initialize your coordinator session
+2. **Define Your Project**: Create projects with specific rules, patterns, and worker types for your domain
+3. **Create Workflows**: Set up tickets that define work stages and which specialized workers handle each stage
+4. **Monitor Progress**: Workers automatically progress through stages, providing updates and handing off to the next worker
+5. **Handle Issues**: Use coordination tools to resume stalled work or adjust workflows as needed
 
-# 2. Define specialized workers
-create_worker_type("todo-app", "architect", "You design system architecture...")
-create_worker_type("todo-app", "rust-dev", "You implement Rust backend code...")  
-create_worker_type("todo-app", "frontend-dev", "You build React interfaces...")
-create_worker_type("todo-app", "tester", "You write comprehensive tests...")
+**WARNING:** Vibe-Ensemble is still work in progress. Some features may not be fully implemented or may have bugs. So, 
+periodically ask Claude Code to check ticket status and event queue. Sometimes it may report issues, but not address them.
+Sending prompt like "Act as a coordinator" usually helps.
 
-# 3. Create a ticket with automatic workflow
-create_ticket("TODO-001", "todo-app", "Implement user authentication", 
-  "Build JWT-based auth system", ["architect", "rust-dev", "tester"])
+### Example Project Types
 
-# 4. Watch as workers automatically:
-#    - Architecture worker designs the auth system
-#    - Rust developer implements the backend
-#    - Tester adds comprehensive tests
-#    - Each worker reports progress and hands off to the next
-```
+**Web Application Development:**
+- Workers: Architect, Frontend Developer, Backend Developer, Security Reviewer
+- Stages: Architecture Design → Implementation → Security Review → Testing
+
+**Documentation and DevOps:**
+- Workers: Technical Writer, DevOps Engineer, QA Tester
+- Stages: Documentation → CI/CD Setup → Deployment Testing
+
+**Debugging and Performance:**
+- Workers: Investigator, Performance Specialist, Code Reviewer
+- Stages: Issue Analysis → Optimization → Validation
+
+Each worker operates independently with their specialized knowledge, ensuring focused expertise at every stage while maintaining coordination across the entire workflow.
 
 ## Key Features
 
@@ -113,6 +120,8 @@ create_ticket("TODO-001", "todo-app", "Implement user authentication",
 - **🎨 Custom Workers**: Define workers for any domain (coding, design, analysis, etc.)
 - **💬 Detailed Reporting**: Every stage produces comprehensive progress reports
 - **⚡ Robust Processing**: Handles failures gracefully with retry mechanisms
+- **📋 Project Rules & Patterns**: Define coding standards and project conventions that workers automatically follow
+- **🔧 Flexible Workflows**: Support for debugging, testing, documentation, and DevOps workflows
 
 ## Requirements
 
@@ -129,6 +138,15 @@ The server accepts the following command-line options:
 - `--host`: Server bind address (default: `127.0.0.1`)
 - `--port`: Server port (default: `3000`)
 - `--log-level`: Log level (default: `info`)
+
+## What's New in v0.7.0
+
+- **Project Rules & Patterns**: Define project-specific coding standards and conventions that workers automatically inherit
+- **Enhanced Documentation**: Comprehensive workflow examples for development, debugging, testing, and DevOps
+- **Improved Database Schema**: Better support for project metadata and worker coordination
+- **Updated MCP Tools**: New project management capabilities with rules and patterns support
+
+> **⚠️ Important Security Note**: Workers in this version have unrestricted access to all tools and system capabilities. Exercise caution when using this system, especially in production environments. A granular permission system is in active development for the next release.
 
 ## How It Works
 

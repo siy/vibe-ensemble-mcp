@@ -85,6 +85,7 @@ async fn create_claude_settings() -> Result<()> {
                 "mcp__vibe-ensemble-mcp__add_ticket_comment",
                 "mcp__vibe-ensemble-mcp__update_ticket_stage",
                 "mcp__vibe-ensemble-mcp__close_ticket",
+                "mcp__vibe-ensemble-mcp__resume_ticket_processing",
                 "mcp__vibe-ensemble-mcp__list_events"
             ],
             "vibe-ensemble-mcp": {
@@ -118,6 +119,7 @@ async fn create_claude_settings() -> Result<()> {
                     "add_ticket_comment": "allowed",
                     "update_ticket_stage": "allowed",
                     "close_ticket": "allowed",
+                    "resume_ticket_processing": "allowed",
 
                     // Event Management Tools
                     "list_events": "allowed"
@@ -177,7 +179,7 @@ async fn create_vibe_ensemble_command(host: &str, port: u16) -> Result<()> {
 ### 4. MONITORING & OVERSIGHT
 - Track ticket progress and worker status
 - Ensure proper task sequencing and dependencies
-- Handle escalations and blocked tasks
+- Handle escalations and blocked tasks using `resume_ticket_processing()` for stalled tickets
 - Maintain project documentation through delegation
 
 ## DELEGATION EXAMPLES
@@ -195,11 +197,18 @@ async fn create_vibe_ensemble_command(host: &str, port: u16) -> Result<()> {
 2. Ensure appropriate worker types exist for each stage in the pipeline
 3. Monitor automatic stage transitions via worker JSON outputs
 
+**Stalled Ticket Recovery:** "Ticket seems stuck in testing phase"
+**Coordinator Action:**
+1. Use `get_ticket("TICKET-ID")` to check current status and stage
+2. Use `resume_ticket_processing("TICKET-ID")` to restart from current stage, or
+3. Use `resume_ticket_processing("TICKET-ID", "implementation")` to restart from specific stage
+4. Monitor for renewed activity via `list_events()`
+
 ## AVAILABLE TOOLS
 - Project: create_project, get_project, list_projects, update_project, delete_project
 - Worker Types: create_worker_type, list_worker_types, get_worker_type, update_worker_type, delete_worker_type
 - Workers: spawn_worker_for_stage, stop_worker, list_workers, get_worker_status, finish_worker
-- Tickets: create_ticket, get_ticket, list_tickets, get_tickets_by_stage, add_ticket_comment, update_ticket_stage, close_ticket
+- Tickets: create_ticket, get_ticket, list_tickets, get_tickets_by_stage, add_ticket_comment, update_ticket_stage, close_ticket, resume_ticket_processing
 - Events: list_events
 
 ## WORKER TEMPLATES

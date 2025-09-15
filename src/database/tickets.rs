@@ -1,6 +1,6 @@
 use anyhow::Result;
 use serde::{Deserialize, Serialize};
-use sqlx::FromRow;
+use sqlx::{FromRow, Row};
 
 use super::DbPool;
 
@@ -37,6 +37,13 @@ pub struct UpdateTicketStageRequest {
 pub struct TicketWithComments {
     pub ticket: Ticket,
     pub comments: Vec<crate::database::comments::Comment>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct TicketWithProjectInfo {
+    pub ticket: Ticket,
+    pub project_rules: Option<String>,
+    pub project_patterns: Option<String>,
 }
 
 impl Ticket {
@@ -283,5 +290,98 @@ impl Ticket {
         .await?;
 
         Ok(ticket)
+    }
+
+    pub async fn get_by_stage_unclaimed(
+        pool: &DbPool,
+        project_id: &str,
+        stage: &str,
+    ) -> Result<Vec<Ticket>> {
+        let tickets = sqlx::query_as::<_, Ticket>(
+            r#"
+            SELECT ticket_id, project_id, title, execution_plan, current_stage, state, priority,
+                   processing_worker_id, created_at, updated_at, closed_at
+            FROM tickets
+            WHERE project_id = ?1 
+              AND current_stage = ?2 
+              AND processing_worker_id IS NULL 
+              AND state = 'open'
+            ORDER BY priority DESC, created_at ASC
+        "#,
+        )
+        .bind(project_id)
+        .bind(stage)
+        .fetch_all(pool)
+        .await?;
+
+        Ok(tickets)
+    }
+
+    pub async fn claim_for_processing(
+        pool: &DbPool,
+        ticket_id: &str,
+        worker_id: &str,
+    ) -> Result<u64> {
+        let result = sqlx::query(
+            r#"
+            UPDATE tickets 
+            SET processing_worker_id = ?1, updated_at = datetime('now')
+            WHERE ticket_id = ?2 
+              AND processing_worker_id IS NULL 
+              AND state = 'open'
+        "#,
+        )
+        .bind(worker_id)
+        .bind(ticket_id)
+        .execute(pool)
+        .await?;
+
+        Ok(result.rows_affected())
+    }
+
+    /// Get a ticket with project rules and patterns included
+    pub async fn get_with_project_info(
+        pool: &DbPool,
+        ticket_id: &str,
+    ) -> Result<Option<TicketWithProjectInfo>> {
+        let result = sqlx::query(
+            r#"
+            SELECT t.ticket_id, t.project_id, t.title, t.execution_plan, t.current_stage, 
+                   t.state, t.priority, t.processing_worker_id, t.created_at, t.updated_at, t.closed_at,
+                   p.project_rules, p.project_patterns
+            FROM tickets t
+            LEFT JOIN projects p ON t.project_id = p.repository_name
+            WHERE t.ticket_id = ?1
+        "#,
+        )
+        .bind(ticket_id)
+        .fetch_optional(pool)
+        .await?;
+
+        if let Some(row) = result {
+            let ticket = Ticket {
+                ticket_id: row.get("ticket_id"),
+                project_id: row.get("project_id"),
+                title: row.get("title"),
+                execution_plan: row.get("execution_plan"),
+                current_stage: row.get("current_stage"),
+                state: row.get("state"),
+                priority: row.get("priority"),
+                processing_worker_id: row.get("processing_worker_id"),
+                created_at: row.get("created_at"),
+                updated_at: row.get("updated_at"),
+                closed_at: row.get("closed_at"),
+            };
+
+            let ticket_with_info = TicketWithProjectInfo {
+                ticket,
+                project_rules: row.get("project_rules"),
+                project_patterns: row.get("project_patterns"),
+            };
+
+            Ok(Some(ticket_with_info))
+        } else {
+            Ok(None)
+        }
     }
 }

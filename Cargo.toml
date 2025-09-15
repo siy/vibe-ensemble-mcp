@@ -1,6 +1,6 @@
 [package]
 name = "vibe-ensemble-mcp"
-version = "0.6.0"
+version = "0.7.0"
 edition = "2021"
 description = "Multi-agent coordination MCP server for Claude Code"
 license = "Apache-2.0"
@@ -10,7 +10,6 @@ repository = "https://github.com/sergiyyevtushenko/vibe-ensemble-mcp"
 [dependencies]
 # Async runtime
 tokio = { version = "1.0", features = ["full"] }
-tokio-stream = { version = "0.1", features = ["sync"] }
 futures = "0.3"
 async-stream = "0.3"
 
@@ -29,6 +28,7 @@ sqlx = { version = "0.7", default-features = false, features = ["runtime-tokio-r
 uuid = { version = "1.0", features = ["v4"] }
 chrono = { version = "0.4", features = ["serde"] }
 anyhow = "1.0"
+dashmap = "5.5"
 
 # CLI and config
 clap = { version = "4.0", features = ["derive"] }

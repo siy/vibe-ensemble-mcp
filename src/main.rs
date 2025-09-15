@@ -52,10 +52,9 @@ async fn main() -> Result<()> {
     std::fs::create_dir_all(logs_dir)?;
 
     let file_appender = tracing_appender::rolling::daily(logs_dir, "server.log");
-    let (non_blocking, guard) = tracing_appender::non_blocking(file_appender);
+    let (non_blocking, _guard) = tracing_appender::non_blocking(file_appender);
 
-    // Keep the guard alive by leaking it (necessary for the file writer to work)
-    std::mem::forget(guard);
+    // Guard is kept alive by the variable scope and will be properly cleaned up on exit
 
     tracing_subscriber::registry()
         .with(tracing_subscriber::fmt::layer().with_filter(env_filter.clone()))

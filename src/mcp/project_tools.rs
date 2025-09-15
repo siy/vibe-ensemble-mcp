@@ -22,6 +22,9 @@ impl ToolHandler for CreateProjectTool {
         let repository_name: String = extract_param(&arguments, "repository_name")?;
         let path: String = extract_param(&arguments, "path")?;
         let short_description: Option<String> = extract_optional_param(&arguments, "description")?;
+        let project_rules: Option<String> = extract_optional_param(&arguments, "project_rules")?;
+        let project_patterns: Option<String> =
+            extract_optional_param(&arguments, "project_patterns")?;
 
         // Create the project directory if it doesn't exist
         debug!("Checking if project directory exists: {}", path);
@@ -42,6 +45,8 @@ impl ToolHandler for CreateProjectTool {
             repository_name: repository_name.clone(),
             path,
             short_description,
+            project_rules,
+            project_patterns,
         };
 
         match Project::create(&state.db, request).await {
@@ -174,10 +179,15 @@ impl ToolHandler for UpdateProjectTool {
         let repository_name: String = extract_param(&arguments, "repository_name")?;
         let path: Option<String> = extract_optional_param(&arguments, "path")?;
         let short_description: Option<String> = extract_optional_param(&arguments, "description")?;
+        let project_rules: Option<String> = extract_optional_param(&arguments, "project_rules")?;
+        let project_patterns: Option<String> =
+            extract_optional_param(&arguments, "project_patterns")?;
 
         let request = UpdateProjectRequest {
             path,
             short_description,
+            project_rules,
+            project_patterns,
         };
 
         match Project::update(&state.db, &repository_name, request).await {
