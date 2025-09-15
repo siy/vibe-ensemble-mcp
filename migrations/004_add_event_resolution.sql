@@ -3,3 +3,6 @@
 -- taken to resolve events that require attention.
 
 ALTER TABLE events ADD COLUMN resolution_summary TEXT;
+
+-- Insert this migration version
+INSERT OR IGNORE INTO schema_migrations (version) VALUES (4);
