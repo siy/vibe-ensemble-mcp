@@ -27,10 +27,10 @@ impl ToolHandler for ListEventsTool {
 
         // Get unprocessed events from DB, then apply optional type filter and limit
         let mut events = Event::get_unprocessed(&state.db).await?;
-        
+
         // Most-recent-first to match "recent" semantics
         events.sort_by(|a, b| b.created_at.cmp(&a.created_at));
-        
+
         let filtered_events: Vec<_> = events
             .into_iter()
             .filter(|event| {
