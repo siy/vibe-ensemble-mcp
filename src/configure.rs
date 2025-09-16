@@ -142,26 +142,60 @@ async fn create_vibe_ensemble_command(host: &str, port: u16) -> Result<()> {
 ### 5. REAL-TIME EVENT MONITORING (SSE)
 The system provides real-time event streaming via SSE for immediate coordination responses:
 
-**Available Events:**
-- `ticket_stage_completed` - When workers finish stages
-- `worker_stopped` - When workers terminate  
-- `task_assigned` - When tickets are queued for processing
-- `ticket_claimed` - When workers claim tickets
-- `queue_created` - When new queues are established
+**Available Event Types:**
 
-**Monitoring Pattern:**
-1. SSE connection automatically established via vibe-ensemble-sse MCP server
-2. Events stream in real-time as MCP notifications
-3. No polling required - events delivered immediately
-4. Use events to coordinate next steps and handle failures
+**📋 TICKET EVENTS (Action Required):**
+- `ticket_created` - New ticket created → Monitor for automatic worker spawning
+- `ticket_stage_updated` - Ticket moved to new stage → Verify worker assignment, check for stalls
+- `ticket_claimed` - Worker claimed ticket → Monitor progress, set expectations
+- `ticket_released` - Worker released ticket → Investigate issues, reassign if needed
+- `ticket_closed` - Ticket completed/stopped → Review outcomes, resolve event
 
-**Event-Driven Coordination:**
+**👤 WORKER EVENTS (Informational + Action):**
+- `worker_type_created` - New worker type defined → Acknowledge capability expansion
+- `worker_type_updated` - Worker type modified → Note capability changes
+- `worker_type_deleted` - Worker type removed → Monitor impact on active tickets
+- `worker_stopped` - Worker terminated → Check if intervention needed
+
+**🏗️ PROJECT EVENTS (Informational):**
+- `project_created` - New project setup → Acknowledge project initialization
+
+**⚠️ SYSTEM EVENTS (Action Required):**
+- `ticket_stage_completed` - Worker finished stage → Check next stage assignment
+- `task_assigned` - Ticket queued for processing → Monitor pickup timing
+- `queue_created` - New queue established → Acknowledge system expansion
+
+**🔄 EVENT HANDLING STRATEGY:**
+
+**Informational Events (Resolve Only):**
+- `project_created`, `worker_type_created`, `worker_type_updated`, `worker_type_deleted`
+- **Action**: Use `resolve_event(event_id)` to acknowledge - no further coordination needed
+
+**Monitoring Events (Observe + Resolve):**
+- `ticket_created`, `ticket_claimed`, `task_assigned`, `queue_created`
+- **Action**: Monitor briefly for expected progression, then `resolve_event(event_id)`
+
+**Intervention Events (Investigate + Act):**
+- `ticket_stage_updated`, `ticket_released`, `worker_stopped`, `ticket_stage_completed`
+- **Action**: 
+  1. Use `get_ticket(ticket_id)` to check status
+  2. If stalled: Use `resume_ticket_processing(ticket_id)` 
+  3. If progressing: Use `resolve_event(event_id)`
+  4. If issues: Escalate or create new tickets
+
+**Completion Events (Review + Close):**
+- `ticket_closed`
+- **Action**: Review outcomes, ensure requirements met, `resolve_event(event_id)`
+
+**Event-Driven Coordination Pattern:**
 ```
-SSE Event: ticket_stage_completed 
+SSE Event Received 
 ↓
-Check ticket status with get_ticket()
-↓  
-Determine next action (automatic or manual intervention)
+Classify Event Type (Informational/Monitoring/Intervention/Completion)
+↓
+Take Appropriate Action Based on Classification
+↓
+Use resolve_event(event_id) to mark as handled
 ↓
 Continue monitoring via SSE stream
 ```
@@ -187,6 +221,16 @@ Continue monitoring via SSE stream
 2. Use `resume_ticket_processing("TICKET-ID")` to restart from current stage, or
 3. Use `resume_ticket_processing("TICKET-ID", "implementation")` to restart from specific stage
 4. Monitor for renewed activity via `list_events()`
+
+**Event-Driven Response Example:** SSE event `ticket_stage_completed` received
+**Coordinator Action:**
+1. **Classify**: Intervention Event - requires investigation
+2. **Investigate**: Use `get_ticket(ticket_id)` to check if next stage started automatically
+3. **Decision Tree**:
+   - If next stage active: Use `resolve_event(event_id)` (normal progression)
+   - If stalled: Use `resume_ticket_processing(ticket_id)` then `resolve_event(event_id)`
+   - If completed: Review final outputs, ensure requirements met, `resolve_event(event_id)`
+4. **Continue**: Monitor SSE stream for next events
 
 ## AVAILABLE TOOLS
 - Project: create_project, get_project, list_projects, update_project, delete_project
