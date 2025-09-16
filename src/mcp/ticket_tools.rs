@@ -384,8 +384,8 @@ impl ToolHandler for UpdateTicketStageTool {
 
     fn definition(&self) -> Tool {
         Tool {
-            name: "complete_ticket_stage".to_string(),
-            description: "Update ticket's completed stage number".to_string(),
+            name: "update_ticket_stage".to_string(),
+            description: "Update ticket to a specific stage".to_string(),
             input_schema: json!({
                 "type": "object",
                 "properties": {

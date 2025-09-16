@@ -9,6 +9,8 @@ use tokio::sync::broadcast;
 
 use crate::server::AppState;
 
+const MCP_PROTOCOL_VERSION: &str = "2024-11-05";
+
 /// SSE event broadcaster for notifying clients about database changes
 #[derive(Clone)]
 pub struct EventBroadcaster {
@@ -57,10 +59,10 @@ pub async fn sse_handler(
         "jsonrpc": "2.0",
         "method": "notifications/initialized",
         "params": {
-            "protocolVersion": "2024-11-05",
+            "protocolVersion": MCP_PROTOCOL_VERSION,
             "serverInfo": {
                 "name": "vibe-ensemble-mcp",
-                "version": "0.8.0"
+                "version": env!("CARGO_PKG_VERSION")
             },
             "capabilities": {
                 "tools": {},

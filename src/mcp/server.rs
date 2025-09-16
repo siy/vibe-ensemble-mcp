@@ -8,6 +8,8 @@ use super::{
 };
 use crate::{error::Result, server::AppState};
 
+const MCP_PROTOCOL_VERSION: &str = "2024-11-05";
+
 pub struct McpServer {
     pub tools: ToolRegistry,
 }
@@ -117,7 +119,7 @@ impl McpServer {
 
         // Log protocol version negotiation
         let client_version = &request.protocol_version;
-        let server_supported_version = "2024-11-05";
+        let server_supported_version = MCP_PROTOCOL_VERSION;
 
         info!(
             "Protocol version negotiation - Client requested: {}, Server supports: {}",
@@ -144,7 +146,7 @@ impl McpServer {
             },
             server_info: ServerInfo {
                 name: "vibe-ensemble-mcp".to_string(),
-                version: "0.5.1".to_string(),
+                version: env!("CARGO_PKG_VERSION").to_string(),
             },
         };
 
@@ -620,10 +622,10 @@ pub async fn mcp_handler(
             info!("MCP-Protocol-Version header received: {}", version_str);
 
             // Validate the header version matches what we support
-            if version_str != "2024-11-05" {
+            if version_str != MCP_PROTOCOL_VERSION {
                 warn!(
-                    "MCP-Protocol-Version header mismatch: client sent {}, server supports 2024-11-05", 
-                    version_str
+                    "MCP-Protocol-Version header mismatch: client sent {}, server supports {}", 
+                    version_str, MCP_PROTOCOL_VERSION
                 );
             }
         } else {
