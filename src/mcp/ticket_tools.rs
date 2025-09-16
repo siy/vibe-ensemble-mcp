@@ -41,6 +41,20 @@ impl ToolHandler for CreateTicketTool {
         let initial_stage: String = extract_optional_param(&Some(args.clone()), "initial_stage")?
             .unwrap_or_else(|| "planning".to_string());
 
+        // Validate that the initial stage worker type exists for this project (including "planning")
+        let worker_type_exists = crate::database::worker_types::WorkerType::get_by_type(
+            &state.db,
+            &project_id,
+            &initial_stage,
+        ).await?;
+
+        if worker_type_exists.is_none() {
+            return Ok(crate::mcp::tools::create_error_response(&format!(
+                "Worker type '{}' does not exist for project '{}'. Cannot use as initial stage. Coordinator must create this worker type first.",
+                initial_stage, project_id
+            )));
+        }
+
         info!("Creating ticket: {} in project {}", title, project_id);
 
         let ticket_id = Uuid::new_v4().to_string();
@@ -323,6 +337,33 @@ impl ToolHandler for UpdateTicketStageTool {
         let ticket_id: String = extract_param(&Some(args.clone()), "ticket_id")?;
         let stage: String = extract_param(&Some(args.clone()), "stage")?;
 
+        // Get the ticket to find the project_id
+        let ticket_data = match Ticket::get_by_id(&state.db, &ticket_id).await? {
+            Some(t) => t.ticket,
+            None => {
+                return Ok(create_error_response(&format!(
+                    "Ticket {} not found",
+                    ticket_id
+                )));
+            }
+        };
+
+        // Validate that the stage worker type exists for this project (unless it's "planning")
+        if stage != "planning" {
+            let worker_type_exists = crate::database::worker_types::WorkerType::get_by_type(
+                &state.db,
+                &ticket_data.project_id,
+                &stage,
+            ).await?;
+
+            if worker_type_exists.is_none() {
+                return Ok(create_error_response(&format!(
+                    "Worker type '{}' does not exist for project '{}'. Cannot update ticket to this stage.",
+                    stage, ticket_data.project_id
+                )));
+            }
+        }
+
         info!("Updating ticket {} to stage {}", ticket_id, stage);
 
         let result = Ticket::update_stage(&state.db, &ticket_id, &stage).await?;
@@ -584,6 +625,22 @@ impl ToolHandler for ResumeTicketProcessingTool {
 
         // Determine stage to use (provided or current)
         let target_stage = stage.unwrap_or(ticket_data.current_stage.clone());
+
+        // Validate that the target stage worker type exists for this project (unless it's "planning")
+        if target_stage != "planning" {
+            let worker_type_exists = crate::database::worker_types::WorkerType::get_by_type(
+                &state.db,
+                &ticket_data.project_id,
+                &target_stage,
+            ).await?;
+
+            if worker_type_exists.is_none() {
+                return Ok(create_error_response(&format!(
+                    "Worker type '{}' does not exist for project '{}'. Cannot resume ticket with this stage.",
+                    target_stage, ticket_data.project_id
+                )));
+            }
+        }
 
         // Determine state to use (provided or "open")
         let target_state = state_param.unwrap_or_else(|| "open".to_string());

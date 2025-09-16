@@ -95,6 +95,22 @@ impl QueueManager {
             task_id
         );
 
+        // Validate that the worker type exists for this project
+        let worker_type_exists = crate::database::worker_types::WorkerType::get_by_type(
+            db, 
+            project_id, 
+            worker_type
+        ).await?;
+
+        if worker_type_exists.is_none() {
+            return Err(anyhow::anyhow!(
+                "Worker type '{}' does not exist for project '{}'. Cannot submit task for ticket {}",
+                worker_type,
+                project_id,
+                ticket_id
+            ));
+        }
+
         // Claim the ticket before submitting to queue
         let worker_id = format!("consumer-{}-{}", worker_type, &task_id[..8]);
         let claim_result =
