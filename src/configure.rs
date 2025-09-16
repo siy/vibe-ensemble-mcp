@@ -161,7 +161,7 @@ async fn create_vibe_ensemble_command(host: &str, port: u16) -> Result<()> {
 - Project: create_project, get_project, list_projects, update_project, delete_project
 - Worker Types: create_worker_type, list_worker_types, get_worker_type, update_worker_type, delete_worker_type
 - Tickets: create_ticket, get_ticket, list_tickets, get_tickets_by_stage, add_ticket_comment, update_ticket_stage, close_ticket, claim_ticket, release_ticket, resume_ticket_processing
-- Events: list_events, resolve_event
+- Events: list_events (resolved filtered by default), resolve_event
 
 ## WORKER TEMPLATES
 High-quality, vibe-ensemble-aware worker templates are available in `.claude/worker-templates/`. These templates provide:

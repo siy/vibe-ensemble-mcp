@@ -56,7 +56,7 @@ impl ToolHandler for ListEventsTool {
     fn definition(&self) -> Tool {
         Tool {
             name: "list_events".to_string(),
-            description: "List recent unprocessed system events, optionally filtered by type. Processed events are those that have been resolved by a coordinator.".to_string(),
+            description: "List recent unprocessed system events, optionally filtered by type. 'Processed' events are those already handled (e.g., resolved or programmatically marked processed).".to_string(),
             input_schema: serde_json::json!({
                 "type": "object",
                 "properties": {
@@ -92,15 +92,16 @@ impl ToolHandler for ResolveEventTool {
         let resolution_summary: String = extract_param(&Some(args.clone()), "resolution_summary")?;
 
         info!(
-            "Resolving event {} with summary: {}",
-            event_id, resolution_summary
+            "Resolving event {} (summary len: {} chars)",
+            event_id,
+            resolution_summary.len()
         );
 
         Event::resolve_event(&state.db, event_id, &resolution_summary).await?;
 
         Ok(CallToolResponse {
             content: vec![ToolContent {
-                content_type: "text".to_string(),
+                content_type: "application/json".to_string(),
                 text: format!("Event {} resolved successfully. The event has been marked as processed and will no longer appear in unprocessed event listings.", event_id),
             }],
             is_error: Some(false),
