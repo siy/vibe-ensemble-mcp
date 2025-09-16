@@ -42,6 +42,11 @@ impl EventBroadcaster {
         let _ = self.sender.send(event_data.to_string());
     }
 
+    /// Broadcast a raw string event to all connected SSE clients
+    pub fn broadcast(&self, event_data: String) -> Result<usize, tokio::sync::broadcast::error::SendError<String>> {
+        self.sender.send(event_data)
+    }
+
     /// Create a new receiver for SSE connections
     pub fn subscribe(&self) -> broadcast::Receiver<String> {
         self.sender.subscribe()

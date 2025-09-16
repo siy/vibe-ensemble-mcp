@@ -71,6 +71,34 @@ impl ToolHandler for CreateTicketTool {
 
         let ticket = Ticket::create(&state.db, req).await?;
 
+        // Broadcast ticket_created event
+        let event = json!({
+            "jsonrpc": "2.0",
+            "method": "notifications/resources/updated",
+            "params": {
+                "uri": format!("vibe-ensemble://tickets/{}", ticket.ticket_id),
+                "event": {
+                    "type": "ticket_created",
+                    "ticket": {
+                        "ticket_id": ticket.ticket_id,
+                        "project_id": ticket.project_id,
+                        "title": ticket.title,
+                        "execution_plan": ticket.execution_plan,
+                        "current_stage": ticket.current_stage,
+                        "state": ticket.state,
+                        "created_at": ticket.created_at
+                    },
+                    "timestamp": chrono::Utc::now().to_rfc3339()
+                }
+            }
+        });
+        
+        if let Err(e) = state.event_broadcaster.broadcast(event.to_string()) {
+            tracing::warn!("Failed to broadcast ticket_created event: {}", e);
+        } else {
+            tracing::debug!("Successfully broadcast ticket_created event for: {}", ticket.ticket_id);
+        }
+
         // Automatically submit the ticket to the initial stage queue
         match state
             .queue_manager
@@ -280,6 +308,34 @@ impl ToolHandler for AddTicketCommentTool {
 
         let comment = Comment::create_from_request(&state.db, req).await?;
 
+        // Broadcast ticket_comment_added event
+        let event = json!({
+            "jsonrpc": "2.0",
+            "method": "notifications/resources/updated",
+            "params": {
+                "uri": format!("vibe-ensemble://tickets/{}", ticket_id),
+                "event": {
+                    "type": "ticket_comment_added",
+                    "comment": {
+                        "id": comment.id,
+                        "ticket_id": comment.ticket_id,
+                        "worker_type": comment.worker_type,
+                        "worker_id": comment.worker_id,
+                        "stage_number": comment.stage_number,
+                        "content": comment.content,
+                        "created_at": comment.created_at
+                    },
+                    "timestamp": chrono::Utc::now().to_rfc3339()
+                }
+            }
+        });
+        
+        if let Err(e) = state.event_broadcaster.broadcast(event.to_string()) {
+            tracing::warn!("Failed to broadcast ticket_comment_added event: {}", e);
+        } else {
+            tracing::debug!("Successfully broadcast ticket_comment_added event for: {}", ticket_id);
+        }
+
         Ok(CallToolResponse {
             content: vec![ToolContent {
                 content_type: "text".to_string(),
@@ -371,10 +427,41 @@ impl ToolHandler for UpdateTicketStageTool {
         let result = Ticket::update_stage(&state.db, &ticket_id, &stage).await?;
 
         match result {
-            Some(_) => Ok(create_success_response(&format!(
-                "Updated ticket {} to stage {}",
-                ticket_id, stage
-            ))),
+            Some(updated_ticket) => {
+                // Broadcast ticket_stage_updated event
+                let event = json!({
+                    "jsonrpc": "2.0",
+                    "method": "notifications/resources/updated",
+                    "params": {
+                        "uri": format!("vibe-ensemble://tickets/{}", ticket_id),
+                        "event": {
+                            "type": "ticket_stage_updated",
+                            "ticket_id": ticket_id,
+                            "new_stage": stage,
+                            "ticket": {
+                                "ticket_id": updated_ticket.ticket_id,
+                                "project_id": updated_ticket.project_id,
+                                "title": updated_ticket.title,
+                                "current_stage": updated_ticket.current_stage,
+                                "state": updated_ticket.state,
+                                "updated_at": updated_ticket.updated_at
+                            },
+                            "timestamp": chrono::Utc::now().to_rfc3339()
+                        }
+                    }
+                });
+                
+                if let Err(e) = state.event_broadcaster.broadcast(event.to_string()) {
+                    tracing::warn!("Failed to broadcast ticket_stage_updated event: {}", e);
+                } else {
+                    tracing::debug!("Successfully broadcast ticket_stage_updated event for: {}", ticket_id);
+                }
+
+                Ok(create_success_response(&format!(
+                    "Updated ticket {} to stage {}",
+                    ticket_id, stage
+                )))
+            }
             None => Ok(create_error_response(&format!(
                 "Ticket {} not found",
                 ticket_id
@@ -435,6 +522,27 @@ impl ToolHandler for ClaimTicketTool {
         .await?;
 
         if result.rows_affected() > 0 {
+            // Broadcast ticket_claimed event
+            let event = json!({
+                "jsonrpc": "2.0",
+                "method": "notifications/resources/updated",
+                "params": {
+                    "uri": format!("vibe-ensemble://tickets/{}", ticket_id),
+                    "event": {
+                        "type": "ticket_claimed",
+                        "ticket_id": ticket_id,
+                        "worker_id": worker_id,
+                        "timestamp": chrono::Utc::now().to_rfc3339()
+                    }
+                }
+            });
+            
+            if let Err(e) = state.event_broadcaster.broadcast(event.to_string()) {
+                tracing::warn!("Failed to broadcast ticket_claimed event: {}", e);
+            } else {
+                tracing::debug!("Successfully broadcast ticket_claimed event for: {}", ticket_id);
+            }
+
             Ok(create_success_response(&format!(
                 "Successfully claimed ticket {} for worker {}",
                 ticket_id, worker_id
@@ -502,6 +610,27 @@ impl ToolHandler for ReleaseTicketTool {
         .await?;
 
         if result.rows_affected() > 0 {
+            // Broadcast ticket_released event
+            let event = json!({
+                "jsonrpc": "2.0",
+                "method": "notifications/resources/updated",
+                "params": {
+                    "uri": format!("vibe-ensemble://tickets/{}", ticket_id),
+                    "event": {
+                        "type": "ticket_released",
+                        "ticket_id": ticket_id,
+                        "worker_id": worker_id,
+                        "timestamp": chrono::Utc::now().to_rfc3339()
+                    }
+                }
+            });
+            
+            if let Err(e) = state.event_broadcaster.broadcast(event.to_string()) {
+                tracing::warn!("Failed to broadcast ticket_released event: {}", e);
+            } else {
+                tracing::debug!("Successfully broadcast ticket_released event for: {}", ticket_id);
+            }
+
             Ok(create_success_response(&format!(
                 "Successfully released ticket {} from worker {}",
                 ticket_id, worker_id
@@ -560,10 +689,40 @@ impl ToolHandler for CloseTicketTool {
         let result = Ticket::close_ticket(&state.db, &ticket_id, &resolution).await?;
 
         match result {
-            Some(_) => Ok(create_success_response(&format!(
-                "Closed ticket {} with resolution: {}",
-                ticket_id, resolution
-            ))),
+            Some(closed_ticket) => {
+                // Broadcast ticket_closed event
+                let event = json!({
+                    "jsonrpc": "2.0",
+                    "method": "notifications/resources/updated",
+                    "params": {
+                        "uri": format!("vibe-ensemble://tickets/{}", ticket_id),
+                        "event": {
+                            "type": "ticket_closed",
+                            "ticket_id": ticket_id,
+                            "resolution": resolution,
+                            "ticket": {
+                                "ticket_id": closed_ticket.ticket_id,
+                                "project_id": closed_ticket.project_id,
+                                "title": closed_ticket.title,
+                                "state": closed_ticket.state,
+                                "closed_at": closed_ticket.closed_at
+                            },
+                            "timestamp": chrono::Utc::now().to_rfc3339()
+                        }
+                    }
+                });
+                
+                if let Err(e) = state.event_broadcaster.broadcast(event.to_string()) {
+                    tracing::warn!("Failed to broadcast ticket_closed event: {}", e);
+                } else {
+                    tracing::debug!("Successfully broadcast ticket_closed event for: {}", ticket_id);
+                }
+
+                Ok(create_success_response(&format!(
+                    "Closed ticket {} with resolution: {}",
+                    ticket_id, resolution
+                )))
+            }
             None => Ok(create_error_response(&format!(
                 "Ticket {} not found",
                 ticket_id

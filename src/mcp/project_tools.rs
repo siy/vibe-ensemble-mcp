@@ -57,6 +57,32 @@ impl ToolHandler for CreateProjectTool {
                     "description": project.short_description,
                     "created_at": project.created_at
                 });
+                
+                // Broadcast project_created event
+                let event = json!({
+                    "jsonrpc": "2.0",
+                    "method": "notifications/resources/updated",
+                    "params": {
+                        "uri": "vibe-ensemble://projects",
+                        "event": {
+                            "type": "project_created",
+                            "project": {
+                                "repository_name": project.repository_name,
+                                "path": project.path,
+                                "description": project.short_description,
+                                "created_at": project.created_at
+                            },
+                            "timestamp": chrono::Utc::now().to_rfc3339()
+                        }
+                    }
+                });
+                
+                if let Err(e) = state.event_broadcaster.broadcast(event.to_string()) {
+                    tracing::warn!("Failed to broadcast project_created event: {}", e);
+                } else {
+                    tracing::debug!("Successfully broadcast project_created event for: {}", project.repository_name);
+                }
+                
                 Ok(create_success_response(&format!(
                     "Project created successfully: {}",
                     response
