@@ -74,7 +74,7 @@ pub async fn sse_handler(
         }
     });
 
-    broadcaster.broadcast_event("mcp_notification", init_notification);
+    broadcaster.broadcast_event("mcp_notification", init_notification.clone());
 
     let mut receiver = broadcaster.subscribe();
 
