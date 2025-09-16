@@ -198,12 +198,14 @@ impl ProcessManager {
                 }
                 '}' => {
                     brace_count -= 1;
-                    if brace_count == 0 && start_pos.is_some() {
-                        let json_candidate = &output[start_pos.unwrap()..=i];
-                        if json_candidate.contains("\"ticket_id\"")
-                            && json_candidate.contains("\"outcome\"")
-                        {
-                            last_valid_json = Some(json_candidate);
+                    if brace_count == 0 {
+                        if let Some(start) = start_pos {
+                            let json_candidate = &output[start..=i];
+                            if json_candidate.contains("\"ticket_id\"")
+                                && json_candidate.contains("\"outcome\"")
+                            {
+                                last_valid_json = Some(json_candidate);
+                            }
                         }
                     }
                 }
@@ -392,8 +394,10 @@ impl ProcessManager {
         let _ = std::fs::remove_file(&config_path);
 
         // If we get here, the worker didn't produce valid output
+        // This should be handled by the caller via WorkerOutput::CoordinatorAttention
+        // rather than directly releasing tickets here since process.rs doesn't have DB access
         Err(anyhow::anyhow!(
-            "Worker {} did not produce valid output for ticket {}",
+            "Worker {} did not produce valid output for ticket {}. This will be handled as coordinator attention by WorkerConsumer.",
             request.worker_id,
             request.ticket_id
         ))
