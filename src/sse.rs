@@ -79,6 +79,11 @@ pub async fn sse_handler(
     let mut receiver = broadcaster.subscribe();
 
     let stream = async_stream::stream! {
+        // Send initialization message immediately to new clients
+        yield Ok(Event::default()
+            .event("message")
+            .data(init_notification.to_string()));
+
         loop {
             match receiver.recv().await {
                 Ok(data) => {
