@@ -168,7 +168,7 @@ impl ProcessManager {
     /// Parse worker JSON output from a string
     pub fn parse_output(output: &str) -> Result<WorkerOutput> {
         debug!("Attempting to parse worker output: {}", output);
-        
+
         // Strategy 1: Look for JSON code blocks (```json ... ```)
         if let Some(json_start) = output.find("```json") {
             let search_start = json_start + 7; // Skip past "```json"
@@ -182,12 +182,12 @@ impl ProcessManager {
                 }
             }
         }
-        
+
         // Strategy 2: Look for the last complete JSON object in the output
         let mut last_valid_json = None;
         let mut brace_count = 0;
         let mut start_pos = None;
-        
+
         for (i, char) in output.char_indices() {
             match char {
                 '{' => {
@@ -200,7 +200,9 @@ impl ProcessManager {
                     brace_count -= 1;
                     if brace_count == 0 && start_pos.is_some() {
                         let json_candidate = &output[start_pos.unwrap()..=i];
-                        if json_candidate.contains("\"ticket_id\"") && json_candidate.contains("\"outcome\"") {
+                        if json_candidate.contains("\"ticket_id\"")
+                            && json_candidate.contains("\"outcome\"")
+                        {
                             last_valid_json = Some(json_candidate);
                         }
                     }
@@ -208,7 +210,7 @@ impl ProcessManager {
                 _ => {}
             }
         }
-        
+
         if let Some(json_str) = last_valid_json {
             debug!("Found valid JSON candidate: {}", json_str);
             match serde_json::from_str::<WorkerOutput>(json_str) {
@@ -216,7 +218,7 @@ impl ProcessManager {
                 Err(e) => debug!("Failed to parse JSON candidate: {}", e),
             }
         }
-        
+
         // Strategy 3: Original simple approach (fallback)
         let json_start = output.find('{');
         let json_end = output.rfind('}');
