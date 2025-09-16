@@ -624,7 +624,7 @@ pub async fn mcp_handler(
             // Validate the header version matches what we support
             if version_str != MCP_PROTOCOL_VERSION {
                 warn!(
-                    "MCP-Protocol-Version header mismatch: client sent {}, server supports {}", 
+                    "MCP-Protocol-Version header mismatch: client sent {}, server supports {}",
                     version_str, MCP_PROTOCOL_VERSION
                 );
             }

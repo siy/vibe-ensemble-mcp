@@ -12,7 +12,7 @@ use crate::{
     database::DbPool,
     sse::{notify_queue_change, notify_ticket_change, EventBroadcaster},
     workers::{
-        domain::{WorkerCompletionEvent, WorkerCommand, TicketId, WorkerType, ProjectId},
+        domain::{TicketId, WorkerCommand, WorkerCompletionEvent, WorkerType},
         output::OutputProcessor,
     },
 };
@@ -40,6 +40,7 @@ pub struct QueueManager {
     completion_sender: mpsc::UnboundedSender<WorkerCompletionEvent>,
     config: Config,
     event_broadcaster: EventBroadcaster,
+    #[allow(dead_code)]
     processor_handle: tokio::task::JoinHandle<()>,
 }
 
@@ -56,7 +57,9 @@ impl QueueManager {
         // Spawn the new output processor
         let output_processor = OutputProcessor::new(db);
         let processor_handle = tokio::spawn(async move {
-            output_processor.start_event_processing(completion_receiver).await;
+            output_processor
+                .start_event_processing(completion_receiver)
+                .await;
         });
 
         Self {
@@ -194,6 +197,7 @@ impl QueueManager {
         let completion_sender = self.completion_sender.clone();
         let db_clone = _db.clone();
         let server_port = self.config.port;
+        let permission_mode = self.config.permission_mode.clone();
 
         tokio::spawn(async move {
             let consumer = WorkerConsumer::new(
@@ -204,6 +208,7 @@ impl QueueManager {
                 completion_sender,
                 db_clone,
                 server_port,
+                permission_mode,
             );
 
             if let Err(e) = consumer.start().await {
@@ -234,6 +239,7 @@ impl QueueManager {
 
     /// Output processor loop - handles WorkerOutput instances centrally
     /// This contains the validation and processing logic moved from json_output.rs
+    #[allow(dead_code)]
     async fn output_processor_loop(
         mut receiver: mpsc::UnboundedReceiver<WorkerOutput>,
         db: DbPool,
@@ -291,6 +297,7 @@ impl QueueManager {
 
     /// Process the parsed worker output and take appropriate actions
     /// This is the core logic moved from json_output.rs
+    #[allow(dead_code)]
     async fn process_worker_output(db: &DbPool, output: &WorkerOutput) -> Result<()> {
         let ticket_id = output
             .ticket_id
@@ -339,6 +346,7 @@ impl QueueManager {
         Ok(())
     }
 
+    #[allow(dead_code)]
     async fn handle_next_stage(db: &DbPool, ticket_id: &str, output: &WorkerOutput) -> Result<()> {
         let target_stage = output
             .target_stage
@@ -435,6 +443,7 @@ impl QueueManager {
         Ok(())
     }
 
+    #[allow(dead_code)]
     async fn handle_prev_stage(db: &DbPool, ticket_id: &str, output: &WorkerOutput) -> Result<()> {
         let target_stage = output
             .target_stage
@@ -489,6 +498,7 @@ impl QueueManager {
         Ok(())
     }
 
+    #[allow(dead_code)]
     async fn handle_coordinator_attention(
         db: &DbPool,
         ticket_id: &str,
@@ -530,6 +540,7 @@ impl QueueManager {
     }
 
     /// Release a ticket if it's currently claimed by any worker
+    #[allow(dead_code)]
     async fn release_ticket_if_claimed(db: &DbPool, ticket_id: &str) -> Result<()> {
         debug!("Releasing ticket {} if claimed", ticket_id);
 
@@ -563,9 +574,11 @@ struct WorkerConsumer {
     completion_sender: mpsc::UnboundedSender<WorkerCompletionEvent>,
     db: DbPool,
     server_port: u16,
+    permission_mode: String,
 }
 
 impl WorkerConsumer {
+    #[allow(clippy::too_many_arguments)]
     fn new(
         project_id: String,
         worker_type: String,
@@ -574,6 +587,7 @@ impl WorkerConsumer {
         completion_sender: mpsc::UnboundedSender<WorkerCompletionEvent>,
         db: DbPool,
         server_port: u16,
+        permission_mode: String,
     ) -> Self {
         Self {
             project_id,
@@ -583,6 +597,7 @@ impl WorkerConsumer {
             completion_sender,
             db,
             server_port,
+            permission_mode,
         }
     }
 
@@ -659,7 +674,7 @@ impl WorkerConsumer {
 
         // Convert WorkerOutput to WorkerCompletionEvent
         let completion_event = self.convert_to_completion_event(&worker_output)?;
-        
+
         // Send event to centralized processor
         if self.completion_sender.send(completion_event).is_err() {
             warn!(
@@ -677,9 +692,9 @@ impl WorkerConsumer {
             .ticket_id
             .as_ref()
             .ok_or_else(|| anyhow::anyhow!("WorkerOutput must have ticket_id"))?;
-        
+
         let ticket_id = TicketId::new(ticket_id_str.clone())?;
-        
+
         // Convert WorkerOutcome to WorkerCommand
         let command = match output.outcome {
             WorkerOutcome::NextStage => {
@@ -691,7 +706,7 @@ impl WorkerConsumer {
                             .filter_map(|s| WorkerType::new(s.clone()).ok())
                             .collect()
                     });
-                    
+
                     WorkerCommand::AdvanceToStage {
                         target_stage,
                         pipeline_update,
@@ -711,13 +726,11 @@ impl WorkerConsumer {
                     return Err(anyhow::anyhow!("PrevStage outcome requires target_stage"));
                 }
             }
-            WorkerOutcome::CoordinatorAttention => {
-                WorkerCommand::RequestCoordinatorAttention {
-                    reason: output.reason.clone(),
-                }
-            }
+            WorkerOutcome::CoordinatorAttention => WorkerCommand::RequestCoordinatorAttention {
+                reason: output.reason.clone(),
+            },
         };
-        
+
         Ok(WorkerCompletionEvent {
             ticket_id,
             command,
@@ -768,6 +781,7 @@ impl WorkerConsumer {
             project_path: project.path,
             system_prompt: worker_type_info.system_prompt,
             server_port: self.server_port,
+            permission_mode: self.permission_mode.clone(),
         };
 
         ProcessManager::spawn_worker(spawn_request).await
