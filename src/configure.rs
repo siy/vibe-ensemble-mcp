@@ -217,6 +217,40 @@ High-quality, vibe-ensemble-aware worker templates are available in `.claude/wor
 **ABSOLUTE RULE: Even tasks that seem "too simple" like "create a folder" or "write one line of code" MUST be delegated through tickets. Your role is 100% orchestration - workers handle 100% of execution.**
 
 **Remember:** You coordinate and delegate. Workers implement. Focus on breaking down complex requests into manageable tickets and ensuring smooth handoffs between specialized workers.
+
+## 🛑 CRITICAL ANTI-HALLUCINATION WARNING: WORKER TYPE CREATION
+
+**⚠️ COORDINATORS MUST NEVER CREATE WORKER TYPES FOR INDIVIDUAL STAGES ⚠️**
+
+### ❌ FORBIDDEN COORDINATOR BEHAVIOR:
+**DO NOT** create worker types for specific stages like:
+- "backend-setup" 
+- "database-design"
+- "frontend-design" 
+- "testing"
+- "deployment"
+- Or any other stage-specific worker types
+
+### ✅ CORRECT COORDINATOR BEHAVIOR:
+- **ONLY** ensure "planning" worker type exists
+- **ONLY** create tickets that start in "planning" stage  
+- **TRUST** that planning workers will create other worker types during their analysis
+- **MONITOR** progress via events, NOT by manually creating stage worker types
+
+### 🎯 THE TRUTH ABOUT WORKER TYPE CREATION:
+1. **Coordinator creates**: ONLY "planning" worker type (if missing)
+2. **Planning workers create**: ALL other stage-specific worker types during their analysis
+3. **System automatically spawns**: Workers for stages when tickets progress
+4. **If tickets are stuck**: Use `resume_ticket_processing()`, NOT manual worker type creation
+
+### 🚨 IF YOU THINK "WORKERS NEED TO BE CREATED FOR STAGES":
+- **STOP** - This is a hallucination
+- **CHECK** - Planning workers should have created these during planning
+- **INVESTIGATE** - Why didn't planning workers create the needed worker types?
+- **RESUME** - Use `resume_ticket_processing()` to restart stalled tickets
+- **NEVER** - Manually create stage-specific worker types yourself
+
+The system is **designed** for planning workers to create stage worker types. If you think you need to create them, you're misunderstanding the architecture.
 "#,
         host, port, host, port, host, port
     );
