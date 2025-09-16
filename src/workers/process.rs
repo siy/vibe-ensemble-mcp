@@ -167,22 +167,74 @@ impl ProcessManager {
 
     /// Parse worker JSON output from a string
     pub fn parse_output(output: &str) -> Result<WorkerOutput> {
-        // Try to find JSON in the output (workers might output other text too)
+        debug!("Attempting to parse worker output: {}", output);
+        
+        // Strategy 1: Look for JSON code blocks (```json ... ```)
+        if let Some(json_start) = output.find("```json") {
+            let search_start = json_start + 7; // Skip past "```json"
+            if let Some(json_end_relative) = output[search_start..].find("```") {
+                let json_end = search_start + json_end_relative;
+                let json_block = output[search_start..json_end].trim();
+                debug!("Found JSON in code block: {}", json_block);
+                match serde_json::from_str::<WorkerOutput>(json_block) {
+                    Ok(worker_output) => return Ok(worker_output),
+                    Err(e) => debug!("Failed to parse JSON from code block: {}", e),
+                }
+            }
+        }
+        
+        // Strategy 2: Look for the last complete JSON object in the output
+        let mut last_valid_json = None;
+        let mut brace_count = 0;
+        let mut start_pos = None;
+        
+        for (i, char) in output.char_indices() {
+            match char {
+                '{' => {
+                    if brace_count == 0 {
+                        start_pos = Some(i);
+                    }
+                    brace_count += 1;
+                }
+                '}' => {
+                    brace_count -= 1;
+                    if brace_count == 0 && start_pos.is_some() {
+                        let json_candidate = &output[start_pos.unwrap()..=i];
+                        if json_candidate.contains("\"ticket_id\"") && json_candidate.contains("\"outcome\"") {
+                            last_valid_json = Some(json_candidate);
+                        }
+                    }
+                }
+                _ => {}
+            }
+        }
+        
+        if let Some(json_str) = last_valid_json {
+            debug!("Found valid JSON candidate: {}", json_str);
+            match serde_json::from_str::<WorkerOutput>(json_str) {
+                Ok(worker_output) => return Ok(worker_output),
+                Err(e) => debug!("Failed to parse JSON candidate: {}", e),
+            }
+        }
+        
+        // Strategy 3: Original simple approach (fallback)
         let json_start = output.find('{');
         let json_end = output.rfind('}');
 
         match (json_start, json_end) {
             (Some(start), Some(end)) if start <= end => {
                 let json_str = &output[start..=end];
-                debug!("Parsing worker JSON: {}", json_str);
-                let worker_output: WorkerOutput = serde_json::from_str(json_str)?;
-                Ok(worker_output)
+                debug!("Fallback: parsing worker JSON: {}", json_str);
+                match serde_json::from_str::<WorkerOutput>(json_str) {
+                    Ok(worker_output) => return Ok(worker_output),
+                    Err(e) => debug!("Fallback parsing failed: {}", e),
+                }
             }
-            _ => {
-                error!("No valid JSON found in worker output: {}", output);
-                Err(anyhow::anyhow!("No valid JSON found in worker output"))
-            }
+            _ => {}
         }
+
+        error!("No valid JSON found in worker output: {}", output);
+        Err(anyhow::anyhow!("No valid JSON found in worker output"))
     }
 
     fn create_mcp_config(project_path: &str, worker_id: &str, server_port: u16) -> Result<String> {
@@ -235,7 +287,7 @@ impl ProcessManager {
 
         // Create system prompt that includes ticket_id
         let system_prompt = format!(
-            "{}\n\nYou are working on ticket_id: {}\nWhen you complete your work, you must output a JSON response with the following structure:\n{{\n  \"ticket_id\": \"{}\",\n  \"outcome\": \"next_stage\" | \"prev_stage\" | \"coordinator_attention\",\n  \"target_stage\": \"stage_name_if_moving\",\n  \"pipeline_update\": [\"optional\", \"array\", \"of\", \"stages\"],\n  \"comment\": \"Description of what you did\",\n  \"reason\": \"Reason for the outcome\"\n}}",
+            "{}\n\n=== CRITICAL OUTPUT REQUIREMENT ===\nYou are working on ticket_id: {}\n\nIMPORTANT: You MUST end your response with a valid JSON block that the system can parse. This JSON determines what happens next to the ticket.\n\nREQUIRED JSON FORMAT:\n```json\n{{\n  \"ticket_id\": \"{}\",\n  \"outcome\": \"next_stage\",\n  \"target_stage\": \"next_worker_type_name\",\n  \"pipeline_update\": [\"stage1\", \"stage2\", \"stage3\"],\n  \"comment\": \"Brief summary of what you accomplished\",\n  \"reason\": \"Why moving to next stage\"\n}}\n```\n\nFIELD DEFINITIONS:\n- \"outcome\": MUST be one of: \"next_stage\", \"prev_stage\", \"coordinator_attention\"\n- \"target_stage\": Name of the worker type for the next stage (required if outcome is \"next_stage\" or \"prev_stage\")\n- \"pipeline_update\": Complete array of all stages in order (INCLUDE THIS to update the execution plan)\n- \"comment\": Your work summary (will be added to ticket comments)\n- \"reason\": Explanation for the outcome\n\nEXAMPLES:\n1. For planning stage completing and moving to development:\n```json\n{{\n  \"ticket_id\": \"abc-123\",\n  \"outcome\": \"next_stage\",\n  \"target_stage\": \"development\",\n  \"pipeline_update\": [\"planning\", \"development\", \"testing\", \"review\"],\n  \"comment\": \"Completed project analysis and created development plan\",\n  \"reason\": \"Planning phase complete, ready for implementation\"\n}}\n```\n\n2. If you need coordinator help:\n```json\n{{\n  \"ticket_id\": \"abc-123\",\n  \"outcome\": \"coordinator_attention\",\n  \"target_stage\": null,\n  \"pipeline_update\": null,\n  \"comment\": \"Encountered issue that needs coordinator decision\",\n  \"reason\": \"Missing requirements or blocked by external dependency\"\n}}\n```\n\nREMEMBER: Your response should include your normal work/analysis, followed by the JSON block at the end.",
             request.system_prompt,
             request.ticket_id,
             request.ticket_id
