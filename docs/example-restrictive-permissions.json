@@ -1,0 +1,32 @@
+{
+  "permissions": {
+    "allow": [
+      "Read",
+      "Write",
+      "Edit",
+      "MultiEdit",
+      "Bash:cargo check*",
+      "Bash:cargo build*",
+      "Bash:cargo test*",
+      "Bash:git status*",
+      "Bash:git add*",
+      "Bash:git commit*",
+      "mcp__*"
+    ],
+    "deny": [
+      "WebFetch", 
+      "WebSearch",
+      "Bash:rm*",
+      "Bash:sudo*",
+      "Bash:ssh*",
+      "Bash:curl*",
+      "Bash:wget*",
+      "Bash:docker*",
+      "Bash:npm install*",
+      "Bash:pip install*"
+    ],
+    "ask": [],
+    "additionalDirectories": [],
+    "defaultMode": "acceptEdits"
+  }
+}

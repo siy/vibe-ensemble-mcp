@@ -4,6 +4,7 @@ pub struct Config {
     pub host: String,
     pub port: u16,
     pub no_respawn: bool,
+    pub permission_mode: String,
 }
 
 impl Config {
@@ -13,5 +14,15 @@ impl Config {
 
     pub fn server_address(&self) -> String {
         format!("{}:{}", self.host, self.port)
+    }
+
+    pub fn validate_permission_mode(&self) -> Result<(), String> {
+        match self.permission_mode.as_str() {
+            "bypass" | "inherit" | "file" => Ok(()),
+            _ => Err(format!(
+                "Invalid permission mode '{}'. Valid options: bypass, inherit, file",
+                self.permission_mode
+            )),
+        }
     }
 }

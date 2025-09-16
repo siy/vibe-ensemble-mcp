@@ -11,6 +11,10 @@ use crate::{
     config::Config,
     database::DbPool,
     sse::{notify_queue_change, notify_ticket_change, EventBroadcaster},
+    workers::{
+        domain::{WorkerCompletionEvent, WorkerCommand, TicketId, WorkerType, ProjectId},
+        output::OutputProcessor,
+    },
 };
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -33,10 +37,9 @@ pub enum WorkerOutcome {
 
 pub struct QueueManager {
     queues: DashMap<String, mpsc::UnboundedSender<TaskItem>>,
-    output_sender: mpsc::UnboundedSender<WorkerOutput>,
+    completion_sender: mpsc::UnboundedSender<WorkerCompletionEvent>,
     config: Config,
     event_broadcaster: EventBroadcaster,
-    #[allow(dead_code)]
     processor_handle: tokio::task::JoinHandle<()>,
 }
 
@@ -48,26 +51,26 @@ impl Default for QueueManager {
 
 impl QueueManager {
     pub fn new(db: DbPool, config: Config, event_broadcaster: EventBroadcaster) -> Self {
-        let (output_sender, output_receiver) = mpsc::unbounded_channel();
+        let (completion_sender, completion_receiver) = mpsc::unbounded_channel();
 
-        // Spawn the output processor thread
-        let event_broadcaster_clone = event_broadcaster.clone();
+        // Spawn the new output processor
+        let output_processor = OutputProcessor::new(db);
         let processor_handle = tokio::spawn(async move {
-            Self::output_processor_loop(output_receiver, db, event_broadcaster_clone).await;
+            output_processor.start_event_processing(completion_receiver).await;
         });
 
         Self {
             queues: DashMap::new(),
-            output_sender,
+            completion_sender,
             config,
             event_broadcaster,
             processor_handle,
         }
     }
 
-    /// Get a sender for WorkerOutput processing
-    pub fn get_output_sender(&self) -> mpsc::UnboundedSender<WorkerOutput> {
-        self.output_sender.clone()
+    /// Get a sender for WorkerCompletionEvent processing
+    pub fn get_completion_sender(&self) -> mpsc::UnboundedSender<WorkerCompletionEvent> {
+        self.completion_sender.clone()
     }
 
     /// Generate standardized queue name: "{project_id}-{worker_type}-queue"
@@ -188,7 +191,7 @@ impl QueueManager {
         let worker_type_clone = worker_type.to_string();
 
         let queue_name_for_error = queue_name_clone.clone();
-        let output_sender = self.output_sender.clone();
+        let completion_sender = self.completion_sender.clone();
         let db_clone = _db.clone();
         let server_port = self.config.port;
 
@@ -198,7 +201,7 @@ impl QueueManager {
                 worker_type_clone,
                 queue_name_clone,
                 receiver,
-                output_sender,
+                completion_sender,
                 db_clone,
                 server_port,
             );
@@ -557,7 +560,7 @@ struct WorkerConsumer {
     worker_type: String,
     queue_name: String,
     receiver: mpsc::UnboundedReceiver<TaskItem>,
-    output_sender: mpsc::UnboundedSender<WorkerOutput>,
+    completion_sender: mpsc::UnboundedSender<WorkerCompletionEvent>,
     db: DbPool,
     server_port: u16,
 }
@@ -568,7 +571,7 @@ impl WorkerConsumer {
         worker_type: String,
         queue_name: String,
         receiver: mpsc::UnboundedReceiver<TaskItem>,
-        output_sender: mpsc::UnboundedSender<WorkerOutput>,
+        completion_sender: mpsc::UnboundedSender<WorkerCompletionEvent>,
         db: DbPool,
         server_port: u16,
     ) -> Self {
@@ -577,7 +580,7 @@ impl WorkerConsumer {
             worker_type,
             queue_name,
             receiver,
-            output_sender,
+            completion_sender,
             db,
             server_port,
         }
@@ -654,15 +657,72 @@ impl WorkerConsumer {
             }
         };
 
-        // Send output to centralized processor
-        if self.output_sender.send(worker_output).is_err() {
+        // Convert WorkerOutput to WorkerCompletionEvent
+        let completion_event = self.convert_to_completion_event(&worker_output)?;
+        
+        // Send event to centralized processor
+        if self.completion_sender.send(completion_event).is_err() {
             warn!(
-                "Output processor has shut down, cannot send output for ticket {}",
+                "Output processor has shut down, cannot send completion event for ticket {}",
                 task.ticket_id
             );
         }
 
         Ok(())
+    }
+
+    /// Convert WorkerOutput to WorkerCompletionEvent
+    fn convert_to_completion_event(&self, output: &WorkerOutput) -> Result<WorkerCompletionEvent> {
+        let ticket_id_str = output
+            .ticket_id
+            .as_ref()
+            .ok_or_else(|| anyhow::anyhow!("WorkerOutput must have ticket_id"))?;
+        
+        let ticket_id = TicketId::new(ticket_id_str.clone())?;
+        
+        // Convert WorkerOutcome to WorkerCommand
+        let command = match output.outcome {
+            WorkerOutcome::NextStage => {
+                if let Some(ref target_stage_str) = output.target_stage {
+                    let target_stage = WorkerType::new(target_stage_str.clone())?;
+                    let pipeline_update = output.pipeline_update.as_ref().map(|pipeline| {
+                        pipeline
+                            .iter()
+                            .filter_map(|s| WorkerType::new(s.clone()).ok())
+                            .collect()
+                    });
+                    
+                    WorkerCommand::AdvanceToStage {
+                        target_stage,
+                        pipeline_update,
+                    }
+                } else {
+                    return Err(anyhow::anyhow!("NextStage outcome requires target_stage"));
+                }
+            }
+            WorkerOutcome::PrevStage => {
+                if let Some(ref target_stage_str) = output.target_stage {
+                    let target_stage = WorkerType::new(target_stage_str.clone())?;
+                    WorkerCommand::ReturnToStage {
+                        target_stage,
+                        reason: output.reason.clone(),
+                    }
+                } else {
+                    return Err(anyhow::anyhow!("PrevStage outcome requires target_stage"));
+                }
+            }
+            WorkerOutcome::CoordinatorAttention => {
+                WorkerCommand::RequestCoordinatorAttention {
+                    reason: output.reason.clone(),
+                }
+            }
+        };
+        
+        Ok(WorkerCompletionEvent {
+            ticket_id,
+            command,
+            comment: output.comment.clone(),
+        })
     }
 
     /// Execute actual worker process - spawn Claude Code worker using ProcessManager

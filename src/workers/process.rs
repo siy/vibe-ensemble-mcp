@@ -1,16 +1,151 @@
 use anyhow::Result;
+use serde::{Deserialize, Serialize};
 use serde_json::json;
 use std::fs;
+use std::path::Path;
 use std::process::Stdio;
 use tokio::process::Command;
-use tracing::{debug, error, info};
+use tracing::{debug, error, info, warn};
 
 use super::queue::WorkerOutput;
 use super::types::SpawnWorkerRequest;
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ClaudePermissions {
+    #[serde(default)]
+    pub allow: Vec<String>,
+    #[serde(default)]
+    pub deny: Vec<String>,
+    #[serde(default)]
+    pub ask: Vec<String>,
+    #[serde(rename = "additionalDirectories", default)]
+    pub additional_directories: Vec<String>,
+    #[serde(rename = "defaultMode", default = "default_mode")]
+    pub default_mode: String,
+}
+
+fn default_mode() -> String {
+    "acceptEdits".to_string()
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ClaudeSettings {
+    #[serde(default)]
+    pub permissions: ClaudePermissions,
+}
+
+impl Default for ClaudePermissions {
+    fn default() -> Self {
+        Self {
+            allow: vec![],
+            deny: vec![],
+            ask: vec![],
+            additional_directories: vec![],
+            default_mode: default_mode(),
+        }
+    }
+}
+
+impl Default for ClaudeSettings {
+    fn default() -> Self {
+        Self {
+            permissions: ClaudePermissions::default(),
+        }
+    }
+}
+
 pub struct ProcessManager;
 
 impl ProcessManager {
+    /// Load permissions from .claude/settings.local.json
+    fn load_inherit_permissions(project_path: &str) -> Result<ClaudePermissions> {
+        let settings_path = Path::new(project_path).join(".claude/settings.local.json");
+        debug!("Loading inherit permissions from: {}", settings_path.display());
+        
+        if !settings_path.exists() {
+            warn!("Settings file not found: {}, using defaults", settings_path.display());
+            return Ok(ClaudePermissions::default());
+        }
+
+        let content = fs::read_to_string(&settings_path)?;
+        let settings: ClaudeSettings = serde_json::from_str(&content)
+            .map_err(|e| anyhow::anyhow!("Failed to parse Claude settings: {}", e))?;
+        
+        info!("Loaded inherit permissions with {} allowed, {} denied tools", 
+              settings.permissions.allow.len(), settings.permissions.deny.len());
+        Ok(settings.permissions)
+    }
+
+    /// Load permissions from .vibe-ensemble-mcp/worker-permissions.json  
+    fn load_file_permissions() -> Result<ClaudePermissions> {
+        let permissions_path = Path::new(".vibe-ensemble-mcp/worker-permissions.json");
+        debug!("Loading file permissions from: {}", permissions_path.display());
+        
+        if !permissions_path.exists() {
+            warn!("Worker permissions file not found: {}, using defaults", permissions_path.display());
+            return Ok(ClaudePermissions::default());
+        }
+
+        let content = fs::read_to_string(&permissions_path)?;
+        let settings: ClaudeSettings = serde_json::from_str(&content)
+            .map_err(|e| anyhow::anyhow!("Failed to parse worker permissions: {}", e))?;
+        
+        info!("Loaded file permissions with {} allowed, {} denied tools", 
+              settings.permissions.allow.len(), settings.permissions.deny.len());
+        Ok(settings.permissions)
+    }
+
+    /// Apply permissions to Claude command based on mode
+    fn apply_permissions_to_command(cmd: &mut Command, permission_mode: &str, project_path: &str) -> Result<()> {
+        match permission_mode {
+            "bypass" => {
+                debug!("Using bypass mode - adding --dangerously-skip-permissions");
+                cmd.arg("--dangerously-skip-permissions");
+            },
+            "inherit" => {
+                debug!("Using inherit mode - loading from .claude/settings.local.json");
+                let permissions = Self::load_inherit_permissions(project_path)?;
+                Self::add_permission_args(cmd, &permissions);
+            },
+            "file" => {
+                debug!("Using file mode - loading from .vibe-ensemble-mcp/worker-permissions.json");
+                let permissions = Self::load_file_permissions()?;
+                Self::add_permission_args(cmd, &permissions);
+            },
+            _ => {
+                return Err(anyhow::anyhow!("Invalid permission mode: {}", permission_mode));
+            }
+        }
+        Ok(())
+    }
+
+    /// Add --allowedTools and --disallowedTools arguments to command
+    fn add_permission_args(cmd: &mut Command, permissions: &ClaudePermissions) {
+        // Add allowed tools
+        if !permissions.allow.is_empty() {
+            cmd.arg("--allowedTools");
+            for tool in &permissions.allow {
+                cmd.arg(tool);
+            }
+            debug!("Added {} allowed tools", permissions.allow.len());
+        }
+
+        // Add disallowed tools  
+        if !permissions.deny.is_empty() {
+            cmd.arg("--disallowedTools");
+            for tool in &permissions.deny {
+                cmd.arg(tool);
+            }
+            debug!("Added {} disallowed tools", permissions.deny.len());
+        }
+
+        // Note: We don't handle "ask" permissions since workers run headless
+        if !permissions.ask.is_empty() {
+            warn!("Worker has {} 'ask' permissions that will be ignored in headless mode", 
+                  permissions.ask.len());
+        }
+    }
+
     /// Parse worker JSON output from a string
     pub fn parse_output(output: &str) -> Result<WorkerOutput> {
         // Try to find JSON in the output (workers might output other text too)
@@ -97,19 +232,17 @@ impl ProcessManager {
             .arg(&system_prompt)
             .arg("--debug")
             //.arg("--verbose")
-            .arg("--permission-mode")
-            .arg("bypassPermissions")
             .arg("--mcp-config")
             .arg(&config_path)
             .arg("--output-format")
             .arg("json")
-            // cmd.arg("--system")
-            //    .arg(&system_prompt)
-            //    .arg("--mcp-config")
-            //    .arg(&config_path)
             .current_dir(&request.project_path)
             .stdout(Stdio::piped())
             .stderr(Stdio::piped());
+
+        // Apply permissions based on mode
+        info!("Applying permission mode: {}", request.permission_mode);
+        Self::apply_permissions_to_command(&mut cmd, &request.permission_mode, &request.project_path)?;
 
         debug!("Executing command: {:?}", cmd);
         let child = cmd.spawn()?;
