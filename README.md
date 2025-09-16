@@ -10,7 +10,7 @@ Vibe-Ensemble allows you to break down complex projects into specialized stages,
 
 - **🎯 Smart Task Planning**: Automatically plan multi-stage workflows (architecture → development → testing → deployment)
 - **🤖 Specialized Workers**: Create custom AI workers with specific expertise (Rust developer, security reviewer, UI designer, etc.)
-- **📋 Automatic Progression**: Workers complete their stage and automatically hand off to the next worker
+- **📋 Automatic Progression**: Workers are auto-spawned by queues when needed and complete their stage, automatically handing off to the next worker
 - **👀 Real-time Monitoring**: Track progress through tickets, comments, and live notifications
 - **🔄 Adaptive Workflows**: Workers can dynamically update execution plans as they discover new requirements
 - **💾 Persistent State**: All progress is saved, allowing you to pause and resume complex projects
@@ -122,6 +122,42 @@ Each worker operates independently with their specialized knowledge, ensuring fo
 - **⚡ Robust Processing**: Handles failures gracefully with retry mechanisms
 - **📋 Project Rules & Patterns**: Define coding standards and project conventions that workers automatically follow
 - **🔧 Flexible Workflows**: Support for debugging, testing, documentation, and DevOps workflows
+
+## MCP Tools
+
+Vibe-Ensemble provides 22 MCP tools organized into four categories:
+
+### Project Management
+- `create_project` - Create a new project with rules and patterns
+- `delete_project` - Delete an existing project
+- `get_project` - Get project details by ID
+- `list_projects` - List all projects
+- `update_project` - Update project settings, rules, or patterns
+
+### Worker Type Management
+- `create_worker_type` - Define specialized worker types with custom system prompts
+- `delete_worker_type` - Remove a worker type definition
+- `get_worker_type` - Get worker type details and configuration
+- `list_worker_types` - List all available worker types for a project
+- `update_worker_type` - Modify worker type settings and prompts
+
+### Ticket Management
+- `add_ticket_comment` - Add progress comments to tickets
+- `claim_ticket` - Claim a ticket for processing
+- `close_ticket` - Mark a ticket as completed
+- `create_ticket` - Create work tickets with execution plans
+- `get_ticket` - Get detailed ticket information
+- `list_tickets` - List tickets with filtering options
+- `release_ticket` - Release a claimed ticket back to the queue
+- `resume_ticket_processing` - Resume stalled or paused tickets
+- `update_ticket_stage` - Update ticket to a specific stage
+
+### Event and Queue Management
+- `get_tickets_by_stage` - Get all tickets currently at a specific stage
+- `list_events` - List system events and notifications
+- `resolve_event` - Mark system events as resolved
+
+> **Note on Worker Management**: Workers are automatically spawned when tickets are assigned to stages. There are no explicit worker spawn/stop tools - the queue system handles worker lifecycle automatically based on workload.
 
 ## Requirements
 

@@ -308,9 +308,9 @@ impl McpServer {
 
 ### 2. Worker Types & Agents
 - FIRST: Define specialized worker types with custom system prompts
-- THEN: Spawn workers using `spawn_worker` with specific queue assignments
-- Workers pull tasks from their designated queues automatically
-- Monitor worker status with `get_worker_status` and `list_workers`
+- THEN: Workers are automatically spawned when tickets are assigned to stages
+- Workers pull tasks from their designated stages automatically
+- Monitor system status with `list_events` and `get_tickets_by_stage`
 
 ### 3. Ticketing System
 - Create tickets with execution plans using `create_ticket`
@@ -321,8 +321,8 @@ impl McpServer {
 ### 4. Task Queues
 - Create specialized queues (e.g., 'development', 'testing', 'review')
 - Workers are assigned to specific queues when spawned
-- Use `assign_task` to route tickets to the appropriate queue
-- Monitor queue status and progress
+- Use `update_ticket_stage` to route tickets to the appropriate stage
+- Monitor stage progress with `get_tickets_by_stage` and `list_events`
 
 ## Available Tools (22 total)
 
@@ -420,27 +420,27 @@ Each worker type needs its own system prompt tailored to its specialization.
 - Break work into tickets with 3-5 stages
 - Each stage should specify which worker type handles it
 - Include clear success criteria
-- Use `assign_task` to route tickets to appropriate queues
+- Use `update_ticket_stage` to route tickets to appropriate stages
 
-### Step 4: Assign Tasks to Queues (Workers Auto-Spawn)
-**⚠️ CRITICAL: Workers are now AUTO-SPAWNED when tasks are assigned!**
+### Step 4: Update Ticket Stages (Workers Auto-Spawn)
+**⚠️ CRITICAL: Workers are now AUTO-SPAWNED when tickets reach specific stages!**
 
-Simply assign tasks to appropriate queue names:
-- **\"architect-queue\"**: For design and planning tickets
-- **\"developer-queue\"**: For implementation tickets
-- **\"tester-queue\"**: For validation tickets
-- **\"reviewer-queue\"**: For code review tickets
-- **\"docs-queue\"**: For documentation tickets
+Simply update tickets to appropriate stage names:
+- **\"planning\"**: For design and architecture work
+- **\"coding\"**: For implementation work
+- **\"testing\"**: For validation and QA work
+- **\"reviewing\"**: For code review work
+- **\"documentation\"**: For documentation work
 
 The system automatically:
-- Detects if a worker exists for the queue
-- Spawns a new worker if needed
-- Workers stop when their queue becomes empty
+- Detects if a worker exists for the stage
+- Spawns a new worker if needed based on worker types
+- Workers stop when their stage work is complete
 
 ### Step 5: Monitor and Coordinate (Your Only Direct Actions)
-- Use `list_events` to track progress
-- Use `get_queue_status` to monitor queues  
-- Use `get_worker_status` to check worker health
+- Use `list_events` to track progress and system notifications
+- Use `get_tickets_by_stage` to monitor stage workload
+- Use `list_tickets` to check overall progress
 - Coordinate handoffs between specialized agents
 - **RESIST** the urge to do tasks yourself - always create tickets instead
 
@@ -462,15 +462,15 @@ The system automatically:
 1. **CREATE PROJECTS**: Using create_project tool
 2. **DEFINE WORKER TYPES**: Using create_worker_type with system prompts
 3. **CREATE TICKETS**: For ALL work (even 'simple' tasks)
-4. **ASSIGN TO QUEUES**: Using assign_task (workers auto-spawn)
-5. **MONITOR PROGRESS**: Using list_events, get_queue_status, get_worker_status
+4. **UPDATE TICKET STAGES**: Using update_ticket_stage (workers auto-spawn)
+5. **MONITOR PROGRESS**: Using list_events, get_tickets_by_stage, list_tickets
 
 ## Key Success Factors
 1. **Worker types MUST exist before creating tickets**
-2. **Workers AUTO-SPAWN when tasks are assigned to queues**  
-3. **Simply assign tasks to queue names (e.g., \"architect-queue\", \"developer-queue\")**
-4. **No need to manually create queues or spawn workers**
-5. **Workers automatically pull from their designated queue and stop when empty**
+2. **Workers AUTO-SPAWN when tickets reach specific stages**  
+3. **Simply update tickets to stage names (e.g., \"planning\", \"coding\", \"testing\")**
+4. **No need to manually create stages or spawn workers**
+5. **Workers automatically pull from their designated stage and complete when done**
 6. **ALL technical work MUST be delegated through tickets**
 
 This delegation-first approach prevents context drift, ensures specialization, and maintains the coordinator's focus on orchestration rather than execution.", project_name, project_name, project_name),
@@ -497,64 +497,64 @@ This delegation-first approach prevents context drift, ensures specialization, a
 1. ✅ Project created
 2. ✅ Worker types defined with system prompts
 3. ✅ Create tickets with execution plans
-4. ✅ Assign tickets to queues (queues/workers auto-managed on assignment)
+4. ✅ Update tickets to stages (stages/workers auto-managed on assignment)
 
-## Queue-Based Coordination Strategy
+## Stage-Based Coordination Strategy
 
-### 1. Task Queue Architecture
-**For {} Tasks, organize work into specialized queues:**
-- **analysis-queue**: Requirements analysis, dependency mapping
-- **development-queue**: Feature implementation, coding
-- **testing-queue**: Validation, QA, automated testing
-- **review-queue**: Code reviews, optimization
-- **documentation-queue**: Docs, guides, README updates
+### 1. Task Stage Architecture
+**For {} Tasks, organize work into specialized stages:**
+- **analysis**: Requirements analysis, dependency mapping
+- **coding**: Feature implementation, coding
+- **testing**: Validation, QA, automated testing
+- **reviewing**: Code reviews, optimization
+- **documentation**: Docs, guides, README updates
 
 ### 2. Auto-Spawn Worker Pattern
-Workers are automatically spawned when tasks are assigned to queues:
+Workers are automatically spawned when tickets are updated to specific stages:
 ```
-assign_task(ticket_id, \"analysis-queue\")    # Auto-spawns analyzer worker if needed
-assign_task(ticket_id, \"development-queue\") # Auto-spawns implementer worker if needed  
-assign_task(ticket_id, \"testing-queue\")     # Auto-spawns tester worker if needed
-assign_task(ticket_id, \"review-queue\")      # Auto-spawns reviewer worker if needed
+update_ticket_stage(ticket_id, \"analysis\")    # Auto-spawns analyzer worker if needed
+update_ticket_stage(ticket_id, \"coding\")     # Auto-spawns implementer worker if needed  
+update_ticket_stage(ticket_id, \"testing\")   # Auto-spawns tester worker if needed
+update_ticket_stage(ticket_id, \"reviewing\") # Auto-spawns reviewer worker if needed
 ```
 
-Workers automatically pull tasks from their assigned queue and stop when queue becomes empty.
+Workers automatically pull tasks from their assigned stage and complete when stage work is done.
 
-### 3. Ticket-to-Queue Assignment Flow
+### 3. Ticket-to-Stage Assignment Flow
 1. **Coordinator**: Create ticket with multi-stage execution plan
-2. **Coordinator**: Assign ticket to first queue: `assign_task(ticket_id, \"analysis-queue\")`
+2. **Coordinator**: Update ticket to first stage: `update_ticket_stage(ticket_id, \"analysis\")`
 3. **Analyzer Worker**: Automatically picks up task, completes analysis stage
 4. **Analyzer Worker**: Adds detailed report via `add_ticket_comment`
-5. **Coordinator**: Moves ticket to next queue: `assign_task(ticket_id, \"development-queue\")`
+5. **Coordinator**: Moves ticket to next stage: `update_ticket_stage(ticket_id, \"coding\")`
 6. **Developer Worker**: Continues from analysis, implements features
 7. **Repeat** through all stages until completion
 
-### 4. Queue-Aware Communication Protocol
-- Workers use `get_queue_tasks(queue_name)` to get their tasks
+### 4. Stage-Aware Communication Protocol
+- Workers use `get_tickets_by_stage(stage_name)` to get their tasks
 - Workers use `add_ticket_comment` with stage reports
-- Workers use `complete_ticket_stage` when stage is done
-- Coordinator uses `get_queue_status` to monitor queue loads
+- Workers use `update_ticket_stage` when stage is done
+- Coordinator uses `get_tickets_by_stage` to monitor stage loads
 - Coordinator uses `list_events` to track overall progress
 - Coordinator uses `resolve_event` to mark events as resolved with investigation summary
 
 ### 5. Multi-Stage Handoff Best Practices
 - **Clear Stage Boundaries**: Each stage has specific deliverables
-- **Queue-Based Routing**: Tickets move between queues, not directly to workers
+- **Stage-Based Routing**: Tickets move between stages, not directly to workers
 - **Detailed Handoff Reports**: Workers document their work for next stage
-- **Coordinator Oversight**: Review progress before moving to next queue
+- **Coordinator Oversight**: Review progress before moving to next stage
 
 ### 6. Quality & Context Control
-- Each worker specializes in their queue's task type only
+- Each worker specializes in their stage's task type only
 - Workers validate previous stage work when starting
 - All context preserved in ticket comments and stage updates
-- Coordinator maintains overall project vision and queue orchestration
-- Use `get_worker_status` to ensure workers are healthy and active
+- Coordinator maintains overall project vision and stage orchestration
+- Use `list_events` to ensure system is healthy and active
 
-### 7. Queue Load Balancing
-- Monitor queue status: `get_queue_status(queue_name)`
-- Workers auto-spawn when tasks are assigned to queues
-- Workers automatically pull next available task from their queue
-- Workers stop automatically when their queue becomes empty
+### 7. Stage Load Balancing
+- Monitor stage status: `get_tickets_by_stage(stage_name)`
+- Workers auto-spawn when tickets reach specific stages
+- Workers automatically pull next available task from their stage
+- Workers stop automatically when their stage work is complete
 
 ## 🚨 CRITICAL: COORDINATOR DELEGATION RULES
 
@@ -573,13 +573,13 @@ Workers automatically pull tasks from their assigned queue and stop when queue b
 ### ✅ What Coordinators SHOULD Do:
 - Create projects and define worker types
 - Create tickets for ALL technical tasks (no exceptions)
-- Assign tickets to appropriate queues (workers auto-spawn as needed)
+- Update tickets to appropriate stages (workers auto-spawn as needed)
 - Coordinate workflow between specialized workers
 - Ensure proper handoffs between stages
 
 **REMEMBER: Even seemingly simple tasks like \\\"create a README\\\" or \\\"set up initial files\\\" should be delegated to workers through tickets. Your job is pure orchestration.**
 
-This queue-based delegation approach prevents context drift, enables parallel processing, maintains clear separation of concerns, and ensures the coordinator stays focused on workflow management rather than task execution.", task_type, task_type),
+This stage-based delegation approach prevents context drift, enables parallel processing, maintains clear separation of concerns, and ensures the coordinator stays focused on workflow management rather than task execution.", task_type, task_type),
                         },
                     }
                 ]
