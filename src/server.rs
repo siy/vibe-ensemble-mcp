@@ -16,7 +16,7 @@ use crate::{
     database::DbPool,
     error::Result,
     mcp::server::mcp_handler,
-    sse::{sse_handler, EventBroadcaster},
+    sse::{sse_handler, sse_message_handler, EventBroadcaster},
     workers::queue::QueueManager,
 };
 
@@ -74,6 +74,10 @@ pub async fn run_server(config: Config) -> Result<()> {
             axum::http::header::CONTENT_TYPE,
             axum::http::header::ACCEPT,
             axum::http::header::CACHE_CONTROL,
+            axum::http::header::AUTHORIZATION,
+            axum::http::header::HeaderName::from_static("x-api-key"),
+            axum::http::header::HeaderName::from_static("last-event-id"),
+            axum::http::header::HeaderName::from_static("mcp-protocol-version"),
         ])
         .allow_origin(axum::http::header::HeaderValue::from_static("*"));
 
@@ -81,6 +85,7 @@ pub async fn run_server(config: Config) -> Result<()> {
         .route("/health", get(health_check))
         .route("/mcp", post(mcp_handler))
         .route("/sse", get(sse_handler))
+        .route("/messages", post(sse_message_handler))
         .layer(RequestBodyLimitLayer::new(1024 * 1024)) // 1 MiB
         .layer(TraceLayer::new_for_http())
         .layer(cors)
