@@ -91,6 +91,11 @@ impl MigrationRunner {
                 content: include_str!("../../migrations/003_add_project_rules_patterns.sql")
                     .to_string(),
             },
+            Migration {
+                version: 4,
+                name: "add event resolution".to_string(),
+                content: include_str!("../../migrations/004_add_event_resolution.sql").to_string(),
+            },
         ];
 
         Ok(migrations)

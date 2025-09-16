@@ -2,15 +2,13 @@
 
 A multi-agent coordination system that enables Claude Code to manage specialized AI workers for complex development tasks.
 
-> **⚠️ Security Warning**: In version 0.7.0, workers have full access to all tools and permissions. Use this system at your own risk. A comprehensive permission system is planned for the next release.
-
 ## What It Does
 
 Vibe-Ensemble allows you to break down complex projects into specialized stages, with each stage handled by a dedicated AI worker:
 
 - **🎯 Smart Task Planning**: Automatically plan multi-stage workflows (architecture → development → testing → deployment)
 - **🤖 Specialized Workers**: Create custom AI workers with specific expertise (Rust developer, security reviewer, UI designer, etc.)
-- **📋 Automatic Progression**: Workers complete their stage and automatically hand off to the next worker
+- **📋 Automatic Progression**: Workers are auto-spawned by queues when needed and complete their stage, automatically handing off to the next worker
 - **👀 Real-time Monitoring**: Track progress through tickets, comments, and live notifications
 - **🔄 Adaptive Workflows**: Workers can dynamically update execution plans as they discover new requirements
 - **💾 Persistent State**: All progress is saved, allowing you to pause and resume complex projects
@@ -123,6 +121,42 @@ Each worker operates independently with their specialized knowledge, ensuring fo
 - **📋 Project Rules & Patterns**: Define coding standards and project conventions that workers automatically follow
 - **🔧 Flexible Workflows**: Support for debugging, testing, documentation, and DevOps workflows
 
+## MCP Tools
+
+Vibe-Ensemble provides 22 MCP tools organized into four categories:
+
+### Project Management
+- `create_project` - Create a new project with rules and patterns
+- `delete_project` - Delete an existing project
+- `get_project` - Get project details by ID
+- `list_projects` - List all projects
+- `update_project` - Update project settings, rules, or patterns
+
+### Worker Type Management
+- `create_worker_type` - Define specialized worker types with custom system prompts
+- `delete_worker_type` - Remove a worker type definition
+- `get_worker_type` - Get worker type details and configuration
+- `list_worker_types` - List all available worker types for a project
+- `update_worker_type` - Modify worker type settings and prompts
+
+### Ticket Management
+- `add_ticket_comment` - Add progress comments to tickets
+- `claim_ticket` - Claim a ticket for processing
+- `close_ticket` - Mark a ticket as completed
+- `create_ticket` - Create work tickets with execution plans
+- `get_ticket` - Get detailed ticket information
+- `list_tickets` - List tickets with filtering options
+- `release_ticket` - Release a claimed ticket back to the queue
+- `resume_ticket_processing` - Resume stalled or paused tickets
+- `update_ticket_stage` - Update ticket to a specific stage
+
+### Event and Queue Management
+- `get_tickets_by_stage` - Get all tickets currently at a specific stage
+- `list_events` - List system events and notifications
+- `resolve_event` - Mark system events as resolved
+
+> **Note on Worker Management**: Workers are automatically spawned when tickets are assigned to stages. There are no explicit worker spawn/stop tools - the queue system handles worker lifecycle automatically based on workload.
+
 ## Requirements
 
 - Rust 1.70+ (for building from source)
@@ -138,15 +172,196 @@ The server accepts the following command-line options:
 - `--host`: Server bind address (default: `127.0.0.1`)
 - `--port`: Server port (default: `3000`)
 - `--log-level`: Log level (default: `info`)
+- `--permission-mode`: Permission mode for workers (default: `inherit`)
+- `--no-respawn`: Disable automatic respawning of workers on startup
 
-## What's New in v0.7.0
+## Security & Permissions
 
-- **Project Rules & Patterns**: Define project-specific coding standards and conventions that workers automatically inherit
-- **Enhanced Documentation**: Comprehensive workflow examples for development, debugging, testing, and DevOps
-- **Improved Database Schema**: Better support for project metadata and worker coordination
-- **Updated MCP Tools**: New project management capabilities with rules and patterns support
+Vibe-Ensemble includes a comprehensive permission system to control what tools and capabilities are available to AI workers. This is essential for security since workers run headless with access to system resources.
 
-> **⚠️ Important Security Note**: Workers in this version have unrestricted access to all tools and system capabilities. Exercise caution when using this system, especially in production environments. A granular permission system is in active development for the next release.
+### Permission Modes
+
+The server supports three permission modes controlled by the `--permission-mode` flag:
+
+#### 1. **Bypass Mode** (`--permission-mode bypass`)
+- **Use Case**: Development, testing, or when you need unrestricted access
+- **Behavior**: Workers run with `--dangerously-skip-permissions` flag
+- **Security Level**: ⚠️ **No restrictions** - workers have access to all tools and system capabilities
+- **When to Use**: Only in trusted environments where full system access is acceptable
+
+```bash
+./vibe-ensemble-mcp --permission-mode bypass
+```
+
+#### 2. **Inherit Mode** (`--permission-mode inherit`) - **Default**
+- **Use Case**: Production deployments where you want to reuse existing Claude Code permissions
+- **Behavior**: Workers inherit permissions from your project's `.claude/settings.local.json` file
+- **Security Level**: 🛡️ **Project-level control** - uses the same permissions as your interactive Claude Code session
+- **When to Use**: When you want workers to have the same access level as your coordinator session
+
+```bash
+./vibe-ensemble-mcp --permission-mode inherit
+# or simply (default)
+./vibe-ensemble-mcp
+```
+
+**Required File**: `.claude/settings.local.json` in your project directory
+
+#### 3. **File Mode** (`--permission-mode file`)
+- **Use Case**: Custom worker-specific permissions different from your coordinator permissions
+- **Behavior**: Workers use permissions from `.vibe-ensemble-mcp/worker-permissions.json`
+- **Security Level**: 🔐 **Worker-specific control** - precisely control what workers can access
+- **When to Use**: When you want fine-grained control over worker capabilities
+
+```bash
+./vibe-ensemble-mcp --permission-mode file
+```
+
+**Required File**: `.vibe-ensemble-mcp/worker-permissions.json` in your project directory
+
+### Permission File Format
+
+All permission modes use the same JSON structure that Claude Code uses internally:
+
+```json
+{
+  "permissions": {
+    "allow": [
+      "Read",
+      "Write",
+      "Edit", 
+      "MultiEdit",
+      "Bash",
+      "mcp__*"
+    ],
+    "deny": [
+      "WebFetch",
+      "WebSearch"
+    ],
+    "ask": [],
+    "additionalDirectories": [
+      "/home/user/safe-directory"
+    ],
+    "defaultMode": "acceptEdits"
+  }
+}
+```
+
+#### Permission Fields
+
+- **`allow`**: Array of tools that workers can use without restriction
+- **`deny`**: Array of tools that workers are prohibited from using  
+- **`ask`**: Array of tools that require user confirmation (⚠️ ignored in headless worker mode)
+- **`additionalDirectories`**: Additional directories workers can access beyond the project directory
+- **`defaultMode`**: Default permission behavior (`"acceptEdits"` or `"rejectEdits"`)
+
+#### Common Tool Names
+
+- **File Operations**: `Read`, `Write`, `Edit`, `MultiEdit`, `Glob`, `Grep`
+- **System Commands**: `Bash`
+- **MCP Tools**: `mcp__*` (wildcard for all MCP server tools)
+- **Web Access**: `WebFetch`, `WebSearch`
+- **Version Control**: `git*` (if you want to restrict git operations)
+
+### Setting Up Permissions
+
+#### For Inherit Mode (Recommended)
+
+1. **Auto-setup** (creates basic permissions):
+   ```bash
+   ./vibe-ensemble-mcp --configure-claude-code --port 3000
+   ```
+
+2. **Manual setup** - Create/edit `.claude/settings.local.json`:
+   ```json
+   {
+     "permissions": {
+       "allow": ["Read", "Write", "Edit", "Bash", "mcp__*"],
+       "deny": ["WebFetch", "WebSearch"],
+       "defaultMode": "acceptEdits"
+     }
+   }
+   ```
+
+#### For File Mode (Advanced)
+
+Create `.vibe-ensemble-mcp/worker-permissions.json`. You can start with one of these examples:
+
+**Balanced Permissions** (recommended starting point):
+```bash
+cp docs/example-worker-permissions.json .vibe-ensemble-mcp/worker-permissions.json
+```
+
+**Restrictive Permissions** (high security):
+```bash
+cp docs/example-restrictive-permissions.json .vibe-ensemble-mcp/worker-permissions.json
+```
+
+**Custom Configuration** - Create your own `.vibe-ensemble-mcp/worker-permissions.json`:
+
+```json
+{
+  "permissions": {
+    "allow": [
+      "Read",
+      "Write", 
+      "Edit",
+      "MultiEdit",
+      "Bash:cargo*",
+      "Bash:git*",
+      "mcp__*"
+    ],
+    "deny": [
+      "WebFetch",
+      "WebSearch",
+      "Bash:rm*",
+      "Bash:sudo*"
+    ],
+    "additionalDirectories": [
+      "./temp",
+      "./build"
+    ],
+    "defaultMode": "acceptEdits"
+  }
+}
+```
+
+### Security Best Practices
+
+1. **Start Restrictive**: Begin with minimal permissions and add tools as needed
+2. **Use Inherit Mode**: In most cases, inherit mode provides the right balance of security and functionality
+3. **Monitor Worker Activity**: Check logs in `.vibe-ensemble-mcp/logs/` to understand what tools workers are using
+4. **Separate Environments**: Use bypass mode only in isolated development environments
+5. **Regular Reviews**: Periodically review and update permission configurations
+
+### Dynamic Permission Updates
+
+Permission files are read fresh from disk each time a worker starts, allowing you to:
+- Update permissions without restarting the server
+- Adjust worker capabilities on-the-fly
+- Test different permission configurations quickly
+
+### Troubleshooting Permissions
+
+**Worker fails to start**: Check that the required permission file exists and has valid JSON syntax
+
+**Worker can't access needed tools**: Add the required tools to the `allow` array in your permissions file
+
+**Security concerns**: Switch to `file` mode and create restrictive permissions tailored to your specific use case
+
+**Permission file location issues**: Ensure files are in the correct location relative to your project directory:
+- Inherit mode: `.claude/settings.local.json` 
+- File mode: `.vibe-ensemble-mcp/worker-permissions.json`
+
+## What's New in v0.8.0
+
+- **🔐 Comprehensive Permission System**: Three security modes (bypass/inherit/file) with fine-grained control over worker capabilities
+- **🛡️ Production-Ready Security**: Default inherit mode reuses your existing Claude Code permissions for safe deployment
+- **⚙️ Dynamic Permission Updates**: Permission files are read fresh each time, allowing real-time security adjustments
+- **📋 Project Rules & Patterns**: Define project-specific coding standards and conventions that workers automatically inherit
+- **📚 Enhanced Documentation**: Comprehensive workflow examples for development, debugging, testing, and DevOps
+- **🗄️ Improved Database Schema**: Better support for project metadata and worker coordination
+- **🔧 Updated MCP Tools**: New project management capabilities with rules and patterns support
 
 ## How It Works
 

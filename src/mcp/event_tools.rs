@@ -20,22 +20,28 @@ impl ToolHandler for ListEventsTool {
         state: &AppState,
         arguments: Option<Value>,
     ) -> crate::error::Result<CallToolResponse> {
-        let args = arguments.unwrap_or_default();
+        let args = arguments.unwrap_or_else(|| Value::Object(serde_json::Map::new()));
 
         let event_type: Option<String> = extract_optional_param(&Some(args.clone()), "event_type")?;
         let limit: i32 = extract_optional_param(&Some(args.clone()), "limit")?.unwrap_or(50);
 
-        let events = Event::get_recent(&state.db, limit).await?;
+        // Get unprocessed events from DB, then apply optional type filter and limit
+        let mut events = Event::get_unprocessed(&state.db).await?;
+
+        // Most-recent-first to match "recent" semantics
+        events.sort_by(|a, b| b.created_at.cmp(&a.created_at));
 
         let filtered_events: Vec<_> = events
             .into_iter()
             .filter(|event| {
+                // Filter by event type if specified
                 if let Some(ref type_filter) = event_type {
                     &event.event_type == type_filter
                 } else {
                     true
                 }
             })
+            .take(limit as usize)
             .collect();
 
         Ok(CallToolResponse {
@@ -50,7 +56,7 @@ impl ToolHandler for ListEventsTool {
     fn definition(&self) -> Tool {
         Tool {
             name: "list_events".to_string(),
-            description: "List recent system events, optionally filtered by type".to_string(),
+            description: "List recent unprocessed system events, optionally filtered by type. 'Processed' events are those already handled (e.g., resolved or programmatically marked processed).".to_string(),
             input_schema: serde_json::json!({
                 "type": "object",
                 "properties": {
@@ -65,6 +71,60 @@ impl ToolHandler for ListEventsTool {
                     }
                 },
                 "required": []
+            }),
+        }
+    }
+}
+
+pub struct ResolveEventTool;
+
+#[async_trait]
+impl ToolHandler for ResolveEventTool {
+    async fn call(
+        &self,
+        state: &AppState,
+        arguments: Option<Value>,
+    ) -> crate::error::Result<CallToolResponse> {
+        let args = arguments
+            .ok_or_else(|| crate::error::AppError::BadRequest("Missing arguments".to_string()))?;
+
+        let event_id: i64 = extract_param(&Some(args.clone()), "event_id")?;
+        let resolution_summary: String = extract_param(&Some(args.clone()), "resolution_summary")?;
+
+        info!(
+            "Resolving event {} (summary len: {} chars)",
+            event_id,
+            resolution_summary.len()
+        );
+
+        Event::resolve_event(&state.db, event_id, &resolution_summary).await?;
+
+        Ok(CallToolResponse {
+            content: vec![ToolContent {
+                content_type: "application/json".to_string(),
+                text: format!("Event {} resolved successfully. The event has been marked as processed and will no longer appear in unprocessed event listings.", event_id),
+            }],
+            is_error: Some(false),
+        })
+    }
+
+    fn definition(&self) -> Tool {
+        Tool {
+            name: "resolve_event".to_string(),
+            description: "Mark an event as resolved with a summary of investigation and actions taken. This marks the event as processed so it no longer appears in active event listings.".to_string(),
+            input_schema: serde_json::json!({
+                "type": "object",
+                "properties": {
+                    "event_id": {
+                        "type": "integer",
+                        "description": "ID of the event to resolve"
+                    },
+                    "resolution_summary": {
+                        "type": "string",
+                        "description": "Summary of the investigation and actions taken to address the event"
+                    }
+                },
+                "required": ["event_id", "resolution_summary"]
             }),
         }
     }

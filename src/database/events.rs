@@ -14,6 +14,7 @@ pub struct Event {
     pub reason: Option<String>,
     pub created_at: String,
     pub processed: bool,
+    pub resolution_summary: Option<String>,
 }
 
 impl Event {
@@ -29,7 +30,7 @@ impl Event {
             r#"
             INSERT INTO events (event_type, ticket_id, worker_id, stage, reason)
             VALUES (?1, ?2, ?3, ?4, ?5)
-            RETURNING id, event_type, ticket_id, worker_id, stage, reason, created_at, processed
+            RETURNING id, event_type, ticket_id, worker_id, stage, reason, created_at, processed, resolution_summary
         "#,
         )
         .bind(event_type)
@@ -53,7 +54,7 @@ impl Event {
             r#"
             INSERT INTO events (event_type, ticket_id, worker_id, stage)
             VALUES ('ticket_stage_completed', ?1, ?2, ?3)
-            RETURNING id, event_type, ticket_id, worker_id, stage, reason, created_at, processed
+            RETURNING id, event_type, ticket_id, worker_id, stage, reason, created_at, processed, resolution_summary
         "#,
         )
         .bind(ticket_id)
@@ -74,7 +75,7 @@ impl Event {
             r#"
             INSERT INTO events (event_type, worker_id, reason)
             VALUES ('worker_stopped', ?1, ?2)
-            RETURNING id, event_type, ticket_id, worker_id, stage, reason, created_at, processed
+            RETURNING id, event_type, ticket_id, worker_id, stage, reason, created_at, processed, resolution_summary
         "#,
         )
         .bind(worker_id)
@@ -94,7 +95,7 @@ impl Event {
             r#"
             INSERT INTO events (event_type, ticket_id, reason)
             VALUES ('task_assigned', ?1, ?2)
-            RETURNING id, event_type, ticket_id, worker_id, stage, reason, created_at, processed
+            RETURNING id, event_type, ticket_id, worker_id, stage, reason, created_at, processed, resolution_summary
         "#,
         )
         .bind(ticket_id)
@@ -108,7 +109,7 @@ impl Event {
     pub async fn get_recent(pool: &DbPool, limit: i32) -> Result<Vec<Event>> {
         let events = sqlx::query_as::<_, Event>(
             r#"
-            SELECT id, event_type, ticket_id, worker_id, stage, reason, created_at, processed
+            SELECT id, event_type, ticket_id, worker_id, stage, reason, created_at, processed, resolution_summary
             FROM events
             ORDER BY created_at DESC
             LIMIT ?1
@@ -124,7 +125,7 @@ impl Event {
     pub async fn get_unprocessed(pool: &DbPool) -> Result<Vec<Event>> {
         let events = sqlx::query_as::<_, Event>(
             r#"
-            SELECT id, event_type, ticket_id, worker_id, stage, reason, created_at, processed
+            SELECT id, event_type, ticket_id, worker_id, stage, reason, created_at, processed, resolution_summary
             FROM events
             WHERE processed = 0
             ORDER BY created_at ASC
@@ -140,7 +141,7 @@ impl Event {
         let events = match processed_filter {
             Some(processed) => {
                 sqlx::query_as::<_, Event>(r#"
-                    SELECT id, event_type, ticket_id, worker_id, stage, reason, created_at, processed
+                    SELECT id, event_type, ticket_id, worker_id, stage, reason, created_at, processed, resolution_summary
                     FROM events
                     WHERE processed = ?1
                     ORDER BY created_at DESC
@@ -151,7 +152,7 @@ impl Event {
             }
             None => {
                 sqlx::query_as::<_, Event>(r#"
-                    SELECT id, event_type, ticket_id, worker_id, stage, reason, created_at, processed
+                    SELECT id, event_type, ticket_id, worker_id, stage, reason, created_at, processed, resolution_summary
                     FROM events
                     ORDER BY created_at DESC
                 "#)
@@ -191,5 +192,25 @@ impl Event {
 
         let result = query_builder.execute(pool).await?;
         Ok(result.rows_affected())
+    }
+
+    pub async fn resolve_event(
+        pool: &DbPool,
+        event_id: i64,
+        resolution_summary: &str,
+    ) -> Result<()> {
+        sqlx::query(
+            r#"
+            UPDATE events 
+            SET processed = 1, resolution_summary = ?1
+            WHERE id = ?2
+        "#,
+        )
+        .bind(resolution_summary)
+        .bind(event_id)
+        .execute(pool)
+        .await?;
+
+        Ok(())
     }
 }

@@ -1,0 +1,39 @@
+{
+  "permissions": {
+    "allow": [
+      "Read",
+      "Write",
+      "Edit",
+      "MultiEdit",
+      "Glob",
+      "Grep",
+      "Bash:cargo*",
+      "Bash:git*", 
+      "Bash:npm*",
+      "Bash:node*",
+      "Bash:python*",
+      "Bash:pytest*",
+      "Bash:ls*",
+      "Bash:mkdir*",
+      "Bash:cp*",
+      "Bash:mv*",
+      "mcp__*"
+    ],
+    "deny": [
+      "WebFetch",
+      "WebSearch",
+      "Bash:rm*",
+      "Bash:sudo*",
+      "Bash:ssh*",
+      "Bash:curl*",
+      "Bash:wget*"
+    ],
+    "ask": [],
+    "additionalDirectories": [
+      "./temp",
+      "./build",
+      "./dist"
+    ],
+    "defaultMode": "acceptEdits"
+  }
+}

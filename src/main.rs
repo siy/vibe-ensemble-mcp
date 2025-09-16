@@ -4,6 +4,16 @@ use tracing::info;
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt, EnvFilter, Layer};
 use vibe_ensemble_mcp::{config::Config, configure::configure_claude_code, server::run_server};
 
+fn validate_permission_mode(mode: &str) -> Result<String, String> {
+    match mode {
+        "bypass" | "inherit" | "file" => Ok(mode.to_string()),
+        _ => Err(format!(
+            "Invalid permission mode '{}'. Valid options: bypass, inherit, file",
+            mode
+        )),
+    }
+}
+
 #[derive(Parser)]
 #[command(name = "vibe-ensemble-mcp")]
 #[command(about = "A multi-agent coordination MCP server")]
@@ -31,6 +41,10 @@ struct Args {
     /// Disable automatic respawning of workers on startup for unfinished tasks
     #[arg(long)]
     no_respawn: bool,
+
+    /// Permission mode for worker processes
+    #[arg(long, default_value = "inherit", value_parser = validate_permission_mode)]
+    permission_mode: String,
 }
 
 #[tokio::main]
@@ -67,14 +81,18 @@ async fn main() -> Result<()> {
         .init();
 
     info!("Starting Vibe-Ensemble MCP Server");
+    info!("Version: {}", env!("CARGO_PKG_VERSION"));
     info!("Database: {}", args.database_path);
     info!("Server: {}:{}", args.host, args.port);
+    info!("Permission mode: {}", args.permission_mode);
+    info!("Respawn disabled: {}", args.no_respawn);
 
     let config = Config {
         database_path: args.database_path,
         host: args.host,
         port: args.port,
         no_respawn: args.no_respawn,
+        permission_mode: args.permission_mode,
     };
 
     run_server(config).await?;
