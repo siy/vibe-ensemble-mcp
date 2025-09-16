@@ -96,11 +96,9 @@ impl QueueManager {
         );
 
         // Validate that the worker type exists for this project
-        let worker_type_exists = crate::database::worker_types::WorkerType::get_by_type(
-            db, 
-            project_id, 
-            worker_type
-        ).await?;
+        let worker_type_exists =
+            crate::database::worker_types::WorkerType::get_by_type(db, project_id, worker_type)
+                .await?;
 
         if worker_type_exists.is_none() {
             return Err(anyhow::anyhow!(

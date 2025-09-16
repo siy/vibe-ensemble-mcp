@@ -20,27 +20,28 @@ impl ToolHandler for ListEventsTool {
         state: &AppState,
         arguments: Option<Value>,
     ) -> crate::error::Result<CallToolResponse> {
-        let args = arguments.unwrap_or_default();
+        let args = arguments.unwrap_or_else(|| Value::Object(serde_json::Map::new()));
 
         let event_type: Option<String> = extract_optional_param(&Some(args.clone()), "event_type")?;
         let limit: i32 = extract_optional_param(&Some(args.clone()), "limit")?.unwrap_or(50);
 
-        let events = Event::get_recent(&state.db, limit).await?;
-
-        // Filter out processed events by default, unless showing all
+        // Get unprocessed events from DB, then apply optional type filter and limit
+        let mut events = Event::get_unprocessed(&state.db).await?;
+        
+        // Most-recent-first to match "recent" semantics
+        events.sort_by(|a, b| b.created_at.cmp(&a.created_at));
+        
         let filtered_events: Vec<_> = events
             .into_iter()
             .filter(|event| {
                 // Filter by event type if specified
-                let type_match = if let Some(ref type_filter) = event_type {
+                if let Some(ref type_filter) = event_type {
                     &event.event_type == type_filter
                 } else {
                     true
-                };
-
-                // Only show unprocessed events by default
-                type_match && !event.processed
+                }
             })
+            .take(limit as usize)
             .collect();
 
         Ok(CallToolResponse {

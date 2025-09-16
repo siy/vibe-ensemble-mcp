@@ -46,7 +46,8 @@ impl ToolHandler for CreateTicketTool {
             &state.db,
             &project_id,
             &initial_stage,
-        ).await?;
+        )
+        .await?;
 
         if worker_type_exists.is_none() {
             return Ok(crate::mcp::tools::create_error_response(&format!(
@@ -354,7 +355,8 @@ impl ToolHandler for UpdateTicketStageTool {
                 &state.db,
                 &ticket_data.project_id,
                 &stage,
-            ).await?;
+            )
+            .await?;
 
             if worker_type_exists.is_none() {
                 return Ok(create_error_response(&format!(
@@ -555,7 +557,7 @@ impl ToolHandler for CloseTicketTool {
             ticket_id, resolution
         );
 
-        let result = Ticket::close_ticket(&state.db, &ticket_id, "Completed").await?;
+        let result = Ticket::close_ticket(&state.db, &ticket_id, &resolution).await?;
 
         match result {
             Some(_) => Ok(create_success_response(&format!(
@@ -632,7 +634,8 @@ impl ToolHandler for ResumeTicketProcessingTool {
                 &state.db,
                 &ticket_data.project_id,
                 &target_stage,
-            ).await?;
+            )
+            .await?;
 
             if worker_type_exists.is_none() {
                 return Ok(create_error_response(&format!(

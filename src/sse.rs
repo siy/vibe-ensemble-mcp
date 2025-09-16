@@ -110,7 +110,7 @@ pub async fn sse_handler(
                             }
                         }).to_string()
                     };
-                    
+
                     yield Ok(Event::default()
                         .event("message")
                         .data(mcp_event));
@@ -156,7 +156,7 @@ pub async fn notify_event_change(
             "timestamp": chrono::Utc::now().to_rfc3339()
         }
     });
-    
+
     broadcaster.broadcast_event("mcp_notification", mcp_notification);
 }
 
@@ -175,7 +175,7 @@ pub async fn notify_ticket_change(
             "timestamp": chrono::Utc::now().to_rfc3339()
         }
     });
-    
+
     broadcaster.broadcast_event("mcp_notification", mcp_notification);
 }
 
@@ -190,7 +190,7 @@ pub async fn notify_worker_change(broadcaster: &EventBroadcaster, worker_id: &st
             "timestamp": chrono::Utc::now().to_rfc3339()
         }
     });
-    
+
     broadcaster.broadcast_event("mcp_notification", mcp_notification);
 }
 
@@ -209,6 +209,6 @@ pub async fn notify_queue_change(
             "timestamp": chrono::Utc::now().to_rfc3339()
         }
     });
-    
+
     broadcaster.broadcast_event("mcp_notification", mcp_notification);
 }

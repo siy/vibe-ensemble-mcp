@@ -94,8 +94,7 @@ impl MigrationRunner {
             Migration {
                 version: 4,
                 name: "add event resolution".to_string(),
-                content: include_str!("../../migrations/004_add_event_resolution.sql")
-                    .to_string(),
+                content: include_str!("../../migrations/004_add_event_resolution.sql").to_string(),
             },
         ];
 
