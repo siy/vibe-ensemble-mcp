@@ -39,11 +39,12 @@ async fn create_mcp_config(host: &str, port: u16) -> Result<()> {
             "vibe-ensemble-mcp": {
                 "type": "http",
                 "url": format!("http://{}:{}/mcp", host, port),
-                "protocol_version": "2024-11-05",
-                "notifications": {
-                    "url": format!("http://{}:{}/sse", host, port),
-                    "type": "sse"
-                }
+                "protocol_version": "2024-11-05"
+            },
+            "vibe-ensemble-sse": {
+                "type": "sse",
+                "url": format!("http://{}:{}/sse", host, port),
+                "protocol_version": "2024-11-05"
             }
         }
     });
