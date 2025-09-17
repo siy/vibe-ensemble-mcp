@@ -7,6 +7,28 @@ license = "Apache-2.0"
 authors = ["Sergiy Yevtushenko"]
 repository = "https://github.com/siy/vibe-ensemble-mcp"
 
+[package.metadata.generate-rpm]
+summary = "Multi-agent coordination MCP server for Claude Code"
+license = "Apache-2.0"
+group = "Development/Tools"
+url = "https://github.com/siy/vibe-ensemble-mcp"
+requires = ["glibc"]
+
+[package.metadata.deb]
+maintainer = "Sergiy Yevtushenko <sergiy.yevtushenko@gmail.com>"
+copyright = "2024, Sergiy Yevtushenko <sergiy.yevtushenko@gmail.com>"
+license-file = ["LICENSE"]
+extended-description = """\
+A multi-agent coordination system that enables Claude Code to manage specialized AI workers for complex development tasks.\
+"""
+depends = "$auto"
+section = "utility"
+priority = "optional"
+assets = [
+    ["target/release/vibe-ensemble-mcp", "usr/bin/", "755"],
+    ["README.md", "usr/share/doc/vibe-ensemble-mcp/", "644"],
+]
+
 [dependencies]
 # Async runtime
 tokio = { version = "1.0", features = ["full"] }
