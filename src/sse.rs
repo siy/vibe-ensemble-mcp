@@ -1,13 +1,22 @@
 use axum::{
     extract::State,
-    response::sse::{Event, KeepAlive, Sse},
+    http::StatusCode,
+    response::{
+        sse::{Event, KeepAlive, Sse},
+        Json,
+    },
+    Json as JsonExtractor,
 };
 use futures::Stream;
-use serde_json::json;
+use serde_json::{json, Value};
 use std::{sync::Arc, time::Duration};
 use tokio::sync::broadcast;
+use tracing::{debug, info};
 
-use crate::server::AppState;
+use crate::{
+    mcp::{server::McpServer, types::JsonRpcRequest},
+    server::AppState,
+};
 
 const MCP_PROTOCOL_VERSION: &str = "2024-11-05";
 
@@ -40,6 +49,14 @@ impl EventBroadcaster {
         });
 
         let _ = self.sender.send(event_data.to_string());
+    }
+
+    /// Broadcast a raw string event to all connected SSE clients
+    pub fn broadcast(
+        &self,
+        event_data: String,
+    ) -> Result<usize, tokio::sync::broadcast::error::SendError<String>> {
+        self.sender.send(event_data)
     }
 
     /// Create a new receiver for SSE connections
@@ -77,6 +94,23 @@ pub async fn sse_handler(
     });
 
     broadcaster.broadcast_event("mcp_notification", init_notification.clone());
+
+    // Send endpoint event for Claude Code SSE transport compatibility
+    let port = state.server_info.port;
+    let endpoint_event = json!({
+        "jsonrpc": "2.0",
+        "method": "notifications/message",
+        "params": {
+            "level": "info",
+            "logger": "vibe-ensemble-sse",
+            "data": json!({
+                "type": "endpoint",
+                "uri": format!("http://localhost:{}/messages", port)
+            })
+        }
+    });
+
+    broadcaster.broadcast_event("endpoint", endpoint_event);
 
     let mut receiver = broadcaster.subscribe();
 
@@ -218,4 +252,69 @@ pub async fn notify_queue_change(
     });
 
     broadcaster.broadcast_event("mcp_notification", mcp_notification);
+}
+
+/// HTTP POST endpoint for receiving messages from Claude Code SSE transport
+pub async fn sse_message_handler(
+    State(state): State<AppState>,
+    JsonExtractor(payload): JsonExtractor<Value>,
+) -> Result<Json<Value>, (StatusCode, Json<Value>)> {
+    debug!("Received SSE message: {}", payload);
+
+    // Parse the JSON as an MCP JsonRpcRequest
+    let request: JsonRpcRequest = match serde_json::from_value(payload.clone()) {
+        Ok(req) => req,
+        Err(e) => {
+            let error_response = json!({
+                "jsonrpc": "2.0",
+                "error": {
+                    "code": -32700,
+                    "message": format!("Parse error: {}", e)
+                },
+                "id": payload.get("id")
+            });
+            return Err((StatusCode::BAD_REQUEST, Json(error_response)));
+        }
+    };
+
+    // Create MCP server and handle the request
+    let mcp_server = McpServer::new();
+    let response = mcp_server.handle_request(&state, request).await;
+
+    info!("SSE message processed successfully");
+
+    // Convert the response to JSON
+    let response_value = match serde_json::to_value(&response) {
+        Ok(val) => val,
+        Err(e) => {
+            let error_response = json!({
+                "jsonrpc": "2.0",
+                "error": {
+                    "code": -32603,
+                    "message": format!("Internal error: {}", e)
+                },
+                "id": response.id
+            });
+            return Err((StatusCode::INTERNAL_SERVER_ERROR, Json(error_response)));
+        }
+    };
+
+    // If this is a successful MCP response, we may want to broadcast it
+    if let Some(result) = response.result {
+        let notification = json!({
+            "jsonrpc": "2.0",
+            "method": "notifications/message",
+            "params": {
+                "level": "info",
+                "logger": "vibe-ensemble-sse",
+                "data": result
+            }
+        });
+
+        if let Err(e) = state.event_broadcaster.broadcast(notification.to_string()) {
+            tracing::warn!("Failed to broadcast SSE response: {}", e);
+        }
+    }
+
+    Ok(Json(response_value))
 }

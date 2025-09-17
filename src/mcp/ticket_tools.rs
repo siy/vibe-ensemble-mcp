@@ -71,6 +71,37 @@ impl ToolHandler for CreateTicketTool {
 
         let ticket = Ticket::create(&state.db, req).await?;
 
+        // Broadcast ticket_created event
+        let event = json!({
+            "jsonrpc": "2.0",
+            "method": "notifications/resources/updated",
+            "params": {
+                "uri": format!("vibe-ensemble://tickets/{}", ticket.ticket_id),
+                "event": {
+                    "type": "ticket_created",
+                    "ticket": {
+                        "ticket_id": ticket.ticket_id,
+                        "project_id": ticket.project_id,
+                        "title": ticket.title,
+                        "execution_plan": ticket.execution_plan,
+                        "current_stage": ticket.current_stage,
+                        "state": ticket.state,
+                        "created_at": ticket.created_at
+                    },
+                    "timestamp": chrono::Utc::now().to_rfc3339()
+                }
+            }
+        });
+
+        if let Err(e) = state.event_broadcaster.broadcast(event.to_string()) {
+            tracing::warn!("Failed to broadcast ticket_created event: {}", e);
+        } else {
+            tracing::debug!(
+                "Successfully broadcast ticket_created event for: {}",
+                ticket.ticket_id
+            );
+        }
+
         // Automatically submit the ticket to the initial stage queue
         match state
             .queue_manager
@@ -280,6 +311,37 @@ impl ToolHandler for AddTicketCommentTool {
 
         let comment = Comment::create_from_request(&state.db, req).await?;
 
+        // Broadcast ticket_comment_added event
+        let event = json!({
+            "jsonrpc": "2.0",
+            "method": "notifications/resources/updated",
+            "params": {
+                "uri": format!("vibe-ensemble://tickets/{}", ticket_id),
+                "event": {
+                    "type": "ticket_comment_added",
+                    "comment": {
+                        "id": comment.id,
+                        "ticket_id": comment.ticket_id,
+                        "worker_type": comment.worker_type,
+                        "worker_id": comment.worker_id,
+                        "stage_number": comment.stage_number,
+                        "content": comment.content,
+                        "created_at": comment.created_at
+                    },
+                    "timestamp": chrono::Utc::now().to_rfc3339()
+                }
+            }
+        });
+
+        if let Err(e) = state.event_broadcaster.broadcast(event.to_string()) {
+            tracing::warn!("Failed to broadcast ticket_comment_added event: {}", e);
+        } else {
+            tracing::debug!(
+                "Successfully broadcast ticket_comment_added event for: {}",
+                ticket_id
+            );
+        }
+
         Ok(CallToolResponse {
             content: vec![ToolContent {
                 content_type: "text".to_string(),
@@ -323,219 +385,6 @@ impl ToolHandler for AddTicketCommentTool {
     }
 }
 
-pub struct UpdateTicketStageTool;
-
-#[async_trait]
-impl ToolHandler for UpdateTicketStageTool {
-    async fn call(
-        &self,
-        state: &AppState,
-        arguments: Option<Value>,
-    ) -> crate::error::Result<CallToolResponse> {
-        let args = arguments
-            .ok_or_else(|| crate::error::AppError::BadRequest("Missing arguments".to_string()))?;
-
-        let ticket_id: String = extract_param(&Some(args.clone()), "ticket_id")?;
-        let stage: String = extract_param(&Some(args.clone()), "stage")?;
-
-        // Get the ticket to find the project_id
-        let ticket_data = match Ticket::get_by_id(&state.db, &ticket_id).await? {
-            Some(t) => t.ticket,
-            None => {
-                return Ok(create_error_response(&format!(
-                    "Ticket {} not found",
-                    ticket_id
-                )));
-            }
-        };
-
-        // Validate that the stage worker type exists for this project (unless it's "planning")
-        if stage != "planning" {
-            let worker_type_exists = crate::database::worker_types::WorkerType::get_by_type(
-                &state.db,
-                &ticket_data.project_id,
-                &stage,
-            )
-            .await?;
-
-            if worker_type_exists.is_none() {
-                return Ok(create_error_response(&format!(
-                    "Worker type '{}' does not exist for project '{}'. Cannot update ticket to this stage.",
-                    stage, ticket_data.project_id
-                )));
-            }
-        }
-
-        info!("Updating ticket {} to stage {}", ticket_id, stage);
-
-        let result = Ticket::update_stage(&state.db, &ticket_id, &stage).await?;
-
-        match result {
-            Some(_) => Ok(create_success_response(&format!(
-                "Updated ticket {} to stage {}",
-                ticket_id, stage
-            ))),
-            None => Ok(create_error_response(&format!(
-                "Ticket {} not found",
-                ticket_id
-            ))),
-        }
-    }
-
-    fn definition(&self) -> Tool {
-        Tool {
-            name: "update_ticket_stage".to_string(),
-            description: "Update ticket to a specific stage".to_string(),
-            input_schema: json!({
-                "type": "object",
-                "properties": {
-                    "ticket_id": {
-                        "type": "string",
-                        "description": "Ticket identifier"
-                    },
-                    "stage": {
-                        "type": "string",
-                        "description": "Stage name to mark as completed"
-                    }
-                },
-                "required": ["ticket_id", "stage"]
-            }),
-        }
-    }
-}
-
-pub struct ClaimTicketTool;
-
-#[async_trait]
-impl ToolHandler for ClaimTicketTool {
-    async fn call(
-        &self,
-        state: &AppState,
-        arguments: Option<Value>,
-    ) -> crate::error::Result<CallToolResponse> {
-        let args = arguments
-            .ok_or_else(|| crate::error::AppError::BadRequest("Missing arguments".to_string()))?;
-
-        let ticket_id: String = extract_param(&Some(args.clone()), "ticket_id")?;
-        let worker_id: String = extract_param(&Some(args.clone()), "worker_id")?;
-
-        info!("Worker {} claiming ticket {}", worker_id, ticket_id);
-
-        // Try to claim the ticket atomically - only if it's not already claimed
-        let result = sqlx::query(
-            r#"
-            UPDATE tickets 
-            SET processing_worker_id = ?1, updated_at = datetime('now')
-            WHERE ticket_id = ?2 AND (processing_worker_id IS NULL OR processing_worker_id = '')
-            "#,
-        )
-        .bind(&worker_id)
-        .bind(&ticket_id)
-        .execute(&state.db)
-        .await?;
-
-        if result.rows_affected() > 0 {
-            Ok(create_success_response(&format!(
-                "Successfully claimed ticket {} for worker {}",
-                ticket_id, worker_id
-            )))
-        } else {
-            Ok(create_error_response(&format!(
-                "Ticket {} is already being processed by another worker",
-                ticket_id
-            )))
-        }
-    }
-
-    fn definition(&self) -> Tool {
-        Tool {
-            name: "claim_ticket".to_string(),
-            description:
-                "Claim a ticket for processing to prevent other workers from picking it up"
-                    .to_string(),
-            input_schema: json!({
-                "type": "object",
-                "properties": {
-                    "ticket_id": {
-                        "type": "string",
-                        "description": "Ticket identifier"
-                    },
-                    "worker_id": {
-                        "type": "string",
-                        "description": "Worker identifier claiming the ticket"
-                    }
-                },
-                "required": ["ticket_id", "worker_id"]
-            }),
-        }
-    }
-}
-
-pub struct ReleaseTicketTool;
-
-#[async_trait]
-impl ToolHandler for ReleaseTicketTool {
-    async fn call(
-        &self,
-        state: &AppState,
-        arguments: Option<Value>,
-    ) -> crate::error::Result<CallToolResponse> {
-        let args = arguments
-            .ok_or_else(|| crate::error::AppError::BadRequest("Missing arguments".to_string()))?;
-
-        let ticket_id: String = extract_param(&Some(args.clone()), "ticket_id")?;
-        let worker_id: String = extract_param(&Some(args.clone()), "worker_id")?;
-
-        info!("Worker {} releasing ticket {}", worker_id, ticket_id);
-
-        // Release the ticket only if claimed by this specific worker
-        let result = sqlx::query(
-            r#"
-            UPDATE tickets 
-            SET processing_worker_id = NULL, updated_at = datetime('now')
-            WHERE ticket_id = ?1 AND processing_worker_id = ?2
-            "#,
-        )
-        .bind(&ticket_id)
-        .bind(&worker_id)
-        .execute(&state.db)
-        .await?;
-
-        if result.rows_affected() > 0 {
-            Ok(create_success_response(&format!(
-                "Successfully released ticket {} from worker {}",
-                ticket_id, worker_id
-            )))
-        } else {
-            Ok(create_error_response(&format!(
-                "Ticket {} was not claimed by worker {} or doesn't exist",
-                ticket_id, worker_id
-            )))
-        }
-    }
-
-    fn definition(&self) -> Tool {
-        Tool {
-            name: "release_ticket".to_string(),
-            description: "Release a claimed ticket so other workers can process it".to_string(),
-            input_schema: json!({
-                "type": "object",
-                "properties": {
-                    "ticket_id": {
-                        "type": "string",
-                        "description": "Ticket identifier"
-                    },
-                    "worker_id": {
-                        "type": "string",
-                        "description": "Worker identifier releasing the ticket"
-                    }
-                },
-                "required": ["ticket_id", "worker_id"]
-            }),
-        }
-    }
-}
-
 pub struct CloseTicketTool;
 
 #[async_trait]
@@ -560,10 +409,43 @@ impl ToolHandler for CloseTicketTool {
         let result = Ticket::close_ticket(&state.db, &ticket_id, &resolution).await?;
 
         match result {
-            Some(_) => Ok(create_success_response(&format!(
-                "Closed ticket {} with resolution: {}",
-                ticket_id, resolution
-            ))),
+            Some(closed_ticket) => {
+                // Broadcast ticket_closed event
+                let event = json!({
+                    "jsonrpc": "2.0",
+                    "method": "notifications/resources/updated",
+                    "params": {
+                        "uri": format!("vibe-ensemble://tickets/{}", ticket_id),
+                        "event": {
+                            "type": "ticket_closed",
+                            "ticket_id": ticket_id,
+                            "resolution": resolution,
+                            "ticket": {
+                                "ticket_id": closed_ticket.ticket_id,
+                                "project_id": closed_ticket.project_id,
+                                "title": closed_ticket.title,
+                                "state": closed_ticket.state,
+                                "closed_at": closed_ticket.closed_at
+                            },
+                            "timestamp": chrono::Utc::now().to_rfc3339()
+                        }
+                    }
+                });
+
+                if let Err(e) = state.event_broadcaster.broadcast(event.to_string()) {
+                    tracing::warn!("Failed to broadcast ticket_closed event: {}", e);
+                } else {
+                    tracing::debug!(
+                        "Successfully broadcast ticket_closed event for: {}",
+                        ticket_id
+                    );
+                }
+
+                Ok(create_success_response(&format!(
+                    "Closed ticket {} with resolution: {}",
+                    ticket_id, resolution
+                )))
+            }
             None => Ok(create_error_response(&format!(
                 "Ticket {} not found",
                 ticket_id

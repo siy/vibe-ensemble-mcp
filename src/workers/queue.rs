@@ -1,6 +1,8 @@
 use anyhow::Result;
 use dashmap::DashMap;
 use serde::{Deserialize, Serialize};
+use sqlx::Row;
+use std::fmt;
 use std::sync::Arc;
 use tokio::sync::mpsc;
 use tracing::{debug, error, info, trace, warn};
@@ -11,10 +13,7 @@ use crate::{
     config::Config,
     database::DbPool,
     sse::{notify_queue_change, notify_ticket_change, EventBroadcaster},
-    workers::{
-        domain::{TicketId, WorkerCommand, WorkerCompletionEvent, WorkerType},
-        output::OutputProcessor,
-    },
+    workers::domain::{TicketId, WorkerCommand, WorkerCompletionEvent, WorkerType},
 };
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -40,8 +39,7 @@ pub struct QueueManager {
     completion_sender: mpsc::UnboundedSender<WorkerCompletionEvent>,
     config: Config,
     event_broadcaster: EventBroadcaster,
-    #[allow(dead_code)]
-    processor_handle: tokio::task::JoinHandle<()>,
+    db: DbPool,
 }
 
 impl Default for QueueManager {
@@ -50,25 +48,35 @@ impl Default for QueueManager {
     }
 }
 
+impl fmt::Debug for QueueManager {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("QueueManager")
+            .field("queue_count", &self.queues.len())
+            .finish()
+    }
+}
+
 impl QueueManager {
-    pub fn new(db: DbPool, config: Config, event_broadcaster: EventBroadcaster) -> Self {
+    pub fn new(db: DbPool, config: Config, event_broadcaster: EventBroadcaster) -> Arc<Self> {
         let (completion_sender, completion_receiver) = mpsc::unbounded_channel();
 
-        // Spawn the new output processor
-        let output_processor = OutputProcessor::new(db);
-        let processor_handle = tokio::spawn(async move {
-            output_processor
-                .start_event_processing(completion_receiver)
-                .await;
-        });
-
-        Self {
+        let queue_manager = Arc::new(Self {
             queues: DashMap::new(),
             completion_sender,
             config,
             event_broadcaster,
-            processor_handle,
-        }
+            db,
+        });
+
+        // Spawn the completion event processor thread internally
+        let queue_manager_clone = queue_manager.clone();
+        tokio::spawn(async move {
+            queue_manager_clone
+                .start_completion_event_processor(completion_receiver)
+                .await;
+        });
+
+        queue_manager
     }
 
     /// Get a sender for WorkerCompletionEvent processing
@@ -199,6 +207,11 @@ impl QueueManager {
         let server_port = self.config.port;
         let permission_mode = self.config.permission_mode.clone();
 
+        // Clone these for emergency release (after they're moved to consumer)
+        let emergency_db = db_clone.clone();
+        let emergency_project_id = project_id_clone.clone();
+        let emergency_worker_type = worker_type_clone.clone();
+
         tokio::spawn(async move {
             let consumer = WorkerConsumer::new(
                 project_id_clone,
@@ -213,6 +226,19 @@ impl QueueManager {
 
             if let Err(e) = consumer.start().await {
                 error!("Consumer failed for queue {}: {}", queue_name_for_error, e);
+                // Critical: Release any claimed tickets for this queue when thread fails entirely
+                if let Err(release_err) = WorkerConsumer::emergency_release_claimed_tickets(
+                    &emergency_db,
+                    &emergency_project_id,
+                    &emergency_worker_type,
+                )
+                .await
+                {
+                    error!(
+                        "Failed to release claimed tickets after consumer failure: {}",
+                        release_err
+                    );
+                }
             }
         });
 
@@ -237,312 +263,344 @@ impl QueueManager {
             .collect()
     }
 
-    /// Output processor loop - handles WorkerOutput instances centrally
-    /// This contains the validation and processing logic moved from json_output.rs
-    #[allow(dead_code)]
-    async fn output_processor_loop(
-        mut receiver: mpsc::UnboundedReceiver<WorkerOutput>,
-        db: DbPool,
-        event_broadcaster: EventBroadcaster,
+    /// Start processing WorkerCompletionEvent messages with auto-enqueue
+    pub async fn start_completion_event_processor(
+        self: Arc<Self>,
+        mut receiver: mpsc::UnboundedReceiver<WorkerCompletionEvent>,
     ) {
-        info!("[QueueManager] Starting centralized output processor");
+        info!("[QueueManager] Starting WorkerCompletionEvent processor with auto-enqueue");
 
-        while let Some(output) = receiver.recv().await {
+        while let Some(event) = receiver.recv().await {
             trace!(
-                "[OutputProcessor] Processing output for ticket {:?}",
-                output.ticket_id
+                "[QueueManager] Processing WorkerCompletionEvent for ticket {:?}",
+                event.ticket_id.as_str()
             );
 
-            info!(
-                "[OutputProcessor] Received output with outcome: {:?}, comment: {}",
-                output.outcome, output.comment
-            );
-
-            // Process the WorkerOutput with full validation and database operations
-            if let Err(e) = Self::process_worker_output(&db, &output).await {
+            if let Err(e) = self.process_completion_event(&event).await {
                 error!(
-                    "[OutputProcessor] Failed to process output for ticket {:?}: {}",
-                    output.ticket_id, e
+                    "[QueueManager] Failed to process WorkerCompletionEvent for ticket {}: {}",
+                    event.ticket_id.as_str(),
+                    e
                 );
-                // Notify about processing failure if ticket_id is available
-                if let Some(ref ticket_id) = output.ticket_id {
-                    crate::sse::notify_ticket_change(
-                        &event_broadcaster,
-                        ticket_id,
-                        "processing_failed",
-                    )
-                    .await;
-                }
-                // Continue processing other outputs even if one fails
-            } else {
-                // Notify about successful processing completion if ticket_id is available
-                if let Some(ref ticket_id) = output.ticket_id {
-                    crate::sse::notify_ticket_change(
-                        &event_broadcaster,
-                        ticket_id,
-                        "processing_completed",
-                    )
-                    .await;
-                }
             }
-
-            info!(
-                "[OutputProcessor] Completed processing for ticket {:?} with outcome {:?}",
-                output.ticket_id, output.outcome
-            );
         }
 
-        info!("[QueueManager] Output processor shut down");
+        info!("[QueueManager] WorkerCompletionEvent processor shut down");
     }
 
-    /// Process the parsed worker output and take appropriate actions
-    /// This is the core logic moved from json_output.rs
-    #[allow(dead_code)]
-    async fn process_worker_output(db: &DbPool, output: &WorkerOutput) -> Result<()> {
-        let ticket_id = output
-            .ticket_id
-            .as_ref()
-            .ok_or_else(|| anyhow::anyhow!("WorkerOutput must have ticket_id filled"))?;
-
+    async fn process_completion_event(
+        self: &Arc<Self>,
+        event: &WorkerCompletionEvent,
+    ) -> Result<()> {
         info!(
-            "Processing worker output for ticket {}: outcome={:?}, target_stage={:?}",
-            ticket_id, output.outcome, output.target_stage
+            "Processing WorkerCompletionEvent for ticket {}: {:?}",
+            event.ticket_id.as_str(),
+            event.command
         );
 
-        // First, validate that the ticket exists
-        let ticket_exists = crate::database::tickets::Ticket::get_by_id(db, ticket_id)
-            .await?
-            .is_some();
-
-        if !ticket_exists {
-            return Err(anyhow::anyhow!("Ticket '{}' not found", ticket_id));
-        }
-
-        // Add the worker's comment
+        // Add worker comment
         crate::database::comments::Comment::create(
-            db,
-            ticket_id,
-            Some("worker"), // Generic worker type since we don't have specific worker type here
-            Some("system"), // Generic worker id since we don't track specific worker ids
-            Some(1),        // Simple stage number
-            &output.comment,
+            &self.db,
+            event.ticket_id.as_str(),
+            Some("worker"),
+            Some("system"),
+            None,
+            &event.comment,
         )
         .await?;
-        info!("Added worker comment for ticket {}", ticket_id);
 
-        // Process based on outcome
-        match output.outcome {
-            WorkerOutcome::NextStage => {
-                Self::handle_next_stage(db, ticket_id, output).await?;
+        match &event.command {
+            WorkerCommand::AdvanceToStage {
+                target_stage,
+                pipeline_update,
+            } => {
+                // Handle stage advancement
+                self.advance_ticket_to_stage(
+                    &event.ticket_id,
+                    target_stage,
+                    pipeline_update.as_ref(),
+                )
+                .await?;
+
+                // AUTO-ENQUEUE for next stage
+                if let Err(e) = self
+                    .auto_enqueue_ticket(event.ticket_id.as_str(), target_stage.as_str())
+                    .await
+                {
+                    warn!(
+                        "Failed to auto-enqueue ticket {} for stage {}: {}",
+                        event.ticket_id.as_str(),
+                        target_stage.as_str(),
+                        e
+                    );
+                }
             }
-            WorkerOutcome::PrevStage => {
-                Self::handle_prev_stage(db, ticket_id, output).await?;
+            WorkerCommand::ReturnToStage {
+                target_stage,
+                reason,
+            } => {
+                self.return_ticket_to_stage(&event.ticket_id, target_stage, reason)
+                    .await?;
+
+                // AUTO-ENQUEUE for previous stage
+                if let Err(e) = self
+                    .auto_enqueue_ticket(event.ticket_id.as_str(), target_stage.as_str())
+                    .await
+                {
+                    warn!(
+                        "Failed to auto-enqueue ticket {} for stage {}: {}",
+                        event.ticket_id.as_str(),
+                        target_stage.as_str(),
+                        e
+                    );
+                }
             }
-            WorkerOutcome::CoordinatorAttention => {
-                Self::handle_coordinator_attention(db, ticket_id, output).await?;
+            WorkerCommand::RequestCoordinatorAttention { reason } => {
+                self.request_coordinator_attention(&event.ticket_id, reason)
+                    .await?;
             }
         }
 
         Ok(())
     }
 
-    #[allow(dead_code)]
-    async fn handle_next_stage(db: &DbPool, ticket_id: &str, output: &WorkerOutput) -> Result<()> {
-        let target_stage = output
-            .target_stage
-            .as_ref()
-            .ok_or_else(|| anyhow::anyhow!("next_stage outcome requires target_stage"))?;
-
-        // Update pipeline FIRST if provided - this allows worker types to be created during planning
-        if let Some(new_pipeline) = &output.pipeline_update {
-            info!(
-                "Updating pipeline for ticket {} to: {:?}",
-                ticket_id, new_pipeline
-            );
-
-            // Get ticket to find project_id for pipeline validation
-            let ticket_with_comments = crate::database::tickets::Ticket::get_by_id(db, ticket_id)
-                .await?
-                .ok_or_else(|| anyhow::anyhow!("Ticket '{}' not found", ticket_id))?;
-
-            // Validate all stages in the new pipeline have registered worker types
-            for stage in new_pipeline {
-                let worker_type_exists = crate::database::worker_types::WorkerType::get_by_type(
-                    db,
-                    &ticket_with_comments.ticket.project_id,
-                    stage,
-                )
-                .await?
-                .is_some();
-
-                if !worker_type_exists {
-                    return Err(anyhow::anyhow!(
-                        "Unknown worker type '{}'. Please, register '{}' first.",
-                        stage,
-                        stage
-                    ));
-                }
-            }
-
-            // Update the ticket's execution_plan (pipeline)
-            let pipeline_json = serde_json::to_string(new_pipeline)?;
-            sqlx::query(
-                "UPDATE tickets SET execution_plan = ?1, updated_at = datetime('now') WHERE ticket_id = ?2"
-            )
-            .bind(&pipeline_json)
-            .bind(ticket_id)
-            .execute(db)
-            .await?;
-        }
-
-        // Now validate that the target stage has a registered worker type
-        let ticket_with_comments = crate::database::tickets::Ticket::get_by_id(db, ticket_id)
+    async fn auto_enqueue_ticket(
+        self: &Arc<Self>,
+        ticket_id: &str,
+        target_stage: &str,
+    ) -> Result<()> {
+        // Get ticket to find project_id
+        let ticket_with_comments = crate::database::tickets::Ticket::get_by_id(&self.db, ticket_id)
             .await?
             .ok_or_else(|| anyhow::anyhow!("Ticket '{}' not found", ticket_id))?;
 
+        let project_id = &ticket_with_comments.ticket.project_id;
+
+        // Submit task to queue for the new stage
+        match self
+            .submit_task(project_id, target_stage, ticket_id, &self.db)
+            .await
+        {
+            Ok(task_id) => {
+                info!(
+                    "Auto-enqueued ticket {} for stage {} (task_id: {})",
+                    ticket_id, target_stage, task_id
+                );
+                Ok(())
+            }
+            Err(e) => {
+                // This is expected for final stages or coordinator attention
+                debug!(
+                    "Could not auto-enqueue ticket {} for stage {}: {}",
+                    ticket_id, target_stage, e
+                );
+                Ok(())
+            }
+        }
+    }
+
+    /// Handle advancing ticket to next stage with optional pipeline update
+    async fn advance_ticket_to_stage(
+        self: &Arc<Self>,
+        ticket_id: &TicketId,
+        target_stage: &WorkerType,
+        pipeline_update: Option<&Vec<WorkerType>>,
+    ) -> Result<()> {
+        // Update pipeline FIRST if provided - this allows worker types to be created during planning
+        if let Some(new_pipeline) = pipeline_update {
+            self.update_pipeline(ticket_id, new_pipeline).await?;
+        }
+
+        // Validate that the target worker type exists in the project
+        self.validate_worker_type_exists(ticket_id, target_stage)
+            .await?;
+
+        info!(
+            "Moving ticket {} to next stage: {}",
+            ticket_id.as_str(),
+            target_stage.as_str()
+        );
+
+        self.transition_ticket_stage(ticket_id, target_stage).await
+    }
+
+    /// Handle returning ticket to previous stage
+    async fn return_ticket_to_stage(
+        self: &Arc<Self>,
+        ticket_id: &TicketId,
+        target_stage: &WorkerType,
+        reason: &str,
+    ) -> Result<()> {
+        // Validate target stage
+        self.validate_worker_type_exists(ticket_id, target_stage)
+            .await?;
+
+        warn!(
+            "Moving ticket {} back to previous stage: {} (reason: {})",
+            ticket_id.as_str(),
+            target_stage.as_str(),
+            reason
+        );
+
+        self.transition_ticket_stage(ticket_id, target_stage).await
+    }
+
+    /// Handle coordinator attention request
+    async fn request_coordinator_attention(
+        self: &Arc<Self>,
+        ticket_id: &TicketId,
+        reason: &str,
+    ) -> Result<()> {
+        warn!(
+            "Ticket {} requires coordinator attention: {}",
+            ticket_id.as_str(),
+            reason
+        );
+
+        // Set ticket to on_hold
+        crate::database::tickets::Ticket::update_state(&self.db, ticket_id.as_str(), "on_hold")
+            .await?;
+
+        // Create coordinator attention event
+        crate::database::events::Event::create_stage_completed(
+            &self.db,
+            ticket_id.as_str(),
+            "coordinator_attention",
+            "system",
+        )
+        .await?;
+
+        // Add special comment
+        crate::database::comments::Comment::create(
+            &self.db,
+            ticket_id.as_str(),
+            Some("system"),
+            Some("system"),
+            Some(999), // Special stage for system messages
+            &format!("⚠️ COORDINATOR ATTENTION REQUIRED: {}", reason),
+        )
+        .await?;
+
+        info!(
+            "Set ticket {} to on_hold status for coordinator attention",
+            ticket_id.as_str()
+        );
+
+        Ok(())
+    }
+
+    // Private helper methods
+    async fn update_pipeline(
+        self: &Arc<Self>,
+        ticket_id: &TicketId,
+        new_pipeline: &[WorkerType],
+    ) -> Result<()> {
+        info!(
+            "Updating pipeline for ticket {} to: {:?}",
+            ticket_id.as_str(),
+            new_pipeline
+        );
+
+        // Get ticket to find project_id for pipeline validation
+        let ticket_with_comments =
+            crate::database::tickets::Ticket::get_by_id(&self.db, ticket_id.as_str())
+                .await?
+                .ok_or_else(|| anyhow::anyhow!("Ticket '{}' not found", ticket_id.as_str()))?;
+
+        let _project_id = &ticket_with_comments.ticket.project_id;
+
+        // Convert WorkerType to strings for database
+        let pipeline_strings: Vec<String> = new_pipeline
+            .iter()
+            .map(|wt| wt.as_str().to_string())
+            .collect();
+
+        // Update the execution_plan field in the database
+        let pipeline_json = serde_json::to_string(&pipeline_strings)
+            .map_err(|e| anyhow::anyhow!("Failed to serialize pipeline: {}", e))?;
+
+        sqlx::query(
+            "UPDATE tickets SET execution_plan = ?1, updated_at = datetime('now') WHERE ticket_id = ?2"
+        )
+        .bind(pipeline_json)
+        .bind(ticket_id.as_str())
+        .execute(&self.db)
+        .await?;
+
+        info!(
+            "Successfully updated pipeline for ticket {}",
+            ticket_id.as_str()
+        );
+        Ok(())
+    }
+
+    async fn validate_worker_type_exists(
+        self: &Arc<Self>,
+        ticket_id: &TicketId,
+        worker_type: &WorkerType,
+    ) -> Result<()> {
+        // Get ticket to find project_id
+        let ticket_with_comments =
+            crate::database::tickets::Ticket::get_by_id(&self.db, ticket_id.as_str())
+                .await?
+                .ok_or_else(|| anyhow::anyhow!("Ticket '{}' not found", ticket_id.as_str()))?;
+
+        // Check if worker type exists in the project
         let worker_type_exists = crate::database::worker_types::WorkerType::get_by_type(
-            db,
+            &self.db,
             &ticket_with_comments.ticket.project_id,
-            target_stage,
+            worker_type.as_str(),
         )
         .await?
         .is_some();
 
         if !worker_type_exists {
             return Err(anyhow::anyhow!(
-                "Unknown worker type '{}'. Please, register '{}' first.",
-                target_stage,
-                target_stage
+                "Worker type '{}' does not exist in project '{}'",
+                worker_type.as_str(),
+                ticket_with_comments.ticket.project_id
             ));
         }
 
-        info!(
-            "Moving ticket {} to next stage: {}",
-            ticket_id, target_stage
-        );
+        Ok(())
+    }
 
-        // Release ticket from current worker (if claimed)
-        Self::release_ticket_if_claimed(db, ticket_id).await?;
+    async fn transition_ticket_stage(
+        self: &Arc<Self>,
+        ticket_id: &TicketId,
+        target_stage: &WorkerType,
+    ) -> Result<()> {
+        // Release ticket if claimed
+        self.release_ticket_if_claimed(ticket_id).await?;
 
-        // Move ticket to target stage
-        crate::database::tickets::Ticket::update_stage(db, ticket_id, target_stage).await?;
+        // Update stage
+        crate::database::tickets::Ticket::update_stage(
+            &self.db,
+            ticket_id.as_str(),
+            target_stage.as_str(),
+        )
+        .await?;
 
-        // Create an event for successful stage completion
+        // Create completion event
         crate::database::events::Event::create_stage_completed(
-            db,
-            ticket_id,
-            target_stage,
+            &self.db,
+            ticket_id.as_str(),
+            target_stage.as_str(),
             "system",
         )
         .await?;
 
         info!(
             "Successfully moved ticket {} to stage {}",
-            ticket_id, target_stage
+            ticket_id.as_str(),
+            target_stage.as_str()
         );
+
         Ok(())
     }
 
-    #[allow(dead_code)]
-    async fn handle_prev_stage(db: &DbPool, ticket_id: &str, output: &WorkerOutput) -> Result<()> {
-        let target_stage = output
-            .target_stage
-            .as_ref()
-            .ok_or_else(|| anyhow::anyhow!("prev_stage outcome requires target_stage"))?;
-
-        // Validate that the target stage has a registered worker type
-        let ticket_with_comments = crate::database::tickets::Ticket::get_by_id(db, ticket_id)
-            .await?
-            .ok_or_else(|| anyhow::anyhow!("Ticket '{}' not found", ticket_id))?;
-
-        let worker_type_exists = crate::database::worker_types::WorkerType::get_by_type(
-            db,
-            &ticket_with_comments.ticket.project_id,
-            target_stage,
-        )
-        .await?
-        .is_some();
-
-        if !worker_type_exists {
-            return Err(anyhow::anyhow!(
-                "Unknown worker type '{}'. Please, register '{}' first.",
-                target_stage,
-                target_stage
-            ));
-        }
-
-        warn!(
-            "Moving ticket {} back to previous stage: {} (reason: {})",
-            ticket_id, target_stage, output.reason
-        );
-
-        // Release ticket from current worker (if claimed)
-        Self::release_ticket_if_claimed(db, ticket_id).await?;
-
-        // Move ticket back to target stage
-        crate::database::tickets::Ticket::update_stage(db, ticket_id, target_stage).await?;
-
-        // Create an event for tracking
-        crate::database::events::Event::create_stage_completed(
-            db,
-            ticket_id,
-            target_stage,
-            "system",
-        )
-        .await?;
-
-        info!(
-            "Successfully moved ticket {} back to stage {}",
-            ticket_id, target_stage
-        );
-        Ok(())
-    }
-
-    #[allow(dead_code)]
-    async fn handle_coordinator_attention(
-        db: &DbPool,
-        ticket_id: &str,
-        output: &WorkerOutput,
-    ) -> Result<()> {
-        warn!(
-            "Ticket {} requires coordinator attention: {}",
-            ticket_id, output.reason
-        );
-
-        // Set ticket state to on_hold to signal coordinator intervention needed
-        crate::database::tickets::Ticket::update_state(db, ticket_id, "on_hold").await?;
-
-        // Create an event for coordinator attention
-        crate::database::events::Event::create_stage_completed(
-            db,
-            ticket_id,
-            "coordinator_attention",
-            "system",
-        )
-        .await?;
-
-        // Add a special comment indicating coordinator attention is needed
-        crate::database::comments::Comment::create(
-            db,
-            ticket_id,
-            Some("system"),
-            Some("system"),
-            Some(999), // Special stage for system messages
-            &format!("⚠️ COORDINATOR ATTENTION REQUIRED: {}", output.reason),
-        )
-        .await?;
-
-        info!(
-            "Set ticket {} to on_hold status for coordinator attention",
-            ticket_id
-        );
-        Ok(())
-    }
-
-    /// Release a ticket if it's currently claimed by any worker
-    #[allow(dead_code)]
-    async fn release_ticket_if_claimed(db: &DbPool, ticket_id: &str) -> Result<()> {
-        debug!("Releasing ticket {} if claimed", ticket_id);
+    async fn release_ticket_if_claimed(self: &Arc<Self>, ticket_id: &TicketId) -> Result<()> {
+        debug!("Releasing ticket {} if claimed", ticket_id.as_str());
 
         let result = sqlx::query(
             r#"
@@ -551,14 +609,20 @@ impl QueueManager {
             WHERE ticket_id = ?1 AND processing_worker_id IS NOT NULL
             "#,
         )
-        .bind(ticket_id)
-        .execute(db)
+        .bind(ticket_id.as_str())
+        .execute(&self.db)
         .await?;
 
         if result.rows_affected() > 0 {
-            info!("Released claimed ticket {} for stage transition", ticket_id);
+            info!(
+                "Released claimed ticket {} for stage transition",
+                ticket_id.as_str()
+            );
         } else {
-            debug!("Ticket {} was not claimed, no release needed", ticket_id);
+            debug!(
+                "Ticket {} was not claimed, no release needed",
+                ticket_id.as_str()
+            );
         }
 
         Ok(())
@@ -673,7 +737,23 @@ impl WorkerConsumer {
         };
 
         // Convert WorkerOutput to WorkerCompletionEvent
-        let completion_event = self.convert_to_completion_event(&worker_output)?;
+        let completion_event = match self.convert_to_completion_event(&worker_output) {
+            Ok(event) => event,
+            Err(e) => {
+                error!(
+                    "Failed to convert WorkerOutput to WorkerCompletionEvent for ticket {}: {}",
+                    task.ticket_id, e
+                );
+                // Release claim on conversion failure to prevent ticket from being stuck
+                if let Err(release_err) = self.release_ticket_claim(&task.ticket_id).await {
+                    error!(
+                        "Failed to release claim for ticket {} after conversion error: {}",
+                        task.ticket_id, release_err
+                    );
+                }
+                return Err(e);
+            }
+        };
 
         // Send event to centralized processor
         if self.completion_sender.send(completion_event).is_err() {
@@ -681,6 +761,14 @@ impl WorkerConsumer {
                 "Output processor has shut down, cannot send completion event for ticket {}",
                 task.ticket_id
             );
+            // Release claim when event cannot be sent to prevent ticket from being stuck
+            if let Err(release_err) = self.release_ticket_claim(&task.ticket_id).await {
+                error!(
+                    "Failed to release claim for ticket {} after send failure: {}",
+                    task.ticket_id, release_err
+                );
+            }
+            return Err(anyhow::anyhow!("Output processor shut down"));
         }
 
         Ok(())
@@ -785,5 +873,109 @@ impl WorkerConsumer {
         };
 
         ProcessManager::spawn_worker(spawn_request).await
+    }
+
+    /// Release claim for a specific ticket
+    async fn release_ticket_claim(&self, ticket_id: &str) -> Result<()> {
+        debug!("Releasing claim for ticket {} due to error", ticket_id);
+
+        let result = sqlx::query(
+            r#"
+            UPDATE tickets 
+            SET processing_worker_id = NULL, updated_at = datetime('now')
+            WHERE ticket_id = ?1 AND processing_worker_id IS NOT NULL
+            "#,
+        )
+        .bind(ticket_id)
+        .execute(&self.db)
+        .await?;
+
+        if result.rows_affected() > 0 {
+            warn!(
+                "Released claim for ticket {} due to processing error",
+                ticket_id
+            );
+        } else {
+            debug!("Ticket {} was not claimed, no release needed", ticket_id);
+        }
+
+        Ok(())
+    }
+
+    /// Emergency function to release all claimed tickets for a specific worker type when consumer thread fails
+    async fn emergency_release_claimed_tickets(
+        db: &DbPool,
+        project_id: &str,
+        worker_type: &str,
+    ) -> Result<()> {
+        warn!(
+            "Emergency releasing claimed tickets for project={}, worker_type={}",
+            project_id, worker_type
+        );
+
+        // Release all tickets claimed by workers with matching prefix for this worker type
+        let worker_prefix = format!("consumer-{}-", worker_type);
+
+        let result = sqlx::query(
+            r#"
+            UPDATE tickets 
+            SET processing_worker_id = NULL, updated_at = datetime('now')
+            WHERE project_id = ?1 
+              AND current_stage = ?2 
+              AND processing_worker_id IS NOT NULL 
+              AND processing_worker_id LIKE ?3
+            "#,
+        )
+        .bind(project_id)
+        .bind(worker_type)
+        .bind(format!("{}%", worker_prefix))
+        .execute(db)
+        .await?;
+
+        if result.rows_affected() > 0 {
+            error!(
+                "Emergency released {} claimed tickets for project={}, worker_type={} due to consumer thread failure",
+                result.rows_affected(),
+                project_id,
+                worker_type
+            );
+
+            // Add system comments to released tickets explaining what happened
+            let released_tickets = sqlx::query(
+                r#"
+                SELECT ticket_id FROM tickets 
+                WHERE project_id = ?1 
+                  AND current_stage = ?2 
+                  AND processing_worker_id IS NULL
+                  AND updated_at >= datetime('now', '-5 seconds')
+                "#,
+            )
+            .bind(project_id)
+            .bind(worker_type)
+            .fetch_all(db)
+            .await?;
+
+            for ticket_row in released_tickets {
+                let ticket_id: String = ticket_row.get("ticket_id");
+                let _ = crate::database::comments::Comment::create(
+                    db,
+                    &ticket_id,
+                    Some("system"),
+                    Some("system"),
+                    Some(999), // Special stage for system messages
+                    &format!(
+                        "🚨 EMERGENCY RELEASE: Consumer thread for worker type '{}' failed. Ticket released for manual intervention or retry.",
+                        worker_type
+                    ),
+                ).await;
+            }
+        } else {
+            info!(
+                "No claimed tickets found to release for project={}, worker_type={}",
+                project_id, worker_type
+            );
+        }
+
+        Ok(())
     }
 }

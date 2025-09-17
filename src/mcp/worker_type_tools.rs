@@ -41,6 +41,39 @@ impl ToolHandler for CreateWorkerTypeTool {
                     "created_at": worker_type_info.created_at,
                     "updated_at": worker_type_info.updated_at
                 });
+
+                // Broadcast worker_type_created event
+                let event = json!({
+                    "jsonrpc": "2.0",
+                    "method": "notifications/resources/updated",
+                    "params": {
+                        "uri": format!("vibe-ensemble://worker-types/{}/{}", project_id, worker_type),
+                        "event": {
+                            "type": "worker_type_created",
+                            "worker_type": {
+                                "id": worker_type_info.id,
+                                "project_id": worker_type_info.project_id,
+                                "worker_type": worker_type_info.worker_type,
+                                "short_description": worker_type_info.short_description,
+                                "system_prompt": worker_type_info.system_prompt,
+                                "created_at": worker_type_info.created_at,
+                                "updated_at": worker_type_info.updated_at
+                            },
+                            "timestamp": chrono::Utc::now().to_rfc3339()
+                        }
+                    }
+                });
+
+                if let Err(e) = state.event_broadcaster.broadcast(event.to_string()) {
+                    tracing::warn!("Failed to broadcast worker_type_created event: {}", e);
+                } else {
+                    tracing::debug!(
+                        "Successfully broadcast worker_type_created event for: {}/{}",
+                        project_id,
+                        worker_type
+                    );
+                }
+
                 Ok(create_success_response(&format!(
                     "Worker type '{}' created successfully for project '{}': {}",
                     worker_type, project_id, response
@@ -213,6 +246,39 @@ impl ToolHandler for UpdateWorkerTypeTool {
                     "created_at": worker_type_info.created_at,
                     "updated_at": worker_type_info.updated_at
                 });
+
+                // Broadcast worker_type_updated event
+                let event = json!({
+                    "jsonrpc": "2.0",
+                    "method": "notifications/resources/updated",
+                    "params": {
+                        "uri": format!("vibe-ensemble://worker-types/{}/{}", project_id, worker_type),
+                        "event": {
+                            "type": "worker_type_updated",
+                            "worker_type": {
+                                "id": worker_type_info.id,
+                                "project_id": worker_type_info.project_id,
+                                "worker_type": worker_type_info.worker_type,
+                                "short_description": worker_type_info.short_description,
+                                "system_prompt": worker_type_info.system_prompt,
+                                "created_at": worker_type_info.created_at,
+                                "updated_at": worker_type_info.updated_at
+                            },
+                            "timestamp": chrono::Utc::now().to_rfc3339()
+                        }
+                    }
+                });
+
+                if let Err(e) = state.event_broadcaster.broadcast(event.to_string()) {
+                    tracing::warn!("Failed to broadcast worker_type_updated event: {}", e);
+                } else {
+                    tracing::debug!(
+                        "Successfully broadcast worker_type_updated event for: {}/{}",
+                        project_id,
+                        worker_type
+                    );
+                }
+
                 Ok(create_success_response(&format!(
                     "Worker type '{}' updated successfully for project '{}': {}",
                     worker_type, project_id, response
@@ -269,10 +335,37 @@ impl ToolHandler for DeleteWorkerTypeTool {
         let worker_type: String = extract_param(&arguments, "worker_type")?;
 
         match WorkerType::delete(&state.db, &project_id, &worker_type).await {
-            Ok(true) => Ok(create_success_response(&format!(
-                "Worker type '{}' deleted successfully from project '{}'",
-                worker_type, project_id
-            ))),
+            Ok(true) => {
+                // Broadcast worker_type_deleted event
+                let event = json!({
+                    "jsonrpc": "2.0",
+                    "method": "notifications/resources/updated",
+                    "params": {
+                        "uri": format!("vibe-ensemble://worker-types/{}/{}", project_id, worker_type),
+                        "event": {
+                            "type": "worker_type_deleted",
+                            "project_id": project_id,
+                            "worker_type": worker_type,
+                            "timestamp": chrono::Utc::now().to_rfc3339()
+                        }
+                    }
+                });
+
+                if let Err(e) = state.event_broadcaster.broadcast(event.to_string()) {
+                    tracing::warn!("Failed to broadcast worker_type_deleted event: {}", e);
+                } else {
+                    tracing::debug!(
+                        "Successfully broadcast worker_type_deleted event for: {}/{}",
+                        project_id,
+                        worker_type
+                    );
+                }
+
+                Ok(create_success_response(&format!(
+                    "Worker type '{}' deleted successfully from project '{}'",
+                    worker_type, project_id
+                )))
+            }
             Ok(false) => Ok(create_error_response(&format!(
                 "Worker type '{}' not found for project '{}'",
                 worker_type, project_id

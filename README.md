@@ -353,15 +353,16 @@ Permission files are read fresh from disk each time a worker starts, allowing yo
 - Inherit mode: `.claude/settings.local.json` 
 - File mode: `.vibe-ensemble-mcp/worker-permissions.json`
 
-## What's New in v0.8.0
+## What's New in v0.8.2
 
-- **🔐 Comprehensive Permission System**: Three security modes (bypass/inherit/file) with fine-grained control over worker capabilities
-- **🛡️ Production-Ready Security**: Default inherit mode reuses your existing Claude Code permissions for safe deployment
-- **⚙️ Dynamic Permission Updates**: Permission files are read fresh each time, allowing real-time security adjustments
-- **📋 Project Rules & Patterns**: Define project-specific coding standards and conventions that workers automatically inherit
-- **📚 Enhanced Documentation**: Comprehensive workflow examples for development, debugging, testing, and DevOps
-- **🗄️ Improved Database Schema**: Better support for project metadata and worker coordination
-- **🔧 Updated MCP Tools**: New project management capabilities with rules and patterns support
+- **🧠 Task Breakdown Sizing Methodology**: Intelligent task breakdown with optimal context-performance optimization (~120K token budget per stage)
+- **📐 Natural Boundary Detection**: Automatic task splitting along technology, functional, and expertise boundaries
+- **⚡ Enhanced Planning Workers**: Built-in token estimation and pipeline optimization with comprehensive validation
+- **📊 Real-Time SSE Integration**: Full Server-Sent Events protocol for live progress monitoring and event streaming
+- **🔧 Improved Worker Templates**: 8 specialized worker templates with task sizing methodology integration
+- **📋 Enhanced Coordinator Prompts**: Updated coordination with systematic task delegation and sizing guidance
+- **🛠️ Robust MCP Tools**: All 22 MCP tools with enhanced project metadata and worker coordination
+- **📚 Comprehensive Documentation**: Complete SSE protocol implementation and task breakdown sizing methodology
 
 ## How It Works
 
