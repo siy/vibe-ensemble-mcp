@@ -737,7 +737,7 @@ impl WorkerConsumer {
         };
 
         // Convert WorkerOutput to WorkerCompletionEvent
-        let completion_event = match self.convert_to_completion_event(&worker_output) {
+        let completion_event = match self.convert_to_completion_event(&worker_output).await {
             Ok(event) => event,
             Err(e) => {
                 error!(
@@ -774,8 +774,11 @@ impl WorkerConsumer {
         Ok(())
     }
 
-    /// Convert WorkerOutput to WorkerCompletionEvent
-    fn convert_to_completion_event(&self, output: &WorkerOutput) -> Result<WorkerCompletionEvent> {
+    /// Convert WorkerOutput to WorkerCompletionEvent with validation
+    async fn convert_to_completion_event(
+        &self,
+        output: &WorkerOutput,
+    ) -> Result<WorkerCompletionEvent> {
         let ticket_id_str = output
             .ticket_id
             .as_ref()
@@ -783,21 +786,58 @@ impl WorkerConsumer {
 
         let ticket_id = TicketId::new(ticket_id_str.clone())?;
 
-        // Convert WorkerOutcome to WorkerCommand
+        // Convert WorkerOutcome to WorkerCommand with validation
         let command = match output.outcome {
             WorkerOutcome::NextStage => {
                 if let Some(ref target_stage_str) = output.target_stage {
-                    let target_stage = WorkerType::new(target_stage_str.clone())?;
-                    let pipeline_update = output.pipeline_update.as_ref().map(|pipeline| {
-                        pipeline
-                            .iter()
-                            .filter_map(|s| WorkerType::new(s.clone()).ok())
-                            .collect()
-                    });
+                    // CRITICAL: Validate that target stage worker type exists before proceeding
+                    let validation_result = self.validate_target_stage(target_stage_str).await;
 
-                    WorkerCommand::AdvanceToStage {
-                        target_stage,
-                        pipeline_update,
+                    match validation_result {
+                        Ok(true) => {
+                            // Target stage exists, proceed normally
+                            let target_stage = WorkerType::new(target_stage_str.clone())?;
+                            let pipeline_update = output.pipeline_update.as_ref().map(|pipeline| {
+                                pipeline
+                                    .iter()
+                                    .filter_map(|s| WorkerType::new(s.clone()).ok())
+                                    .collect()
+                            });
+
+                            WorkerCommand::AdvanceToStage {
+                                target_stage,
+                                pipeline_update,
+                            }
+                        }
+                        Ok(false) => {
+                            // Target stage does not exist - convert to coordinator attention
+                            // This ensures invalid data never reaches the database
+                            warn!(
+                                "Worker specified non-existent target stage '{}' for project '{}'. Converting to coordinator attention.",
+                                target_stage_str, self.project_id
+                            );
+
+                            WorkerCommand::RequestCoordinatorAttention {
+                                reason: format!(
+                                    "Worker specified non-existent target stage '{}' for project '{}'. The stage pipeline contains a reference to a worker type that does not exist. Ticket needs to be reset to planning stage for re-planning with proper worker type validation.",
+                                    target_stage_str, self.project_id
+                                ),
+                            }
+                        }
+                        Err(e) => {
+                            // Database error during validation - fail safe to coordinator attention
+                            error!(
+                                "Failed to validate target stage '{}' for project '{}': {}",
+                                target_stage_str, self.project_id, e
+                            );
+
+                            WorkerCommand::RequestCoordinatorAttention {
+                                reason: format!(
+                                    "Failed to validate target stage '{}' due to database error: {}. Ticket needs manual review.",
+                                    target_stage_str, e
+                                ),
+                            }
+                        }
                     }
                 } else {
                     return Err(anyhow::anyhow!("NextStage outcome requires target_stage"));
@@ -805,10 +845,46 @@ impl WorkerConsumer {
             }
             WorkerOutcome::PrevStage => {
                 if let Some(ref target_stage_str) = output.target_stage {
-                    let target_stage = WorkerType::new(target_stage_str.clone())?;
-                    WorkerCommand::ReturnToStage {
-                        target_stage,
-                        reason: output.reason.clone(),
+                    // CRITICAL: Validate that target stage worker type exists before proceeding
+                    let validation_result = self.validate_target_stage(target_stage_str).await;
+
+                    match validation_result {
+                        Ok(true) => {
+                            // Target stage exists, proceed normally
+                            let target_stage = WorkerType::new(target_stage_str.clone())?;
+                            WorkerCommand::ReturnToStage {
+                                target_stage,
+                                reason: output.reason.clone(),
+                            }
+                        }
+                        Ok(false) => {
+                            // Target stage does not exist - convert to coordinator attention
+                            warn!(
+                                "Worker specified non-existent target stage '{}' for project '{}' in PrevStage. Converting to coordinator attention.",
+                                target_stage_str, self.project_id
+                            );
+
+                            WorkerCommand::RequestCoordinatorAttention {
+                                reason: format!(
+                                    "Worker specified non-existent target stage '{}' for project '{}' in PrevStage operation. The stage pipeline contains a reference to a worker type that does not exist. Ticket needs to be reset to planning stage for re-planning.",
+                                    target_stage_str, self.project_id
+                                ),
+                            }
+                        }
+                        Err(e) => {
+                            // Database error during validation - fail safe to coordinator attention
+                            error!(
+                                "Failed to validate target stage '{}' for project '{}' in PrevStage: {}",
+                                target_stage_str, self.project_id, e
+                            );
+
+                            WorkerCommand::RequestCoordinatorAttention {
+                                reason: format!(
+                                    "Failed to validate target stage '{}' in PrevStage due to database error: {}. Ticket needs manual review.",
+                                    target_stage_str, e
+                                ),
+                            }
+                        }
                     }
                 } else {
                     return Err(anyhow::anyhow!("PrevStage outcome requires target_stage"));
@@ -824,6 +900,21 @@ impl WorkerConsumer {
             command,
             comment: output.comment.clone(),
         })
+    }
+
+    /// Validate that a target stage worker type exists in the database
+    async fn validate_target_stage(&self, target_stage: &str) -> Result<bool> {
+        match crate::database::worker_types::WorkerType::get_by_type(
+            &self.db,
+            &self.project_id,
+            target_stage,
+        )
+        .await
+        {
+            Ok(Some(_)) => Ok(true),
+            Ok(None) => Ok(false),
+            Err(e) => Err(e),
+        }
     }
 
     /// Execute actual worker process - spawn Claude Code worker using ProcessManager

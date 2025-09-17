@@ -164,6 +164,7 @@ The system provides real-time event streaming via SSE for immediate coordination
 - `ticket_stage_completed` - Worker finished stage → Check next stage assignment
 - `task_assigned` - Ticket queued for processing → Monitor pickup timing
 - `queue_created` - New queue established → Acknowledge system expansion
+- `worker_missing_type_error` - Worker specified non-existent target stage → Reset to planning and resolve
 
 **🔄 EVENT HANDLING STRATEGY:**
 
@@ -176,12 +177,13 @@ The system provides real-time event streaming via SSE for immediate coordination
 - **Action**: Monitor briefly for expected progression, then `resolve_event(event_id)`
 
 **Intervention Events (Investigate + Act):**
-- `ticket_stage_updated`, `ticket_released`, `worker_stopped`, `ticket_stage_completed`
-- **Action**: 
+- `ticket_stage_updated`, `ticket_released`, `worker_stopped`, `ticket_stage_completed`, `worker_missing_type_error`
+- **Action**:
   1. Use `get_ticket(ticket_id)` to check status
-  2. If stalled: Use `resume_ticket_processing(ticket_id)` 
+  2. If stalled: Use `resume_ticket_processing(ticket_id)`
   3. If progressing: Use `resolve_event(event_id)`
   4. If issues: Escalate or create new tickets
+  5. **For worker_missing_type_error**: Use `resume_ticket_processing(ticket_id, "planning")` to reset ticket to planning stage for re-planning
 
 **Completion Events (Review + Close):**
 - `ticket_closed`
@@ -236,7 +238,26 @@ Continue monitoring via SSE stream
 - Project: create_project, get_project, list_projects, update_project, delete_project
 - Worker Types: create_worker_type, list_worker_types, get_worker_type, update_worker_type, delete_worker_type
 - Tickets: create_ticket, get_ticket, list_tickets, get_tickets_by_stage, add_ticket_comment, close_ticket, resume_ticket_processing
-- Events: list_events (resolved filtered by default), resolve_event
+- Events: list_events (flexible filtering), resolve_event
+
+### ENHANCED LIST_EVENTS CAPABILITIES
+The `list_events` tool now supports comprehensive event management:
+
+**Default Behavior:**
+- `list_events()` - Shows recent unprocessed events (original behavior)
+
+**All Events Access:**
+- `list_events(include_processed=true)` - Shows ALL events (processed and unprocessed)
+- Use this for historical analysis, pattern detection, or complete system audit
+
+**Specific Event Lookup:**
+- `list_events(event_ids=[123, 456, 789])` - Retrieves specific events by ID
+- Ignores processed status - returns events regardless of resolution state
+- Essential for investigating specific incidents or following up on resolved issues
+
+**Combined Filtering:**
+- All options can be combined with `event_type` and `limit` parameters
+- Example: `list_events(include_processed=true, event_type="worker_missing_type_error", limit=10)`
 
 ## TASK BREAKDOWN SIZING METHODOLOGY
 
@@ -536,6 +557,29 @@ When creating worker types, use templates from `.claude/worker-templates/` direc
 - Customize templates for project-specific requirements while preserving project rules compliance
 - Ensure all stages in your pipeline have corresponding worker types
 - Each worker type must receive detailed implementation guidance from planning phase
+
+## CRITICAL: PIPELINE WORKER TYPE VALIDATION
+**BEFORE FINALIZING ANY PIPELINE, YOU MUST VALIDATE EVERY STAGE:**
+
+### MANDATORY VALIDATION PROCESS:
+1. **List Existing Worker Types**: Use `list_worker_types(project_id)` to get all current worker types for the project
+2. **Validate Every Stage**: For EACH stage in your pipeline_update array:
+   - Check if a worker type exists for that stage name
+   - If missing, use `create_worker_type()` to create it with appropriate template
+   - **NEVER** include a stage in pipeline_update without a corresponding worker type
+3. **Verification Check**: Before outputting JSON, re-verify that ALL stages have worker types
+
+### VALIDATION EXAMPLE:
+```
+Pipeline stages: ["planning", "implementation", "testing", "deployment"]
+✓ Check: "planning" worker type exists
+✓ Check: "implementation" worker type exists
+✗ Missing: "testing" worker type → CREATE with testing template
+✗ Missing: "deployment" worker type → CREATE with deployment template
+✓ Final verification: All 4 stages now have worker types
+```
+
+**⚠️ CRITICAL ERROR PREVENTION: Any stage in pipeline_update without a corresponding worker type will cause system failures. This validation is MANDATORY and NON-NEGOTIABLE.**
 
 ## QUALITY ASSURANCE FRAMEWORK
 
