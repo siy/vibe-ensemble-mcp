@@ -15,7 +15,6 @@ use crate::{
     sse::{notify_queue_change, notify_ticket_change, EventBroadcaster},
     workers::{
         domain::{TicketId, WorkerCommand, WorkerCompletionEvent, WorkerType},
-        output::OutputProcessor,
     },
 };
 
@@ -40,7 +39,6 @@ pub enum WorkerOutcome {
 pub struct QueueManager {
     queues: DashMap<String, mpsc::UnboundedSender<TaskItem>>,
     completion_sender: mpsc::UnboundedSender<WorkerCompletionEvent>,
-    worker_output_sender: mpsc::UnboundedSender<WorkerOutput>,
     config: Config,
     event_broadcaster: EventBroadcaster,
     db: DbPool,
@@ -65,30 +63,26 @@ impl QueueManager {
         db: DbPool,
         config: Config,
         event_broadcaster: EventBroadcaster,
-    ) -> (Self, mpsc::UnboundedReceiver<WorkerOutput>) {
+    ) -> Arc<Self> {
         let (completion_sender, completion_receiver) = mpsc::unbounded_channel();
-        let (worker_output_sender, worker_output_receiver) = mpsc::unbounded_channel();
 
-        // Start event processor independently (for WorkerCompletionEvent)
-        let output_processor = OutputProcessor::new(db.clone());
-        tokio::spawn(async move {
-            output_processor
-                .start_event_processing(completion_receiver)
-                .await;
-        });
-
-        let queue_manager = Self {
+        let queue_manager = Arc::new(Self {
             queues: DashMap::new(),
             completion_sender,
-            worker_output_sender,
             config,
             event_broadcaster,
             db,
-        };
+        });
 
-        // Return both the QueueManager and the WorkerOutput receiver
-        // The caller will start the WorkerOutput processor after wrapping in Arc
-        (queue_manager, worker_output_receiver)
+        // Spawn the completion event processor thread internally
+        let queue_manager_clone = queue_manager.clone();
+        tokio::spawn(async move {
+            queue_manager_clone
+                .start_completion_event_processor(completion_receiver)
+                .await;
+        });
+
+        queue_manager
     }
 
     /// Get a sender for WorkerCompletionEvent processing
@@ -96,10 +90,6 @@ impl QueueManager {
         self.completion_sender.clone()
     }
 
-    /// Get a sender for WorkerOutput processing (legacy format)
-    pub fn get_worker_output_sender(&self) -> mpsc::UnboundedSender<WorkerOutput> {
-        self.worker_output_sender.clone()
-    }
 
     /// Generate standardized queue name: "{project_id}-{worker_type}-queue"
     pub fn generate_queue_name(project_id: &str, worker_type: &str) -> String {
@@ -280,109 +270,81 @@ impl QueueManager {
             .collect()
     }
 
-    /// Start processing WorkerOutput messages with auto-enqueue
-    pub async fn start_worker_output_processor(
+    /// Start processing WorkerCompletionEvent messages with auto-enqueue
+    pub async fn start_completion_event_processor(
         self: Arc<Self>,
-        mut receiver: mpsc::UnboundedReceiver<WorkerOutput>,
+        mut receiver: mpsc::UnboundedReceiver<WorkerCompletionEvent>,
     ) {
-        info!("[QueueManager] Starting WorkerOutput processor with auto-enqueue");
+        info!("[QueueManager] Starting WorkerCompletionEvent processor with auto-enqueue");
 
-        while let Some(output) = receiver.recv().await {
+        while let Some(event) = receiver.recv().await {
             trace!(
-                "[QueueManager] Processing WorkerOutput for ticket {:?}",
-                output.ticket_id
+                "[QueueManager] Processing WorkerCompletionEvent for ticket {:?}",
+                event.ticket_id.as_str()
             );
 
-            if let Err(e) = self.process_worker_output(&output).await {
+            if let Err(e) = self.process_completion_event(&event).await {
                 error!(
-                    "[QueueManager] Failed to process WorkerOutput for ticket {:?}: {}",
-                    output.ticket_id, e
+                    "[QueueManager] Failed to process WorkerCompletionEvent for ticket {}: {}",
+                    event.ticket_id.as_str(), e
                 );
             }
         }
 
-        info!("[QueueManager] WorkerOutput processor shut down");
+        info!("[QueueManager] WorkerCompletionEvent processor shut down");
     }
 
-    async fn process_worker_output(self: &Arc<Self>, output: &WorkerOutput) -> Result<()> {
-        use crate::workers::domain::*;
-
-        let ticket_id_str = output
-            .ticket_id
-            .as_ref()
-            .ok_or_else(|| anyhow::anyhow!("WorkerOutput missing ticket_id"))?;
-
+    async fn process_completion_event(self: &Arc<Self>, event: &WorkerCompletionEvent) -> Result<()> {
         info!(
-            "Processing WorkerOutput for ticket {}: {:?} -> {:?}",
-            ticket_id_str, output.outcome, output.target_stage
+            "Processing WorkerCompletionEvent for ticket {}: {:?}",
+            event.ticket_id.as_str(), event.command
         );
 
         // Add worker comment
         crate::database::comments::Comment::create(
             &self.db,
-            ticket_id_str,
+            event.ticket_id.as_str(),
             Some("worker"),
             Some("system"),
             None,
-            &output.comment,
+            &event.comment,
         )
         .await?;
 
-        // Convert string ticket_id to TicketId domain type
-        let ticket_id = TicketId::new(ticket_id_str.clone())?;
-
-        match output.outcome {
-            WorkerOutcome::NextStage => {
-                let target_stage_str = output.target_stage.as_ref().ok_or_else(|| {
-                    anyhow::anyhow!("Missing target_stage for next_stage outcome")
-                })?;
-                let target_stage = WorkerType::new(target_stage_str.clone())?;
-
-                // Convert pipeline update to domain types if provided
-                let pipeline_update = output.pipeline_update.as_ref().map(|pipeline| {
-                    pipeline
-                        .iter()
-                        .filter_map(|s| WorkerType::new(s.clone()).ok())
-                        .collect::<Vec<_>>()
-                });
-
+        match &event.command {
+            WorkerCommand::AdvanceToStage { target_stage, pipeline_update } => {
                 // Handle stage advancement
-                self.advance_ticket_to_stage(&ticket_id, &target_stage, pipeline_update.as_ref())
+                self.advance_ticket_to_stage(&event.ticket_id, target_stage, pipeline_update.as_ref())
                     .await?;
 
                 // AUTO-ENQUEUE for next stage
                 if let Err(e) = self
-                    .auto_enqueue_ticket(ticket_id_str, target_stage_str)
+                    .auto_enqueue_ticket(event.ticket_id.as_str(), target_stage.as_str())
                     .await
                 {
                     warn!(
                         "Failed to auto-enqueue ticket {} for stage {}: {}",
-                        ticket_id_str, target_stage_str, e
+                        event.ticket_id.as_str(), target_stage.as_str(), e
                     );
                 }
             }
-            WorkerOutcome::PrevStage => {
-                let target_stage_str = output.target_stage.as_ref().ok_or_else(|| {
-                    anyhow::anyhow!("Missing target_stage for prev_stage outcome")
-                })?;
-                let target_stage = WorkerType::new(target_stage_str.clone())?;
-
-                self.return_ticket_to_stage(&ticket_id, &target_stage, &output.reason)
+            WorkerCommand::ReturnToStage { target_stage, reason } => {
+                self.return_ticket_to_stage(&event.ticket_id, target_stage, reason)
                     .await?;
 
                 // AUTO-ENQUEUE for previous stage
                 if let Err(e) = self
-                    .auto_enqueue_ticket(ticket_id_str, target_stage_str)
+                    .auto_enqueue_ticket(event.ticket_id.as_str(), target_stage.as_str())
                     .await
                 {
                     warn!(
                         "Failed to auto-enqueue ticket {} for stage {}: {}",
-                        ticket_id_str, target_stage_str, e
+                        event.ticket_id.as_str(), target_stage.as_str(), e
                     );
                 }
             }
-            WorkerOutcome::CoordinatorAttention => {
-                self.request_coordinator_attention(&ticket_id, &output.reason)
+            WorkerCommand::RequestCoordinatorAttention { reason } => {
+                self.request_coordinator_attention(&event.ticket_id, reason)
                     .await?;
             }
         }

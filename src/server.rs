@@ -41,18 +41,8 @@ pub async fn run_server(config: Config) -> Result<()> {
     // Initialize event broadcaster
     let event_broadcaster = EventBroadcaster::new();
 
-    // Initialize queue manager
-    let (queue_manager, worker_output_receiver) =
-        QueueManager::new(db.clone(), config.clone(), event_broadcaster.clone());
-    let queue_manager = Arc::new(queue_manager);
-
-    // Start the WorkerOutput processor now that QueueManager is in an Arc
-    let queue_manager_clone = queue_manager.clone();
-    tokio::spawn(async move {
-        queue_manager_clone
-            .start_worker_output_processor(worker_output_receiver)
-            .await;
-    });
+    // Initialize queue manager (spawns completion event processor internally)
+    let queue_manager = QueueManager::new(db.clone(), config.clone(), event_broadcaster.clone());
 
     let state = AppState {
         config: config.clone(),
