@@ -78,9 +78,7 @@ async fn create_claude_settings() -> Result<()> {
                 "mcp__vibe-ensemble-mcp__list_tickets",
                 "mcp__vibe-ensemble-mcp__get_tickets_by_stage",
                 "mcp__vibe-ensemble-mcp__add_ticket_comment",
-                "mcp__vibe-ensemble-mcp__update_ticket_stage",
                 "mcp__vibe-ensemble-mcp__close_ticket",
-                "mcp__vibe-ensemble-mcp__claim_ticket",
                 "mcp__vibe-ensemble-mcp__release_ticket",
                 "mcp__vibe-ensemble-mcp__resume_ticket_processing",
                 "mcp__vibe-ensemble-mcp__list_events",
@@ -237,7 +235,7 @@ Continue monitoring via SSE stream
 ## AVAILABLE TOOLS
 - Project: create_project, get_project, list_projects, update_project, delete_project
 - Worker Types: create_worker_type, list_worker_types, get_worker_type, update_worker_type, delete_worker_type
-- Tickets: create_ticket, get_ticket, list_tickets, get_tickets_by_stage, add_ticket_comment, update_ticket_stage, close_ticket, claim_ticket, release_ticket, resume_ticket_processing
+- Tickets: create_ticket, get_ticket, list_tickets, get_tickets_by_stage, add_ticket_comment, close_ticket, resume_ticket_processing
 - Events: list_events (resolved filtered by default), resolve_event
 
 ## TASK BREAKDOWN SIZING METHODOLOGY

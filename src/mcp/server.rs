@@ -45,10 +45,7 @@ impl McpServer {
         tools.register(GetTicketTool);
         tools.register(ListTicketsTool);
         tools.register(AddTicketCommentTool);
-        tools.register(UpdateTicketStageTool);
         tools.register(CloseTicketTool);
-        tools.register(ClaimTicketTool);
-        tools.register(ReleaseTicketTool);
         tools.register(ResumeTicketProcessingTool);
 
         // Register event and stage management tools

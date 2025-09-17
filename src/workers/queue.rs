@@ -13,9 +13,7 @@ use crate::{
     config::Config,
     database::DbPool,
     sse::{notify_queue_change, notify_ticket_change, EventBroadcaster},
-    workers::{
-        domain::{TicketId, WorkerCommand, WorkerCompletionEvent, WorkerType},
-    },
+    workers::domain::{TicketId, WorkerCommand, WorkerCompletionEvent, WorkerType},
 };
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -59,11 +57,7 @@ impl fmt::Debug for QueueManager {
 }
 
 impl QueueManager {
-    pub fn new(
-        db: DbPool,
-        config: Config,
-        event_broadcaster: EventBroadcaster,
-    ) -> Arc<Self> {
+    pub fn new(db: DbPool, config: Config, event_broadcaster: EventBroadcaster) -> Arc<Self> {
         let (completion_sender, completion_receiver) = mpsc::unbounded_channel();
 
         let queue_manager = Arc::new(Self {
@@ -89,7 +83,6 @@ impl QueueManager {
     pub fn get_completion_sender(&self) -> mpsc::UnboundedSender<WorkerCompletionEvent> {
         self.completion_sender.clone()
     }
-
 
     /// Generate standardized queue name: "{project_id}-{worker_type}-queue"
     pub fn generate_queue_name(project_id: &str, worker_type: &str) -> String {
@@ -286,7 +279,8 @@ impl QueueManager {
             if let Err(e) = self.process_completion_event(&event).await {
                 error!(
                     "[QueueManager] Failed to process WorkerCompletionEvent for ticket {}: {}",
-                    event.ticket_id.as_str(), e
+                    event.ticket_id.as_str(),
+                    e
                 );
             }
         }
@@ -294,10 +288,14 @@ impl QueueManager {
         info!("[QueueManager] WorkerCompletionEvent processor shut down");
     }
 
-    async fn process_completion_event(self: &Arc<Self>, event: &WorkerCompletionEvent) -> Result<()> {
+    async fn process_completion_event(
+        self: &Arc<Self>,
+        event: &WorkerCompletionEvent,
+    ) -> Result<()> {
         info!(
             "Processing WorkerCompletionEvent for ticket {}: {:?}",
-            event.ticket_id.as_str(), event.command
+            event.ticket_id.as_str(),
+            event.command
         );
 
         // Add worker comment
@@ -312,10 +310,17 @@ impl QueueManager {
         .await?;
 
         match &event.command {
-            WorkerCommand::AdvanceToStage { target_stage, pipeline_update } => {
+            WorkerCommand::AdvanceToStage {
+                target_stage,
+                pipeline_update,
+            } => {
                 // Handle stage advancement
-                self.advance_ticket_to_stage(&event.ticket_id, target_stage, pipeline_update.as_ref())
-                    .await?;
+                self.advance_ticket_to_stage(
+                    &event.ticket_id,
+                    target_stage,
+                    pipeline_update.as_ref(),
+                )
+                .await?;
 
                 // AUTO-ENQUEUE for next stage
                 if let Err(e) = self
@@ -324,11 +329,16 @@ impl QueueManager {
                 {
                     warn!(
                         "Failed to auto-enqueue ticket {} for stage {}: {}",
-                        event.ticket_id.as_str(), target_stage.as_str(), e
+                        event.ticket_id.as_str(),
+                        target_stage.as_str(),
+                        e
                     );
                 }
             }
-            WorkerCommand::ReturnToStage { target_stage, reason } => {
+            WorkerCommand::ReturnToStage {
+                target_stage,
+                reason,
+            } => {
                 self.return_ticket_to_stage(&event.ticket_id, target_stage, reason)
                     .await?;
 
@@ -339,7 +349,9 @@ impl QueueManager {
                 {
                     warn!(
                         "Failed to auto-enqueue ticket {} for stage {}: {}",
-                        event.ticket_id.as_str(), target_stage.as_str(), e
+                        event.ticket_id.as_str(),
+                        target_stage.as_str(),
+                        e
                     );
                 }
             }
@@ -725,7 +737,23 @@ impl WorkerConsumer {
         };
 
         // Convert WorkerOutput to WorkerCompletionEvent
-        let completion_event = self.convert_to_completion_event(&worker_output)?;
+        let completion_event = match self.convert_to_completion_event(&worker_output) {
+            Ok(event) => event,
+            Err(e) => {
+                error!(
+                    "Failed to convert WorkerOutput to WorkerCompletionEvent for ticket {}: {}",
+                    task.ticket_id, e
+                );
+                // Release claim on conversion failure to prevent ticket from being stuck
+                if let Err(release_err) = self.release_ticket_claim(&task.ticket_id).await {
+                    error!(
+                        "Failed to release claim for ticket {} after conversion error: {}",
+                        task.ticket_id, release_err
+                    );
+                }
+                return Err(e);
+            }
+        };
 
         // Send event to centralized processor
         if self.completion_sender.send(completion_event).is_err() {
@@ -733,6 +761,14 @@ impl WorkerConsumer {
                 "Output processor has shut down, cannot send completion event for ticket {}",
                 task.ticket_id
             );
+            // Release claim when event cannot be sent to prevent ticket from being stuck
+            if let Err(release_err) = self.release_ticket_claim(&task.ticket_id).await {
+                error!(
+                    "Failed to release claim for ticket {} after send failure: {}",
+                    task.ticket_id, release_err
+                );
+            }
+            return Err(anyhow::anyhow!("Output processor shut down"));
         }
 
         Ok(())
@@ -837,6 +873,33 @@ impl WorkerConsumer {
         };
 
         ProcessManager::spawn_worker(spawn_request).await
+    }
+
+    /// Release claim for a specific ticket
+    async fn release_ticket_claim(&self, ticket_id: &str) -> Result<()> {
+        debug!("Releasing claim for ticket {} due to error", ticket_id);
+
+        let result = sqlx::query(
+            r#"
+            UPDATE tickets 
+            SET processing_worker_id = NULL, updated_at = datetime('now')
+            WHERE ticket_id = ?1 AND processing_worker_id IS NOT NULL
+            "#,
+        )
+        .bind(ticket_id)
+        .execute(&self.db)
+        .await?;
+
+        if result.rows_affected() > 0 {
+            warn!(
+                "Released claim for ticket {} due to processing error",
+                ticket_id
+            );
+        } else {
+            debug!("Ticket {} was not claimed, no release needed", ticket_id);
+        }
+
+        Ok(())
     }
 
     /// Emergency function to release all claimed tickets for a specific worker type when consumer thread fails
