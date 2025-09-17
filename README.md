@@ -123,7 +123,7 @@ Each worker operates independently with their specialized knowledge, ensuring fo
 
 ## MCP Tools
 
-Vibe-Ensemble provides 22 MCP tools organized into four categories:
+Vibe-Ensemble provides 19 MCP tools organized into four categories:
 
 ### Project Management
 - `create_project` - Create a new project with rules and patterns
@@ -141,14 +141,11 @@ Vibe-Ensemble provides 22 MCP tools organized into four categories:
 
 ### Ticket Management
 - `add_ticket_comment` - Add progress comments to tickets
-- `claim_ticket` - Claim a ticket for processing
 - `close_ticket` - Mark a ticket as completed
 - `create_ticket` - Create work tickets with execution plans
 - `get_ticket` - Get detailed ticket information
 - `list_tickets` - List tickets with filtering options
-- `release_ticket` - Release a claimed ticket back to the queue
 - `resume_ticket_processing` - Resume stalled or paused tickets
-- `update_ticket_stage` - Update ticket to a specific stage
 
 ### Event and Queue Management
 - `get_tickets_by_stage` - Get all tickets currently at a specific stage
@@ -353,7 +350,7 @@ Permission files are read fresh from disk each time a worker starts, allowing yo
 - Inherit mode: `.claude/settings.local.json` 
 - File mode: `.vibe-ensemble-mcp/worker-permissions.json`
 
-## What's New in v0.8.2
+## What's New in v0.9.0
 
 - **🧠 Task Breakdown Sizing Methodology**: Intelligent task breakdown with optimal context-performance optimization (~120K token budget per stage)
 - **📐 Natural Boundary Detection**: Automatic task splitting along technology, functional, and expertise boundaries
@@ -361,8 +358,9 @@ Permission files are read fresh from disk each time a worker starts, allowing yo
 - **📊 Real-Time SSE Integration**: Full Server-Sent Events protocol for live progress monitoring and event streaming
 - **🔧 Improved Worker Templates**: 8 specialized worker templates with task sizing methodology integration
 - **📋 Enhanced Coordinator Prompts**: Updated coordination with systematic task delegation and sizing guidance
-- **🛠️ Robust MCP Tools**: All 22 MCP tools with enhanced project metadata and worker coordination
+- **🛠️ Robust MCP Tools**: 22 MCP tools with enhanced project metadata and worker coordination
 - **📚 Comprehensive Documentation**: Complete SSE protocol implementation and task breakdown sizing methodology
+- **🔒 Enhanced Security**: Removed manual ticket manipulation tools to prevent pipeline stalls
 
 ## How It Works
 
