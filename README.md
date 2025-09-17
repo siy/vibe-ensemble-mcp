@@ -94,6 +94,8 @@ Once you have Vibe-Ensemble configured and running with Claude Code, you can coo
 periodically ask Claude Code to check ticket status and event queue. Sometimes it may report issues, but not address them.
 Sending prompt like "Act as a coordinator" usually helps.
 
+**SECURITY WARNING:** The permission mechanisms are not entirely tested and may not work reliably. The only tested option is 'bypass', but you should use it at your own risk because it enables workers to do whatever they want. Use bypass mode only in isolated development environments.
+
 ### Example Project Types
 
 **Web Application Development:**
