@@ -79,7 +79,8 @@ impl ProcessManager {
 
     /// Load permissions from <project_path>/.vibe-ensemble-mcp/worker-permissions.json
     fn load_file_permissions(project_path: &str) -> Result<ClaudePermissions> {
-        let permissions_path = Path::new(project_path).join(".vibe-ensemble-mcp/worker-permissions.json");
+        let permissions_path =
+            Path::new(project_path).join(".vibe-ensemble-mcp/worker-permissions.json");
         debug!(
             "Loading file permissions from: {}",
             permissions_path.display()
