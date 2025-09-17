@@ -3,8 +3,8 @@ use serde_json::Value;
 use tracing::{debug, error, info, trace, warn};
 
 use super::{
-    event_tools::*, project_tools::*, ticket_tools::*, tools::ToolRegistry, types::*,
-    worker_type_tools::*,
+    event_tools::*, permission_tools::*, project_tools::*, ticket_tools::*, tools::ToolRegistry,
+    types::*, worker_type_tools::*,
 };
 use crate::{error::Result, server::AppState};
 
@@ -52,6 +52,9 @@ impl McpServer {
         tools.register(ListEventsTool);
         tools.register(ResolveEventTool);
         tools.register(GetTicketsByStageTool);
+
+        // Register permission management tools
+        tools.register(GetPermissionModelTool);
 
         Self { tools }
     }
@@ -318,15 +321,16 @@ impl McpServer {
 ### 4. Task Queues
 - Create specialized queues (e.g., 'development', 'testing', 'review')
 - Workers are assigned to specific queues when spawned
-- Use `update_ticket_stage` to route tickets to the appropriate stage
+- Tickets automatically advance through stages as workers complete their tasks
 - Monitor stage progress with `get_tickets_by_stage` and `list_events`
 
-## Available Tools (22 total)
+## Available Tools (20 total)
 
 **Project Management**: create_project, list_projects, get_project, update_project, delete_project
 **Worker Types**: create_worker_type, list_worker_types, get_worker_type, update_worker_type, delete_worker_type
-**Tickets**: create_ticket, get_ticket, list_tickets, add_ticket_comment, update_ticket_stage, close_ticket, claim_ticket, release_ticket, resume_ticket_processing
+**Tickets**: create_ticket, get_ticket, list_tickets, add_ticket_comment, close_ticket, resume_ticket_processing
 **Events**: list_events, resolve_event, get_tickets_by_stage
+**Permissions**: get_permission_model
 
 ## CRITICAL WORKFLOW SEQUENCE
 1. **Setup Phase**: Create project → Define worker types with specialized system prompts
@@ -369,6 +373,31 @@ impl McpServer {
 - Coordinate handoffs between specialized workers
 
 **REMEMBER: Even tasks that seem 'too simple to delegate' like 'create a README' or 'make a folder' MUST be delegated through tickets. Your job is PURE ORCHESTRATION - let workers handle 100% of actual work execution.**
+
+## 🔐 PERMISSION ISSUES AND COORDINATOR RESPONSE
+
+When workers encounter permission restrictions and report them via 'CoordinatorAttention' outcome:
+
+### ✅ COORDINATOR MUST:
+1. **Call `get_permission_model`** to understand the current permission configuration
+2. **Communicate with the user** about the specific tool the worker needs
+3. **Explain what the tool does** and why the worker needs it for their task
+4. **Ask user for approval** to add the tool to the allowed permissions
+5. **Guide user** on which file to edit based on permission model response
+6. **Wait for user confirmation** before proceeding
+
+### 📋 PERMISSION TROUBLESHOOTING WORKFLOW:
+1. Worker reports: \"CoordinatorAttention: Need access to tool 'WebSearch' to research API documentation\"
+2. Coordinator calls `get_permission_model` to understand permission setup
+3. Coordinator tells user: \"Worker needs WebSearch tool to research APIs. Current mode is 'inherit' - you need to add 'WebSearch' to .claude/settings.local.json allow array\"
+4. User updates permissions and confirms
+5. Coordinator instructs user to restart worker or resume ticket processing
+
+### ❌ NEVER DO:
+- Ignore permission issues from workers
+- Assume user knows how to fix permissions 
+- Proceed without user approval for tool access
+- Modify permission files yourself (delegate to user)
 
 The system prevents context drift by allowing each worker to focus on their specialty while you (the coordinator) manage the overall workflow through queue-based task distribution and delegation.".to_string(),
                     },

@@ -1,4 +1,5 @@
 pub mod event_tools;
+pub mod permission_tools;
 pub mod project_tools;
 pub mod server;
 pub mod ticket_tools;
