@@ -1,543 +1,229 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Vibe Ensemble - Multi-Agent Coordination for Claude Code</title>
-    <link rel="icon" type="image/x-icon" href="static/favicon.ico">
-    <link rel="icon" type="image/svg+xml" href="static/logo.svg">
-    <style>
-        * {
-            margin: 0;
-            padding: 0;
-            box-sizing: border-box;
-        }
-        
-        body {
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
-            line-height: 1.6;
-            color: #333;
-            background: linear-gradient(135deg, #22D3EE 0%, #7C4DFF 100%);
-            min-height: 100vh;
-        }
-        
-        .container {
-            max-width: 1200px;
-            margin: 0 auto;
-            padding: 2rem;
-        }
-        
-        .header {
-            text-align: center;
-            color: white;
-            margin-bottom: 3rem;
-        }
-        
-        .logo {
-            width: 120px;
-            height: 120px;
-            margin: 0 auto 1rem;
-            display: block;
-        }
-        
-        h1 {
-            font-size: 3rem;
-            margin-bottom: 0.5rem;
-            font-weight: 700;
-        }
-        
-        .tagline {
-            font-size: 1.2rem;
-            opacity: 0.9;
-            margin-bottom: 2rem;
-        }
-        
-        .main-content {
-            background: white;
-            border-radius: 12px;
-            padding: 3rem;
-            box-shadow: 0 20px 40px rgba(0,0,0,0.1);
-            margin-bottom: 2rem;
-        }
-        
-        .section {
-            margin-bottom: 2.5rem;
-        }
-        
-        h2 {
-            color: #0B1D59;
-            font-size: 1.8rem;
-            margin-bottom: 1rem;
-            border-bottom: 2px solid #22D3EE;
-            padding-bottom: 0.5rem;
-        }
-        
-        h3 {
-            color: #4a5568;
-            font-size: 1.3rem;
-            margin: 1.5rem 0 0.5rem;
-        }
-        
-        p {
-            margin-bottom: 1rem;
-            color: #4a5568;
-        }
-        
-        .feature-grid {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
-            gap: 2rem;
-            margin: 2rem 0;
-        }
-        
-        .feature-card {
-            background: #f7fafc;
-            padding: 1.5rem;
-            border-radius: 8px;
-            border-left: 4px solid #22D3EE;
-        }
-        
-        .install-section {
-            background: #0B1D59;
-            color: white;
-            border-radius: 12px;
-            padding: 2rem;
-            margin: 2rem 0;
-        }
-        
-        .command-section {
-            margin: 1.5rem 0;
-        }
-        
-        .command-tabs {
-            display: flex;
-            margin-bottom: 1rem;
-            border-bottom: 2px solid #4a5568;
-        }
-        
-        .command-tab {
-            background: #4a5568;
-            color: white;
-            padding: 0.5rem 1rem;
-            border: none;
-            cursor: pointer;
-            font-weight: 600;
-            border-radius: 6px 6px 0 0;
-            margin-right: 2px;
-        }
-        
-        .command-tab.active {
-            background: #22D3EE;
-        }
-        
-        .command-tab:hover {
-            background: #5B5FF7;
-        }
-        
-        .command-content {
-            display: none;
-        }
-        
-        .command-content.active {
-            display: block;
-        }
-        
-        code {
-            background: #2d3748;
-            color: #e2e8f0;
-            padding: 0.25rem 0.5rem;
-            border-radius: 4px;
-            font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
-        }
-        
-        .code-block {
-            background: #2d3748;
-            color: #e2e8f0;
-            padding: 1rem;
-            border-radius: 6px;
-            overflow-x: auto;
-            margin: 1rem 0;
-            font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
-            position: relative;
-        }
-        
-        .copy-btn {
-            position: absolute;
-            top: 0.5rem;
-            right: 0.5rem;
-            background: #4a5568;
-            color: white;
-            border: none;
-            padding: 0.25rem 0.5rem;
-            border-radius: 4px;
-            font-size: 0.75rem;
-            cursor: pointer;
-            font-weight: 600;
-            transition: background-color 0.2s;
-        }
-        
-        .copy-btn:hover {
-            background: #5B5FF7;
-        }
-        
-        .copy-btn.copied {
-            background: #48bb78;
-        }
-        
-        .footer {
-            text-align: center;
-            color: white;
-            opacity: 0.8;
-            padding: 2rem 0;
-        }
-        
-        @media (max-width: 768px) {
-            h1 {
-                font-size: 2rem;
-            }
-            
-            .main-content {
-                padding: 2rem;
-            }
-            
-            .command-tabs {
-                flex-direction: column;
-                border-bottom: none;
-            }
-            
-            .command-tab {
-                border-radius: 6px;
-                margin-bottom: 0.25rem;
-                margin-right: 0;
-            }
-            
-            .copy-btn {
-                position: static;
-                display: block;
-                margin-bottom: 0.5rem;
-                width: fit-content;
-            }
-        }
-    </style>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Vibe Ensemble — Multi‑Agent Coordination for Claude Code</title>
+  <link rel="icon" type="image/x-icon" href="static/favicon.ico" />
+  <link rel="icon" type="image/svg+xml" href="static/logo.svg" />
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+      line-height: 1.6; color: #333;
+      background: linear-gradient(135deg, #22D3EE 0%, #7C4DFF 100%);
+      min-height: 100vh;
+    }
+    .container { max-width: 1200px; margin: 0 auto; padding: 2rem; }
+    .header { text-align: center; color: white; margin-bottom: 3rem; }
+    .logo { width: 120px; height: 120px; margin: 0 auto 1rem; display: block; }
+    h1 { font-size: 3rem; margin-bottom: 0.5rem; font-weight: 700; }
+    .tagline { font-size: 1.2rem; opacity: 0.9; margin-bottom: 2rem; }
+    .main-content {
+      background: white; border-radius: 12px; padding: 3rem;
+      box-shadow: 0 20px 40px rgba(0,0,0,0.1); margin-bottom: 2rem;
+    }
+    .section { margin-bottom: 2.5rem; }
+    h2 { color: #0B1D59; font-size: 1.8rem; margin-bottom: 1rem; border-bottom: 2px solid #22D3EE; padding-bottom: 0.5rem; }
+    h3 { color: #4a5568; font-size: 1.1rem; margin: 1rem 0 0.5rem; }
+    p { margin-bottom: 1rem; color: #4a5568; }
+    .feature-grid {
+      display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+      gap: 1.25rem; margin: 1.5rem 0;
+    }
+    .feature-card { background: #f7fafc; padding: 1.25rem; border-radius: 8px; border-left: 4px solid #22D3EE; }
+    .install-section { background: #0B1D59; color: white; border-radius: 12px; padding: 2rem; margin: 2rem 0; }
+    .command-tabs { display: flex; margin-bottom: 1rem; border-bottom: 2px solid #4a5568; }
+    .command-tab { background: #4a5568; color: white; padding: 0.5rem 1rem; border: 0; cursor: pointer; font-weight: 600; border-radius: 6px 6px 0 0; margin-right: 2px; }
+    .command-tab.active, .command-tab:hover { background: #5B5FF7; }
+    .command-content { display: none; }
+    .command-content.active { display: block; }
+    .code-block {
+      background: #2d3748; color: #e2e8f0; padding: 1rem; border-radius: 6px; overflow-x: auto; margin: 1rem 0;
+      font-family: 'Monaco','Menlo','Ubuntu Mono',monospace; position: relative;
+    }
+    .copy-btn {
+      position: absolute; top: 0.5rem; right: 0.5rem; background: #4a5568; color: white; border: 0;
+      padding: 0.25rem 0.5rem; border-radius: 4px; font-size: 0.75rem; cursor: pointer; font-weight: 600;
+    }
+    .copy-btn:hover { background: #5B5FF7; }
+    .footer { text-align: center; color: white; opacity: 0.85; padding: 2rem 0; }
+    @media (max-width: 768px) {
+      h1 { font-size: 2rem; }
+      .main-content { padding: 2rem; }
+      .command-tabs { flex-direction: column; border-bottom: none; }
+      .command-tab { border-radius: 6px; margin-bottom: 0.25rem; margin-right: 0; }
+      .copy-btn { position: static; display: block; margin-bottom: 0.5rem; width: fit-content; }
+    }
+  </style>
 </head>
 <body>
-    <div class="container">
-        <header class="header">
-            <img src="static/logo-128.png" alt="Vibe Ensemble Logo" class="logo">
-            <h1>Vibe Ensemble</h1>
-            <p class="tagline">Multi-Agent Coordination MCP Server for Claude Code</p>
-        </header>
-        
-        <main class="main-content">
-            <section class="section">
-                <h2>What is Vibe Ensemble?</h2>
-                <p>
-                    Vibe Ensemble is a powerful Model Context Protocol (MCP) server that enables sophisticated multi-agent coordination 
-                    within Claude Code. It allows one coordinator agent to manage multiple specialized worker agents, preventing context 
-                    drift and maintaining focus across complex, multi-stage projects. Break down ambitious tasks into specialized stages 
-                    handled by expert workers - from architecture and development to testing and deployment.
-                </p>
-                
-                <div class="feature-grid">
-                    <div class="feature-card">
-                        <h3>🎯 Focused Execution</h3>
-                        <p>Each worker agent specializes in specific tasks, maintaining deep focus without context dilution.</p>
-                    </div>
-                    <div class="feature-card">
-                        <h3>🔄 Seamless Coordination</h3>
-                        <p>Coordinator manages task assignment, progress tracking, and inter-agent communication.</p>
-                    </div>
-                    <div class="feature-card">
-                        <h3>📊 Project Management</h3>
-                        <p>Built-in ticketing system with multi-stage execution plans and detailed progress tracking.</p>
-                    </div>
-                    <div class="feature-card">
-                        <h3>🚀 Scalable Architecture</h3>
-                        <p>Spawn multiple workers, manage queues, and handle complex workflows with ease.</p>
-                    </div>
-                </div>
-            </section>
-            
-            <section class="section">
-                <h2>How It Works</h2>
-                <p>
-                    The system consists of three main components:
-                </p>
-                <div class="feature-grid">
-                    <div class="feature-card">
-                        <h3>Coordinator Agent</h3>
-                        <p>Regular Claude Code instance connected to the MCP server. Manages overall project strategy and task distribution.</p>
-                    </div>
-                    <div class="feature-card">
-                        <h3>Worker Agents</h3>
-                        <p>Specialized Claude Code headless processes. Each focuses on specific stages of work (analysis, implementation, testing, etc.).</p>
-                    </div>
-                    <div class="feature-card">
-                        <h3>MCP Server</h3>
-                        <p>Rust-based coordination server that manages workers, queues, and provides tools for multi-agent communication.</p>
-                    </div>
-                </div>
-            </section>
-        </main>
-        
-        <div class="install-section">
-            <h2 style="color: white; border-bottom-color: #22D3EE;">Quick Installation</h2>
-            <p>Get started with Vibe Ensemble in seconds. Our installer automatically detects your platform and downloads the latest release.</p>
-            
-            <div class="command-section">
-                <div class="command-tabs">
-                    <button class="command-tab active" onclick="showTab('install', 'unix')">Linux/macOS</button>
-                    <button class="command-tab" onclick="showTab('install', 'windows')">Windows</button>
-                </div>
-                
-                <div id="install-unix" class="command-content active">
-                    <div class="code-block">
-                        <button class="copy-btn" onclick="copyToClipboard('curl -fsSL https://get.vibeensemble.dev/install.sh | sh', this)">Copy</button>
-curl -fsSL https://get.vibeensemble.dev/install.sh | sh
-                    </div>
-                </div>
-                
-                <div id="install-windows" class="command-content">
-                    <div class="code-block">
-                        <button class="copy-btn" onclick="copyToClipboard('iwr -useb https://get.vibeensemble.dev/install.ps1 | iex', this)">Copy</button>
-iwr -useb https://get.vibeensemble.dev/install.ps1 | iex
-                    </div>
-                </div>
-            </div>
-            
-            <h3 style="color: white;">Usage</h3>
-            <p>After installation, configure Claude Code integration:</p>
-            
-            <div class="command-section">
-                <div class="command-tabs">
-                    <button class="command-tab active" onclick="showTab('usage', 'unix')">Linux/macOS</button>
-                    <button class="command-tab" onclick="showTab('usage', 'windows')">Windows</button>
-                </div>
-                
-                <div id="usage-unix" class="command-content active">
-                    <p style="color: white; margin-bottom: 1rem;"><strong>1. Generate Claude Code configuration:</strong></p>
-                    <div class="code-block">
-                        <button class="copy-btn" onclick="copyToClipboard('vibe-ensemble-mcp --configure-claude-code --host 127.0.0.1 --port 3000', this)">Copy</button>
-vibe-ensemble-mcp --configure-claude-code --host 127.0.0.1 --port 3000
-                    </div>
-                    
-                    <p style="color: white; margin: 1.5rem 0 1rem;"><strong>2. Start the server:</strong></p>
-                    <div class="code-block">
-                        <button class="copy-btn" onclick="copyToClipboard('vibe-ensemble-mcp --port 3000', this)">Copy</button>
-vibe-ensemble-mcp --port 3000
-                    </div>
-                    
-                    <p style="color: white; margin: 1.5rem 0 1rem;"><strong>3. Open Claude Code and run:</strong></p>
-                    <div class="code-block">
-                        <button class="copy-btn" onclick="copyToClipboard('vibe-ensemble', this)">Copy</button>
-vibe-ensemble
-                    </div>
-                    
-                    <p style="color: white; margin: 1.5rem 0 0.5rem; font-size: 0.9rem; opacity: 0.8;">
-                        Alternatively, configure manually: <code style="font-size: 0.8rem;">claude mcp add --transport http vibe-ensemble http://localhost:3000/mcp</code>
-                    </p>
-                </div>
-                
-                <div id="usage-windows" class="command-content">
-                    <p style="color: white; margin-bottom: 1rem;"><strong>1. Generate Claude Code configuration:</strong></p>
-                    <div class="code-block">
-                        <button class="copy-btn" onclick="copyToClipboard('vibe-ensemble-mcp.exe --configure-claude-code --host 127.0.0.1 --port 3000', this)">Copy</button>
-vibe-ensemble-mcp.exe --configure-claude-code --host 127.0.0.1 --port 3000
-                    </div>
-                    
-                    <p style="color: white; margin: 1.5rem 0 1rem;"><strong>2. Start the server:</strong></p>
-                    <div class="code-block">
-                        <button class="copy-btn" onclick="copyToClipboard('vibe-ensemble-mcp.exe --port 3000', this)">Copy</button>
-vibe-ensemble-mcp.exe --port 3000
-                    </div>
-                    
-                    <p style="color: white; margin: 1.5rem 0 1rem;"><strong>3. Open Claude Code and run:</strong></p>
-                    <div class="code-block">
-                        <button class="copy-btn" onclick="copyToClipboard('vibe-ensemble', this)">Copy</button>
-vibe-ensemble
-                    </div>
-                    
-                    <p style="color: white; margin: 1.5rem 0 0.5rem; font-size: 0.9rem; opacity: 0.8;">
-                        Alternatively, configure manually: <code style="font-size: 0.8rem;">claude mcp add --transport http vibe-ensemble http://localhost:3000/mcp</code>
-                    </p>
-                </div>
-            </div>
+  <div class="container">
+    <header class="header">
+      <img src="static/logo-128.png" alt="Vibe Ensemble Logo" class="logo" />
+      <h1>Vibe Ensemble</h1>
+      <p class="tagline">Multi‑Agent Coordination MCP Server for Claude Code</p>
+    </header>
+
+    <main class="main-content">
+      <section class="section">
+        <h2>What is Vibe Ensemble?</h2>
+        <p>
+          Vibe Ensemble is an MCP server that turns Claude Code into a reliable multi‑agent coordinator. You define projects and specialized worker types, create tickets with a minimal pipeline, and Vibe Ensemble handles the handoffs. Tasks progress through focused stages without context drift or focus dilution.
+        </p>
+      </section>
+
+      <section class="section">
+        <h2>How it feels to use</h2>
+        <p>
+          Claude Code becomes your control tower for planning and managing several projects at once. You discuss and approve the plan as usual; once you give sign‑off, the rest runs mostly in the background. You check progress periodically, step in to resolve issues, and keep momentum without micromanaging. Claude Code shifts into a high‑level coordinator that handles the routine. Because it’s not writing code or diving into every detail itself, its focus stays sharp and context remains clean for much longer.
+        </p>
+      </section>
+
+      <section class="section">
+        <h2>Key Capabilities</h2>
+        <div class="feature-grid">
+          <div class="feature-card">
+            <h3>Focused, staged execution</h3>
+            <p>Specialized workers (planning, design, implementation, testing, review) process tickets in well‑defined stages.</p>
+          </div>
+          <div class="feature-card">
+            <h3>Advanced planning and sizing</h3>
+            <p>Built‑in methodology to size tasks for speed and reliability; planners output complete pipelines and JSON coordination.</p>
+          </div>
+          <div class="feature-card">
+            <h3>Automatic handoffs</h3>
+            <p>Finishing a stage updates the ticket and queues the next worker. Recovery on restart is built‑in.</p>
+          </div>
+          <div class="feature-card">
+            <h3>Multiple projects</h3>
+            <p>Coordinate several projects simultaneously without losing context or mixing priorities.</p>
+          </div>
+          <div class="feature-card">
+            <h3>Real‑time monitoring</h3>
+            <p>HTTP MCP + SSE with events and status updates. See what’s moving, act where needed.</p>
+          </div>
+          <div class="feature-card">
+            <h3>Safer defaults</h3>
+            <p>Permission modes for workers (inherit, file, bypass) so you can choose the right level of access.</p>
+          </div>
         </div>
-        
-        <main class="main-content">
-            <section class="section">
-                <h2>Features</h2>
-                <h3>🏗️ Project Management</h3>
-                <p>Create and manage projects with automatic workspace detection and configuration.</p>
-                
-                <h3>🎫 Advanced Ticketing</h3>
-                <p>Multi-stage ticket system with execution plans, worker assignments, and progress tracking.</p>
-                
-                <h3>👥 Worker Management</h3>
-                <p>Spawn, monitor, and coordinate multiple specialized worker agents with different capabilities.</p>
-                
-                <h3>📋 Task Queues</h3>
-                <p>Efficient task distribution with priority queues and automatic load balancing.</p>
-                
-                <h3>📈 Event Tracking</h3>
-                <p>Comprehensive logging and monitoring of all agent activities and system events.</p>
-                
-                <h3>💾 Persistent State</h3>
-                <p>SQLite-based storage ensures all project data, tickets, and progress are preserved.</p>
-            </section>
-            
-            <section class="section">
-                <h2>Example Use Cases</h2>
-                <p>
-                    Vibe Ensemble excels at coordinating complex, multi-stage workflows across diverse domains. Here are some proven patterns:
-                </p>
-                
-                <div class="feature-grid">
-                    <div class="feature-card">
-                        <h3>🌐 Web Application Development</h3>
-                        <p><strong>Workers:</strong> Architect, Frontend Developer, Backend Developer, Security Reviewer</p>
-                        <p><strong>Stages:</strong> Architecture Design → Implementation → Security Review → Testing</p>
-                        <p>Perfect for building full-stack applications with proper architectural planning and security validation.</p>
-                    </div>
-                    <div class="feature-card">
-                        <h3>📚 Documentation and DevOps</h3>
-                        <p><strong>Workers:</strong> Technical Writer, DevOps Engineer, QA Tester</p>
-                        <p><strong>Stages:</strong> Documentation → CI/CD Setup → Deployment Testing</p>
-                        <p>Streamline your documentation workflows and deployment pipeline setup with specialized expertise.</p>
-                    </div>
-                    <div class="feature-card">
-                        <h3>🔍 Debugging and Performance</h3>
-                        <p><strong>Workers:</strong> Investigator, Performance Specialist, Code Reviewer</p>
-                        <p><strong>Stages:</strong> Issue Analysis → Optimization → Validation</p>
-                        <p>Systematically investigate bugs and performance issues with focused expertise at each stage.</p>
-                    </div>
-                </div>
-                
-                <h3>🎯 Key Benefits</h3>
-                <div class="feature-grid">
-                    <div class="feature-card">
-                        <h3>🚀 Zero Configuration</h3>
-                        <p>Auto-setup with <code>--configure-claude-code</code> flag generates all necessary Claude Code integration files.</p>
-                    </div>
-                    <div class="feature-card">
-                        <h3>🔄 Automatic Handoffs</h3>
-                        <p>Workers complete stages and automatically trigger the next steps in your workflow.</p>
-                    </div>
-                    <div class="feature-card">
-                        <h3>📊 Real-time Updates</h3>
-                        <p>Live progress tracking via Server-Sent Events keeps you informed of all worker activities.</p>
-                    </div>
-                    <div class="feature-card">
-                        <h3>🎨 Custom Workers</h3>
-                        <p>Define workers for any domain - coding, design, analysis, testing, or specialized business logic.</p>
-                    </div>
-                </div>
-                
-                <p style="margin-top: 2rem; padding: 1rem; background: #f0f9ff; border-left: 4px solid #22D3EE; border-radius: 4px;">
-                    <strong>💡 Pro Tip:</strong> Each worker operates independently with their specialized knowledge, ensuring focused expertise 
-                    at every stage while maintaining coordination across the entire workflow. No more context drift or task switching overhead!
-                </p>
-            </section>
-            
-            <section class="section">
-                <h2>System Requirements</h2>
-                <p>
-                    • <strong>Claude Code</strong> - Latest version<br>
-                    • <strong>Operating System</strong> - Linux, macOS, or Windows<br>
-                    • <strong>Memory</strong> - 512MB RAM minimum<br>
-                    • <strong>Storage</strong> - 50MB free space
-                </p>
-            </section>
-        </main>
-        
-        <footer class="footer">
-            <p>
-                Vibe Ensemble is open source software licensed under Apache 2.0.<br>
-                <a href="https://github.com/sergiyyevtushenko/vibe-ensemble-mcp" style="color: #90cdf4;">View on GitHub</a>
-            </p>
-        </footer>
-    </div>
-    
-    <script>
-        function showTab(section, platform) {
-            // Hide all content for this section
-            const contents = document.querySelectorAll(`[id^="${section}-"]`);
-            contents.forEach(content => {
-                content.classList.remove('active');
-            });
-            
-            // Remove active class from all tabs in this section
-            const sectionElement = document.getElementById(`${section}-unix`).parentNode.parentNode;
-            const tabs = sectionElement.querySelectorAll('.command-tab');
-            tabs.forEach(tab => {
-                tab.classList.remove('active');
-            });
-            
-            // Show selected content
-            document.getElementById(`${section}-${platform}`).classList.add('active');
-            
-            // Activate selected tab
-            event.target.classList.add('active');
-        }
-        
-        function copyToClipboard(text, button) {
-            // Use the modern clipboard API if available
-            if (navigator.clipboard) {
-                navigator.clipboard.writeText(text).then(function() {
-                    showCopySuccess(button);
-                }, function(err) {
-                    fallbackCopyToClipboard(text, button);
-                });
-            } else {
-                fallbackCopyToClipboard(text, button);
-            }
-        }
-        
-        function fallbackCopyToClipboard(text, button) {
-            const textArea = document.createElement("textarea");
-            textArea.value = text;
-            textArea.style.position = "fixed";
-            textArea.style.left = "-999999px";
-            textArea.style.top = "-999999px";
-            document.body.appendChild(textArea);
-            textArea.focus();
-            textArea.select();
-            
-            try {
-                const successful = document.execCommand('copy');
-                if (successful) {
-                    showCopySuccess(button);
-                } else {
-                    showCopyError(button);
-                }
-            } catch (err) {
-                showCopyError(button);
-            }
-            
-            document.body.removeChild(textArea);
-        }
-        
-        function showCopySuccess(button) {
-            const originalText = button.textContent;
-            button.textContent = 'Copied!';
-            button.classList.add('copied');
-            
-            setTimeout(() => {
-                button.textContent = originalText;
-                button.classList.remove('copied');
-            }, 2000);
-        }
-        
-        function showCopyError(button) {
-            const originalText = button.textContent;
-            button.textContent = 'Failed';
-            button.style.backgroundColor = '#e53e3e';
-            
-            setTimeout(() => {
-                button.textContent = originalText;
-                button.style.backgroundColor = '';
-            }, 2000);
-        }
-    </script>
+      </section>
+
+      <section class="section">
+        <h2>How it works</h2>
+        <div class="feature-grid">
+          <div class="feature-card">
+            <h3>Coordinator</h3>
+            <p>Claude Code acts as a coordinator. It manages projects, defines worker types, creates tickets, reviews events, and resumes stalled work. It does not implement tasks itself.</p>
+          </div>
+          <div class="feature-card">
+            <h3>Planner</h3>
+            <p>Transforms a goal into a staged plan using the sizing methodology. Validates worker types and outputs a strict JSON block with outcome, target stage, pipeline update, comment, and reason.</p>
+          </div>
+          <div class="feature-card">
+            <h3>Server</h3>
+            <p>The Rust MCP server manages SQLite state, queues, process execution, and MCP/SSE integrations. Stage completion automatically enqueues the next stage.</p>
+          </div>
+        </div>
+      </section>
+
+      <section class="install-section">
+        <h2 style="color:white; border-bottom-color:#22D3EE;">Quick Install</h2>
+        <p>Install the server, configure Claude Code, and get moving in minutes.</p>
+
+        <div class="command-tabs">
+          <button class="command-tab active" onclick="showTab('install','unix')">Linux/macOS</button>
+          <button class="command-tab" onclick="showTab('install','windows')">Windows</button>
+        </div>
+        <div id="install-unix" class="command-content active">
+          <div class="code-block">
+            <button class="copy-btn" onclick="copyToClipboard('curl -fsSL https://get.vibeensemble.dev/install.sh | sh', this)">Copy</button>
+curl -fsSL https://get.vibeensemble.dev/install.sh | sh
+          </div>
+        </div>
+        <div id="install-windows" class="command-content">
+          <div class="code-block">
+            <button class="copy-btn" onclick="copyToClipboard('iwr -useb https://get.vibeensemble.dev/install.ps1 | iex', this)">Copy</button>
+iwr -useb https://get.vibeensemble.dev/install.ps1 | iex
+          </div>
+        </div>
+
+        <h3 style="color:white; margin-top:1rem;">Usage</h3>
+        <p>Configure Claude Code integration and start the server.</p>
+        <div class="code-block">
+          <button class="copy-btn" onclick="copyToClipboard('vibe-ensemble-mcp --configure-claude-code --host 127.0.0.1 --port 3000', this)">Copy</button>
+vibe-ensemble-mcp --configure-claude-code --host 127.0.0.1 --port 3000
+        </div>
+        <div class="code-block">
+          <button class="copy-btn" onclick="copyToClipboard('vibe-ensemble-mcp --port 3000', this)">Copy</button>
+vibe-ensemble-mcp --port 3000
+        </div>
+        <div class="code-block">
+          <button class="copy-btn" onclick="copyToClipboard('vibe-ensemble', this)">Copy</button>
+vibe-ensemble
+        </div>
+      </section>
+
+      <section class="section">
+        <h2>Planner & Coordinator Details</h2>
+        <div class="feature-grid">
+          <div class="feature-card">
+            <h3>Planner outputs</h3>
+            <p>Complete pipeline, worker type checks, JSON outcome including target stage, optional pipeline update, and clear handoff comment and rationale.</p>
+          </div>
+          <div class="feature-card">
+            <h3>Coordinator responsibilities</h3>
+            <p>Create projects and worker types, create tickets starting at planning, monitor events, handle escalations, and use resume_ticket_processing to keep work flowing.</p>
+          </div>
+          <div class="feature-card">
+            <h3>Ticket lifecycle</h3>
+            <p>Create → Plan → Stage N → Next stage (auto) → Review → Close. All state is persisted with automatic recovery for open, unclaimed tickets.</p>
+          </div>
+        </div>
+      </section>
+
+      <section class="section">
+        <h2>Security & Status</h2>
+        <ul>
+          <li>Worker permission modes: <code>inherit</code> (default), <code>file</code> (settings from .vibe-ensemble-mcp/worker-permissions.json), or <code>bypass</code> (not recommended).</li>
+          <li>SSE and MCP integrations are evolving.</li>
+          <li>Interfaces may change between early releases.</li>
+          <li>Use in controlled environments and review the repository README for the latest warnings.</li>
+        </ul>
+      </section>
+    </main>
+
+    <footer class="footer">
+      <p>
+        Vibe Ensemble is open source (Apache 2.0). 
+        <a href="https://github.com/sergiyyevtushenko/vibe-ensemble-mcp" style="color:#bcd8ff;">View on GitHub</a>
+      </p>
+    </footer>
+  </div>
+  <script>
+    function showTab(section, platform) {
+      const contents = document.querySelectorAll('[id^="'+section+'-"]');
+      contents.forEach(c => c.classList.remove('active'));
+      const panels = document.getElementById(section+'-unix').parentNode.parentNode.querySelectorAll('.command-tab');
+      panels.forEach(t => t.classList.remove('active'));
+      document.getElementById(section+'-'+platform).classList.add('active');
+      event.target.classList.add('active');
+    }
+    function copyToClipboard(text, button) {
+      if (navigator.clipboard) {
+        navigator.clipboard.writeText(text).then(function(){ showCopySuccess(button); }, function(){ fallbackCopy(text, button); });
+      } else { fallbackCopy(text, button); }
+    }
+    function fallbackCopy(text, button) {
+      const ta = document.createElement('textarea');
+      ta.value = text; ta.style.position='fixed'; ta.style.left='-999999px'; ta.style.top='-999999px';
+      document.body.appendChild(ta); ta.focus(); ta.select();
+      try { document.execCommand('copy'); showCopySuccess(button); } catch(e){ showCopyError(button); }
+      document.body.removeChild(ta);
+    }
+    function showCopySuccess(button) { const t=button.textContent; button.textContent='Copied!'; button.classList.add('copied'); setTimeout(()=>{button.textContent=t; button.classList.remove('copied');}, 2000); }
+    function showCopyError(button) { const t=button.textContent; button.textContent='Failed'; button.style.backgroundColor='#e53e3e'; setTimeout(()=>{button.textContent=t; button.style.backgroundColor='';}, 2000); }
+  </script>
 </body>
 </html>
