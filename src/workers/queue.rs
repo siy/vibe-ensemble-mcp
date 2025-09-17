@@ -501,22 +501,37 @@ impl QueueManager {
             new_pipeline
         );
 
-        // Get ticket to find project_id for pipeline validation
+        // Get ticket to find project_id and current state for validation
         let ticket_with_comments =
             crate::database::tickets::Ticket::get_by_id(&self.db, ticket_id.as_str())
                 .await?
                 .ok_or_else(|| anyhow::anyhow!("Ticket '{}' not found", ticket_id.as_str()))?;
 
-        let _project_id = &ticket_with_comments.ticket.project_id;
+        let ticket = &ticket_with_comments.ticket;
+        let _project_id = &ticket.project_id;
 
-        // Convert WorkerType to strings for database
-        let pipeline_strings: Vec<String> = new_pipeline
+        // Get original pipeline for past stage validation
+        let original_pipeline = ticket.get_execution_plan()?;
+
+        // Get current stage index for immutability validation
+        let current_stage_index = self.get_current_stage_index(ticket)?;
+
+        // Convert WorkerType to strings for validation and database
+        let new_pipeline_strings: Vec<String> = new_pipeline
             .iter()
             .map(|wt| wt.as_str().to_string())
             .collect();
 
-        // Update the execution_plan field in the database
-        let pipeline_json = serde_json::to_string(&pipeline_strings)
+        // CRITICAL: Validate that past stages are preserved (immutable history)
+        self.validate_pipeline_preserves_past_stages(
+            &original_pipeline,
+            &new_pipeline_strings,
+            current_stage_index,
+            ticket_id.as_str(),
+        )?;
+
+        // Only proceed with database update if validation passes
+        let pipeline_json = serde_json::to_string(&new_pipeline_strings)
             .map_err(|e| anyhow::anyhow!("Failed to serialize pipeline: {}", e))?;
 
         sqlx::query(
@@ -528,9 +543,88 @@ impl QueueManager {
         .await?;
 
         info!(
-            "Successfully updated pipeline for ticket {}",
-            ticket_id.as_str()
+            "Successfully updated pipeline for ticket {} (past {} stages preserved)",
+            ticket_id.as_str(),
+            current_stage_index + 1
         );
+        Ok(())
+    }
+
+    /// Get the current stage index in the pipeline
+    /// Returns the index of the current stage, or 0 for "planning" stage
+    fn get_current_stage_index(&self, ticket: &crate::database::tickets::Ticket) -> Result<usize> {
+        let plan = ticket.get_execution_plan()?;
+
+        // Special case: planning stage is before the pipeline starts
+        if ticket.current_stage == "planning" {
+            return Ok(0);
+        }
+
+        // Find current stage index in the pipeline
+        for (i, stage) in plan.iter().enumerate() {
+            if stage == &ticket.current_stage {
+                return Ok(i);
+            }
+        }
+
+        Err(anyhow::anyhow!(
+            "Current stage '{}' not found in pipeline: {:?}",
+            ticket.current_stage,
+            plan
+        ))
+    }
+
+    /// Validate that pipeline update preserves past stages (immutable history)
+    /// Past stages (up to and including current stage) cannot be modified
+    fn validate_pipeline_preserves_past_stages(
+        &self,
+        original_pipeline: &[String],
+        new_pipeline: &[String],
+        current_stage_index: usize,
+        ticket_id: &str,
+    ) -> Result<()> {
+        // For planning stage, we allow full pipeline replacement since no stages are completed yet
+        if current_stage_index == 0 && original_pipeline.len() <= 1 {
+            return Ok(());
+        }
+
+        // Verify that past stages (up to and including current stage) are preserved
+        for i in 0..=current_stage_index {
+            if i >= original_pipeline.len() {
+                return Err(anyhow::anyhow!(
+                    "Pipeline validation failed for ticket {}: original pipeline too short (index {} not found in pipeline of length {})",
+                    ticket_id,
+                    i,
+                    original_pipeline.len()
+                ));
+            }
+
+            if i >= new_pipeline.len() {
+                return Err(anyhow::anyhow!(
+                    "Pipeline validation failed for ticket {}: new pipeline truncates past stages (index {} not found in new pipeline of length {}). Past stages cannot be deleted.",
+                    ticket_id,
+                    i,
+                    new_pipeline.len()
+                ));
+            }
+
+            if original_pipeline[i] != new_pipeline[i] {
+                return Err(anyhow::anyhow!(
+                    "Pipeline validation failed for ticket {}: illegal modification of past stage at index {}: '{}' -> '{}'. Past stages are immutable.",
+                    ticket_id,
+                    i,
+                    original_pipeline[i],
+                    new_pipeline[i]
+                ));
+            }
+        }
+
+        info!(
+            "Pipeline validation passed for ticket {}: past {} stages preserved",
+            ticket_id,
+            current_stage_index + 1
+        );
+
         Ok(())
     }
 
