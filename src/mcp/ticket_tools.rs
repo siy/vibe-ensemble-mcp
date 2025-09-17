@@ -92,11 +92,14 @@ impl ToolHandler for CreateTicketTool {
                 }
             }
         });
-        
+
         if let Err(e) = state.event_broadcaster.broadcast(event.to_string()) {
             tracing::warn!("Failed to broadcast ticket_created event: {}", e);
         } else {
-            tracing::debug!("Successfully broadcast ticket_created event for: {}", ticket.ticket_id);
+            tracing::debug!(
+                "Successfully broadcast ticket_created event for: {}",
+                ticket.ticket_id
+            );
         }
 
         // Automatically submit the ticket to the initial stage queue
@@ -329,11 +332,14 @@ impl ToolHandler for AddTicketCommentTool {
                 }
             }
         });
-        
+
         if let Err(e) = state.event_broadcaster.broadcast(event.to_string()) {
             tracing::warn!("Failed to broadcast ticket_comment_added event: {}", e);
         } else {
-            tracing::debug!("Successfully broadcast ticket_comment_added event for: {}", ticket_id);
+            tracing::debug!(
+                "Successfully broadcast ticket_comment_added event for: {}",
+                ticket_id
+            );
         }
 
         Ok(CallToolResponse {
@@ -450,11 +456,14 @@ impl ToolHandler for UpdateTicketStageTool {
                         }
                     }
                 });
-                
+
                 if let Err(e) = state.event_broadcaster.broadcast(event.to_string()) {
                     tracing::warn!("Failed to broadcast ticket_stage_updated event: {}", e);
                 } else {
-                    tracing::debug!("Successfully broadcast ticket_stage_updated event for: {}", ticket_id);
+                    tracing::debug!(
+                        "Successfully broadcast ticket_stage_updated event for: {}",
+                        ticket_id
+                    );
                 }
 
                 Ok(create_success_response(&format!(
@@ -536,11 +545,14 @@ impl ToolHandler for ClaimTicketTool {
                     }
                 }
             });
-            
+
             if let Err(e) = state.event_broadcaster.broadcast(event.to_string()) {
                 tracing::warn!("Failed to broadcast ticket_claimed event: {}", e);
             } else {
-                tracing::debug!("Successfully broadcast ticket_claimed event for: {}", ticket_id);
+                tracing::debug!(
+                    "Successfully broadcast ticket_claimed event for: {}",
+                    ticket_id
+                );
             }
 
             Ok(create_success_response(&format!(
@@ -624,11 +636,14 @@ impl ToolHandler for ReleaseTicketTool {
                     }
                 }
             });
-            
+
             if let Err(e) = state.event_broadcaster.broadcast(event.to_string()) {
                 tracing::warn!("Failed to broadcast ticket_released event: {}", e);
             } else {
-                tracing::debug!("Successfully broadcast ticket_released event for: {}", ticket_id);
+                tracing::debug!(
+                    "Successfully broadcast ticket_released event for: {}",
+                    ticket_id
+                );
             }
 
             Ok(create_success_response(&format!(
@@ -711,11 +726,14 @@ impl ToolHandler for CloseTicketTool {
                         }
                     }
                 });
-                
+
                 if let Err(e) = state.event_broadcaster.broadcast(event.to_string()) {
                     tracing::warn!("Failed to broadcast ticket_closed event: {}", e);
                 } else {
-                    tracing::debug!("Successfully broadcast ticket_closed event for: {}", ticket_id);
+                    tracing::debug!(
+                        "Successfully broadcast ticket_closed event for: {}",
+                        ticket_id
+                    );
                 }
 
                 Ok(create_success_response(&format!(

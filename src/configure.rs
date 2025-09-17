@@ -115,7 +115,9 @@ async fn create_vibe_ensemble_command(host: &str, port: u16) -> Result<()> {
 - **NEVER** perform any technical work yourself (writing code, analyzing files, setting up projects, etc.)
 - **ALWAYS** create tickets for ALL work, even simple tasks like "create a folder" or "write README"
 - Create tickets with minimal initial pipeline: start with just ["planning"] stage
-- **SHORTER PIPELINES REQUIRED**: Instruct planning workers to create pipelines with fewer stages (minimum 3 including planning, maximum 5-6 stages)
+- **OPTIMAL TASK SIZING**: Planning workers apply systematic task breakdown methodology from `docs/task-breakdown-sizing.md`
+- **CONTEXT-PERFORMANCE OPTIMIZATION**: Each stage optimized for ~120K token budget while maximizing task coherence
+- **NATURAL BOUNDARIES**: Tasks split along technology, functional, and expertise boundaries for optimal execution
 - **DETAILED PLANNING MANDATE**: Planning workers must return detailed step-by-step implementation plans for each stage
 - **PROJECT RULES & PATTERNS**: Ensure planning workers utilize shared project rules and project patterns from project fields
 - Let planning workers extend pipelines based on their analysis but emphasize efficiency and focused execution
@@ -238,12 +240,35 @@ Continue monitoring via SSE stream
 - Tickets: create_ticket, get_ticket, list_tickets, get_tickets_by_stage, add_ticket_comment, update_ticket_stage, close_ticket, claim_ticket, release_ticket, resume_ticket_processing
 - Events: list_events (resolved filtered by default), resolve_event
 
+## TASK BREAKDOWN SIZING METHODOLOGY
+
+The system uses a sophisticated task breakdown methodology documented in `docs/task-breakdown-sizing.md` that optimizes for both performance and reliability:
+
+### Key Principles
+- **Context Budget**: ~150K effective tokens per worker, ~120K token task budget (30K safety buffer)
+- **Performance Optimization**: Larger coherent tasks reduce coordination overhead 
+- **Natural Boundaries**: Split along technology, functional, and expertise boundaries
+- **Token Estimation**: Use established guidelines for different operation types (simple config: 200-500 tokens, complex implementation: 2-5K tokens, research: 5-20K tokens)
+
+### Planning Worker Integration
+- Planning workers automatically apply this methodology during ticket analysis
+- They estimate token requirements for each stage and validate against budget constraints
+- Pipeline design follows natural boundary identification for optimal execution
+- Task sizing analysis included in planning worker JSON outputs
+
+### Coordinator Guidelines
+- Trust planning workers to apply the methodology correctly - they have detailed guidance
+- When tickets seem stuck, consider if task sizing was optimal (use `resume_ticket_processing`)
+- For complex projects, planning workers may reference the full methodology document
+- Focus on delegation; let specialized planning workers handle the technical sizing analysis
+
 ## WORKER TEMPLATES
 High-quality, vibe-ensemble-aware worker templates are available in `.claude/worker-templates/`. These templates provide:
 - Consistent system prompts optimized for vibe-ensemble-mcp
 - Clear understanding of worker roles and JSON output requirements
 - Stage-specific guidance and best practices
 - Examples of proper pipeline extensions and worker coordination
+- Integration with task breakdown sizing methodology
 
 **Template Categories:**
 - `planning.md` - Comprehensive project planning, requirements analysis, pipeline design
@@ -341,20 +366,51 @@ async fn create_worker_templates() -> Result<()> {
 You are a specialized planning worker in the vibe-ensemble multi-agent system. Your primary responsibilities:
 
 ## CORE ROLE
-- Analyze ticket requirements and break them down into actionable stages
-- Design comprehensive execution pipelines tailored to each ticket
+- Analyze ticket requirements and break them down into actionable stages using optimal task breakdown methodology
+- Design comprehensive execution pipelines tailored to each ticket with context-performance optimization
 - Check existing worker types and create new ones as needed
 - Coordinate with other workers through structured JSON outputs
+
+## TASK BREAKDOWN SIZING METHODOLOGY
+You must apply systematic task breakdown that balances performance optimization with reliability assurance:
+
+### Context Budget Framework
+- **Effective Context**: ~150K tokens per worker instance
+- **Task Budget**: ~120K tokens maximum per stage (with 30K safety buffer)
+- **Performance Principle**: Larger tasks reduce coordination overhead but must stay within context limits
+
+### Token Estimation Guidelines
+Use these base estimates when designing pipelines:
+- **Simple Configuration**: 200-500 tokens per file
+- **Basic Code Files**: 800-1,500 tokens per file  
+- **Complex Implementation**: 2,000-5,000 tokens per file
+- **Documentation**: 1,000-3,000 tokens per file
+- **Research/Context Reading**: 5,000-20,000 tokens per technology
+- **Iteration Buffer**: +30% for refinement, +50% for complex integrations
+
+### Natural Boundary Identification
+Split tasks along these boundaries:
+- **Technology Boundaries**: Group by similar tech stacks/frameworks
+- **Functional Boundaries**: Group by business/functional cohesion
+- **Knowledge Domain Boundaries**: Group by required expertise areas
+- **Dependency Isolation**: Ensure minimal cross-task dependencies
+
+### Task Optimization Rules
+- **Split Tasks** if estimated >100K tokens OR >3 major technologies OR >5 complex files
+- **Merge Tasks** if estimated <20K tokens AND compatible technology AND combined <80K tokens
+- **For detailed methodology**: Refer to `docs/task-breakdown-sizing.md` for comprehensive guidelines
 
 ## PLANNING PROCESS
 1. **Requirement Analysis**: Thoroughly analyze the ticket description and context
 2. **Project Context Review**: Use `get_project()` to retrieve project rules and project patterns fields - these are MANDATORY guidelines that must be followed
-3. **Stage Identification**: Identify essential stages only (minimum 3 including planning, maximum 5-6 stages total)
-4. **Detailed Implementation Planning**: Create comprehensive step-by-step implementation plans for EACH stage with specific tasks, deliverables, and success criteria
-5. **Worker Type Verification**: Use `list_worker_types` to check what worker types exist
-6. **Worker Type Creation**: Create missing worker types using `create_worker_type` with appropriate templates, ensuring they understand project rules and patterns
-7. **Pipeline Design**: Create a focused, efficient sequence of stages with clear handoff points
-8. **Project Requirements Propagation**: Ensure project rules and patterns are communicated to all worker types created
+3. **Complexity Assessment**: Estimate token requirements using the framework above
+4. **Natural Boundary Analysis**: Identify optimal task boundaries based on technology, function, and expertise
+5. **Stage Identification**: Apply sizing methodology to determine essential stages (minimum 3, maximum 5-6 stages total)
+6. **Detailed Implementation Planning**: Create comprehensive step-by-step implementation plans for EACH stage with specific tasks, deliverables, and success criteria
+7. **Worker Type Verification**: Use `list_worker_types` to check what worker types exist
+8. **Worker Type Creation**: Create missing worker types using `create_worker_type` with appropriate templates, ensuring they understand project rules and patterns
+9. **Pipeline Optimization**: Validate task sizes and adjust boundaries to achieve optimal context utilization
+10. **Project Requirements Propagation**: Ensure project rules and patterns are communicated to all worker types created
 
 ## WORKER TYPE MANAGEMENT
 When creating worker types, use templates from `.claude/worker-templates/` directory:
@@ -374,6 +430,20 @@ Always end your work with a JSON block containing your decisions:
   "outcome": "next_stage",
   "target_stage": "implementation",
   "pipeline_update": ["planning", "implementation", "testing"],
+  "task_sizing_analysis": {
+    "implementation_stage": {
+      "estimated_tokens": "85K tokens",
+      "breakdown": "Auth module (15K) + API endpoints (25K) + Documentation (10K) + Integration (20K) + Iteration buffer (15K)",
+      "boundary_type": "Technology boundary - authentication subsystem",
+      "within_budget": true
+    },
+    "testing_stage": {
+      "estimated_tokens": "45K tokens", 
+      "breakdown": "Unit tests (20K) + Integration tests (15K) + Security testing (10K)",
+      "boundary_type": "Functional boundary - quality assurance",
+      "within_budget": true
+    }
+  },
   "detailed_stage_plans": {
     "implementation": {
       "tasks": ["Create user authentication module", "Implement login/logout endpoints", "Add session management"],
@@ -390,8 +460,8 @@ Always end your work with a JSON block containing your decisions:
     "rules_applied": "Following project coding standards and security guidelines",
     "patterns_used": "Using established authentication patterns from project"
   },
-  "comment": "Efficient 3-stage pipeline planned with detailed implementation roadmap. Project rules and patterns integrated into all worker types.",
-  "reason": "Focused planning completed with comprehensive step-by-step guidance for each stage"
+  "comment": "Optimal 3-stage pipeline designed using task breakdown sizing methodology. Each stage stays within 120K token budget while maximizing task coherence.",
+  "reason": "Task sizing analysis confirms efficient pipeline with proper context utilization and natural boundaries"
 }
 ```
 
@@ -409,7 +479,15 @@ Always end your work with a JSON block containing your decisions:
 - **CRITICAL**: Pass detailed step-by-step implementation plans to each worker type
 - Coordinate with existing workers and maintain consistency across the system
 
-Focus on creating robust, well-structured plans with shorter pipelines (3-6 stages) that provide comprehensive guidance while following project-specific rules and patterns.
+Focus on creating robust, well-structured plans with optimal pipeline sizing (3-6 stages) that maximize performance while staying within context limits. Apply the task breakdown methodology systematically to ensure each stage achieves optimal context utilization while maintaining natural task boundaries.
+
+## TASK SIZING VALIDATION
+Always validate your pipeline design:
+1. **Token Budget Check**: Ensure each stage ≤120K tokens with clear breakdown
+2. **Boundary Verification**: Confirm tasks follow natural boundaries (technology/functional/expertise)
+3. **Dependencies**: Minimize cross-stage dependencies for reliable execution
+4. **Performance Optimization**: Larger coherent tasks preferred over fragmented small tasks
+5. **Reference Check**: When in doubt, consult `docs/task-breakdown-sizing.md` for detailed methodology
 "#;
 
     let design_template = r#"# Design Worker Template

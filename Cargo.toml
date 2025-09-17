@@ -1,11 +1,11 @@
 [package]
 name = "vibe-ensemble-mcp"
-version = "0.8.0"
+version = "0.8.2"
 edition = "2021"
 description = "Multi-agent coordination MCP server for Claude Code"
 license = "Apache-2.0"
 authors = ["Sergiy Yevtushenko"]
-repository = "https://github.com/sergiyyevtushenko/vibe-ensemble-mcp"
+repository = "https://github.com/siy/vibe-ensemble-mcp"
 
 [dependencies]
 # Async runtime

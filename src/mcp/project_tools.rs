@@ -57,7 +57,7 @@ impl ToolHandler for CreateProjectTool {
                     "description": project.short_description,
                     "created_at": project.created_at
                 });
-                
+
                 // Broadcast project_created event
                 let event = json!({
                     "jsonrpc": "2.0",
@@ -76,13 +76,16 @@ impl ToolHandler for CreateProjectTool {
                         }
                     }
                 });
-                
+
                 if let Err(e) = state.event_broadcaster.broadcast(event.to_string()) {
                     tracing::warn!("Failed to broadcast project_created event: {}", e);
                 } else {
-                    tracing::debug!("Successfully broadcast project_created event for: {}", project.repository_name);
+                    tracing::debug!(
+                        "Successfully broadcast project_created event for: {}",
+                        project.repository_name
+                    );
                 }
-                
+
                 Ok(create_success_response(&format!(
                     "Project created successfully: {}",
                     response

@@ -1,7 +1,10 @@
 use axum::{
     extract::State,
     http::StatusCode,
-    response::{sse::{Event, KeepAlive, Sse}, Json},
+    response::{
+        sse::{Event, KeepAlive, Sse},
+        Json,
+    },
     Json as JsonExtractor,
 };
 use futures::Stream;
@@ -10,7 +13,10 @@ use std::{sync::Arc, time::Duration};
 use tokio::sync::broadcast;
 use tracing::{debug, info};
 
-use crate::{server::AppState, mcp::{server::McpServer, types::JsonRpcRequest}};
+use crate::{
+    mcp::{server::McpServer, types::JsonRpcRequest},
+    server::AppState,
+};
 
 const MCP_PROTOCOL_VERSION: &str = "2024-11-05";
 
@@ -46,7 +52,10 @@ impl EventBroadcaster {
     }
 
     /// Broadcast a raw string event to all connected SSE clients
-    pub fn broadcast(&self, event_data: String) -> Result<usize, tokio::sync::broadcast::error::SendError<String>> {
+    pub fn broadcast(
+        &self,
+        event_data: String,
+    ) -> Result<usize, tokio::sync::broadcast::error::SendError<String>> {
         self.sender.send(event_data)
     }
 
@@ -100,9 +109,9 @@ pub async fn sse_handler(
             })
         }
     });
-    
+
     broadcaster.broadcast_event("endpoint", endpoint_event);
-    
+
     let mut receiver = broadcaster.subscribe();
 
     let stream = async_stream::stream! {
@@ -251,7 +260,7 @@ pub async fn sse_message_handler(
     JsonExtractor(payload): JsonExtractor<Value>,
 ) -> Result<Json<Value>, (StatusCode, Json<Value>)> {
     debug!("Received SSE message: {}", payload);
-    
+
     // Parse the JSON as an MCP JsonRpcRequest
     let request: JsonRpcRequest = match serde_json::from_value(payload.clone()) {
         Ok(req) => req,
@@ -267,13 +276,13 @@ pub async fn sse_message_handler(
             return Err((StatusCode::BAD_REQUEST, Json(error_response)));
         }
     };
-    
+
     // Create MCP server and handle the request
     let mcp_server = McpServer::new();
     let response = mcp_server.handle_request(&state, request).await;
-    
+
     info!("SSE message processed successfully");
-    
+
     // Convert the response to JSON
     let response_value = match serde_json::to_value(&response) {
         Ok(val) => val,
@@ -289,7 +298,7 @@ pub async fn sse_message_handler(
             return Err((StatusCode::INTERNAL_SERVER_ERROR, Json(error_response)));
         }
     };
-    
+
     // If this is a successful MCP response, we may want to broadcast it
     if let Some(result) = response.result {
         let notification = json!({
@@ -301,11 +310,11 @@ pub async fn sse_message_handler(
                 "data": result
             }
         });
-        
+
         if let Err(e) = state.event_broadcaster.broadcast(notification.to_string()) {
             tracing::warn!("Failed to broadcast SSE response: {}", e);
         }
     }
-    
+
     Ok(Json(response_value))
 }

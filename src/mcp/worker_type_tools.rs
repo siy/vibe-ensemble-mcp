@@ -41,7 +41,7 @@ impl ToolHandler for CreateWorkerTypeTool {
                     "created_at": worker_type_info.created_at,
                     "updated_at": worker_type_info.updated_at
                 });
-                
+
                 // Broadcast worker_type_created event
                 let event = json!({
                     "jsonrpc": "2.0",
@@ -63,13 +63,17 @@ impl ToolHandler for CreateWorkerTypeTool {
                         }
                     }
                 });
-                
+
                 if let Err(e) = state.event_broadcaster.broadcast(event.to_string()) {
                     tracing::warn!("Failed to broadcast worker_type_created event: {}", e);
                 } else {
-                    tracing::debug!("Successfully broadcast worker_type_created event for: {}/{}", project_id, worker_type);
+                    tracing::debug!(
+                        "Successfully broadcast worker_type_created event for: {}/{}",
+                        project_id,
+                        worker_type
+                    );
                 }
-                
+
                 Ok(create_success_response(&format!(
                     "Worker type '{}' created successfully for project '{}': {}",
                     worker_type, project_id, response
@@ -242,7 +246,7 @@ impl ToolHandler for UpdateWorkerTypeTool {
                     "created_at": worker_type_info.created_at,
                     "updated_at": worker_type_info.updated_at
                 });
-                
+
                 // Broadcast worker_type_updated event
                 let event = json!({
                     "jsonrpc": "2.0",
@@ -264,13 +268,17 @@ impl ToolHandler for UpdateWorkerTypeTool {
                         }
                     }
                 });
-                
+
                 if let Err(e) = state.event_broadcaster.broadcast(event.to_string()) {
                     tracing::warn!("Failed to broadcast worker_type_updated event: {}", e);
                 } else {
-                    tracing::debug!("Successfully broadcast worker_type_updated event for: {}/{}", project_id, worker_type);
+                    tracing::debug!(
+                        "Successfully broadcast worker_type_updated event for: {}/{}",
+                        project_id,
+                        worker_type
+                    );
                 }
-                
+
                 Ok(create_success_response(&format!(
                     "Worker type '{}' updated successfully for project '{}': {}",
                     worker_type, project_id, response
@@ -342,13 +350,17 @@ impl ToolHandler for DeleteWorkerTypeTool {
                         }
                     }
                 });
-                
+
                 if let Err(e) = state.event_broadcaster.broadcast(event.to_string()) {
                     tracing::warn!("Failed to broadcast worker_type_deleted event: {}", e);
                 } else {
-                    tracing::debug!("Successfully broadcast worker_type_deleted event for: {}/{}", project_id, worker_type);
+                    tracing::debug!(
+                        "Successfully broadcast worker_type_deleted event for: {}/{}",
+                        project_id,
+                        worker_type
+                    );
                 }
-                
+
                 Ok(create_success_response(&format!(
                     "Worker type '{}' deleted successfully from project '{}'",
                     worker_type, project_id
