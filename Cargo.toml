@@ -13,6 +13,10 @@ license = "Apache-2.0"
 group = "Development/Tools"
 url = "https://github.com/siy/vibe-ensemble-mcp"
 requires = ["glibc"]
+assets = [
+    { source = "target/release/vibe-ensemble-mcp", dest = "/usr/bin/vibe-ensemble-mcp", mode = "755" },
+    { source = "README.md", dest = "/usr/share/doc/vibe-ensemble-mcp/README.md", mode = "644" }
+]
 
 [package.metadata.deb]
 maintainer = "Sergiy Yevtushenko <sergiy.yevtushenko@gmail.com>"
