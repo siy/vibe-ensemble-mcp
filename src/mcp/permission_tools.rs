@@ -11,7 +11,7 @@ pub struct GetPermissionModelTool;
 impl ToolHandler for GetPermissionModelTool {
     async fn call(&self, state: &AppState, _arguments: Option<Value>) -> Result<CallToolResponse> {
         let permission_mode = &state.config.permission_mode;
-        
+
         let (config_file, description, example_path) = match permission_mode.as_str() {
             "bypass" => (
                 "None (bypass mode)",
@@ -76,13 +76,15 @@ impl ToolHandler for GetPermissionModelTool {
                 "security_considerations": [
                     "Start with minimal permissions and add tools as needed",
                     "Use 'inherit' mode for most production cases",
-                    "Only use 'bypass' mode in isolated development environments", 
+                    "Only use 'bypass' mode in isolated development environments",
                     "Review worker activity logs in .vibe-ensemble-mcp/logs/ to understand tool usage"
                 ]
             }
         });
 
-        Ok(create_success_response(&serde_json::to_string_pretty(&response)?))
+        Ok(create_success_response(&serde_json::to_string_pretty(
+            &response,
+        )?))
     }
 
     fn definition(&self) -> Tool {

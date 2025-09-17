@@ -94,7 +94,7 @@ Once you have Vibe-Ensemble configured and running with Claude Code, you can coo
 periodically ask Claude Code to check ticket status and event queue. Sometimes it may report issues, but not address them.
 Sending prompt like "Act as a coordinator" usually helps.
 
-**SECURITY WARNING:** The permission mechanisms are not entirely tested and may not work reliably. The only tested option is 'bypass', but you should use it at your own risk because it enables workers to do whatever they want. Use bypass mode only in isolated development environments.
+**SECURITY WARNING:** Always review and test permission configurations before production use. While the permission system is designed to be secure, proper configuration is essential. Use 'bypass' mode only in isolated development environments as it grants unrestricted access. For production use, prefer 'inherit' or 'file' modes with carefully configured tool restrictions.
 
 ### Example Project Types
 
@@ -125,7 +125,7 @@ Each worker operates independently with their specialized knowledge, ensuring fo
 
 ## MCP Tools
 
-Vibe-Ensemble provides 19 MCP tools organized into four categories:
+Vibe-Ensemble provides 20 MCP tools organized into five categories:
 
 ### Project Management
 - `create_project` - Create a new project with rules and patterns
@@ -153,6 +153,9 @@ Vibe-Ensemble provides 19 MCP tools organized into four categories:
 - `get_tickets_by_stage` - Get all tickets currently at a specific stage
 - `list_events` - List system events and notifications
 - `resolve_event` - Mark system events as resolved
+
+### Permission Management
+- `get_permission_model` - Get information about the current permission model and configuration
 
 > **Note on Worker Management**: Workers are automatically spawned when tickets are assigned to stages. There are no explicit worker spawn/stop tools - the queue system handles worker lifecycle automatically based on workload.
 

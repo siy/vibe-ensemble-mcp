@@ -3,8 +3,8 @@ use serde_json::Value;
 use tracing::{debug, error, info, trace, warn};
 
 use super::{
-    event_tools::*, permission_tools::*, project_tools::*, ticket_tools::*, tools::ToolRegistry, types::*,
-    worker_type_tools::*,
+    event_tools::*, permission_tools::*, project_tools::*, ticket_tools::*, tools::ToolRegistry,
+    types::*, worker_type_tools::*,
 };
 use crate::{error::Result, server::AppState};
 
@@ -321,7 +321,7 @@ impl McpServer {
 ### 4. Task Queues
 - Create specialized queues (e.g., 'development', 'testing', 'review')
 - Workers are assigned to specific queues when spawned
-- Use `update_ticket_stage` to route tickets to the appropriate stage
+- Tickets automatically advance through stages as workers complete their tasks
 - Monitor stage progress with `get_tickets_by_stage` and `list_events`
 
 ## Available Tools (20 total)
