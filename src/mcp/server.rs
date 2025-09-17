@@ -204,6 +204,22 @@ impl McpServer {
 
         info!("Calling tool: {}", request.name);
 
+        // Log parameters if they exist and are not empty
+        if let Some(ref args) = request.arguments {
+            let should_log = match args {
+                Value::Null => false,
+                Value::Object(map) => !map.is_empty(),
+                _ => true,
+            };
+            if should_log {
+                info!(
+                    "Tool parameters: {}",
+                    serde_json::to_string_pretty(args)
+                        .unwrap_or_else(|_| "Failed to serialize parameters".to_string())
+                );
+            }
+        }
+
         let response = self.tools.call_tool(state, request).await.map_err(|e| {
             error!("Tool execution error: {}", e);
             JsonRpcError {
