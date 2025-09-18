@@ -31,6 +31,7 @@ pub struct AppState {
 
 #[derive(Clone)]
 pub struct ServerInfo {
+    pub host: String,
     pub port: u16,
 }
 
@@ -48,7 +49,10 @@ pub async fn run_server(config: Config) -> Result<()> {
         config: config.clone(),
         db,
         queue_manager,
-        server_info: ServerInfo { port: config.port },
+        server_info: ServerInfo {
+            host: config.host.clone(),
+            port: config.port,
+        },
         event_broadcaster,
     };
 

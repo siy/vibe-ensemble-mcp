@@ -93,9 +93,9 @@ pub async fn sse_handler(
         }
     });
 
-    broadcaster.broadcast_event("mcp_notification", init_notification.clone());
-
     // Send endpoint event for Claude Code SSE transport compatibility
+    // Use configured host instead of hardcoded localhost
+    let host = &state.server_info.host;
     let port = state.server_info.port;
     let endpoint_event = json!({
         "jsonrpc": "2.0",
@@ -105,20 +105,28 @@ pub async fn sse_handler(
             "logger": "vibe-ensemble-sse",
             "data": json!({
                 "type": "endpoint",
-                "uri": format!("http://localhost:{}/messages", port)
+                "uri": format!("http://{}:{}/messages", host, port)
             })
         }
     });
 
-    broadcaster.broadcast_event("endpoint", endpoint_event);
-
+    // Create receiver BEFORE broadcasting to ensure new clients receive all events
     let mut receiver = broadcaster.subscribe();
+
+    // Broadcast events for other existing clients (they won't see these as their receivers are already created)
+    broadcaster.broadcast_event("mcp_notification", init_notification.clone());
+    broadcaster.broadcast_event("endpoint", endpoint_event.clone());
 
     let stream = async_stream::stream! {
         // Send initialization message immediately to new clients
         yield Ok(Event::default()
             .event("message")
             .data(init_notification.to_string()));
+
+        // Send endpoint discovery event immediately to new clients
+        yield Ok(Event::default()
+            .event("message")
+            .data(endpoint_event.to_string()));
 
         loop {
             match receiver.recv().await {
@@ -192,9 +200,11 @@ pub async fn notify_event_change(
         "method": "notifications/resources/updated",
         "params": {
             "uri": "vibe-ensemble://events",
-            "event_type": event_type,
-            "event_data": event_data,
-            "timestamp": chrono::Utc::now().to_rfc3339()
+            "event": {
+                "type": event_type,
+                "data": event_data,
+                "timestamp": chrono::Utc::now().to_rfc3339()
+            }
         }
     });
 
@@ -212,8 +222,12 @@ pub async fn notify_ticket_change(
         "method": "notifications/resources/updated",
         "params": {
             "uri": format!("vibe-ensemble://tickets/{}", ticket_id),
-            "change_type": change_type,
-            "timestamp": chrono::Utc::now().to_rfc3339()
+            "event": {
+                "type": "ticket_changed",
+                "change_type": change_type,
+                "ticket_id": ticket_id,
+                "timestamp": chrono::Utc::now().to_rfc3339()
+            }
         }
     });
 
@@ -227,15 +241,19 @@ pub async fn notify_worker_change(broadcaster: &EventBroadcaster, worker_id: &st
         "method": "notifications/resources/updated",
         "params": {
             "uri": format!("vibe-ensemble://workers/{}", worker_id),
-            "status": status,
-            "timestamp": chrono::Utc::now().to_rfc3339()
+            "event": {
+                "type": "worker_changed",
+                "worker_id": worker_id,
+                "status": status,
+                "timestamp": chrono::Utc::now().to_rfc3339()
+            }
         }
     });
 
     broadcaster.broadcast_event("mcp_notification", mcp_notification);
 }
 
-/// Notify about queue changes  
+/// Notify about queue changes
 pub async fn notify_queue_change(
     broadcaster: &EventBroadcaster,
     queue_name: &str,
@@ -246,8 +264,12 @@ pub async fn notify_queue_change(
         "method": "notifications/resources/updated",
         "params": {
             "uri": format!("vibe-ensemble://queues/{}", queue_name),
-            "change_type": change_type,
-            "timestamp": chrono::Utc::now().to_rfc3339()
+            "event": {
+                "type": "queue_changed",
+                "queue_name": queue_name,
+                "change_type": change_type,
+                "timestamp": chrono::Utc::now().to_rfc3339()
+            }
         }
     });
 
