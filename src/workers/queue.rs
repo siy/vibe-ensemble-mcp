@@ -42,11 +42,8 @@ pub struct QueueManager {
     db: DbPool,
 }
 
-impl Default for QueueManager {
-    fn default() -> Self {
-        panic!("QueueManager requires DbPool and Config parameters - use QueueManager::new(db, config) instead of default()")
-    }
-}
+// QueueManager intentionally does not implement Default to prevent misuse
+// Always use QueueManager::new(db, config, event_broadcaster) for proper initialization
 
 impl fmt::Debug for QueueManager {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
@@ -152,7 +149,7 @@ impl QueueManager {
 
         // Get or create queue with consumer
         let sender = self
-            .get_or_create_queue(&queue_name, project_id, worker_type, db)
+            .get_or_create_queue(&queue_name, project_id, worker_type)
             .await?;
 
         // Send task to queue
@@ -178,7 +175,6 @@ impl QueueManager {
         queue_name: &str,
         project_id: &str,
         worker_type: &str,
-        _db: &DbPool,
     ) -> Result<mpsc::UnboundedSender<TaskItem>> {
         // Check if queue already exists
         if let Some(sender) = self.queues.get(queue_name) {
@@ -203,7 +199,7 @@ impl QueueManager {
 
         let queue_name_for_error = queue_name_clone.clone();
         let completion_sender = self.completion_sender.clone();
-        let db_clone = _db.clone();
+        let db_clone = self.db.clone();
         let server_port = self.config.port;
         let permission_mode = self.config.permission_mode.clone();
 

@@ -9,6 +9,7 @@ use tracing::{debug, error, info, warn};
 
 use super::queue::WorkerOutput;
 use super::types::SpawnWorkerRequest;
+use crate::mcp::MCP_PROTOCOL_VERSION;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ClaudePermissions {
@@ -253,7 +254,7 @@ impl ProcessManager {
                 "vibe-ensemble-mcp": {
                     "type": "http",
                     "url": format!("http://127.0.0.1:{}/mcp", server_port),
-                    "protocol_version": "2024-11-05"
+                    "protocol_version": MCP_PROTOCOL_VERSION
                 }
             }
         });

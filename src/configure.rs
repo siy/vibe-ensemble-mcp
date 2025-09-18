@@ -2,6 +2,8 @@ use anyhow::Result;
 use serde_json::json;
 use std::fs;
 
+use crate::mcp::MCP_PROTOCOL_VERSION;
+
 /// Generate Claude Code integration files
 pub async fn configure_claude_code(host: &str, port: u16) -> Result<()> {
     println!("🔧 Configuring Claude Code integration...");
@@ -39,12 +41,12 @@ async fn create_mcp_config(host: &str, port: u16) -> Result<()> {
             "vibe-ensemble-mcp": {
                 "type": "http",
                 "url": format!("http://{}:{}/mcp", host, port),
-                "protocol_version": "2024-11-05"
+                "protocol_version": MCP_PROTOCOL_VERSION
             },
             "vibe-ensemble-sse": {
                 "type": "sse",
                 "url": format!("http://{}:{}/sse", host, port),
-                "protocol_version": "2024-11-05"
+                "protocol_version": MCP_PROTOCOL_VERSION
             }
         }
     });

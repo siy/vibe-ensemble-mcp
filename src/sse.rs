@@ -11,14 +11,12 @@ use futures::Stream;
 use serde_json::{json, Value};
 use std::{sync::Arc, time::Duration};
 use tokio::sync::broadcast;
-use tracing::{debug, info};
+use tracing::debug;
 
 use crate::{
-    mcp::{server::McpServer, types::JsonRpcRequest},
+    mcp::{server::McpServer, types::JsonRpcRequest, MCP_PROTOCOL_VERSION},
     server::AppState,
 };
-
-const MCP_PROTOCOL_VERSION: &str = "2024-11-05";
 
 /// SSE event broadcaster for notifying clients about database changes
 #[derive(Clone)]
@@ -34,7 +32,7 @@ impl Default for EventBroadcaster {
 
 impl EventBroadcaster {
     pub fn new() -> Self {
-        let (sender, _) = broadcast::channel(100);
+        let (sender, _) = broadcast::channel(512);
         Self {
             sender: Arc::new(sender),
         }
@@ -48,7 +46,9 @@ impl EventBroadcaster {
             "data": data
         });
 
-        let _ = self.sender.send(event_data.to_string());
+        if let Err(e) = self.sender.send(event_data.to_string()) {
+            debug!("SSE broadcast failed: {}", e);
+        }
     }
 
     /// Broadcast a raw string event to all connected SSE clients
@@ -164,7 +164,8 @@ pub async fn sse_handler(
                         .event("message")
                         .data(mcp_event));
                 }
-                Err(broadcast::error::RecvError::Lagged(_)) => {
+                Err(broadcast::error::RecvError::Lagged(skipped_messages)) => {
+                    debug!("SSE client lagged, skipped {} messages", skipped_messages);
                     // Send MCP-compliant heartbeat
                     let heartbeat = json!({
                         "jsonrpc": "2.0",
@@ -303,7 +304,7 @@ pub async fn sse_message_handler(
     let mcp_server = McpServer::new();
     let response = mcp_server.handle_request(&state, request).await;
 
-    info!("SSE message processed successfully");
+    debug!("SSE message processed successfully");
 
     // Convert the response to JSON
     let response_value = match serde_json::to_value(&response) {

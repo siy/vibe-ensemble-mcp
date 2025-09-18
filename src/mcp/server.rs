@@ -4,11 +4,9 @@ use tracing::{debug, error, info, trace, warn};
 
 use super::{
     dependency_tools::*, event_tools::*, permission_tools::*, project_tools::*, ticket_tools::*,
-    tools::ToolRegistry, types::*, worker_type_tools::*,
+    tools::ToolRegistry, types::*, worker_type_tools::*, MCP_PROTOCOL_VERSION,
 };
 use crate::{error::Result, server::AppState};
-
-const MCP_PROTOCOL_VERSION: &str = "2024-11-05";
 
 pub struct McpServer {
     pub tools: ToolRegistry,
