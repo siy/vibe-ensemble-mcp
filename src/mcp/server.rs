@@ -3,8 +3,8 @@ use serde_json::Value;
 use tracing::{debug, error, info, trace, warn};
 
 use super::{
-    event_tools::*, permission_tools::*, project_tools::*, ticket_tools::*, tools::ToolRegistry,
-    types::*, worker_type_tools::*,
+    dependency_tools::*, event_tools::*, permission_tools::*, project_tools::*, ticket_tools::*,
+    tools::ToolRegistry, types::*, worker_type_tools::*,
 };
 use crate::{error::Result, server::AppState};
 
@@ -52,6 +52,13 @@ impl McpServer {
         tools.register(ListEventsTool);
         tools.register(ResolveEventTool);
         tools.register(GetTicketsByStageTool);
+
+        // Register dependency management tools
+        tools.register(AddTicketDependencyTool);
+        tools.register(RemoveTicketDependencyTool);
+        tools.register(GetDependencyGraphTool);
+        tools.register(ListReadyTicketsTool);
+        tools.register(ListBlockedTicketsTool);
 
         // Register permission management tools
         tools.register(GetPermissionModelTool);

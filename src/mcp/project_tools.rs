@@ -45,8 +45,8 @@ impl ToolHandler for CreateProjectTool {
             repository_name: repository_name.clone(),
             path,
             short_description,
-            project_rules,
-            project_patterns,
+            rules: project_rules,
+            patterns: project_patterns,
         };
 
         match Project::create(&state.db, request).await {

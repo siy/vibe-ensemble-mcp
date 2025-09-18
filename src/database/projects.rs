@@ -10,10 +10,14 @@ pub struct Project {
     pub repository_name: String,
     pub path: String,
     pub short_description: Option<String>,
-    pub project_rules: Option<String>,
-    pub project_patterns: Option<String>,
     pub created_at: String,
     pub updated_at: String,
+    // Renamed from project_rules/project_patterns (removing redundant prefix)
+    pub rules: Option<String>,
+    pub patterns: Option<String>,
+    // New versioning fields for DAG support
+    pub rules_version: Option<i32>,
+    pub patterns_version: Option<i32>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -21,8 +25,8 @@ pub struct CreateProjectRequest {
     pub repository_name: String,
     pub path: String,
     pub short_description: Option<String>,
-    pub project_rules: Option<String>,
-    pub project_patterns: Option<String>,
+    pub rules: Option<String>,
+    pub patterns: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -37,16 +41,16 @@ impl Project {
     pub async fn create(pool: &DbPool, req: CreateProjectRequest) -> Result<Project> {
         let project = sqlx::query_as::<_, Project>(
             r#"
-            INSERT INTO projects (repository_name, path, short_description, project_rules, project_patterns)
-            VALUES (?1, ?2, ?3, ?4, ?5)
-            RETURNING repository_name, path, short_description, project_rules, project_patterns, created_at, updated_at
+            INSERT INTO projects (repository_name, path, short_description, rules, patterns, rules_version, patterns_version)
+            VALUES (?1, ?2, ?3, ?4, ?5, 1, 1)
+            RETURNING repository_name, path, short_description, created_at, updated_at, rules, patterns, rules_version, patterns_version
         "#,
         )
         .bind(&req.repository_name)
         .bind(&req.path)
         .bind(&req.short_description)
-        .bind(&req.project_rules)
-        .bind(&req.project_patterns)
+        .bind(&req.rules)
+        .bind(&req.patterns)
         .fetch_one(pool)
         .await?;
 

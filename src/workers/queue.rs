@@ -361,6 +361,9 @@ impl QueueManager {
             }
         }
 
+        // Handle dependency cascades after any completion event
+        self.handle_dependency_cascade(event).await?;
+
         Ok(())
     }
 
@@ -754,6 +757,147 @@ impl QueueManager {
                 "Ticket {} was not claimed, no release needed",
                 ticket_id.as_str()
             );
+        }
+
+        Ok(())
+    }
+
+    /// Handle dependency cascades when tickets complete or advance stages
+    async fn handle_dependency_cascade(
+        self: &Arc<Self>,
+        event: &WorkerCompletionEvent,
+    ) -> Result<()> {
+        let ticket_id = event.ticket_id.as_str();
+
+        // Get the ticket to check its current state
+        let ticket_with_comments = crate::database::tickets::Ticket::get_by_id(&self.db, ticket_id)
+            .await?
+            .ok_or_else(|| anyhow::anyhow!("Ticket '{}' not found", ticket_id))?;
+
+        let ticket = &ticket_with_comments.ticket;
+
+        match &event.command {
+            WorkerCommand::AdvanceToStage { .. } => {
+                // When ticket advances, check if this unblocks any dependent tickets
+                self.check_and_unblock_dependents(ticket_id).await?;
+
+                // If this ticket has a parent, resubmit parent for reassessment
+                if let Some(parent_id) = &ticket.parent_ticket_id {
+                    self.resubmit_parent_ticket(parent_id).await?;
+                }
+            }
+            WorkerCommand::RequestCoordinatorAttention { .. } => {
+                // Parent may need to reassess strategy when child needs attention
+                if let Some(parent_id) = &ticket.parent_ticket_id {
+                    self.resubmit_parent_ticket(parent_id).await?;
+                }
+            }
+            _ => {
+                // For other commands, still check dependencies
+                self.check_and_unblock_dependents(ticket_id).await?;
+            }
+        }
+
+        Ok(())
+    }
+
+    /// Check if ticket completion unblocks any dependent tickets
+    async fn check_and_unblock_dependents(
+        self: &Arc<Self>,
+        completed_ticket_id: &str,
+    ) -> Result<()> {
+        // Get all tickets that are blocked by this ticket
+        let blocked_tickets =
+            crate::database::dag::TicketDependency::get_blocked_by(&self.db, completed_ticket_id)
+                .await?;
+
+        for blocked_ticket_id in blocked_tickets {
+            // Check if this ticket's dependencies are now satisfied
+            if crate::database::dag::TicketDependency::all_dependencies_satisfied(
+                &self.db,
+                &blocked_ticket_id,
+            )
+            .await?
+            {
+                info!(
+                    "Unblocking ticket {} - all dependencies satisfied",
+                    blocked_ticket_id
+                );
+
+                // Update status to ready
+                crate::database::tickets::Ticket::update_dependency_status(
+                    &self.db,
+                    &blocked_ticket_id,
+                    "ready",
+                )
+                .await?;
+
+                // Get the ticket details for resubmission
+                if let Some(ticket_with_comments) =
+                    crate::database::tickets::Ticket::get_by_id(&self.db, &blocked_ticket_id)
+                        .await?
+                {
+                    let ticket = &ticket_with_comments.ticket;
+
+                    // Resubmit the now-ready ticket to its current stage
+                    if let Err(e) = self
+                        .auto_enqueue_ticket(&blocked_ticket_id, &ticket.current_stage)
+                        .await
+                    {
+                        warn!(
+                            "Failed to auto-enqueue unblocked ticket {} for stage {}: {}",
+                            blocked_ticket_id, ticket.current_stage, e
+                        );
+                    } else {
+                        info!(
+                            "Successfully resubmitted unblocked ticket {} to stage {}",
+                            blocked_ticket_id, ticket.current_stage
+                        );
+                    }
+                }
+            }
+        }
+
+        Ok(())
+    }
+
+    /// Resubmit parent ticket when child completes or needs attention
+    async fn resubmit_parent_ticket(self: &Arc<Self>, parent_ticket_id: &str) -> Result<()> {
+        // Get parent ticket details
+        if let Some(parent_with_comments) =
+            crate::database::tickets::Ticket::get_by_id(&self.db, parent_ticket_id).await?
+        {
+            let parent_ticket = &parent_with_comments.ticket;
+
+            // Only resubmit if parent is not already being processed and is open
+            if parent_ticket.processing_worker_id.is_none() && parent_ticket.state == "open" {
+                info!(
+                    "Resubmitting parent ticket {} at stage {} due to child activity",
+                    parent_ticket_id, parent_ticket.current_stage
+                );
+
+                if let Err(e) = self
+                    .auto_enqueue_ticket(parent_ticket_id, &parent_ticket.current_stage)
+                    .await
+                {
+                    warn!(
+                        "Failed to resubmit parent ticket {} for stage {}: {}",
+                        parent_ticket_id, parent_ticket.current_stage, e
+                    );
+                } else {
+                    info!(
+                        "Successfully resubmitted parent ticket {} to stage {}",
+                        parent_ticket_id, parent_ticket.current_stage
+                    );
+                }
+            } else {
+                debug!(
+                    "Parent ticket {} not resubmitted (already processing: {}, state: {})",
+                    parent_ticket_id,
+                    parent_ticket.processing_worker_id.is_some(),
+                    parent_ticket.state
+                );
+            }
         }
 
         Ok(())

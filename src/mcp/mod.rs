@@ -1,3 +1,4 @@
+pub mod dependency_tools;
 pub mod event_tools;
 pub mod permission_tools;
 pub mod project_tools;

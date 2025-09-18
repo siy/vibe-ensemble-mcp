@@ -34,12 +34,20 @@ impl ToolHandler for CreateTicketTool {
         let title: String = extract_param(&Some(args.clone()), "title")?;
         let description: String =
             extract_optional_param(&Some(args.clone()), "description")?.unwrap_or_default();
-        let _ticket_type: String = extract_optional_param(&Some(args.clone()), "ticket_type")?
+        let ticket_type: String = extract_optional_param(&Some(args.clone()), "ticket_type")?
             .unwrap_or_else(|| "task".to_string());
         let _priority: String = extract_optional_param(&Some(args.clone()), "priority")?
             .unwrap_or_else(|| "medium".to_string());
         let initial_stage: String = extract_optional_param(&Some(args.clone()), "initial_stage")?
             .unwrap_or_else(|| "planning".to_string());
+
+        // New DAG-related parameters
+        let parent_ticket_id: Option<String> =
+            extract_optional_param(&Some(args.clone()), "parent_ticket_id")?;
+        let execution_plan_input: Option<Vec<String>> =
+            extract_optional_param(&Some(args.clone()), "execution_plan")?;
+        let created_by_worker_id: Option<String> =
+            extract_optional_param(&Some(args.clone()), "created_by_worker_id")?;
 
         // Validate that the initial stage worker type exists for this project (including "planning")
         let worker_type_exists = crate::database::worker_types::WorkerType::get_by_type(
@@ -59,7 +67,27 @@ impl ToolHandler for CreateTicketTool {
         info!("Creating ticket: {} in project {}", title, project_id);
 
         let ticket_id = Uuid::new_v4().to_string();
-        let execution_plan = vec![initial_stage.clone()];
+
+        // Use provided execution plan or default to single stage
+        let execution_plan = execution_plan_input.unwrap_or_else(|| vec![initial_stage.clone()]);
+
+        // Validate all stages in execution plan exist as worker types
+        for stage in &execution_plan {
+            let stage_exists = crate::database::worker_types::WorkerType::get_by_type(
+                &state.db,
+                &project_id,
+                stage,
+            )
+            .await?
+            .is_some();
+
+            if !stage_exists {
+                return Ok(create_error_response(&format!(
+                    "Worker type '{}' does not exist in project '{}'. All stages in execution plan must exist as worker types.",
+                    stage, project_id
+                )));
+            }
+        }
 
         let req = CreateTicketRequest {
             ticket_id: ticket_id.clone(),
@@ -67,6 +95,10 @@ impl ToolHandler for CreateTicketTool {
             title: title.clone(),
             description: description.clone(),
             execution_plan,
+            parent_ticket_id,
+            ticket_type: Some(ticket_type),
+            dependency_status: None, // Will default to 'ready' in database
+            created_by_worker_id,
         };
 
         let ticket = Ticket::create(&state.db, req).await?;
@@ -164,6 +196,21 @@ impl ToolHandler for CreateTicketTool {
                         "type": "string",
                         "description": "Initial stage for ticket processing (must be a valid worker type)",
                         "default": "planning"
+                    },
+                    "parent_ticket_id": {
+                        "type": "string",
+                        "description": "Optional parent ticket ID for creating subtasks"
+                    },
+                    "execution_plan": {
+                        "type": "array",
+                        "items": {
+                            "type": "string"
+                        },
+                        "description": "Complete execution plan (array of stage names). If not provided, defaults to single initial_stage. All stages must exist as worker types."
+                    },
+                    "created_by_worker_id": {
+                        "type": "string",
+                        "description": "ID of the worker that created this ticket (for planner-created tickets)"
                     }
                 },
                 "required": ["project_id", "title"]

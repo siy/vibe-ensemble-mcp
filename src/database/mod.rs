@@ -1,4 +1,5 @@
 pub mod comments;
+pub mod dag;
 pub mod events;
 pub mod migrations;
 pub mod projects;

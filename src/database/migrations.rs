@@ -96,6 +96,11 @@ impl MigrationRunner {
                 name: "add event resolution".to_string(),
                 content: include_str!("../../migrations/004_add_event_resolution.sql").to_string(),
             },
+            Migration {
+                version: 5,
+                name: "ticket dependencies and DAG support".to_string(),
+                content: include_str!("../../migrations/005_ticket_dependencies.sql").to_string(),
+            },
         ];
 
         Ok(migrations)
