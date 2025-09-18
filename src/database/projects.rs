@@ -60,7 +60,7 @@ impl Project {
     pub async fn get_by_name(pool: &DbPool, repository_name: &str) -> Result<Option<Project>> {
         let project = sqlx::query_as::<_, Project>(
             r#"
-            SELECT repository_name, path, short_description, project_rules, project_patterns, created_at, updated_at
+            SELECT repository_name, path, short_description, rules, patterns, created_at, updated_at, rules_version, patterns_version
             FROM projects
             WHERE repository_name = ?1
         "#,
@@ -75,7 +75,7 @@ impl Project {
     pub async fn list_all(pool: &DbPool) -> Result<Vec<Project>> {
         let projects = sqlx::query_as::<_, Project>(
             r#"
-            SELECT repository_name, path, short_description, project_rules, project_patterns, created_at, updated_at
+            SELECT repository_name, path, short_description, rules, patterns, created_at, updated_at, rules_version, patterns_version
             FROM projects
             ORDER BY created_at DESC
         "#,
@@ -113,18 +113,18 @@ impl Project {
             bind_values.push(desc);
         }
         if let Some(ref rules) = req.project_rules {
-            set_clauses.push("project_rules = ?");
+            set_clauses.push("rules = ?");
             bind_values.push(rules);
         }
         if let Some(ref patterns) = req.project_patterns {
-            set_clauses.push("project_patterns = ?");
+            set_clauses.push("patterns = ?");
             bind_values.push(patterns);
         }
 
         set_clauses.push("updated_at = datetime('now')");
 
         let query = format!(
-            "UPDATE projects SET {} WHERE repository_name = ? RETURNING repository_name, path, short_description, project_rules, project_patterns, created_at, updated_at",
+            "UPDATE projects SET {} WHERE repository_name = ? RETURNING repository_name, path, short_description, rules, patterns, created_at, updated_at, rules_version, patterns_version",
             set_clauses.join(", ")
         );
 

@@ -385,9 +385,9 @@ impl Ticket {
     ) -> Result<Option<TicketWithProjectInfo>> {
         let result = sqlx::query(
             r#"
-            SELECT t.ticket_id, t.project_id, t.title, t.execution_plan, t.current_stage, 
+            SELECT t.ticket_id, t.project_id, t.title, t.execution_plan, t.current_stage,
                    t.state, t.priority, t.processing_worker_id, t.created_at, t.updated_at, t.closed_at,
-                   p.project_rules, p.project_patterns
+                   p.rules, p.patterns
             FROM tickets t
             LEFT JOIN projects p ON t.project_id = p.repository_name
             WHERE t.ticket_id = ?1
@@ -421,8 +421,8 @@ impl Ticket {
 
             let ticket_with_info = TicketWithProjectInfo {
                 ticket,
-                project_rules: row.get("project_rules"),
-                project_patterns: row.get("project_patterns"),
+                project_rules: row.get("rules"),
+                project_patterns: row.get("patterns"),
             };
 
             Ok(Some(ticket_with_info))
