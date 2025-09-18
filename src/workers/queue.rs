@@ -530,7 +530,11 @@ impl QueueManager {
             ticket_id.as_str(),
         )?;
 
-        // Only proceed with database update if validation passes
+        // CRITICAL: Validate that ALL stages exist as worker types before database update
+        self.validate_all_stages_exist(ticket, &new_pipeline_strings)
+            .await?;
+
+        // Only proceed with database update if all validation passes
         let pipeline_json = serde_json::to_string(&new_pipeline_strings)
             .map_err(|e| anyhow::anyhow!("Failed to serialize pipeline: {}", e))?;
 
@@ -655,6 +659,39 @@ impl QueueManager {
                 ticket_with_comments.ticket.project_id
             ));
         }
+
+        Ok(())
+    }
+
+    /// Validate that ALL stages in the pipeline exist as worker types in the project
+    async fn validate_all_stages_exist(
+        &self,
+        ticket: &crate::database::tickets::Ticket,
+        pipeline_stages: &[String],
+    ) -> Result<()> {
+        for stage in pipeline_stages {
+            let worker_type_exists = crate::database::worker_types::WorkerType::get_by_type(
+                &self.db,
+                &ticket.project_id,
+                stage,
+            )
+            .await?
+            .is_some();
+
+            if !worker_type_exists {
+                return Err(anyhow::anyhow!(
+                    "Pipeline validation failed: worker type '{}' does not exist in project '{}'. All pipeline stages must exist as worker types before pipeline update.",
+                    stage,
+                    ticket.project_id
+                ));
+            }
+        }
+
+        info!(
+            "Pipeline validation passed: all {} stages exist as worker types in project '{}'",
+            pipeline_stages.len(),
+            ticket.project_id
+        );
 
         Ok(())
     }
