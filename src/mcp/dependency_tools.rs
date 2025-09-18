@@ -7,7 +7,7 @@ use super::{
         create_error_response, create_success_response, extract_optional_param, extract_param,
         ToolHandler,
     },
-    types::{CallToolResponse, Tool, ToolContent},
+    types::{CallToolResponse, PaginationCursor, Tool, ToolContent},
 };
 use crate::{database::dag::TicketDependency, server::AppState};
 
@@ -265,18 +265,52 @@ impl ToolHandler for ListReadyTicketsTool {
         let args = arguments.unwrap_or_else(|| Value::Object(serde_json::Map::new()));
         let project_id: Option<String> = extract_optional_param(&Some(args.clone()), "project_id")?;
 
+        // Parse pagination parameters
+        let cursor_str: Option<String> = extract_optional_param(&Some(args.clone()), "cursor")?;
+        let cursor = PaginationCursor::from_cursor_string(cursor_str)
+            .map_err(crate::error::AppError::BadRequest)?;
+
         info!("Listing ready tickets for project: {:?}", project_id);
 
         match crate::database::tickets::Ticket::get_ready_tickets(&state.db, project_id.as_deref())
             .await
         {
-            Ok(tickets) => {
-                info!("Found {} ready tickets", tickets.len());
+            Ok(all_tickets) => {
+                info!("Found {} ready tickets", all_tickets.len());
+
+                // Apply pagination
+                let total_tickets = all_tickets.len();
+                let start = cursor.offset;
+                let end = std::cmp::min(start + cursor.page_size, total_tickets);
+                let has_more = end < total_tickets;
+
+                let paginated_tickets = if start >= total_tickets {
+                    Vec::new()
+                } else {
+                    all_tickets[start..end].to_vec()
+                };
+
+                // Generate next cursor if there are more results
+                let next_cursor = if has_more {
+                    cursor.next_cursor(true)
+                } else {
+                    None
+                };
+
+                // Create response with pagination info
+                let response_data = serde_json::json!({
+                    "tickets": paginated_tickets,
+                    "pagination": {
+                        "total": total_tickets,
+                        "has_more": has_more,
+                        "next_cursor": next_cursor
+                    }
+                });
 
                 Ok(CallToolResponse {
                     content: vec![ToolContent {
                         content_type: "application/json".to_string(),
-                        text: serde_json::to_string_pretty(&tickets)?,
+                        text: serde_json::to_string_pretty(&response_data)?,
                     }],
                     is_error: Some(false),
                 })
@@ -303,6 +337,10 @@ impl ToolHandler for ListReadyTicketsTool {
                     "project_id": {
                         "type": "string",
                         "description": "Optional project identifier to filter tickets"
+                    },
+                    "cursor": {
+                        "type": "string",
+                        "description": "Optional cursor for pagination"
                     }
                 },
                 "required": []
@@ -323,6 +361,11 @@ impl ToolHandler for ListBlockedTicketsTool {
         let args = arguments.unwrap_or_else(|| Value::Object(serde_json::Map::new()));
         let project_id: Option<String> = extract_optional_param(&Some(args.clone()), "project_id")?;
 
+        // Parse pagination parameters
+        let cursor_str: Option<String> = extract_optional_param(&Some(args.clone()), "cursor")?;
+        let cursor = PaginationCursor::from_cursor_string(cursor_str)
+            .map_err(crate::error::AppError::BadRequest)?;
+
         info!("Listing blocked tickets for project: {:?}", project_id);
 
         match crate::database::tickets::Ticket::get_blocked_tickets(
@@ -331,13 +374,42 @@ impl ToolHandler for ListBlockedTicketsTool {
         )
         .await
         {
-            Ok(tickets) => {
-                info!("Found {} blocked tickets", tickets.len());
+            Ok(all_tickets) => {
+                info!("Found {} blocked tickets", all_tickets.len());
+
+                // Apply pagination
+                let total_tickets = all_tickets.len();
+                let start = cursor.offset;
+                let end = std::cmp::min(start + cursor.page_size, total_tickets);
+                let has_more = end < total_tickets;
+
+                let paginated_tickets = if start >= total_tickets {
+                    Vec::new()
+                } else {
+                    all_tickets[start..end].to_vec()
+                };
+
+                // Generate next cursor if there are more results
+                let next_cursor = if has_more {
+                    cursor.next_cursor(true)
+                } else {
+                    None
+                };
+
+                // Create response with pagination info
+                let response_data = serde_json::json!({
+                    "tickets": paginated_tickets,
+                    "pagination": {
+                        "total": total_tickets,
+                        "has_more": has_more,
+                        "next_cursor": next_cursor
+                    }
+                });
 
                 Ok(CallToolResponse {
                     content: vec![ToolContent {
                         content_type: "application/json".to_string(),
-                        text: serde_json::to_string_pretty(&tickets)?,
+                        text: serde_json::to_string_pretty(&response_data)?,
                     }],
                     is_error: Some(false),
                 })
@@ -362,6 +434,10 @@ impl ToolHandler for ListBlockedTicketsTool {
                     "project_id": {
                         "type": "string",
                         "description": "Optional project identifier to filter tickets"
+                    },
+                    "cursor": {
+                        "type": "string",
+                        "description": "Optional cursor for pagination"
                     }
                 },
                 "required": []

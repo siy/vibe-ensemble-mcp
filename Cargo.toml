@@ -54,6 +54,7 @@ uuid = { version = "1.0", features = ["v4"] }
 chrono = { version = "0.4", features = ["serde"] }
 anyhow = "1.0"
 dashmap = "5.5"
+base64 = "0.21"
 
 # CLI and config
 clap = { version = "4.0", features = ["derive"] }

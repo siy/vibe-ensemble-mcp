@@ -81,7 +81,7 @@ pub struct ServerInfo {
     pub version: String,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Tool {
     pub name: String,
     pub description: String,
@@ -92,6 +92,8 @@ pub struct Tool {
 #[derive(Debug, Serialize, Deserialize)]
 pub struct ListToolsResponse {
     pub tools: Vec<Tool>,
+    #[serde(rename = "nextCursor", skip_serializing_if = "Option::is_none")]
+    pub next_cursor: Option<String>,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -136,6 +138,8 @@ pub struct PromptArgument {
 #[derive(Debug, Serialize, Deserialize)]
 pub struct ListPromptsResponse {
     pub prompts: Vec<Prompt>,
+    #[serde(rename = "nextCursor", skip_serializing_if = "Option::is_none")]
+    pub next_cursor: Option<String>,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -168,3 +172,55 @@ pub const INVALID_REQUEST: i32 = -32600;
 pub const METHOD_NOT_FOUND: i32 = -32601;
 pub const INVALID_PARAMS: i32 = -32602;
 pub const INTERNAL_ERROR: i32 = -32603;
+
+// Pagination types and utilities
+#[derive(Debug, Serialize, Deserialize)]
+pub struct PaginationParams {
+    pub cursor: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PaginationCursor {
+    pub offset: usize,
+    pub page_size: usize,
+}
+
+impl PaginationCursor {
+    pub fn new(offset: usize, page_size: usize) -> Self {
+        Self { offset, page_size }
+    }
+
+    pub fn from_cursor_string(cursor: Option<String>) -> Result<Self, String> {
+        match cursor {
+            None => Ok(Self::new(0, 50)), // Default page size of 50
+            Some(cursor_str) => {
+                use base64::{engine::general_purpose, Engine};
+                let decoded = general_purpose::STANDARD
+                    .decode(&cursor_str)
+                    .map_err(|_| "Invalid cursor format".to_string())?;
+                let cursor_json = String::from_utf8(decoded)
+                    .map_err(|_| "Invalid cursor encoding".to_string())?;
+                let cursor: PaginationCursor = serde_json::from_str(&cursor_json)
+                    .map_err(|_| "Invalid cursor structure".to_string())?;
+                Ok(cursor)
+            }
+        }
+    }
+
+    pub fn to_cursor_string(&self) -> Result<String, String> {
+        use base64::{engine::general_purpose, Engine};
+        let cursor_json =
+            serde_json::to_string(self).map_err(|_| "Failed to serialize cursor".to_string())?;
+        let encoded = general_purpose::STANDARD.encode(cursor_json.as_bytes());
+        Ok(encoded)
+    }
+
+    pub fn next_cursor(&self, has_more: bool) -> Option<String> {
+        if has_more {
+            let next = Self::new(self.offset + self.page_size, self.page_size);
+            next.to_cursor_string().ok()
+        } else {
+            None
+        }
+    }
+}

@@ -8,7 +8,7 @@ use super::{
         create_error_response, create_success_response, extract_optional_param, extract_param,
         ToolHandler,
     },
-    types::{CallToolResponse, Tool, ToolContent},
+    types::{CallToolResponse, PaginationCursor, Tool, ToolContent},
 };
 use crate::{
     database::{
@@ -289,15 +289,48 @@ impl ToolHandler for ListTicketsTool {
         let project_id: Option<String> = extract_optional_param(&Some(args.clone()), "project_id")?;
         let status: Option<String> = extract_optional_param(&Some(args.clone()), "status")?;
 
-        let tickets =
+        // Parse pagination parameters
+        let cursor_str: Option<String> = extract_optional_param(&Some(args.clone()), "cursor")?;
+        let cursor = PaginationCursor::from_cursor_string(cursor_str)
+            .map_err(crate::error::AppError::BadRequest)?;
+
+        // Get all tickets first
+        let all_tickets =
             Ticket::list_by_project(&state.db, project_id.as_deref(), status.as_deref()).await?;
 
-        let filtered_tickets = tickets;
+        // Apply pagination
+        let total_tickets = all_tickets.len();
+        let start = cursor.offset;
+        let end = std::cmp::min(start + cursor.page_size, total_tickets);
+        let has_more = end < total_tickets;
+
+        let paginated_tickets = if start >= total_tickets {
+            Vec::new()
+        } else {
+            all_tickets[start..end].to_vec()
+        };
+
+        // Generate next cursor if there are more results
+        let next_cursor = if has_more {
+            cursor.next_cursor(true)
+        } else {
+            None
+        };
+
+        // Create response with pagination info
+        let response_data = json!({
+            "tickets": paginated_tickets,
+            "pagination": {
+                "total": total_tickets,
+                "has_more": has_more,
+                "next_cursor": next_cursor
+            }
+        });
 
         Ok(CallToolResponse {
             content: vec![ToolContent {
                 content_type: "text".to_string(),
-                text: serde_json::to_string_pretty(&filtered_tickets)?,
+                text: serde_json::to_string_pretty(&response_data)?,
             }],
             is_error: Some(false),
         })
@@ -317,6 +350,10 @@ impl ToolHandler for ListTicketsTool {
                     "status": {
                         "type": "string",
                         "description": "Optional status filter (open, in_progress, completed, closed)"
+                    },
+                    "cursor": {
+                        "type": "string",
+                        "description": "Optional cursor for pagination"
                     }
                 },
                 "required": []

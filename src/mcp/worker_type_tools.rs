@@ -5,7 +5,7 @@ use super::tools::{
     create_error_response, create_success_response, extract_optional_param, extract_param,
     ToolHandler,
 };
-use super::types::{CallToolResponse, Tool};
+use super::types::{CallToolResponse, PaginationCursor, Tool, ToolContent};
 use crate::{
     database::worker_types::{CreateWorkerTypeRequest, UpdateWorkerTypeRequest, WorkerType},
     error::Result,
@@ -122,15 +122,53 @@ pub struct ListWorkerTypesTool;
 #[async_trait]
 impl ToolHandler for ListWorkerTypesTool {
     async fn call(&self, state: &AppState, arguments: Option<Value>) -> Result<CallToolResponse> {
-        let project_id: Option<String> = extract_optional_param(&arguments, "project_id")?;
+        let args = arguments.unwrap_or_default();
+
+        let project_id: Option<String> = extract_optional_param(&Some(args.clone()), "project_id")?;
+
+        // Parse pagination parameters
+        let cursor_str: Option<String> = extract_optional_param(&Some(args.clone()), "cursor")?;
+        let cursor = PaginationCursor::from_cursor_string(cursor_str)
+            .map_err(crate::error::AppError::BadRequest)?;
 
         match WorkerType::list_by_project(&state.db, project_id.as_deref()).await {
-            Ok(worker_types) => {
-                let worker_types_json = serde_json::to_string_pretty(&worker_types)?;
-                Ok(create_success_response(&format!(
-                    "Worker types:\n{}",
-                    worker_types_json
-                )))
+            Ok(all_worker_types) => {
+                // Apply pagination
+                let total_worker_types = all_worker_types.len();
+                let start = cursor.offset;
+                let end = std::cmp::min(start + cursor.page_size, total_worker_types);
+                let has_more = end < total_worker_types;
+
+                let paginated_worker_types = if start >= total_worker_types {
+                    Vec::new()
+                } else {
+                    all_worker_types[start..end].to_vec()
+                };
+
+                // Generate next cursor if there are more results
+                let next_cursor = if has_more {
+                    cursor.next_cursor(true)
+                } else {
+                    None
+                };
+
+                // Create response with pagination info
+                let response_data = json!({
+                    "worker_types": paginated_worker_types,
+                    "pagination": {
+                        "total": total_worker_types,
+                        "has_more": has_more,
+                        "next_cursor": next_cursor
+                    }
+                });
+
+                Ok(CallToolResponse {
+                    content: vec![ToolContent {
+                        content_type: "text".to_string(),
+                        text: serde_json::to_string_pretty(&response_data)?,
+                    }],
+                    is_error: Some(false),
+                })
             }
             Err(e) => Ok(create_error_response(&format!(
                 "Failed to list worker types: {}",
@@ -149,8 +187,13 @@ impl ToolHandler for ListWorkerTypesTool {
                     "project_id": {
                         "type": "string",
                         "description": "Optional project ID to filter worker types"
+                    },
+                    "cursor": {
+                        "type": "string",
+                        "description": "Optional cursor for pagination"
                     }
-                }
+                },
+                "required": []
             }),
         }
     }

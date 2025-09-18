@@ -76,7 +76,14 @@ impl McpServer {
         let response = match request.method.as_str() {
             "initialize" => self.handle_initialize(request.params).await,
             "notifications/initialized" => self.handle_initialized().await,
-            "list_tools" | "tools/list" => self.handle_list_tools().await,
+            "list_tools" | "tools/list" => {
+                // Check if this is a paginated request by looking for params
+                if request.params.is_some() {
+                    self.handle_list_tools_with_pagination(request.params).await
+                } else {
+                    self.handle_list_tools().await
+                }
+            }
             "call_tool" | "tools/call" => self.handle_call_tool(state, request.params).await,
             "list_prompts" | "prompts/list" => self.handle_list_prompts().await,
             "get_prompt" | "prompts/get" => self.handle_get_prompt(request.params).await,
@@ -175,10 +182,61 @@ impl McpServer {
     }
 
     async fn handle_list_tools(&self) -> std::result::Result<Value, JsonRpcError> {
-        info!("Handling list_tools request");
+        self.handle_list_tools_with_pagination(None).await
+    }
 
-        let tools = self.tools.list_tools();
-        let response = ListToolsResponse { tools };
+    async fn handle_list_tools_with_pagination(
+        &self,
+        params: Option<Value>,
+    ) -> std::result::Result<Value, JsonRpcError> {
+        info!("Handling list_tools request with pagination");
+
+        // Parse pagination parameters if provided
+        let pagination_params = if let Some(params) = params {
+            serde_json::from_value::<PaginationParams>(params).map_err(|e| JsonRpcError {
+                code: INVALID_PARAMS,
+                message: format!("Invalid pagination params: {}", e),
+                data: None,
+            })?
+        } else {
+            PaginationParams { cursor: None }
+        };
+
+        // Parse cursor
+        let cursor =
+            PaginationCursor::from_cursor_string(pagination_params.cursor).map_err(|e| {
+                JsonRpcError {
+                    code: INVALID_PARAMS,
+                    message: format!("Invalid cursor: {}", e),
+                    data: None,
+                }
+            })?;
+
+        // Get all tools and apply pagination
+        let all_tools = self.tools.list_tools();
+        let total_tools = all_tools.len();
+
+        let start = cursor.offset;
+        let end = std::cmp::min(start + cursor.page_size, total_tools);
+        let has_more = end < total_tools;
+
+        let paginated_tools = if start >= total_tools {
+            Vec::new()
+        } else {
+            all_tools[start..end].to_vec()
+        };
+
+        // Generate next cursor if there are more results
+        let next_cursor = if has_more {
+            cursor.next_cursor(true)
+        } else {
+            None
+        };
+
+        let response = ListToolsResponse {
+            tools: paginated_tools,
+            next_cursor,
+        };
 
         let result = serde_json::to_value(response).map_err(|e| JsonRpcError {
             code: INTERNAL_ERROR,
@@ -278,7 +336,10 @@ impl McpServer {
             },
         ];
 
-        let response = ListPromptsResponse { prompts };
+        let response = ListPromptsResponse {
+            prompts,
+            next_cursor: None,
+        };
 
         let result = serde_json::to_value(response).map_err(|e| JsonRpcError {
             code: INTERNAL_ERROR,

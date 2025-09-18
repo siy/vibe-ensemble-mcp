@@ -4,7 +4,7 @@ use tracing::info;
 
 use super::{
     tools::{extract_optional_param, extract_param, ToolHandler},
-    types::{CallToolResponse, Tool, ToolContent},
+    types::{CallToolResponse, PaginationCursor, Tool, ToolContent},
 };
 use crate::{
     database::{events::Event, tickets::Ticket},
@@ -27,6 +27,11 @@ impl ToolHandler for ListEventsTool {
         let include_processed: bool =
             extract_optional_param(&Some(args.clone()), "include_processed")?.unwrap_or(false);
         let event_ids: Option<Vec<i64>> = extract_optional_param(&Some(args.clone()), "event_ids")?;
+
+        // Parse pagination parameters
+        let cursor_str: Option<String> = extract_optional_param(&Some(args.clone()), "cursor")?;
+        let cursor = PaginationCursor::from_cursor_string(cursor_str)
+            .map_err(crate::error::AppError::BadRequest)?;
 
         let events = if let Some(ref ids) = event_ids {
             // Get specific events by IDs (ignores processed filter when using specific IDs)
@@ -58,10 +63,39 @@ impl ToolHandler for ListEventsTool {
             .take(limit as usize)
             .collect();
 
+        // Apply pagination to the filtered events
+        let total_events = filtered_events.len();
+        let start = cursor.offset;
+        let end = std::cmp::min(start + cursor.page_size, total_events);
+        let has_more = end < total_events;
+
+        let paginated_events = if start >= total_events {
+            Vec::new()
+        } else {
+            filtered_events[start..end].to_vec()
+        };
+
+        // Generate next cursor if there are more results
+        let next_cursor = if has_more {
+            cursor.next_cursor(true)
+        } else {
+            None
+        };
+
+        // Create response with pagination info
+        let response_data = serde_json::json!({
+            "events": paginated_events,
+            "pagination": {
+                "total": total_events,
+                "has_more": has_more,
+                "next_cursor": next_cursor
+            }
+        });
+
         Ok(CallToolResponse {
             content: vec![ToolContent {
                 content_type: "text".to_string(),
-                text: serde_json::to_string_pretty(&filtered_events)?,
+                text: serde_json::to_string_pretty(&response_data)?,
             }],
             is_error: Some(false),
         })
@@ -94,6 +128,10 @@ impl ToolHandler for ListEventsTool {
                             "type": "integer"
                         },
                         "description": "Get specific events by their IDs. When provided, ignores include_processed filter and other filtering options."
+                    },
+                    "cursor": {
+                        "type": "string",
+                        "description": "Optional cursor for pagination"
                     }
                 },
                 "required": []
@@ -170,19 +208,24 @@ impl ToolHandler for GetTicketsByStageTool {
 
         let stage: String = extract_param(&Some(args.clone()), "stage")?;
 
+        // Parse pagination parameters
+        let cursor_str: Option<String> = extract_optional_param(&Some(args.clone()), "cursor")?;
+        let cursor = PaginationCursor::from_cursor_string(cursor_str)
+            .map_err(crate::error::AppError::BadRequest)?;
+
         info!("Getting tickets for stage: {}", stage);
 
-        // Get tickets with matching current_stage
-        let tickets = sqlx::query_as::<_, Ticket>(
+        // Get all tickets with matching current_stage
+        let all_tickets = sqlx::query_as::<_, Ticket>(
             r#"
             SELECT ticket_id, project_id, title, execution_plan, current_stage, state, priority,
                    processing_worker_id, created_at, updated_at, closed_at
             FROM tickets
             WHERE current_stage = ?1 AND state = 'open'
-            ORDER BY 
-                CASE priority 
+            ORDER BY
+                CASE priority
                     WHEN 'urgent' THEN 1
-                    WHEN 'high' THEN 2  
+                    WHEN 'high' THEN 2
                     WHEN 'medium' THEN 3
                     WHEN 'low' THEN 4
                     ELSE 5
@@ -194,10 +237,39 @@ impl ToolHandler for GetTicketsByStageTool {
         .fetch_all(&state.db)
         .await?;
 
+        // Apply pagination
+        let total_tickets = all_tickets.len();
+        let start = cursor.offset;
+        let end = std::cmp::min(start + cursor.page_size, total_tickets);
+        let has_more = end < total_tickets;
+
+        let paginated_tickets = if start >= total_tickets {
+            Vec::new()
+        } else {
+            all_tickets[start..end].to_vec()
+        };
+
+        // Generate next cursor if there are more results
+        let next_cursor = if has_more {
+            cursor.next_cursor(true)
+        } else {
+            None
+        };
+
+        // Create response with pagination info
+        let response_data = serde_json::json!({
+            "tickets": paginated_tickets,
+            "pagination": {
+                "total": total_tickets,
+                "has_more": has_more,
+                "next_cursor": next_cursor
+            }
+        });
+
         Ok(CallToolResponse {
             content: vec![ToolContent {
                 content_type: "text".to_string(),
-                text: serde_json::to_string_pretty(&tickets)?,
+                text: serde_json::to_string_pretty(&response_data)?,
             }],
             is_error: Some(false),
         })
@@ -214,6 +286,10 @@ impl ToolHandler for GetTicketsByStageTool {
                     "stage": {
                         "type": "string",
                         "description": "Name of the stage (e.g., 'planning', 'design', 'coding', 'testing')"
+                    },
+                    "cursor": {
+                        "type": "string",
+                        "description": "Optional cursor for pagination"
                     }
                 },
                 "required": ["stage"]

@@ -127,7 +127,9 @@ impl Ticket {
         let ticket = sqlx::query_as::<_, Ticket>(
             r#"
             SELECT ticket_id, project_id, title, execution_plan, current_stage, state, priority,
-                   processing_worker_id, created_at, updated_at, closed_at
+                   processing_worker_id, created_at, updated_at, closed_at,
+                   parent_ticket_id, dependency_status, created_by_worker_id, ticket_type,
+                   rules_version, patterns_version, inherited_from_parent
             FROM tickets
             WHERE ticket_id = ?1
         "#,
@@ -153,7 +155,9 @@ impl Ticket {
         let mut query = String::from(
             r#"
             SELECT ticket_id, project_id, title, execution_plan, current_stage, state, priority,
-                   processing_worker_id, created_at, updated_at, closed_at
+                   processing_worker_id, created_at, updated_at, closed_at,
+                   parent_ticket_id, dependency_status, created_by_worker_id, ticket_type,
+                   rules_version, patterns_version, inherited_from_parent
             FROM tickets
         "#,
         );
@@ -201,11 +205,13 @@ impl Ticket {
     ) -> Result<Option<Ticket>> {
         let ticket = sqlx::query_as::<_, Ticket>(
             r#"
-            UPDATE tickets 
+            UPDATE tickets
             SET current_stage = ?1, updated_at = datetime('now')
             WHERE ticket_id = ?2
             RETURNING ticket_id, project_id, title, execution_plan, current_stage, state, priority,
-                     processing_worker_id, created_at, updated_at, closed_at
+                     processing_worker_id, created_at, updated_at, closed_at,
+                     parent_ticket_id, dependency_status, created_by_worker_id, ticket_type,
+                     rules_version, patterns_version, inherited_from_parent
         "#,
         )
         .bind(new_stage)
@@ -226,11 +232,13 @@ impl Ticket {
         // Update ticket status
         let ticket = sqlx::query_as::<_, Ticket>(
             r#"
-            UPDATE tickets 
+            UPDATE tickets
             SET current_stage = ?1, state = 'closed', updated_at = datetime('now'), closed_at = datetime('now')
             WHERE ticket_id = ?2
             RETURNING ticket_id, project_id, title, execution_plan, current_stage, state, priority,
-                     processing_worker_id, created_at, updated_at, closed_at
+                     processing_worker_id, created_at, updated_at, closed_at,
+                     parent_ticket_id, dependency_status, created_by_worker_id, ticket_type,
+                     rules_version, patterns_version, inherited_from_parent
         "#,
         )
         .bind(status)
@@ -294,11 +302,13 @@ impl Ticket {
     ) -> Result<Option<Ticket>> {
         let ticket = sqlx::query_as::<_, Ticket>(
             r#"
-            UPDATE tickets 
+            UPDATE tickets
             SET state = ?1, updated_at = datetime('now')
             WHERE ticket_id = ?2
             RETURNING ticket_id, project_id, title, execution_plan, current_stage, state, priority,
-                     processing_worker_id, created_at, updated_at, closed_at
+                     processing_worker_id, created_at, updated_at, closed_at,
+                     parent_ticket_id, dependency_status, created_by_worker_id, ticket_type,
+                     rules_version, patterns_version, inherited_from_parent
         "#,
         )
         .bind(state)
@@ -316,11 +326,13 @@ impl Ticket {
     ) -> Result<Option<Ticket>> {
         let ticket = sqlx::query_as::<_, Ticket>(
             r#"
-            UPDATE tickets 
+            UPDATE tickets
             SET priority = ?1, updated_at = datetime('now')
             WHERE ticket_id = ?2
             RETURNING ticket_id, project_id, title, execution_plan, current_stage, state, priority,
-                     processing_worker_id, created_at, updated_at, closed_at
+                     processing_worker_id, created_at, updated_at, closed_at,
+                     parent_ticket_id, dependency_status, created_by_worker_id, ticket_type,
+                     rules_version, patterns_version, inherited_from_parent
         "#,
         )
         .bind(priority)
@@ -339,11 +351,13 @@ impl Ticket {
         let tickets = sqlx::query_as::<_, Ticket>(
             r#"
             SELECT ticket_id, project_id, title, execution_plan, current_stage, state, priority,
-                   processing_worker_id, created_at, updated_at, closed_at
+                   processing_worker_id, created_at, updated_at, closed_at,
+                   parent_ticket_id, dependency_status, created_by_worker_id, ticket_type,
+                   rules_version, patterns_version, inherited_from_parent
             FROM tickets
-            WHERE project_id = ?1 
-              AND current_stage = ?2 
-              AND processing_worker_id IS NULL 
+            WHERE project_id = ?1
+              AND current_stage = ?2
+              AND processing_worker_id IS NULL
               AND state = 'open'
             ORDER BY priority DESC, created_at ASC
         "#,
@@ -387,6 +401,8 @@ impl Ticket {
             r#"
             SELECT t.ticket_id, t.project_id, t.title, t.execution_plan, t.current_stage,
                    t.state, t.priority, t.processing_worker_id, t.created_at, t.updated_at, t.closed_at,
+                   t.parent_ticket_id, t.dependency_status, t.created_by_worker_id, t.ticket_type,
+                   t.rules_version, t.patterns_version, t.inherited_from_parent,
                    p.rules, p.patterns
             FROM tickets t
             LEFT JOIN projects p ON t.project_id = p.repository_name

@@ -7,7 +7,7 @@ use super::tools::{
     create_error_response, create_success_response, extract_optional_param, extract_param,
     ToolHandler,
 };
-use super::types::{CallToolResponse, Tool};
+use super::types::{CallToolResponse, PaginationCursor, Tool, ToolContent};
 use crate::{
     database::projects::{CreateProjectRequest, Project, UpdateProjectRequest},
     error::Result,
@@ -128,14 +128,52 @@ pub struct ListProjectsTool;
 
 #[async_trait]
 impl ToolHandler for ListProjectsTool {
-    async fn call(&self, state: &AppState, _arguments: Option<Value>) -> Result<CallToolResponse> {
+    async fn call(&self, state: &AppState, arguments: Option<Value>) -> Result<CallToolResponse> {
+        let args = arguments.unwrap_or_default();
+
+        // Parse pagination parameters
+        let cursor_str: Option<String> = extract_optional_param(&Some(args.clone()), "cursor")?;
+        let cursor = PaginationCursor::from_cursor_string(cursor_str)
+            .map_err(crate::error::AppError::BadRequest)?;
+
         match Project::list_all(&state.db).await {
-            Ok(projects) => {
-                let projects_json = serde_json::to_string_pretty(&projects)?;
-                Ok(create_success_response(&format!(
-                    "Projects:\n{}",
-                    projects_json
-                )))
+            Ok(all_projects) => {
+                // Apply pagination
+                let total_projects = all_projects.len();
+                let start = cursor.offset;
+                let end = std::cmp::min(start + cursor.page_size, total_projects);
+                let has_more = end < total_projects;
+
+                let paginated_projects = if start >= total_projects {
+                    Vec::new()
+                } else {
+                    all_projects[start..end].to_vec()
+                };
+
+                // Generate next cursor if there are more results
+                let next_cursor = if has_more {
+                    cursor.next_cursor(true)
+                } else {
+                    None
+                };
+
+                // Create response with pagination info
+                let response_data = json!({
+                    "projects": paginated_projects,
+                    "pagination": {
+                        "total": total_projects,
+                        "has_more": has_more,
+                        "next_cursor": next_cursor
+                    }
+                });
+
+                Ok(CallToolResponse {
+                    content: vec![ToolContent {
+                        content_type: "text".to_string(),
+                        text: serde_json::to_string_pretty(&response_data)?,
+                    }],
+                    is_error: Some(false),
+                })
             }
             Err(e) => Ok(create_error_response(&format!(
                 "Failed to list projects: {}",
@@ -150,7 +188,13 @@ impl ToolHandler for ListProjectsTool {
             description: "List all projects".to_string(),
             input_schema: json!({
                 "type": "object",
-                "properties": {}
+                "properties": {
+                    "cursor": {
+                        "type": "string",
+                        "description": "Optional cursor for pagination"
+                    }
+                },
+                "required": []
             }),
         }
     }
