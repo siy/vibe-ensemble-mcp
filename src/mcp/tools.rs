@@ -98,7 +98,8 @@ pub fn create_json_error_response(error: &str) -> CallToolResponse {
     CallToolResponse {
         content: vec![ToolContent {
             content_type: "application/json".to_string(),
-            text: serde_json::to_string_pretty(&error_data).unwrap_or_else(|_| r#"{"error": "Unknown error"}"#.to_string()),
+            text: serde_json::to_string_pretty(&error_data)
+                .unwrap_or_else(|_| r#"{"error": "Unknown error"}"#.to_string()),
         }],
         is_error: Some(true),
     }

@@ -108,7 +108,6 @@ pub async fn sse_handler(
     )
 }
 
-
 /// HTTP POST endpoint for receiving messages from Claude Code SSE transport
 pub async fn sse_message_handler(
     State(state): State<AppState>,

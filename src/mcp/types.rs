@@ -225,10 +225,7 @@ impl PaginationCursor {
     }
 
     /// Apply pagination to a collection and return paginated data with metadata
-    pub fn paginate<T: Clone>(
-        &self,
-        items: Vec<T>,
-    ) -> PaginationResult<T> {
+    pub fn paginate<T: Clone>(&self, items: Vec<T>) -> PaginationResult<T> {
         let total = items.len();
         let start = self.offset;
         let end = std::cmp::min(start + self.page_size, total);

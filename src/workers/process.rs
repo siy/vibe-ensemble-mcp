@@ -64,10 +64,15 @@ impl ProcessManager {
             return Ok(ClaudePermissions::default());
         }
 
-        let content = fs::read_to_string(&settings_path)
-            .with_context(|| format!("Failed to read settings file: {}", settings_path.display()))?;
-        let settings: ClaudeSettings = serde_json::from_str(&content)
-            .with_context(|| format!("Failed to parse Claude settings from {}", settings_path.display()))?;
+        let content = fs::read_to_string(&settings_path).with_context(|| {
+            format!("Failed to read settings file: {}", settings_path.display())
+        })?;
+        let settings: ClaudeSettings = serde_json::from_str(&content).with_context(|| {
+            format!(
+                "Failed to parse Claude settings from {}",
+                settings_path.display()
+            )
+        })?;
 
         info!(
             "Loaded inherit permissions with {} allowed, {} denied tools",
@@ -94,10 +99,18 @@ impl ProcessManager {
             return Ok(ClaudePermissions::default());
         }
 
-        let content = fs::read_to_string(&permissions_path)
-            .with_context(|| format!("Failed to read permissions file: {}", permissions_path.display()))?;
-        let settings: ClaudeSettings = serde_json::from_str(&content)
-            .with_context(|| format!("Failed to parse worker permissions from {}", permissions_path.display()))?;
+        let content = fs::read_to_string(&permissions_path).with_context(|| {
+            format!(
+                "Failed to read permissions file: {}",
+                permissions_path.display()
+            )
+        })?;
+        let settings: ClaudeSettings = serde_json::from_str(&content).with_context(|| {
+            format!(
+                "Failed to parse worker permissions from {}",
+                permissions_path.display()
+            )
+        })?;
 
         info!(
             "Loaded file permissions with {} allowed, {} denied tools",
@@ -243,7 +256,12 @@ impl ProcessManager {
         Err(anyhow::anyhow!("No valid JSON found in worker output"))
     }
 
-    fn create_mcp_config(project_path: &str, worker_id: &str, host: &str, server_port: u16) -> Result<String> {
+    fn create_mcp_config(
+        project_path: &str,
+        worker_id: &str,
+        host: &str,
+        server_port: u16,
+    ) -> Result<String> {
         debug!(
             "Creating MCP config for worker {} in project path: {}",
             worker_id, project_path
