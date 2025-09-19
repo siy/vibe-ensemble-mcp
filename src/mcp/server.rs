@@ -406,7 +406,7 @@ impl McpServer {
 - Tickets automatically advance through stages as workers complete their tasks
 - Monitor stage progress with `get_tickets_by_stage` and `list_events`
 
-## Available Tools (20 total)
+## Available Tools (25 total)
 
 **Project Management**: create_project, list_projects, get_project, update_project, delete_project
 **Worker Types**: create_worker_type, list_worker_types, get_worker_type, update_worker_type, delete_worker_type
@@ -528,16 +528,16 @@ Each worker type needs its own system prompt tailored to its specialization.
 - Break work into tickets with 3-5 stages
 - Each stage should specify which worker type handles it
 - Include clear success criteria
-- Use `update_ticket_stage` to route tickets to appropriate stages
+- Use `resume_ticket_processing(ticket_id, stage=...)` to route tickets to appropriate stages
 
 ### Step 4: Update Ticket Stages (Workers Auto-Spawn)
 **⚠️ CRITICAL: Workers are now AUTO-SPAWNED when tickets reach specific stages!**
 
 Simply update tickets to appropriate stage names:
 - **\"planning\"**: For design and architecture work
-- **\"coding\"**: For implementation work
+- **\"implementation\"**: For implementation work
 - **\"testing\"**: For validation and QA work
-- **\"reviewing\"**: For code review work
+- **\"review\"**: For code review work
 - **\"documentation\"**: For documentation work
 
 The system automatically:
@@ -570,7 +570,7 @@ The system automatically:
 1. **CREATE PROJECTS**: Using create_project tool
 2. **DEFINE WORKER TYPES**: Using create_worker_type with system prompts
 3. **CREATE TICKETS**: For ALL work (even 'simple' tasks)
-4. **UPDATE TICKET STAGES**: Using update_ticket_stage (workers auto-spawn)
+4. **UPDATE TICKET STAGES**: Using resume_ticket_processing (workers auto-spawn)
 5. **MONITOR PROGRESS**: Using list_events, get_tickets_by_stage, list_tickets
 
 ## Key Success Factors
@@ -611,36 +611,36 @@ This delegation-first approach prevents context drift, ensures specialization, a
 
 ### 1. Task Stage Architecture
 **For {} Tasks, organize work into specialized stages:**
-- **analysis**: Requirements analysis, dependency mapping
-- **coding**: Feature implementation, coding
+- **planning**: Requirements analysis, dependency mapping
+- **implementation**: Feature implementation, coding
 - **testing**: Validation, QA, automated testing
-- **reviewing**: Code reviews, optimization
+- **review**: Code reviews, optimization
 - **documentation**: Docs, guides, README updates
 
 ### 2. Auto-Spawn Worker Pattern
 Workers are automatically spawned when tickets are updated to specific stages:
 ```
-update_ticket_stage(ticket_id, \"analysis\")    # Auto-spawns analyzer worker if needed
-update_ticket_stage(ticket_id, \"coding\")     # Auto-spawns implementer worker if needed  
-update_ticket_stage(ticket_id, \"testing\")   # Auto-spawns tester worker if needed
-update_ticket_stage(ticket_id, \"reviewing\") # Auto-spawns reviewer worker if needed
+resume_ticket_processing(ticket_id, \"planning\")       # Auto-spawns planner worker if needed
+resume_ticket_processing(ticket_id, \"implementation\")  # Auto-spawns implementer worker if needed
+resume_ticket_processing(ticket_id, \"testing\")        # Auto-spawns tester worker if needed
+resume_ticket_processing(ticket_id, \"review\")         # Auto-spawns reviewer worker if needed
 ```
 
 Workers automatically pull tasks from their assigned stage and complete when stage work is done.
 
 ### 3. Ticket-to-Stage Assignment Flow
 1. **Coordinator**: Create ticket with multi-stage execution plan
-2. **Coordinator**: Update ticket to first stage: `update_ticket_stage(ticket_id, \"analysis\")`
-3. **Analyzer Worker**: Automatically picks up task, completes analysis stage
-4. **Analyzer Worker**: Adds detailed report via `add_ticket_comment`
-5. **Coordinator**: Moves ticket to next stage: `update_ticket_stage(ticket_id, \"coding\")`
-6. **Developer Worker**: Continues from analysis, implements features
+2. **Coordinator**: Update ticket to first stage: `resume_ticket_processing(ticket_id, \"planning\")`
+3. **Planning Worker**: Automatically picks up task, completes planning stage
+4. **Planning Worker**: Adds detailed report via `add_ticket_comment`
+5. **Coordinator**: Moves ticket to next stage: `resume_ticket_processing(ticket_id, \"implementation\")`
+6. **Implementation Worker**: Continues from planning, implements features
 7. **Repeat** through all stages until completion
 
 ### 4. Stage-Aware Communication Protocol
 - Workers use `get_tickets_by_stage(stage_name)` to get their tasks
 - Workers use `add_ticket_comment` with stage reports
-- Workers use `update_ticket_stage` when stage is done
+- Workers signal stage transitions via JSON outcome
 - Coordinator uses `get_tickets_by_stage` to monitor stage loads
 - Coordinator uses `list_events` to track overall progress
 - Coordinator uses `resolve_event` to mark events as resolved with investigation summary
@@ -681,7 +681,7 @@ Workers automatically pull tasks from their assigned stage and complete when sta
 ### ✅ What Coordinators SHOULD Do:
 - Create projects and define worker types
 - Create tickets for ALL technical tasks (no exceptions)
-- Update tickets to appropriate stages (workers auto-spawn as needed)
+- Resume tickets to appropriate stages using resume_ticket_processing (workers auto-spawn as needed)
 - Coordinate workflow between specialized workers
 - Ensure proper handoffs between stages
 
