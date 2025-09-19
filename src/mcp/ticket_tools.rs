@@ -5,8 +5,8 @@ use uuid::Uuid;
 
 use super::{
     tools::{
-        create_error_response, create_success_response, extract_optional_param, extract_param,
-        ToolHandler,
+        create_error_response, create_json_success_response, create_success_response,
+        extract_optional_param, extract_param, ToolHandler,
     },
     types::{CallToolResponse, PaginationCursor, Tool, ToolContent},
 };
@@ -104,40 +104,23 @@ impl ToolHandler for CreateTicketTool {
         let ticket = Ticket::create(&state.db, req).await?;
 
         // Broadcast ticket_created event
-        let event = json!({
-            "jsonrpc": "2.0",
-            "method": "notifications/resources/updated",
-            "params": {
-                "uri": format!("vibe-ensemble://tickets/{}", ticket.ticket_id),
-                "event": {
-                    "type": "ticket_created",
-                    "ticket": {
-                        "ticket_id": ticket.ticket_id,
-                        "project_id": ticket.project_id,
-                        "title": ticket.title,
-                        "execution_plan": ticket.execution_plan,
-                        "current_stage": ticket.current_stage,
-                        "state": ticket.state,
-                        "created_at": ticket.created_at
-                    },
-                    "timestamp": chrono::Utc::now().to_rfc3339()
-                }
-            }
-        });
-
-        if let Err(e) = state.event_broadcaster.broadcast(event.to_string()) {
-            tracing::warn!("Failed to broadcast ticket_created event: {}", e);
-        } else {
-            tracing::debug!(
-                "Successfully broadcast ticket_created event for: {}",
-                ticket.ticket_id
-            );
-        }
+        use crate::events::EventPayload;
+        let event = EventPayload::ticket_created_with_data(
+            &ticket.ticket_id,
+            &ticket.project_id,
+            &ticket.title,
+            &ticket.current_stage,
+        );
+        state.event_broadcaster.broadcast(event);
+        tracing::debug!(
+            "Successfully broadcast ticket_created event for: {}",
+            ticket.ticket_id
+        );
 
         // Automatically submit the ticket to the initial stage queue
         match state
             .queue_manager
-            .submit_task(&project_id, &initial_stage, &ticket_id, &state.db)
+            .submit_task(&project_id, &initial_stage, &ticket_id)
             .await
         {
             Ok(task_id) => {
@@ -239,16 +222,10 @@ impl ToolHandler for GetTicketTool {
             Some(ticket) => {
                 let comments = Comment::get_by_ticket_id(&state.db, &ticket_id).await?;
 
-                Ok(CallToolResponse {
-                    content: vec![ToolContent {
-                        content_type: "text".to_string(),
-                        text: serde_json::to_string_pretty(&json!({
-                            "ticket": ticket,
-                            "comments": comments
-                        }))?,
-                    }],
-                    is_error: Some(false),
-                })
+                Ok(create_json_success_response(json!({
+                    "ticket": ticket,
+                    "comments": comments
+                })))
             }
             None => Ok(create_error_response(&format!(
                 "Ticket {} not found",
@@ -298,42 +275,20 @@ impl ToolHandler for ListTicketsTool {
         let all_tickets =
             Ticket::list_by_project(&state.db, project_id.as_deref(), status.as_deref()).await?;
 
-        // Apply pagination
-        let total_tickets = all_tickets.len();
-        let start = cursor.offset;
-        let end = std::cmp::min(start + cursor.page_size, total_tickets);
-        let has_more = end < total_tickets;
-
-        let paginated_tickets = if start >= total_tickets {
-            Vec::new()
-        } else {
-            all_tickets[start..end].to_vec()
-        };
-
-        // Generate next cursor if there are more results
-        let next_cursor = if has_more {
-            cursor.next_cursor(true)
-        } else {
-            None
-        };
+        // Apply pagination using helper
+        let pagination_result = cursor.paginate(all_tickets);
 
         // Create response with pagination info
         let response_data = json!({
-            "tickets": paginated_tickets,
+            "tickets": pagination_result.items,
             "pagination": {
-                "total": total_tickets,
-                "has_more": has_more,
-                "next_cursor": next_cursor
+                "total": pagination_result.total,
+                "has_more": pagination_result.has_more,
+                "next_cursor": pagination_result.next_cursor
             }
         });
 
-        Ok(CallToolResponse {
-            content: vec![ToolContent {
-                content_type: "text".to_string(),
-                text: serde_json::to_string_pretty(&response_data)?,
-            }],
-            is_error: Some(false),
-        })
+        Ok(create_json_success_response(response_data))
     }
 
     fn definition(&self) -> Tool {
@@ -396,35 +351,13 @@ impl ToolHandler for AddTicketCommentTool {
         let comment = Comment::create_from_request(&state.db, req).await?;
 
         // Broadcast ticket_comment_added event
-        let event = json!({
-            "jsonrpc": "2.0",
-            "method": "notifications/resources/updated",
-            "params": {
-                "uri": format!("vibe-ensemble://tickets/{}", ticket_id),
-                "event": {
-                    "type": "ticket_comment_added",
-                    "comment": {
-                        "id": comment.id,
-                        "ticket_id": comment.ticket_id,
-                        "worker_type": comment.worker_type,
-                        "worker_id": comment.worker_id,
-                        "stage_number": comment.stage_number,
-                        "content": comment.content,
-                        "created_at": comment.created_at
-                    },
-                    "timestamp": chrono::Utc::now().to_rfc3339()
-                }
-            }
-        });
-
-        if let Err(e) = state.event_broadcaster.broadcast(event.to_string()) {
-            tracing::warn!("Failed to broadcast ticket_comment_added event: {}", e);
-        } else {
-            tracing::debug!(
-                "Successfully broadcast ticket_comment_added event for: {}",
-                ticket_id
-            );
-        }
+        use crate::events::EventPayload;
+        let event = EventPayload::ticket_updated(&ticket_id, "", "comment_added");
+        state.event_broadcaster.broadcast(event);
+        tracing::debug!(
+            "Successfully broadcast ticket_comment_added event for: {}",
+            ticket_id
+        );
 
         Ok(CallToolResponse {
             content: vec![ToolContent {
@@ -495,35 +428,13 @@ impl ToolHandler for CloseTicketTool {
         match result {
             Some(closed_ticket) => {
                 // Broadcast ticket_closed event
-                let event = json!({
-                    "jsonrpc": "2.0",
-                    "method": "notifications/resources/updated",
-                    "params": {
-                        "uri": format!("vibe-ensemble://tickets/{}", ticket_id),
-                        "event": {
-                            "type": "ticket_closed",
-                            "ticket_id": ticket_id,
-                            "resolution": resolution,
-                            "ticket": {
-                                "ticket_id": closed_ticket.ticket_id,
-                                "project_id": closed_ticket.project_id,
-                                "title": closed_ticket.title,
-                                "state": closed_ticket.state,
-                                "closed_at": closed_ticket.closed_at
-                            },
-                            "timestamp": chrono::Utc::now().to_rfc3339()
-                        }
-                    }
-                });
-
-                if let Err(e) = state.event_broadcaster.broadcast(event.to_string()) {
-                    tracing::warn!("Failed to broadcast ticket_closed event: {}", e);
-                } else {
-                    tracing::debug!(
-                        "Successfully broadcast ticket_closed event for: {}",
-                        ticket_id
-                    );
-                }
+                use crate::events::EventPayload;
+                let event = EventPayload::ticket_closed(&ticket_id, &closed_ticket.project_id);
+                state.event_broadcaster.broadcast(event);
+                tracing::debug!(
+                    "Successfully broadcast ticket_closed event for: {}",
+                    ticket_id
+                );
 
                 Ok(create_success_response(&format!(
                     "Closed ticket {} with resolution: {}",
@@ -651,12 +562,7 @@ impl ToolHandler for ResumeTicketProcessingTool {
         if target_state == "open" {
             match state
                 .queue_manager
-                .submit_task(
-                    &ticket_data.project_id,
-                    &target_stage,
-                    &ticket_id,
-                    &state.db,
-                )
+                .submit_task(&ticket_data.project_id, &target_stage, &ticket_id)
                 .await
             {
                 Ok(task_id) => {

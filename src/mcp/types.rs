@@ -223,4 +223,39 @@ impl PaginationCursor {
             None
         }
     }
+
+    /// Apply pagination to a collection and return paginated data with metadata
+    pub fn paginate<T: Clone>(
+        &self,
+        items: Vec<T>,
+    ) -> PaginationResult<T> {
+        let total = items.len();
+        let start = self.offset;
+        let end = std::cmp::min(start + self.page_size, total);
+        let has_more = end < total;
+
+        let paginated_items = if start >= total {
+            Vec::new()
+        } else {
+            items[start..end].to_vec()
+        };
+
+        let next_cursor = self.next_cursor(has_more);
+
+        PaginationResult {
+            items: paginated_items,
+            total,
+            has_more,
+            next_cursor,
+        }
+    }
+}
+
+/// Result of pagination operation with metadata
+#[derive(Debug, Clone)]
+pub struct PaginationResult<T> {
+    pub items: Vec<T>,
+    pub total: usize,
+    pub has_more: bool,
+    pub next_cursor: Option<String>,
 }

@@ -63,32 +63,16 @@ impl ToolHandler for ListEventsTool {
             .take(limit as usize)
             .collect();
 
-        // Apply pagination to the filtered events
-        let total_events = filtered_events.len();
-        let start = cursor.offset;
-        let end = std::cmp::min(start + cursor.page_size, total_events);
-        let has_more = end < total_events;
-
-        let paginated_events = if start >= total_events {
-            Vec::new()
-        } else {
-            filtered_events[start..end].to_vec()
-        };
-
-        // Generate next cursor if there are more results
-        let next_cursor = if has_more {
-            cursor.next_cursor(true)
-        } else {
-            None
-        };
+        // Apply pagination using helper
+        let pagination_result = cursor.paginate(filtered_events);
 
         // Create response with pagination info
         let response_data = serde_json::json!({
-            "events": paginated_events,
+            "events": pagination_result.items,
             "pagination": {
-                "total": total_events,
-                "has_more": has_more,
-                "next_cursor": next_cursor
+                "total": pagination_result.total,
+                "has_more": pagination_result.has_more,
+                "next_cursor": pagination_result.next_cursor
             }
         });
 
@@ -237,32 +221,16 @@ impl ToolHandler for GetTicketsByStageTool {
         .fetch_all(&state.db)
         .await?;
 
-        // Apply pagination
-        let total_tickets = all_tickets.len();
-        let start = cursor.offset;
-        let end = std::cmp::min(start + cursor.page_size, total_tickets);
-        let has_more = end < total_tickets;
-
-        let paginated_tickets = if start >= total_tickets {
-            Vec::new()
-        } else {
-            all_tickets[start..end].to_vec()
-        };
-
-        // Generate next cursor if there are more results
-        let next_cursor = if has_more {
-            cursor.next_cursor(true)
-        } else {
-            None
-        };
+        // Apply pagination using helper
+        let pagination_result = cursor.paginate(all_tickets);
 
         // Create response with pagination info
         let response_data = serde_json::json!({
-            "tickets": paginated_tickets,
+            "tickets": pagination_result.items,
             "pagination": {
-                "total": total_tickets,
-                "has_more": has_more,
-                "next_cursor": next_cursor
+                "total": pagination_result.total,
+                "has_more": pagination_result.has_more,
+                "next_cursor": pagination_result.next_cursor
             }
         });
 

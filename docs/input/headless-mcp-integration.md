@@ -114,7 +114,7 @@ claude --mcp-config /tmp/github-server.json -p "Analyze repository issues"
   "mcpServers": {
     "real-time-api": {
       "url": "https://api.example.com/mcp/sse",
-      "transport": "sse",
+      "type": "sse",
       "headers": {
         "Authorization": "Bearer ${API_TOKEN}",
         "User-Agent": "Claude-Code/1.0",
@@ -143,7 +143,7 @@ claude --mcp-config /tmp/github-server.json -p "Analyze repository issues"
   "mcpServers": {
     "streaming-service": {
       "url": "https://streaming-api.example.com/mcp",
-      "transport": "http",
+      "type": "http",
       "streaming": true,
       "headers": {
         "Content-Type": "application/json",
@@ -421,7 +421,7 @@ jobs:
       "mcpServers": {
         "prod-monitoring": {
           "url": "https://monitoring-api.company.com/mcp",
-          "transport": "https",
+          "type": "https",
           "headers": {
             "Authorization": "Bearer ${{ secrets.MONITORING_TOKEN }}"
           }
@@ -484,7 +484,7 @@ jobs:
   "mcpServers": {
     "oauth-service": {
       "url": "https://api.service.com/mcp",
-      "transport": "http",
+      "type": "http",
       "oauth": {
         "grant_type": "client_credentials",
         "token_url": "https://auth.service.com/oauth/token",
@@ -749,7 +749,7 @@ data: {
   "mcpServers": {
     "resilient-service": {
       "url": "https://api.example.com/mcp",
-      "transport": "sse",
+      "type": "sse",
       "retry": {
         "max_attempts": 5,
         "initial_delay": 1000,

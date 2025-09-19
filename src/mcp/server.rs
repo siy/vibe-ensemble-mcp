@@ -743,8 +743,7 @@ pub async fn mcp_handler(
         debug!("No MCP-Protocol-Version header present (optional for HTTP transport)");
     }
 
-    let mcp_server = McpServer::new();
-    let response = mcp_server.handle_request(&state, request).await;
+    let response = state.mcp_server.handle_request(&state, request).await;
 
     trace!(
         "MCP response: {}",

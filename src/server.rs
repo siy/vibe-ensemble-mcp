@@ -15,7 +15,7 @@ use crate::{
     config::Config,
     database::DbPool,
     error::Result,
-    mcp::server::mcp_handler,
+    mcp::server::{mcp_handler, McpServer},
     sse::{sse_handler, sse_message_handler, EventBroadcaster},
     workers::queue::QueueManager,
 };
@@ -27,6 +27,7 @@ pub struct AppState {
     pub queue_manager: Arc<QueueManager>,
     pub server_info: ServerInfo,
     pub event_broadcaster: EventBroadcaster,
+    pub mcp_server: Arc<McpServer>,
 }
 
 #[derive(Clone)]
@@ -45,6 +46,9 @@ pub async fn run_server(config: Config) -> Result<()> {
     // Initialize queue manager (spawns completion event processor internally)
     let queue_manager = QueueManager::new(db.clone(), config.clone(), event_broadcaster.clone());
 
+    // Initialize single MCP server instance
+    let mcp_server = Arc::new(McpServer::new());
+
     let state = AppState {
         config: config.clone(),
         db,
@@ -54,6 +58,7 @@ pub async fn run_server(config: Config) -> Result<()> {
             port: config.port,
         },
         event_broadcaster,
+        mcp_server,
     };
 
     // Respawn workers for unfinished tasks if enabled
@@ -222,7 +227,7 @@ async fn respawn_workers_for_unfinished_tasks(state: &AppState) -> Result<()> {
         // Step 3: Submit all tickets (now unclaimed and open) to queues
         if let Err(e) = state
             .queue_manager
-            .submit_task(&project_id, &current_stage, &ticket_id, &state.db)
+            .submit_task(&project_id, &current_stage, &ticket_id)
             .await
         {
             error!("Failed to submit ticket {} to queue: {}", ticket_id, e);

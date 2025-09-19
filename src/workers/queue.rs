@@ -12,7 +12,8 @@ use super::types::TaskItem;
 use crate::{
     config::Config,
     database::DbPool,
-    sse::{notify_queue_change, notify_ticket_change, EventBroadcaster},
+    events::EventPayload,
+    sse::EventBroadcaster,
     workers::domain::{TicketId, WorkerCommand, WorkerCompletionEvent, WorkerType},
 };
 
@@ -93,7 +94,6 @@ impl QueueManager {
         project_id: &str,
         worker_type: &str,
         ticket_id: &str,
-        db: &DbPool,
     ) -> Result<String> {
         let queue_name = Self::generate_queue_name(project_id, worker_type);
         let task_id = Uuid::new_v4().to_string();
@@ -107,9 +107,12 @@ impl QueueManager {
         );
 
         // Validate that the worker type exists for this project
-        let worker_type_exists =
-            crate::database::worker_types::WorkerType::get_by_type(db, project_id, worker_type)
-                .await?;
+        let worker_type_exists = crate::database::worker_types::WorkerType::get_by_type(
+            &self.db,
+            project_id,
+            worker_type,
+        )
+        .await?;
 
         if worker_type_exists.is_none() {
             return Err(anyhow::anyhow!(
@@ -123,7 +126,7 @@ impl QueueManager {
         // Claim the ticket before submitting to queue
         let worker_id = format!("consumer-{}-{}", worker_type, &task_id[..8]);
         let claim_result =
-            crate::database::tickets::Ticket::claim_for_processing(db, ticket_id, &worker_id)
+            crate::database::tickets::Ticket::claim_for_processing(&self.db, ticket_id, &worker_id)
                 .await?;
 
         if claim_result == 0 {
@@ -139,7 +142,8 @@ impl QueueManager {
         );
 
         // Notify about ticket being claimed for processing
-        notify_ticket_change(&self.event_broadcaster, ticket_id, "claimed").await;
+        let event = EventPayload::ticket_updated(ticket_id, project_id, "claimed");
+        self.event_broadcaster.broadcast(event);
 
         let task = TaskItem {
             task_id: task_id.clone(),
@@ -157,14 +161,17 @@ impl QueueManager {
             return Err(anyhow::anyhow!("Queue {} is closed", queue_name));
         }
 
-        info!(
+        debug!(
             "[QueueManager] Task {} submitted to queue {}",
             task_id, queue_name
         );
 
         // Notify about task submission
-        notify_queue_change(&self.event_broadcaster, &queue_name, "task_submitted").await;
-        notify_ticket_change(&self.event_broadcaster, ticket_id, "queued").await;
+        let queue_event = EventPayload::queue_updated(&queue_name, project_id, worker_type, 1);
+        self.event_broadcaster.broadcast(queue_event);
+
+        let ticket_event = EventPayload::ticket_updated(ticket_id, project_id, "queued");
+        self.event_broadcaster.broadcast(ticket_event);
 
         Ok(task_id)
     }
@@ -200,6 +207,7 @@ impl QueueManager {
         let queue_name_for_error = queue_name_clone.clone();
         let completion_sender = self.completion_sender.clone();
         let db_clone = self.db.clone();
+        let server_host = self.config.host.clone();
         let server_port = self.config.port;
         let permission_mode = self.config.permission_mode.clone();
 
@@ -216,6 +224,7 @@ impl QueueManager {
                 receiver,
                 completion_sender,
                 db_clone,
+                server_host,
                 server_port,
                 permission_mode,
             );
@@ -238,10 +247,11 @@ impl QueueManager {
             }
         });
 
-        info!("[QueueManager] Started consumer for queue: {}", queue_name);
+        debug!("[QueueManager] Started consumer for queue: {}", queue_name);
 
         // Notify about new queue creation
-        notify_queue_change(&self.event_broadcaster, queue_name, "created").await;
+        let event = EventPayload::queue_updated(queue_name, project_id, worker_type, 0);
+        self.event_broadcaster.broadcast(event);
 
         Ok(sender)
     }
@@ -376,10 +386,7 @@ impl QueueManager {
         let project_id = &ticket_with_comments.ticket.project_id;
 
         // Submit task to queue for the new stage
-        match self
-            .submit_task(project_id, target_stage, ticket_id, &self.db)
-            .await
-        {
+        match self.submit_task(project_id, target_stage, ticket_id).await {
             Ok(task_id) => {
                 info!(
                     "Auto-enqueued ticket {} for stage {} (task_id: {})",
@@ -908,6 +915,7 @@ struct WorkerConsumer {
     receiver: mpsc::UnboundedReceiver<TaskItem>,
     completion_sender: mpsc::UnboundedSender<WorkerCompletionEvent>,
     db: DbPool,
+    server_host: String,
     server_port: u16,
     permission_mode: String,
 }
@@ -921,6 +929,7 @@ impl WorkerConsumer {
         receiver: mpsc::UnboundedReceiver<TaskItem>,
         completion_sender: mpsc::UnboundedSender<WorkerCompletionEvent>,
         db: DbPool,
+        server_host: String,
         server_port: u16,
         permission_mode: String,
     ) -> Self {
@@ -931,6 +940,7 @@ impl WorkerConsumer {
             receiver,
             completion_sender,
             db,
+            server_host,
             server_port,
             permission_mode,
         }
@@ -1230,6 +1240,7 @@ impl WorkerConsumer {
             ticket_id: ticket_id.to_string(),
             project_path: project.path,
             system_prompt: worker_type_info.system_prompt,
+            server_host: self.server_host.clone(),
             server_port: self.server_port,
             permission_mode: self.permission_mode.clone(),
         };

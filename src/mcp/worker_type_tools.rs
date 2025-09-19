@@ -43,36 +43,27 @@ impl ToolHandler for CreateWorkerTypeTool {
                 });
 
                 // Broadcast worker_type_created event
-                let event = json!({
-                    "jsonrpc": "2.0",
-                    "method": "notifications/resources/updated",
-                    "params": {
-                        "uri": format!("vibe-ensemble://worker-types/{}/{}", project_id, worker_type),
-                        "event": {
-                            "type": "worker_type_created",
-                            "worker_type": {
-                                "id": worker_type_info.id,
-                                "project_id": worker_type_info.project_id,
-                                "worker_type": worker_type_info.worker_type,
-                                "short_description": worker_type_info.short_description,
-                                "system_prompt": worker_type_info.system_prompt,
-                                "created_at": worker_type_info.created_at,
-                                "updated_at": worker_type_info.updated_at
-                            },
-                            "timestamp": chrono::Utc::now().to_rfc3339()
+                use crate::events::EventPayload;
+                let event = EventPayload::system_message(
+                    "worker_types",
+                    "worker_type_created",
+                    Some(json!({
+                        "worker_type": {
+                            "id": worker_type_info.id,
+                            "project_id": worker_type_info.project_id,
+                            "worker_type": worker_type_info.worker_type,
+                            "short_description": worker_type_info.short_description,
+                            "created_at": worker_type_info.created_at,
+                            "updated_at": worker_type_info.updated_at
                         }
-                    }
-                });
-
-                if let Err(e) = state.event_broadcaster.broadcast(event.to_string()) {
-                    tracing::warn!("Failed to broadcast worker_type_created event: {}", e);
-                } else {
-                    tracing::debug!(
-                        "Successfully broadcast worker_type_created event for: {}/{}",
-                        project_id,
-                        worker_type
-                    );
-                }
+                    })),
+                );
+                state.event_broadcaster.broadcast(event);
+                tracing::debug!(
+                    "Successfully broadcast worker_type_created event for: {}/{}",
+                    project_id,
+                    worker_type
+                );
 
                 Ok(create_success_response(&format!(
                     "Worker type '{}' created successfully for project '{}': {}",
@@ -133,32 +124,16 @@ impl ToolHandler for ListWorkerTypesTool {
 
         match WorkerType::list_by_project(&state.db, project_id.as_deref()).await {
             Ok(all_worker_types) => {
-                // Apply pagination
-                let total_worker_types = all_worker_types.len();
-                let start = cursor.offset;
-                let end = std::cmp::min(start + cursor.page_size, total_worker_types);
-                let has_more = end < total_worker_types;
-
-                let paginated_worker_types = if start >= total_worker_types {
-                    Vec::new()
-                } else {
-                    all_worker_types[start..end].to_vec()
-                };
-
-                // Generate next cursor if there are more results
-                let next_cursor = if has_more {
-                    cursor.next_cursor(true)
-                } else {
-                    None
-                };
+                // Apply pagination using helper
+                let pagination_result = cursor.paginate(all_worker_types);
 
                 // Create response with pagination info
                 let response_data = json!({
-                    "worker_types": paginated_worker_types,
+                    "worker_types": pagination_result.items,
                     "pagination": {
-                        "total": total_worker_types,
-                        "has_more": has_more,
-                        "next_cursor": next_cursor
+                        "total": pagination_result.total,
+                        "has_more": pagination_result.has_more,
+                        "next_cursor": pagination_result.next_cursor
                     }
                 });
 
@@ -291,36 +266,27 @@ impl ToolHandler for UpdateWorkerTypeTool {
                 });
 
                 // Broadcast worker_type_updated event
-                let event = json!({
-                    "jsonrpc": "2.0",
-                    "method": "notifications/resources/updated",
-                    "params": {
-                        "uri": format!("vibe-ensemble://worker-types/{}/{}", project_id, worker_type),
-                        "event": {
-                            "type": "worker_type_updated",
-                            "worker_type": {
-                                "id": worker_type_info.id,
-                                "project_id": worker_type_info.project_id,
-                                "worker_type": worker_type_info.worker_type,
-                                "short_description": worker_type_info.short_description,
-                                "system_prompt": worker_type_info.system_prompt,
-                                "created_at": worker_type_info.created_at,
-                                "updated_at": worker_type_info.updated_at
-                            },
-                            "timestamp": chrono::Utc::now().to_rfc3339()
+                use crate::events::EventPayload;
+                let event = EventPayload::system_message(
+                    "worker_types",
+                    "worker_type_updated",
+                    Some(json!({
+                        "worker_type": {
+                            "id": worker_type_info.id,
+                            "project_id": worker_type_info.project_id,
+                            "worker_type": worker_type_info.worker_type,
+                            "short_description": worker_type_info.short_description,
+                            "created_at": worker_type_info.created_at,
+                            "updated_at": worker_type_info.updated_at
                         }
-                    }
-                });
-
-                if let Err(e) = state.event_broadcaster.broadcast(event.to_string()) {
-                    tracing::warn!("Failed to broadcast worker_type_updated event: {}", e);
-                } else {
-                    tracing::debug!(
-                        "Successfully broadcast worker_type_updated event for: {}/{}",
-                        project_id,
-                        worker_type
-                    );
-                }
+                    })),
+                );
+                state.event_broadcaster.broadcast(event);
+                tracing::debug!(
+                    "Successfully broadcast worker_type_updated event for: {}/{}",
+                    project_id,
+                    worker_type
+                );
 
                 Ok(create_success_response(&format!(
                     "Worker type '{}' updated successfully for project '{}': {}",
@@ -380,29 +346,21 @@ impl ToolHandler for DeleteWorkerTypeTool {
         match WorkerType::delete(&state.db, &project_id, &worker_type).await {
             Ok(true) => {
                 // Broadcast worker_type_deleted event
-                let event = json!({
-                    "jsonrpc": "2.0",
-                    "method": "notifications/resources/updated",
-                    "params": {
-                        "uri": format!("vibe-ensemble://worker-types/{}/{}", project_id, worker_type),
-                        "event": {
-                            "type": "worker_type_deleted",
-                            "project_id": project_id,
-                            "worker_type": worker_type,
-                            "timestamp": chrono::Utc::now().to_rfc3339()
-                        }
-                    }
-                });
-
-                if let Err(e) = state.event_broadcaster.broadcast(event.to_string()) {
-                    tracing::warn!("Failed to broadcast worker_type_deleted event: {}", e);
-                } else {
-                    tracing::debug!(
-                        "Successfully broadcast worker_type_deleted event for: {}/{}",
-                        project_id,
-                        worker_type
-                    );
-                }
+                use crate::events::EventPayload;
+                let event = EventPayload::system_message(
+                    "worker_types",
+                    "worker_type_deleted",
+                    Some(json!({
+                        "project_id": project_id,
+                        "worker_type": worker_type
+                    })),
+                );
+                state.event_broadcaster.broadcast(event);
+                tracing::debug!(
+                    "Successfully broadcast worker_type_deleted event for: {}/{}",
+                    project_id,
+                    worker_type
+                );
 
                 Ok(create_success_response(&format!(
                     "Worker type '{}' deleted successfully from project '{}'",

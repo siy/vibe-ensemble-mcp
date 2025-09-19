@@ -4,10 +4,10 @@ use std::fs;
 use tracing::{debug, info};
 
 use super::tools::{
-    create_error_response, create_success_response, extract_optional_param, extract_param,
-    ToolHandler,
+    create_error_response, create_json_success_response, create_success_response,
+    extract_optional_param, extract_param, ToolHandler,
 };
-use super::types::{CallToolResponse, PaginationCursor, Tool, ToolContent};
+use super::types::{CallToolResponse, PaginationCursor, Tool};
 use crate::{
     database::projects::{CreateProjectRequest, Project, UpdateProjectRequest},
     error::Result,
@@ -59,32 +59,26 @@ impl ToolHandler for CreateProjectTool {
                 });
 
                 // Broadcast project_created event
-                let event = json!({
-                    "jsonrpc": "2.0",
-                    "method": "notifications/resources/updated",
-                    "params": {
-                        "uri": "vibe-ensemble://projects",
-                        "event": {
-                            "type": "project_created",
-                            "project": {
-                                "repository_name": project.repository_name,
-                                "path": project.path,
-                                "description": project.short_description,
-                                "created_at": project.created_at
-                            },
-                            "timestamp": chrono::Utc::now().to_rfc3339()
-                        }
-                    }
-                });
+                use crate::events::EventPayload;
 
-                if let Err(e) = state.event_broadcaster.broadcast(event.to_string()) {
-                    tracing::warn!("Failed to broadcast project_created event: {}", e);
-                } else {
-                    tracing::debug!(
-                        "Successfully broadcast project_created event for: {}",
-                        project.repository_name
-                    );
-                }
+                let event = EventPayload::system_message(
+                    "projects",
+                    "project_created",
+                    Some(json!({
+                        "project": {
+                            "repository_name": project.repository_name,
+                            "path": project.path,
+                            "description": project.short_description,
+                            "created_at": project.created_at
+                        }
+                    })),
+                );
+
+                state.event_broadcaster.broadcast(event);
+                tracing::debug!(
+                    "Successfully broadcast project_created event for: {}",
+                    project.repository_name
+                );
 
                 Ok(create_success_response(&format!(
                     "Project created successfully: {}",
@@ -138,42 +132,20 @@ impl ToolHandler for ListProjectsTool {
 
         match Project::list_all(&state.db).await {
             Ok(all_projects) => {
-                // Apply pagination
-                let total_projects = all_projects.len();
-                let start = cursor.offset;
-                let end = std::cmp::min(start + cursor.page_size, total_projects);
-                let has_more = end < total_projects;
-
-                let paginated_projects = if start >= total_projects {
-                    Vec::new()
-                } else {
-                    all_projects[start..end].to_vec()
-                };
-
-                // Generate next cursor if there are more results
-                let next_cursor = if has_more {
-                    cursor.next_cursor(true)
-                } else {
-                    None
-                };
+                // Apply pagination using helper
+                let pagination_result = cursor.paginate(all_projects);
 
                 // Create response with pagination info
                 let response_data = json!({
-                    "projects": paginated_projects,
+                    "projects": pagination_result.items,
                     "pagination": {
-                        "total": total_projects,
-                        "has_more": has_more,
-                        "next_cursor": next_cursor
+                        "total": pagination_result.total,
+                        "has_more": pagination_result.has_more,
+                        "next_cursor": pagination_result.next_cursor
                     }
                 });
 
-                Ok(CallToolResponse {
-                    content: vec![ToolContent {
-                        content_type: "text".to_string(),
-                        text: serde_json::to_string_pretty(&response_data)?,
-                    }],
-                    is_error: Some(false),
-                })
+                Ok(create_json_success_response(response_data))
             }
             Err(e) => Ok(create_error_response(&format!(
                 "Failed to list projects: {}",

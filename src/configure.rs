@@ -65,26 +65,7 @@ async fn create_claude_settings() -> Result<()> {
     let settings = json!({
         "permissions": {
             "allow": [
-                "mcp__vibe-ensemble-mcp__create_project",
-                "mcp__vibe-ensemble-mcp__list_projects",
-                "mcp__vibe-ensemble-mcp__get_project",
-                "mcp__vibe-ensemble-mcp__update_project",
-                "mcp__vibe-ensemble-mcp__delete_project",
-                "mcp__vibe-ensemble-mcp__create_worker_type",
-                "mcp__vibe-ensemble-mcp__list_worker_types",
-                "mcp__vibe-ensemble-mcp__get_worker_type",
-                "mcp__vibe-ensemble-mcp__update_worker_type",
-                "mcp__vibe-ensemble-mcp__delete_worker_type",
-                "mcp__vibe-ensemble-mcp__create_ticket",
-                "mcp__vibe-ensemble-mcp__get_ticket",
-                "mcp__vibe-ensemble-mcp__list_tickets",
-                "mcp__vibe-ensemble-mcp__get_tickets_by_stage",
-                "mcp__vibe-ensemble-mcp__add_ticket_comment",
-                "mcp__vibe-ensemble-mcp__close_ticket",
-                "mcp__vibe-ensemble-mcp__release_ticket",
-                "mcp__vibe-ensemble-mcp__resume_ticket_processing",
-                "mcp__vibe-ensemble-mcp__list_events",
-                "mcp__vibe-ensemble-mcp__resolve_event"
+                "mcp__*"
             ]
         },
         "enableAllProjectMcpServers": true

@@ -1,6 +1,5 @@
-use anyhow::Result;
+use anyhow::{Context, Result};
 use serde::{Deserialize, Serialize};
-use serde_json::json;
 use std::fs;
 use std::path::Path;
 use std::process::Stdio;
@@ -9,7 +8,6 @@ use tracing::{debug, error, info, warn};
 
 use super::queue::WorkerOutput;
 use super::types::SpawnWorkerRequest;
-use crate::mcp::MCP_PROTOCOL_VERSION;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ClaudePermissions {
@@ -66,9 +64,10 @@ impl ProcessManager {
             return Ok(ClaudePermissions::default());
         }
 
-        let content = fs::read_to_string(&settings_path)?;
+        let content = fs::read_to_string(&settings_path)
+            .with_context(|| format!("Failed to read settings file: {}", settings_path.display()))?;
         let settings: ClaudeSettings = serde_json::from_str(&content)
-            .map_err(|e| anyhow::anyhow!("Failed to parse Claude settings: {}", e))?;
+            .with_context(|| format!("Failed to parse Claude settings from {}", settings_path.display()))?;
 
         info!(
             "Loaded inherit permissions with {} allowed, {} denied tools",
@@ -95,9 +94,10 @@ impl ProcessManager {
             return Ok(ClaudePermissions::default());
         }
 
-        let content = fs::read_to_string(&permissions_path)?;
+        let content = fs::read_to_string(&permissions_path)
+            .with_context(|| format!("Failed to read permissions file: {}", permissions_path.display()))?;
         let settings: ClaudeSettings = serde_json::from_str(&content)
-            .map_err(|e| anyhow::anyhow!("Failed to parse worker permissions: {}", e))?;
+            .with_context(|| format!("Failed to parse worker permissions from {}", permissions_path.display()))?;
 
         info!(
             "Loaded file permissions with {} allowed, {} denied tools",
@@ -243,35 +243,30 @@ impl ProcessManager {
         Err(anyhow::anyhow!("No valid JSON found in worker output"))
     }
 
-    fn create_mcp_config(project_path: &str, worker_id: &str, server_port: u16) -> Result<String> {
+    fn create_mcp_config(project_path: &str, worker_id: &str, host: &str, server_port: u16) -> Result<String> {
         debug!(
             "Creating MCP config for worker {} in project path: {}",
             worker_id, project_path
         );
 
-        let config = json!({
-            "mcpServers": {
-                "vibe-ensemble-mcp": {
-                    "type": "http",
-                    "url": format!("http://127.0.0.1:{}/mcp", server_port),
-                    "protocol_version": MCP_PROTOCOL_VERSION
-                }
-            }
-        });
+        use crate::mcp::constants::build_mcp_config;
+        let config = build_mcp_config(host, server_port);
         debug!("MCP config JSON created successfully");
 
         let config_path = format!("{}/worker_{}_mcp_config.json", project_path, worker_id);
         debug!("Target config file path: {}", config_path);
 
         debug!("Serializing config to pretty JSON...");
-        let config_json = serde_json::to_string_pretty(&config)?;
+        let config_json = serde_json::to_string_pretty(&config)
+            .with_context(|| "Failed to serialize MCP config to JSON")?;
         debug!(
             "JSON serialization successful, length: {} bytes",
             config_json.len()
         );
 
         debug!("Writing config file to: {}", config_path);
-        fs::write(&config_path, config_json)?;
+        fs::write(&config_path, config_json)
+            .with_context(|| format!("Failed to write MCP config to {}", config_path))?;
         debug!("File write successful");
 
         info!("Generated MCP config file: {}", config_path);
@@ -288,6 +283,7 @@ impl ProcessManager {
         let config_path = Self::create_mcp_config(
             &request.project_path,
             &request.worker_id,
+            &request.server_host,
             request.server_port,
         )?;
 
