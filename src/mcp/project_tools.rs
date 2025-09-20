@@ -4,7 +4,7 @@ use std::fs;
 use tracing::{debug, info};
 
 use super::tools::{
-    create_error_response, create_json_success_response, create_success_response,
+    create_json_error_response, create_json_success_response,
     extract_optional_param, extract_param, ToolHandler,
 };
 use super::types::{CallToolResponse, PaginationCursor, Tool};
@@ -31,7 +31,7 @@ impl ToolHandler for CreateProjectTool {
         if !std::path::Path::new(&path).exists() {
             info!("Creating project directory: {}", path);
             if let Err(e) = fs::create_dir_all(&path) {
-                return Ok(create_error_response(&format!(
+                return Ok(create_json_error_response(&format!(
                     "Failed to create project directory '{}': {}",
                     path, e
                 )));
@@ -80,12 +80,9 @@ impl ToolHandler for CreateProjectTool {
                     project.repository_name
                 );
 
-                Ok(create_success_response(&format!(
-                    "Project created successfully: {}",
-                    response
-                )))
+                Ok(create_json_success_response(response))
             }
-            Err(e) => Ok(create_error_response(&format!(
+            Err(e) => Ok(create_json_error_response(&format!(
                 "Failed to create project: {}",
                 e
             ))),
@@ -147,7 +144,7 @@ impl ToolHandler for ListProjectsTool {
 
                 Ok(create_json_success_response(response_data))
             }
-            Err(e) => Ok(create_error_response(&format!(
+            Err(e) => Ok(create_json_error_response(&format!(
                 "Failed to list projects: {}",
                 e
             ))),
@@ -181,17 +178,13 @@ impl ToolHandler for GetProjectTool {
 
         match Project::get_by_name(&state.db, &repository_name).await {
             Ok(Some(project)) => {
-                let project_json = serde_json::to_string_pretty(&project)?;
-                Ok(create_success_response(&format!(
-                    "Project:\n{}",
-                    project_json
-                )))
+                Ok(create_json_success_response(serde_json::to_value(&project)?))
             }
-            Ok(None) => Ok(create_error_response(&format!(
+            Ok(None) => Ok(create_json_error_response(&format!(
                 "Project '{}' not found",
                 repository_name
             ))),
-            Err(e) => Ok(create_error_response(&format!(
+            Err(e) => Ok(create_json_error_response(&format!(
                 "Failed to get project: {}",
                 e
             ))),
@@ -237,17 +230,13 @@ impl ToolHandler for UpdateProjectTool {
 
         match Project::update(&state.db, &repository_name, request).await {
             Ok(Some(project)) => {
-                let project_json = serde_json::to_string_pretty(&project)?;
-                Ok(create_success_response(&format!(
-                    "Project updated:\n{}",
-                    project_json
-                )))
+                Ok(create_json_success_response(serde_json::to_value(&project)?))
             }
-            Ok(None) => Ok(create_error_response(&format!(
+            Ok(None) => Ok(create_json_error_response(&format!(
                 "Project '{}' not found",
                 repository_name
             ))),
-            Err(e) => Ok(create_error_response(&format!(
+            Err(e) => Ok(create_json_error_response(&format!(
                 "Failed to update project: {}",
                 e
             ))),
@@ -288,15 +277,15 @@ impl ToolHandler for DeleteProjectTool {
         let repository_name: String = extract_param(&arguments, "repository_name")?;
 
         match Project::delete(&state.db, &repository_name).await {
-            Ok(true) => Ok(create_success_response(&format!(
-                "Project '{}' deleted successfully",
-                repository_name
-            ))),
-            Ok(false) => Ok(create_error_response(&format!(
+            Ok(true) => Ok(create_json_success_response(json!({
+                "message": format!("Project '{}' deleted successfully", repository_name),
+                "repository_name": repository_name
+            }))),
+            Ok(false) => Ok(create_json_error_response(&format!(
                 "Project '{}' not found",
                 repository_name
             ))),
-            Err(e) => Ok(create_error_response(&format!(
+            Err(e) => Ok(create_json_error_response(&format!(
                 "Failed to delete project: {}",
                 e
             ))),

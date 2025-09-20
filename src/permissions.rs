@@ -71,7 +71,7 @@ impl ClaudePermissions {
 }
 
 /// Permission modes supported by the system
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum PermissionMode {
     /// No restrictions - workers run with --dangerously-skip-permissions
     Bypass,

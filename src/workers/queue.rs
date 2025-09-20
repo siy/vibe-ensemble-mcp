@@ -13,6 +13,7 @@ use crate::{
     config::Config,
     database::DbPool,
     events::EventPayload,
+    permissions::PermissionMode,
     sse::EventBroadcaster,
     workers::domain::{TicketId, WorkerCommand, WorkerCompletionEvent, WorkerType},
 };
@@ -209,7 +210,7 @@ impl QueueManager {
         let db_clone = self.db.clone();
         let server_host = self.config.host.clone();
         let server_port = self.config.port;
-        let permission_mode = self.config.permission_mode.clone();
+        let permission_mode = self.config.permission_mode;
 
         // Clone these for emergency release (after they're moved to consumer)
         let emergency_db = db_clone.clone();
@@ -917,7 +918,7 @@ struct WorkerConsumer {
     db: DbPool,
     server_host: String,
     server_port: u16,
-    permission_mode: String,
+    permission_mode: PermissionMode,
 }
 
 impl WorkerConsumer {
@@ -931,7 +932,7 @@ impl WorkerConsumer {
         db: DbPool,
         server_host: String,
         server_port: u16,
-        permission_mode: String,
+        permission_mode: PermissionMode,
     ) -> Self {
         Self {
             project_id,
@@ -1242,7 +1243,7 @@ impl WorkerConsumer {
             system_prompt: worker_type_info.system_prompt,
             server_host: self.server_host.clone(),
             server_port: self.server_port,
-            permission_mode: self.permission_mode.clone(),
+            permission_mode: self.permission_mode,
         };
 
         ProcessManager::spawn_worker(spawn_request).await

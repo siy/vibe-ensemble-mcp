@@ -5,7 +5,7 @@ use uuid::Uuid;
 
 use super::{
     tools::{
-        create_error_response, create_json_success_response, create_success_response,
+        create_json_error_response, create_json_success_response,
         extract_optional_param, extract_param, ToolHandler,
     },
     types::{CallToolResponse, PaginationCursor, Tool, ToolContent},
@@ -58,7 +58,7 @@ impl ToolHandler for CreateTicketTool {
         .await?;
 
         if worker_type_exists.is_none() {
-            return Ok(crate::mcp::tools::create_error_response(&format!(
+            return Ok(crate::mcp::tools::create_json_error_response(&format!(
                 "Worker type '{}' does not exist for project '{}'. Cannot use as initial stage. Coordinator must create this worker type first.",
                 initial_stage, project_id
             )));
@@ -82,7 +82,7 @@ impl ToolHandler for CreateTicketTool {
             .is_some();
 
             if !stage_exists {
-                return Ok(create_error_response(&format!(
+                return Ok(create_json_error_response(&format!(
                     "Worker type '{}' does not exist in project '{}'. All stages in execution plan must exist as worker types.",
                     stage, project_id
                 )));
@@ -227,7 +227,7 @@ impl ToolHandler for GetTicketTool {
                     "comments": comments
                 })))
             }
-            None => Ok(create_error_response(&format!(
+            None => Ok(create_json_error_response(&format!(
                 "Ticket {} not found",
                 ticket_id
             ))),
@@ -436,12 +436,13 @@ impl ToolHandler for CloseTicketTool {
                     ticket_id
                 );
 
-                Ok(create_success_response(&format!(
-                    "Closed ticket {} with resolution: {}",
-                    ticket_id, resolution
-                )))
+                Ok(create_json_success_response(json!({
+                    "message": format!("Closed ticket {} with resolution: {}", ticket_id, resolution),
+                    "ticket_id": ticket_id,
+                    "resolution": resolution
+                })))
             }
-            None => Ok(create_error_response(&format!(
+            None => Ok(create_json_error_response(&format!(
                 "Ticket {} not found",
                 ticket_id
             ))),
@@ -495,7 +496,7 @@ impl ToolHandler for ResumeTicketProcessingTool {
         let ticket_data = match ticket {
             Some(t) => t.ticket,
             None => {
-                return Ok(create_error_response(&format!(
+                return Ok(create_json_error_response(&format!(
                     "Ticket {} not found",
                     ticket_id
                 )));
@@ -515,7 +516,7 @@ impl ToolHandler for ResumeTicketProcessingTool {
             .await?;
 
             if worker_type_exists.is_none() {
-                return Ok(create_error_response(&format!(
+                return Ok(create_json_error_response(&format!(
                     "Worker type '{}' does not exist for project '{}'. Cannot resume ticket with this stage.",
                     target_stage, ticket_data.project_id
                 )));
@@ -571,10 +572,13 @@ impl ToolHandler for ResumeTicketProcessingTool {
                         ticket_id, target_stage, task_id
                     );
 
-                    Ok(create_success_response(&format!(
-                        "Resumed processing for ticket {} at stage '{}' with state '{}' and submitted to queue as task {}",
-                        ticket_id, target_stage, target_state, task_id
-                    )))
+                    Ok(create_json_success_response(json!({
+                        "message": format!("Resumed processing for ticket {} at stage '{}' with state '{}' and submitted to queue as task {}", ticket_id, target_stage, target_state, task_id),
+                        "ticket_id": ticket_id,
+                        "target_stage": target_stage,
+                        "target_state": target_state,
+                        "task_id": task_id
+                    })))
                 }
                 Err(e) => {
                     warn!(
@@ -582,17 +586,23 @@ impl ToolHandler for ResumeTicketProcessingTool {
                         ticket_id, target_stage, e
                     );
 
-                    Ok(create_success_response(&format!(
-                        "Resumed ticket {} at stage '{}' with state '{}' but failed to submit to queue: {}",
-                        ticket_id, target_stage, target_state, e
-                    )))
+                    Ok(create_json_success_response(json!({
+                        "message": format!("Resumed ticket {} at stage '{}' with state '{}' but failed to submit to queue: {}", ticket_id, target_stage, target_state, e),
+                        "ticket_id": ticket_id,
+                        "target_stage": target_stage,
+                        "target_state": target_state,
+                        "queue_error": e.to_string()
+                    })))
                 }
             }
         } else {
-            Ok(create_success_response(&format!(
-                "Resumed ticket {} at stage '{}' with state '{}' (not submitted to queue due to non-open state)",
-                ticket_id, target_stage, target_state
-            )))
+            Ok(create_json_success_response(json!({
+                "message": format!("Resumed ticket {} at stage '{}' with state '{}' (not submitted to queue due to non-open state)", ticket_id, target_stage, target_state),
+                "ticket_id": ticket_id,
+                "target_stage": target_stage,
+                "target_state": target_state,
+                "submitted_to_queue": false
+            })))
         }
     }
 

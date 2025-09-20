@@ -2,16 +2,17 @@ use anyhow::Result;
 use clap::Parser;
 use tracing::info;
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt, EnvFilter, Layer};
-use vibe_ensemble_mcp::{config::Config, configure::configure_claude_code, server::run_server};
+use vibe_ensemble_mcp::{
+    config::Config,
+    configure::configure_claude_code,
+    permissions::PermissionMode,
+    server::run_server
+};
 
 fn validate_permission_mode(mode: &str) -> Result<String, String> {
-    match mode {
-        "bypass" | "inherit" | "file" => Ok(mode.to_string()),
-        _ => Err(format!(
-            "Invalid permission mode '{}'. Valid options: bypass, inherit, file",
-            mode
-        )),
-    }
+    mode.parse::<PermissionMode>()
+        .map(|_| mode.to_string())
+        .map_err(|e| e.to_string())
 }
 
 #[derive(Parser)]
@@ -84,7 +85,8 @@ async fn main() -> Result<()> {
     info!("Version: {}", env!("CARGO_PKG_VERSION"));
     info!("Database: {}", args.database_path);
     info!("Server: {}:{}", args.host, args.port);
-    info!("Permission mode: {}", args.permission_mode);
+    let permission_mode: PermissionMode = args.permission_mode.parse()?;
+    info!("Permission mode: {}", permission_mode.as_str());
     info!("Respawn disabled: {}", args.no_respawn);
 
     let config = Config {
@@ -92,7 +94,7 @@ async fn main() -> Result<()> {
         host: args.host,
         port: args.port,
         no_respawn: args.no_respawn,
-        permission_mode: args.permission_mode,
+        permission_mode,
     };
 
     run_server(config).await?;

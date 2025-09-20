@@ -14,10 +14,10 @@ impl ProcessManager {
     /// Apply permissions to Claude command based on mode
     fn apply_permissions_to_command(
         cmd: &mut Command,
-        permission_mode: &str,
+        permission_mode: PermissionMode,
         project_path: &str,
     ) -> Result<()> {
-        let mode: PermissionMode = permission_mode.parse()?;
+        let mode = permission_mode;
 
         match mode {
             PermissionMode::Bypass => {
@@ -168,10 +168,10 @@ impl ProcessManager {
             .stderr(Stdio::piped());
 
         // Apply permissions based on mode
-        info!("Applying permission mode: {}", request.permission_mode);
+        info!("Applying permission mode: {}", request.permission_mode.as_str());
         Self::apply_permissions_to_command(
             &mut cmd,
-            &request.permission_mode,
+            request.permission_mode,
             &request.project_path,
         )?;
 

@@ -2,7 +2,7 @@ use async_trait::async_trait;
 use serde_json::{json, Value};
 
 use super::tools::{
-    create_error_response, create_success_response, extract_optional_param, extract_param,
+    create_json_error_response, create_json_success_response, extract_optional_param, extract_param,
     ToolHandler,
 };
 use super::types::{CallToolResponse, PaginationCursor, Tool, ToolContent};
@@ -65,12 +65,9 @@ impl ToolHandler for CreateWorkerTypeTool {
                     worker_type
                 );
 
-                Ok(create_success_response(&format!(
-                    "Worker type '{}' created successfully for project '{}': {}",
-                    worker_type, project_id, response
-                )))
+                Ok(create_json_success_response(response))
             }
-            Err(e) => Ok(create_error_response(&format!(
+            Err(e) => Ok(create_json_error_response(&format!(
                 "Failed to create worker type '{}' for project '{}': {}",
                 worker_type, project_id, e
             ))),
@@ -145,7 +142,7 @@ impl ToolHandler for ListWorkerTypesTool {
                     is_error: Some(false),
                 })
             }
-            Err(e) => Ok(create_error_response(&format!(
+            Err(e) => Ok(create_json_error_response(&format!(
                 "Failed to list worker types: {}",
                 e
             ))),
@@ -193,16 +190,13 @@ impl ToolHandler for GetWorkerTypeTool {
                     "created_at": worker_type_info.created_at,
                     "updated_at": worker_type_info.updated_at
                 });
-                Ok(create_success_response(&format!(
-                    "Worker type details: {}",
-                    response
-                )))
+                Ok(create_json_success_response(response))
             }
-            Ok(None) => Ok(create_error_response(&format!(
+            Ok(None) => Ok(create_json_error_response(&format!(
                 "Worker type '{}' not found for project '{}'",
                 worker_type, project_id
             ))),
-            Err(e) => Ok(create_error_response(&format!(
+            Err(e) => Ok(create_json_error_response(&format!(
                 "Failed to get worker type '{}' for project '{}': {}",
                 worker_type, project_id, e
             ))),
@@ -243,7 +237,7 @@ impl ToolHandler for UpdateWorkerTypeTool {
         let system_prompt: Option<String> = extract_optional_param(&arguments, "system_prompt")?;
 
         if short_description.is_none() && system_prompt.is_none() {
-            return Ok(create_error_response(
+            return Ok(create_json_error_response(
                 "At least one of 'short_description' or 'system_prompt' must be provided for update"
             ));
         }
@@ -288,16 +282,13 @@ impl ToolHandler for UpdateWorkerTypeTool {
                     worker_type
                 );
 
-                Ok(create_success_response(&format!(
-                    "Worker type '{}' updated successfully for project '{}': {}",
-                    worker_type, project_id, response
-                )))
+                Ok(create_json_success_response(response))
             }
-            Ok(None) => Ok(create_error_response(&format!(
+            Ok(None) => Ok(create_json_error_response(&format!(
                 "Worker type '{}' not found for project '{}'",
                 worker_type, project_id
             ))),
-            Err(e) => Ok(create_error_response(&format!(
+            Err(e) => Ok(create_json_error_response(&format!(
                 "Failed to update worker type '{}' for project '{}': {}",
                 worker_type, project_id, e
             ))),
@@ -362,16 +353,17 @@ impl ToolHandler for DeleteWorkerTypeTool {
                     worker_type
                 );
 
-                Ok(create_success_response(&format!(
-                    "Worker type '{}' deleted successfully from project '{}'",
-                    worker_type, project_id
-                )))
+                Ok(create_json_success_response(json!({
+                    "message": format!("Worker type '{}' deleted successfully from project '{}'", worker_type, project_id),
+                    "worker_type": worker_type,
+                    "project_id": project_id
+                })))
             }
-            Ok(false) => Ok(create_error_response(&format!(
+            Ok(false) => Ok(create_json_error_response(&format!(
                 "Worker type '{}' not found for project '{}'",
                 worker_type, project_id
             ))),
-            Err(e) => Ok(create_error_response(&format!(
+            Err(e) => Ok(create_json_error_response(&format!(
                 "Failed to delete worker type '{}' from project '{}': {}",
                 worker_type, project_id, e
             ))),

@@ -1,10 +1,10 @@
 use async_trait::async_trait;
-use serde_json::Value;
+use serde_json::{json, Value};
 use tracing::{info, warn};
 
 use super::{
     tools::{
-        create_error_response, create_success_response, extract_optional_param, extract_param,
+        create_json_error_response, create_json_success_response, extract_optional_param, extract_param,
         ToolHandler,
     },
     types::{CallToolResponse, PaginationCursor, Tool, ToolContent},
@@ -58,17 +58,19 @@ impl ToolHandler for AddTicketDependencyTool {
                     .await;
                 }
 
-                Ok(create_success_response(&format!(
-                    "Successfully created {} dependency from '{}' to '{}'",
-                    dependency_type, parent_ticket_id, child_ticket_id
-                )))
+                Ok(create_json_success_response(json!({
+                    "message": format!("Successfully created {} dependency from '{}' to '{}'", dependency_type, parent_ticket_id, child_ticket_id),
+                    "dependency_type": dependency_type,
+                    "parent_ticket_id": parent_ticket_id,
+                    "child_ticket_id": child_ticket_id
+                })))
             }
             Err(e) => {
                 warn!(
                     "Failed to create dependency {}->{}: {}",
                     parent_ticket_id, child_ticket_id, e
                 );
-                Ok(create_error_response(&format!(
+                Ok(create_json_error_response(&format!(
                     "Failed to create dependency: {}",
                     e
                 )))
@@ -144,17 +146,18 @@ impl ToolHandler for RemoveTicketDependencyTool {
                     .await;
                 }
 
-                Ok(create_success_response(&format!(
-                    "Successfully removed dependency from '{}' to '{}'",
-                    parent_ticket_id, child_ticket_id
-                )))
+                Ok(create_json_success_response(json!({
+                    "message": format!("Successfully removed dependency from '{}' to '{}'", parent_ticket_id, child_ticket_id),
+                    "parent_ticket_id": parent_ticket_id,
+                    "child_ticket_id": child_ticket_id
+                })))
             }
             Err(e) => {
                 warn!(
                     "Failed to remove dependency {}->{}: {}",
                     parent_ticket_id, child_ticket_id, e
                 );
-                Ok(create_error_response(&format!(
+                Ok(create_json_error_response(&format!(
                     "Failed to remove dependency: {}",
                     e
                 )))
@@ -222,7 +225,7 @@ impl ToolHandler for GetDependencyGraphTool {
                     "Failed to build dependency graph for project {}: {}",
                     project_id, e
                 );
-                Ok(create_error_response(&format!(
+                Ok(create_json_error_response(&format!(
                     "Failed to build dependency graph: {}",
                     e
                 )))
@@ -301,7 +304,7 @@ impl ToolHandler for ListReadyTicketsTool {
             }
             Err(e) => {
                 warn!("Failed to list ready tickets: {}", e);
-                Ok(create_error_response(&format!(
+                Ok(create_json_error_response(&format!(
                     "Failed to list ready tickets: {}",
                     e
                 )))
@@ -384,7 +387,7 @@ impl ToolHandler for ListBlockedTicketsTool {
             }
             Err(e) => {
                 warn!("Failed to list blocked tickets: {}", e);
-                Ok(create_error_response(&format!(
+                Ok(create_json_error_response(&format!(
                     "Failed to list blocked tickets: {}",
                     e
                 )))

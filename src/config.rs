@@ -1,10 +1,12 @@
+use crate::permissions::PermissionMode;
+
 #[derive(Debug, Clone)]
 pub struct Config {
     pub database_path: String,
     pub host: String,
     pub port: u16,
     pub no_respawn: bool,
-    pub permission_mode: String,
+    pub permission_mode: PermissionMode,
 }
 
 impl Config {
@@ -16,10 +18,4 @@ impl Config {
         format!("{}:{}", self.host, self.port)
     }
 
-    pub fn validate_permission_mode(&self) -> Result<(), String> {
-        use crate::permissions::PermissionMode;
-        self.permission_mode.parse::<PermissionMode>()
-            .map(|_| ())
-            .map_err(|e| e.to_string())
-    }
 }

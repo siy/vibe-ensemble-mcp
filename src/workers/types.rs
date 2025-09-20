@@ -1,6 +1,7 @@
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use tokio::sync::RwLock;
+use crate::permissions::PermissionMode;
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub enum WorkerStatus {
@@ -52,7 +53,7 @@ pub struct SpawnWorkerRequest {
     pub system_prompt: String,
     pub server_host: String,
     pub server_port: u16,
-    pub permission_mode: String,
+    pub permission_mode: PermissionMode,
 }
 
 pub type WorkerRegistry = RwLock<HashMap<String, WorkerProcess>>;
