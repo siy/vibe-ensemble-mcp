@@ -17,12 +17,9 @@ impl Config {
     }
 
     pub fn validate_permission_mode(&self) -> Result<(), String> {
-        match self.permission_mode.as_str() {
-            "bypass" | "inherit" | "file" => Ok(()),
-            _ => Err(format!(
-                "Invalid permission mode '{}'. Valid options: bypass, inherit, file",
-                self.permission_mode
-            )),
-        }
+        use crate::permissions::PermissionMode;
+        self.permission_mode.parse::<PermissionMode>()
+            .map(|_| ())
+            .map_err(|e| e.to_string())
     }
 }

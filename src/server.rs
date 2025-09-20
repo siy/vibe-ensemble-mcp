@@ -25,15 +25,8 @@ pub struct AppState {
     pub config: Config,
     pub db: DbPool,
     pub queue_manager: Arc<QueueManager>,
-    pub server_info: ServerInfo,
     pub event_broadcaster: EventBroadcaster,
     pub mcp_server: Arc<McpServer>,
-}
-
-#[derive(Clone)]
-pub struct ServerInfo {
-    pub host: String,
-    pub port: u16,
 }
 
 pub async fn run_server(config: Config) -> Result<()> {
@@ -53,10 +46,6 @@ pub async fn run_server(config: Config) -> Result<()> {
         config: config.clone(),
         db,
         queue_manager,
-        server_info: ServerInfo {
-            host: config.host.clone(),
-            port: config.port,
-        },
         event_broadcaster,
         mcp_server,
     };

@@ -66,8 +66,7 @@ pub async fn create_pool(database_url: &str) -> Result<DbPool> {
     let pool = SqlitePool::connect(database_url).await?;
 
     info!("Running database migrations");
-    let migration_runner = migrations::MigrationRunner::new(pool.clone());
-    migration_runner.run_migrations().await?;
+    migrations::run_migrations(&pool).await?;
 
     Ok(pool)
 }

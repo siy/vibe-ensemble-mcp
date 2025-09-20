@@ -18,48 +18,53 @@ impl Default for McpServer {
     }
 }
 
+/// Macro to register multiple tools at once
+macro_rules! register_tools {
+    ($registry:expr, $($tool:expr),+ $(,)?) => {
+        $(
+            $registry.register($tool);
+        )+
+    };
+}
+
 impl McpServer {
     pub fn new() -> Self {
         let mut tools = ToolRegistry::new();
 
-        // Register project management tools
-        tools.register(CreateProjectTool);
-        tools.register(ListProjectsTool);
-        tools.register(GetProjectTool);
-        tools.register(UpdateProjectTool);
-        tools.register(DeleteProjectTool);
-
-        // Worker management is handled automatically by the queue system
-
-        // Register worker type management tools
-        tools.register(CreateWorkerTypeTool);
-        tools.register(ListWorkerTypesTool);
-        tools.register(GetWorkerTypeTool);
-        tools.register(UpdateWorkerTypeTool);
-        tools.register(DeleteWorkerTypeTool);
-
-        // Register ticket management tools
-        tools.register(CreateTicketTool);
-        tools.register(GetTicketTool);
-        tools.register(ListTicketsTool);
-        tools.register(AddTicketCommentTool);
-        tools.register(CloseTicketTool);
-        tools.register(ResumeTicketProcessingTool);
-
-        // Register event and stage management tools
-        tools.register(ListEventsTool);
-        tools.register(ResolveEventTool);
-        tools.register(GetTicketsByStageTool);
-
-        // Register dependency management tools
-        tools.register(AddTicketDependencyTool);
-        tools.register(RemoveTicketDependencyTool);
-        tools.register(GetDependencyGraphTool);
-        tools.register(ListReadyTicketsTool);
-        tools.register(ListBlockedTicketsTool);
-
-        // Register permission management tools
-        tools.register(GetPermissionModelTool);
+        register_tools!(
+            tools,
+            // Project management tools
+            CreateProjectTool,
+            ListProjectsTool,
+            GetProjectTool,
+            UpdateProjectTool,
+            DeleteProjectTool,
+            // Worker type management tools
+            CreateWorkerTypeTool,
+            ListWorkerTypesTool,
+            GetWorkerTypeTool,
+            UpdateWorkerTypeTool,
+            DeleteWorkerTypeTool,
+            // Ticket management tools
+            CreateTicketTool,
+            GetTicketTool,
+            ListTicketsTool,
+            AddTicketCommentTool,
+            CloseTicketTool,
+            ResumeTicketProcessingTool,
+            // Event and stage management tools
+            ListEventsTool,
+            ResolveEventTool,
+            GetTicketsByStageTool,
+            // Dependency management tools
+            AddTicketDependencyTool,
+            RemoveTicketDependencyTool,
+            GetDependencyGraphTool,
+            ListReadyTicketsTool,
+            ListBlockedTicketsTool,
+            // Permission management tools
+            GetPermissionModelTool,
+        );
 
         Self { tools }
     }

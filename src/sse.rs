@@ -55,8 +55,8 @@ pub async fn sse_handler(
     let broadcaster = &state.event_broadcaster;
 
     // Create typed events for initialization
-    let host = &state.server_info.host;
-    let port = state.server_info.port;
+    let host = &state.config.host;
+    let port = state.config.port;
     let system_init_event = EventPayload::system_init();
     let endpoint_discovery_event = EventPayload::endpoint_discovery(
         &format!("http://{}:{}/messages", host, port),

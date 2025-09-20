@@ -4,6 +4,7 @@ pub mod database;
 pub mod error;
 pub mod events;
 pub mod mcp;
+pub mod permissions;
 pub mod server;
 pub mod sse;
 pub mod workers;
