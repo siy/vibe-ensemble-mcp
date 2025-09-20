@@ -3,6 +3,8 @@ use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
+pub mod emitter;
+
 /// Strongly typed event payload - replaces String-based broadcasts
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct EventPayload {

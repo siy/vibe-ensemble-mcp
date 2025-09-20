@@ -3,8 +3,11 @@ use serde_json::Value;
 use tracing::info;
 
 use super::{
-    tools::{extract_optional_param, extract_param, ToolHandler},
-    types::{CallToolResponse, PaginationCursor, Tool, ToolContent},
+    tools::{
+        create_json_success_response, create_success_response, extract_optional_param,
+        extract_param, ToolHandler,
+    },
+    types::{CallToolResponse, PaginationCursor, Tool},
 };
 use crate::{
     database::{events::Event, tickets::Ticket},
@@ -76,13 +79,7 @@ impl ToolHandler for ListEventsTool {
             }
         });
 
-        Ok(CallToolResponse {
-            content: vec![ToolContent {
-                content_type: "text".to_string(),
-                text: serde_json::to_string_pretty(&response_data)?,
-            }],
-            is_error: Some(false),
-        })
+        Ok(create_json_success_response(response_data))
     }
 
     fn definition(&self) -> Tool {
@@ -147,13 +144,7 @@ impl ToolHandler for ResolveEventTool {
 
         Event::resolve_event(&state.db, event_id, &resolution_summary).await?;
 
-        Ok(CallToolResponse {
-            content: vec![ToolContent {
-                content_type: "application/json".to_string(),
-                text: format!("Event {} resolved successfully. The event has been marked as processed and will no longer appear in unprocessed event listings.", event_id),
-            }],
-            is_error: Some(false),
-        })
+        Ok(create_success_response(&format!("Event {} resolved successfully. The event has been marked as processed and will no longer appear in unprocessed event listings.", event_id)))
     }
 
     fn definition(&self) -> Tool {
@@ -234,13 +225,7 @@ impl ToolHandler for GetTicketsByStageTool {
             }
         });
 
-        Ok(CallToolResponse {
-            content: vec![ToolContent {
-                content_type: "text".to_string(),
-                text: serde_json::to_string_pretty(&response_data)?,
-            }],
-            is_error: Some(false),
-        })
+        Ok(create_json_success_response(response_data))
     }
 
     fn definition(&self) -> Tool {

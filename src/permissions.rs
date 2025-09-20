@@ -154,14 +154,51 @@ pub fn load_file_permissions(project_path: &str) -> Result<ClaudePermissions> {
     Ok(settings.permissions)
 }
 
-/// Load permissions based on the permission mode
+/// Permission policy that clarifies intent at call sites
+#[derive(Debug, Clone)]
+pub enum PermissionPolicy {
+    /// Bypass all permissions - no restrictions
+    Bypass,
+    /// Apply specific permission rules
+    Enforce(ClaudePermissions),
+}
+
+impl PermissionPolicy {
+    /// Check if this policy bypasses all permissions
+    pub fn is_bypass(&self) -> bool {
+        matches!(self, PermissionPolicy::Bypass)
+    }
+
+    /// Get permissions if any are enforced, None if bypass mode
+    pub fn permissions(&self) -> Option<&ClaudePermissions> {
+        match self {
+            PermissionPolicy::Bypass => None,
+            PermissionPolicy::Enforce(perms) => Some(perms),
+        }
+    }
+}
+
+/// Load permissions based on the permission mode (deprecated - use load_permission_policy)
 pub fn load_permissions(
     mode: PermissionMode,
     project_path: &str,
 ) -> Result<Option<ClaudePermissions>> {
+    let policy = load_permission_policy(mode, project_path)?;
+    Ok(policy.permissions().cloned())
+}
+
+/// Load permission policy based on the permission mode
+pub fn load_permission_policy(
+    mode: PermissionMode,
+    project_path: &str,
+) -> Result<PermissionPolicy> {
     match mode {
-        PermissionMode::Bypass => Ok(None), // No permissions needed in bypass mode
-        PermissionMode::Inherit => Ok(Some(load_inherit_permissions(project_path)?)),
-        PermissionMode::File => Ok(Some(load_file_permissions(project_path)?)),
+        PermissionMode::Bypass => Ok(PermissionPolicy::Bypass),
+        PermissionMode::Inherit => Ok(PermissionPolicy::Enforce(load_inherit_permissions(
+            project_path,
+        )?)),
+        PermissionMode::File => Ok(PermissionPolicy::Enforce(load_file_permissions(
+            project_path,
+        )?)),
     }
 }

@@ -79,7 +79,7 @@ impl McpServer {
         let response = match request.method.as_str() {
             "initialize" => self.handle_initialize(request.params).await,
             "notifications/initialized" => self.handle_initialized().await,
-            "list_tools" | "tools/list" => {
+            "tools/list" => {
                 // Check if this is a paginated request by looking for params
                 if request.params.is_some() {
                     self.handle_list_tools_with_pagination(request.params).await
@@ -87,9 +87,9 @@ impl McpServer {
                     self.handle_list_tools().await
                 }
             }
-            "call_tool" | "tools/call" => self.handle_call_tool(state, request.params).await,
-            "list_prompts" | "prompts/list" => self.handle_list_prompts().await,
-            "get_prompt" | "prompts/get" => self.handle_get_prompt(request.params).await,
+            "tools/call" => self.handle_call_tool(state, request.params).await,
+            "prompts/list" => self.handle_list_prompts().await,
+            "prompts/get" => self.handle_get_prompt(request.params).await,
             _ => Err(JsonRpcError {
                 code: METHOD_NOT_FOUND,
                 message: format!("Method '{}' not found", request.method),

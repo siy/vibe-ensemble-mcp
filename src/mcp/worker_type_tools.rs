@@ -1,11 +1,12 @@
 use async_trait::async_trait;
 use serde_json::{json, Value};
+use tracing::warn;
 
 use super::tools::{
-    create_json_error_response, create_json_success_response, extract_optional_param, extract_param,
-    ToolHandler,
+    create_json_error_response, create_json_success_response, extract_optional_param,
+    extract_param, ToolHandler,
 };
-use super::types::{CallToolResponse, PaginationCursor, Tool, ToolContent};
+use super::types::{CallToolResponse, PaginationCursor, Tool};
 use crate::{
     database::worker_types::{CreateWorkerTypeRequest, UpdateWorkerTypeRequest, WorkerType},
     error::Result,
@@ -42,28 +43,22 @@ impl ToolHandler for CreateWorkerTypeTool {
                     "updated_at": worker_type_info.updated_at
                 });
 
-                // Broadcast worker_type_created event
-                use crate::events::EventPayload;
-                let event = EventPayload::system_message(
-                    "worker_types",
-                    "worker_type_created",
-                    Some(json!({
-                        "worker_type": {
-                            "id": worker_type_info.id,
-                            "project_id": worker_type_info.project_id,
-                            "worker_type": worker_type_info.worker_type,
-                            "short_description": worker_type_info.short_description,
-                            "created_at": worker_type_info.created_at,
-                            "updated_at": worker_type_info.updated_at
-                        }
-                    })),
-                );
-                state.event_broadcaster.broadcast(event);
-                tracing::debug!(
-                    "Successfully broadcast worker_type_created event for: {}/{}",
-                    project_id,
-                    worker_type
-                );
+                // Emit worker_type_created event
+                let worker_type_data = json!({
+                    "id": worker_type_info.id,
+                    "project_id": worker_type_info.project_id,
+                    "worker_type": worker_type_info.worker_type,
+                    "short_description": worker_type_info.short_description,
+                    "created_at": worker_type_info.created_at,
+                    "updated_at": worker_type_info.updated_at
+                });
+                if let Err(e) = state
+                    .event_emitter()
+                    .emit_worker_type_created(&project_id, &worker_type, &worker_type_data)
+                    .await
+                {
+                    warn!("Failed to emit worker_type_created event: {}", e);
+                }
 
                 Ok(create_json_success_response(response))
             }
@@ -134,13 +129,7 @@ impl ToolHandler for ListWorkerTypesTool {
                     }
                 });
 
-                Ok(CallToolResponse {
-                    content: vec![ToolContent {
-                        content_type: "text".to_string(),
-                        text: serde_json::to_string_pretty(&response_data)?,
-                    }],
-                    is_error: Some(false),
-                })
+                Ok(create_json_success_response(response_data))
             }
             Err(e) => Ok(create_json_error_response(&format!(
                 "Failed to list worker types: {}",
@@ -259,28 +248,22 @@ impl ToolHandler for UpdateWorkerTypeTool {
                     "updated_at": worker_type_info.updated_at
                 });
 
-                // Broadcast worker_type_updated event
-                use crate::events::EventPayload;
-                let event = EventPayload::system_message(
-                    "worker_types",
-                    "worker_type_updated",
-                    Some(json!({
-                        "worker_type": {
-                            "id": worker_type_info.id,
-                            "project_id": worker_type_info.project_id,
-                            "worker_type": worker_type_info.worker_type,
-                            "short_description": worker_type_info.short_description,
-                            "created_at": worker_type_info.created_at,
-                            "updated_at": worker_type_info.updated_at
-                        }
-                    })),
-                );
-                state.event_broadcaster.broadcast(event);
-                tracing::debug!(
-                    "Successfully broadcast worker_type_updated event for: {}/{}",
-                    project_id,
-                    worker_type
-                );
+                // Emit worker_type_updated event
+                let worker_type_data = json!({
+                    "id": worker_type_info.id,
+                    "project_id": worker_type_info.project_id,
+                    "worker_type": worker_type_info.worker_type,
+                    "short_description": worker_type_info.short_description,
+                    "created_at": worker_type_info.created_at,
+                    "updated_at": worker_type_info.updated_at
+                });
+                if let Err(e) = state
+                    .event_emitter()
+                    .emit_worker_type_updated(&project_id, &worker_type, &worker_type_data)
+                    .await
+                {
+                    warn!("Failed to emit worker_type_updated event: {}", e);
+                }
 
                 Ok(create_json_success_response(response))
             }
@@ -336,22 +319,14 @@ impl ToolHandler for DeleteWorkerTypeTool {
 
         match WorkerType::delete(&state.db, &project_id, &worker_type).await {
             Ok(true) => {
-                // Broadcast worker_type_deleted event
-                use crate::events::EventPayload;
-                let event = EventPayload::system_message(
-                    "worker_types",
-                    "worker_type_deleted",
-                    Some(json!({
-                        "project_id": project_id,
-                        "worker_type": worker_type
-                    })),
-                );
-                state.event_broadcaster.broadcast(event);
-                tracing::debug!(
-                    "Successfully broadcast worker_type_deleted event for: {}/{}",
-                    project_id,
-                    worker_type
-                );
+                // Emit worker_type_deleted event
+                if let Err(e) = state
+                    .event_emitter()
+                    .emit_worker_type_deleted(&project_id, &worker_type)
+                    .await
+                {
+                    warn!("Failed to emit worker_type_deleted event: {}", e);
+                }
 
                 Ok(create_json_success_response(json!({
                     "message": format!("Worker type '{}' deleted successfully from project '{}'", worker_type, project_id),

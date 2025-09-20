@@ -1,11 +1,11 @@
 use async_trait::async_trait;
 use serde_json::{json, Value};
 use std::fs;
-use tracing::{debug, info};
+use tracing::{debug, info, warn};
 
 use super::tools::{
-    create_json_error_response, create_json_success_response,
-    extract_optional_param, extract_param, ToolHandler,
+    create_json_error_response, create_json_success_response, extract_optional_param,
+    extract_param, ToolHandler,
 };
 use super::types::{CallToolResponse, PaginationCursor, Tool};
 use crate::{
@@ -22,9 +22,8 @@ impl ToolHandler for CreateProjectTool {
         let repository_name: String = extract_param(&arguments, "repository_name")?;
         let path: String = extract_param(&arguments, "path")?;
         let short_description: Option<String> = extract_optional_param(&arguments, "description")?;
-        let project_rules: Option<String> = extract_optional_param(&arguments, "project_rules")?;
-        let project_patterns: Option<String> =
-            extract_optional_param(&arguments, "project_patterns")?;
+        let rules: Option<String> = extract_optional_param(&arguments, "rules")?;
+        let patterns: Option<String> = extract_optional_param(&arguments, "patterns")?;
 
         // Create the project directory if it doesn't exist
         debug!("Checking if project directory exists: {}", path);
@@ -45,8 +44,8 @@ impl ToolHandler for CreateProjectTool {
             repository_name: repository_name.clone(),
             path,
             short_description,
-            rules: project_rules,
-            patterns: project_patterns,
+            rules,
+            patterns,
         };
 
         match Project::create(&state.db, request).await {
@@ -58,27 +57,20 @@ impl ToolHandler for CreateProjectTool {
                     "created_at": project.created_at
                 });
 
-                // Broadcast project_created event
-                use crate::events::EventPayload;
-
-                let event = EventPayload::system_message(
-                    "projects",
-                    "project_created",
-                    Some(json!({
-                        "project": {
-                            "repository_name": project.repository_name,
-                            "path": project.path,
-                            "description": project.short_description,
-                            "created_at": project.created_at
-                        }
-                    })),
-                );
-
-                state.event_broadcaster.broadcast(event);
-                tracing::debug!(
-                    "Successfully broadcast project_created event for: {}",
-                    project.repository_name
-                );
+                // Emit project_created event
+                let project_data = json!({
+                    "repository_name": project.repository_name,
+                    "path": project.path,
+                    "description": project.short_description,
+                    "created_at": project.created_at
+                });
+                if let Err(e) = state
+                    .event_emitter()
+                    .emit_project_created(&project_data)
+                    .await
+                {
+                    warn!("Failed to emit project_created event: {}", e);
+                }
 
                 Ok(create_json_success_response(response))
             }
@@ -107,6 +99,14 @@ impl ToolHandler for CreateProjectTool {
                     "description": {
                         "type": "string",
                         "description": "Optional short description of the project"
+                    },
+                    "rules": {
+                        "type": "string",
+                        "description": "Project-specific rules and guidelines"
+                    },
+                    "patterns": {
+                        "type": "string",
+                        "description": "Project-specific patterns and conventions"
                     }
                 },
                 "required": ["repository_name", "path"]
@@ -177,9 +177,9 @@ impl ToolHandler for GetProjectTool {
         let repository_name: String = extract_param(&arguments, "repository_name")?;
 
         match Project::get_by_name(&state.db, &repository_name).await {
-            Ok(Some(project)) => {
-                Ok(create_json_success_response(serde_json::to_value(&project)?))
-            }
+            Ok(Some(project)) => Ok(create_json_success_response(serde_json::to_value(
+                &project,
+            )?)),
             Ok(None) => Ok(create_json_error_response(&format!(
                 "Project '{}' not found",
                 repository_name
@@ -217,21 +217,20 @@ impl ToolHandler for UpdateProjectTool {
         let repository_name: String = extract_param(&arguments, "repository_name")?;
         let path: Option<String> = extract_optional_param(&arguments, "path")?;
         let short_description: Option<String> = extract_optional_param(&arguments, "description")?;
-        let project_rules: Option<String> = extract_optional_param(&arguments, "project_rules")?;
-        let project_patterns: Option<String> =
-            extract_optional_param(&arguments, "project_patterns")?;
+        let rules: Option<String> = extract_optional_param(&arguments, "rules")?;
+        let patterns: Option<String> = extract_optional_param(&arguments, "patterns")?;
 
         let request = UpdateProjectRequest {
             path,
             short_description,
-            project_rules,
-            project_patterns,
+            rules,
+            patterns,
         };
 
         match Project::update(&state.db, &repository_name, request).await {
-            Ok(Some(project)) => {
-                Ok(create_json_success_response(serde_json::to_value(&project)?))
-            }
+            Ok(Some(project)) => Ok(create_json_success_response(serde_json::to_value(
+                &project,
+            )?)),
             Ok(None) => Ok(create_json_error_response(&format!(
                 "Project '{}' not found",
                 repository_name
@@ -261,6 +260,14 @@ impl ToolHandler for UpdateProjectTool {
                     "description": {
                         "type": "string",
                         "description": "New short description of the project"
+                    },
+                    "rules": {
+                        "type": "string",
+                        "description": "Project-specific rules and guidelines"
+                    },
+                    "patterns": {
+                        "type": "string",
+                        "description": "Project-specific patterns and conventions"
                     }
                 },
                 "required": ["repository_name"]

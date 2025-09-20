@@ -3,10 +3,8 @@ use clap::Parser;
 use tracing::info;
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt, EnvFilter, Layer};
 use vibe_ensemble_mcp::{
-    config::Config,
-    configure::configure_claude_code,
-    permissions::PermissionMode,
-    server::run_server
+    config::Config, configure::configure_claude_code, permissions::PermissionMode,
+    server::run_server,
 };
 
 fn validate_permission_mode(mode: &str) -> Result<String, String> {

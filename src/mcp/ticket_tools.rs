@@ -5,10 +5,10 @@ use uuid::Uuid;
 
 use super::{
     tools::{
-        create_json_error_response, create_json_success_response,
+        create_json_error_response, create_json_success_response, create_success_response,
         extract_optional_param, extract_param, ToolHandler,
     },
-    types::{CallToolResponse, PaginationCursor, Tool, ToolContent},
+    types::{CallToolResponse, PaginationCursor, Tool},
 };
 use crate::{
     database::{
@@ -49,19 +49,15 @@ impl ToolHandler for CreateTicketTool {
         let created_by_worker_id: Option<String> =
             extract_optional_param(&Some(args.clone()), "created_by_worker_id")?;
 
-        // Validate that the initial stage worker type exists for this project (including "planning")
-        let worker_type_exists = crate::database::worker_types::WorkerType::get_by_type(
+        // Validate that the initial stage worker type exists for this project
+        if let Err(e) = crate::validation::PipelineValidator::validate_initial_stage(
             &state.db,
             &project_id,
             &initial_stage,
         )
-        .await?;
-
-        if worker_type_exists.is_none() {
-            return Ok(crate::mcp::tools::create_json_error_response(&format!(
-                "Worker type '{}' does not exist for project '{}'. Cannot use as initial stage. Coordinator must create this worker type first.",
-                initial_stage, project_id
-            )));
+        .await
+        {
+            return Ok(create_json_error_response(&e.to_string()));
         }
 
         info!("Creating ticket: {} in project {}", title, project_id);
@@ -72,21 +68,15 @@ impl ToolHandler for CreateTicketTool {
         let execution_plan = execution_plan_input.unwrap_or_else(|| vec![initial_stage.clone()]);
 
         // Validate all stages in execution plan exist as worker types
-        for stage in &execution_plan {
-            let stage_exists = crate::database::worker_types::WorkerType::get_by_type(
-                &state.db,
-                &project_id,
-                stage,
-            )
-            .await?
-            .is_some();
-
-            if !stage_exists {
-                return Ok(create_json_error_response(&format!(
-                    "Worker type '{}' does not exist in project '{}'. All stages in execution plan must exist as worker types.",
-                    stage, project_id
-                )));
-            }
+        if let Err(e) = crate::validation::PipelineValidator::validate_pipeline_stages(
+            &state.db,
+            &project_id,
+            &execution_plan,
+            "Ticket creation",
+        )
+        .await
+        {
+            return Ok(create_json_error_response(&e.to_string()));
         }
 
         let req = CreateTicketRequest {
@@ -103,19 +93,19 @@ impl ToolHandler for CreateTicketTool {
 
         let ticket = Ticket::create(&state.db, req).await?;
 
-        // Broadcast ticket_created event
-        use crate::events::EventPayload;
-        let event = EventPayload::ticket_created_with_data(
-            &ticket.ticket_id,
-            &ticket.project_id,
-            &ticket.title,
-            &ticket.current_stage,
-        );
-        state.event_broadcaster.broadcast(event);
-        tracing::debug!(
-            "Successfully broadcast ticket_created event for: {}",
-            ticket.ticket_id
-        );
+        // Emit ticket_created event
+        if let Err(e) = state
+            .event_emitter()
+            .emit_ticket_created(
+                &ticket.ticket_id,
+                &ticket.project_id,
+                &ticket.title,
+                &ticket.current_stage,
+            )
+            .await
+        {
+            warn!("Failed to emit ticket_created event: {}", e);
+        }
 
         // Automatically submit the ticket to the initial stage queue
         match state
@@ -137,13 +127,10 @@ impl ToolHandler for CreateTicketTool {
             }
         }
 
-        Ok(CallToolResponse {
-            content: vec![ToolContent {
-                content_type: "text".to_string(),
-                text: format!("Created ticket {} with ID: {}", title, ticket.ticket_id),
-            }],
-            is_error: Some(false),
-        })
+        Ok(create_success_response(&format!(
+            "Created ticket {} with ID: {}",
+            title, ticket.ticket_id
+        )))
     }
 
     fn definition(&self) -> Tool {
@@ -350,22 +337,25 @@ impl ToolHandler for AddTicketCommentTool {
 
         let comment = Comment::create_from_request(&state.db, req).await?;
 
-        // Broadcast ticket_comment_added event
-        use crate::events::EventPayload;
-        let event = EventPayload::ticket_updated(&ticket_id, "", "comment_added");
-        state.event_broadcaster.broadcast(event);
-        tracing::debug!(
-            "Successfully broadcast ticket_comment_added event for: {}",
-            ticket_id
-        );
+        // Emit ticket_updated event for comment added
+        if let Err(e) = state
+            .event_emitter()
+            .emit_ticket_updated(
+                &ticket_id,
+                "", // project_id will be looked up by the emitter if needed
+                "comment_added",
+                None,
+                Some(&format!("Comment added: {}", comment.id)),
+            )
+            .await
+        {
+            warn!("Failed to emit ticket_updated event: {}", e);
+        }
 
-        Ok(CallToolResponse {
-            content: vec![ToolContent {
-                content_type: "text".to_string(),
-                text: format!("Added comment to ticket {}: {}", ticket_id, comment.id),
-            }],
-            is_error: Some(false),
-        })
+        Ok(create_success_response(&format!(
+            "Added comment to ticket {}: {}",
+            ticket_id, comment.id
+        )))
     }
 
     fn definition(&self) -> Tool {
@@ -427,14 +417,14 @@ impl ToolHandler for CloseTicketTool {
 
         match result {
             Some(closed_ticket) => {
-                // Broadcast ticket_closed event
-                use crate::events::EventPayload;
-                let event = EventPayload::ticket_closed(&ticket_id, &closed_ticket.project_id);
-                state.event_broadcaster.broadcast(event);
-                tracing::debug!(
-                    "Successfully broadcast ticket_closed event for: {}",
-                    ticket_id
-                );
+                // Emit ticket_closed event
+                if let Err(e) = state
+                    .event_emitter()
+                    .emit_ticket_closed(&ticket_id, &closed_ticket.project_id, &resolution)
+                    .await
+                {
+                    warn!("Failed to emit ticket_closed event: {}", e);
+                }
 
                 Ok(create_json_success_response(json!({
                     "message": format!("Closed ticket {} with resolution: {}", ticket_id, resolution),
@@ -506,21 +496,15 @@ impl ToolHandler for ResumeTicketProcessingTool {
         // Determine stage to use (provided or current)
         let target_stage = stage.unwrap_or(ticket_data.current_stage.clone());
 
-        // Validate that the target stage worker type exists for this project (unless it's "planning")
-        if target_stage != "planning" {
-            let worker_type_exists = crate::database::worker_types::WorkerType::get_by_type(
-                &state.db,
-                &ticket_data.project_id,
-                &target_stage,
-            )
-            .await?;
-
-            if worker_type_exists.is_none() {
-                return Ok(create_json_error_response(&format!(
-                    "Worker type '{}' does not exist for project '{}'. Cannot resume ticket with this stage.",
-                    target_stage, ticket_data.project_id
-                )));
-            }
+        // Validate that the target stage worker type exists for this project
+        if let Err(e) = crate::validation::PipelineValidator::validate_resume_stage(
+            &state.db,
+            &ticket_data.project_id,
+            &target_stage,
+        )
+        .await
+        {
+            return Ok(create_json_error_response(&e.to_string()));
         }
 
         // Determine state to use (provided or "open")

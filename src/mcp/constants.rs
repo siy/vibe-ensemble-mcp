@@ -51,20 +51,6 @@ impl JsonRpcEnvelopes {
         })
     }
 
-    /// Create endpoint discovery message
-    pub fn endpoint_discovery(http_url: &str, sse_url: &str) -> Value {
-        json!({
-            "jsonrpc": "2.0",
-            "method": "notifications/endpoints",
-            "params": {
-                "endpoints": {
-                    "http": http_url,
-                    "sse": sse_url
-                }
-            }
-        })
-    }
-
     /// Create JSON-RPC error response
     pub fn error_response(code: i32, message: &str, id: Option<Value>) -> Value {
         json!({

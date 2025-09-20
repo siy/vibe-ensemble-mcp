@@ -6,7 +6,9 @@ use tracing::{debug, info, warn};
 
 use super::queue::WorkerOutput;
 use super::types::SpawnWorkerRequest;
-use crate::permissions::{load_permissions, ClaudePermissions, PermissionMode};
+use crate::permissions::{
+    load_permission_policy, ClaudePermissions, PermissionMode, PermissionPolicy,
+};
 
 pub struct ProcessManager;
 
@@ -26,15 +28,19 @@ impl ProcessManager {
             }
             PermissionMode::Inherit | PermissionMode::File => {
                 debug!("Using {} mode", mode.as_str());
-                if let Some(permissions) = load_permissions(mode, project_path)? {
-                    info!(
-                        "Loaded permissions with {} allowed, {} denied tools",
-                        permissions.allow.len(),
-                        permissions.deny.len()
-                    );
-                    Self::add_permission_args(cmd, &permissions);
-                } else {
-                    debug!("No permissions loaded for mode: {}", mode.as_str());
+                let policy = load_permission_policy(mode, project_path)?;
+                match policy {
+                    PermissionPolicy::Bypass => {
+                        debug!("Permission policy is bypass for mode: {}", mode.as_str());
+                    }
+                    PermissionPolicy::Enforce(permissions) => {
+                        info!(
+                            "Loaded permissions with {} allowed, {} denied tools",
+                            permissions.allow.len(),
+                            permissions.deny.len()
+                        );
+                        Self::add_permission_args(cmd, &permissions);
+                    }
                 }
             }
         }
@@ -68,6 +74,57 @@ impl ProcessManager {
                 permissions.ask.len()
             );
         }
+    }
+
+    /// Optimized worker output parsing with fallback strategies
+    fn try_parse_worker_output(stdout: &str) -> Result<WorkerOutput> {
+        debug!("Attempting optimized worker output parsing");
+
+        // Strategy 1: Try to parse as single JSON object (most efficient)
+        if let Ok(output) = serde_json::from_str::<WorkerOutput>(stdout.trim()) {
+            debug!("Successfully parsed as direct JSON");
+            return Ok(output);
+        }
+
+        // Strategy 2: Try Claude CLI wrapper format ({"result": "...", "type": "completion"})
+        if let Ok(claude_output) = serde_json::from_str::<serde_json::Value>(stdout.trim()) {
+            if let Some(result_str) = claude_output.get("result").and_then(|v| v.as_str()) {
+                debug!("Found Claude CLI wrapper, extracting result");
+                if let Ok(output) = Self::parse_worker_output_from_result(result_str) {
+                    return Ok(output);
+                }
+            }
+        }
+
+        // Strategy 3: Line-by-line parsing (fallback for complex outputs)
+        for line in stdout.lines() {
+            let line = line.trim();
+            if line.is_empty() {
+                continue;
+            }
+
+            // Try direct JSON parsing first
+            if let Ok(output) = serde_json::from_str::<WorkerOutput>(line) {
+                debug!("Successfully parsed worker output from line");
+                return Ok(output);
+            }
+
+            // Try Claude CLI wrapper on this line
+            if line.contains("\"result\"") && line.contains("\"type\"") {
+                if let Ok(claude_output) = serde_json::from_str::<serde_json::Value>(line) {
+                    if let Some(result_str) = claude_output.get("result").and_then(|v| v.as_str()) {
+                        debug!("Found Claude CLI wrapper in line, extracting result");
+                        if let Ok(output) = Self::parse_worker_output_from_result(result_str) {
+                            return Ok(output);
+                        }
+                    }
+                }
+            }
+        }
+
+        Err(anyhow::anyhow!(
+            "Could not parse worker output using any strategy. Workers must output valid JSON."
+        ))
     }
 
     /// Parse worker JSON output from the result string within Claude CLI JSON wrapper
@@ -168,7 +225,10 @@ impl ProcessManager {
             .stderr(Stdio::piped());
 
         // Apply permissions based on mode
-        info!("Applying permission mode: {}", request.permission_mode.as_str());
+        info!(
+            "Applying permission mode: {}",
+            request.permission_mode.as_str()
+        );
         Self::apply_permissions_to_command(
             &mut cmd,
             request.permission_mode,
@@ -192,38 +252,15 @@ impl ProcessManager {
         debug!("Worker stdout: {}", stdout_str);
         debug!("Worker stderr: {}", stderr_str);
 
-        // Parse Claude CLI JSON output format
-        // Claude CLI with --output-format json wraps response in {"result": "...", "type": "completion"}
-        for line in stdout_str.lines() {
-            if line.contains("\"result\"") && line.contains("\"type\"") {
-                debug!("Parsing Claude CLI wrapper JSON: {}", line);
-                match serde_json::from_str::<serde_json::Value>(line) {
-                    Ok(claude_output) => {
-                        if let Some(result_str) =
-                            claude_output.get("result").and_then(|v| v.as_str())
-                        {
-                            debug!("Extracted result string from Claude CLI wrapper");
-                            match Self::parse_worker_output_from_result(result_str) {
-                                Ok(parsed_output) => {
-                                    info!(
-                                        "Successfully parsed worker output for ticket {}",
-                                        request.ticket_id
-                                    );
-                                    // Clean up
-                                    let _ = std::fs::remove_file(&config_path);
-                                    return Ok(parsed_output);
-                                }
-                                Err(e) => {
-                                    debug!("Failed to parse worker output from result: {}", e);
-                                }
-                            }
-                        }
-                    }
-                    Err(e) => {
-                        debug!("Failed to parse Claude CLI wrapper JSON: {}", e);
-                    }
-                }
-            }
+        // Optimized parsing: try whole output first, then line-by-line fallback
+        if let Ok(parsed_output) = Self::try_parse_worker_output(&stdout_str) {
+            info!(
+                "Successfully parsed worker output for ticket {}",
+                request.ticket_id
+            );
+            // Clean up
+            let _ = std::fs::remove_file(&config_path);
+            return Ok(parsed_output);
         }
 
         // Clean up config file

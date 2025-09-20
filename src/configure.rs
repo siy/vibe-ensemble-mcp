@@ -1,8 +1,7 @@
 use anyhow::Result;
-use serde_json::json;
 use std::fs;
 
-use crate::mcp::MCP_PROTOCOL_VERSION;
+use crate::mcp::constants::build_mcp_config;
 use crate::permissions::{ClaudePermissions, ClaudeSettings};
 
 /// Generate Claude Code integration files
@@ -37,21 +36,7 @@ pub async fn configure_claude_code(host: &str, port: u16) -> Result<()> {
 }
 
 async fn create_mcp_config(host: &str, port: u16) -> Result<()> {
-    let config = json!({
-        "mcpServers": {
-            "vibe-ensemble-mcp": {
-                "type": "http",
-                "url": format!("http://{}:{}/mcp", host, port),
-                "protocol_version": MCP_PROTOCOL_VERSION
-            },
-            "vibe-ensemble-sse": {
-                "type": "sse",
-                "url": format!("http://{}:{}/sse", host, port),
-                "protocol_version": MCP_PROTOCOL_VERSION
-            }
-        }
-    });
-
+    let config = build_mcp_config(host, port);
     fs::write(".mcp.json", serde_json::to_string_pretty(&config)?)?;
     Ok(())
 }

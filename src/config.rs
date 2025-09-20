@@ -17,5 +17,4 @@ impl Config {
     pub fn server_address(&self) -> String {
         format!("{}:{}", self.host, self.port)
     }
-
 }

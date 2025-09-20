@@ -33,8 +33,8 @@ pub struct CreateProjectRequest {
 pub struct UpdateProjectRequest {
     pub path: Option<String>,
     pub short_description: Option<String>,
-    pub project_rules: Option<String>,
-    pub project_patterns: Option<String>,
+    pub rules: Option<String>,
+    pub patterns: Option<String>,
 }
 
 impl Project {
@@ -94,49 +94,62 @@ impl Project {
         // Check if any updates are needed
         if req.path.is_none()
             && req.short_description.is_none()
-            && req.project_rules.is_none()
-            && req.project_patterns.is_none()
+            && req.rules.is_none()
+            && req.patterns.is_none()
         {
             return Self::get_by_name(pool, repository_name).await;
         }
 
-        // Build update query dynamically
-        let mut set_clauses = Vec::new();
-        let mut bind_values: Vec<&str> = Vec::new();
+        // Build update query using QueryBuilder for safer parameter binding
+        let mut query_builder = sqlx::QueryBuilder::new("UPDATE projects SET ");
+        let mut has_field = false;
 
         if let Some(ref path) = req.path {
-            set_clauses.push("path = ?");
-            bind_values.push(path);
+            if has_field {
+                query_builder.push(", ");
+            }
+            query_builder.push("path = ");
+            query_builder.push_bind(path);
+            has_field = true;
         }
         if let Some(ref desc) = req.short_description {
-            set_clauses.push("short_description = ?");
-            bind_values.push(desc);
+            if has_field {
+                query_builder.push(", ");
+            }
+            query_builder.push("short_description = ");
+            query_builder.push_bind(desc);
+            has_field = true;
         }
-        if let Some(ref rules) = req.project_rules {
-            set_clauses.push("rules = ?");
-            bind_values.push(rules);
+        if let Some(ref rules) = req.rules {
+            if has_field {
+                query_builder.push(", ");
+            }
+            query_builder.push("rules = ");
+            query_builder.push_bind(rules);
+            has_field = true;
         }
-        if let Some(ref patterns) = req.project_patterns {
-            set_clauses.push("patterns = ?");
-            bind_values.push(patterns);
+        if let Some(ref patterns) = req.patterns {
+            if has_field {
+                query_builder.push(", ");
+            }
+            query_builder.push("patterns = ");
+            query_builder.push_bind(patterns);
+            has_field = true;
         }
 
-        set_clauses.push("updated_at = datetime('now')");
-
-        let query = format!(
-            "UPDATE projects SET {} WHERE repository_name = ? RETURNING repository_name, path, short_description, rules, patterns, created_at, updated_at, rules_version, patterns_version",
-            set_clauses.join(", ")
-        );
-
-        let mut query_builder = sqlx::query_as::<_, Project>(&query);
-
-        // Bind values in order
-        for value in bind_values {
-            query_builder = query_builder.bind(value);
+        if has_field {
+            query_builder.push(", ");
         }
-        query_builder = query_builder.bind(repository_name);
+        query_builder.push("updated_at = datetime('now')");
 
-        let project = query_builder.fetch_optional(pool).await?;
+        query_builder.push(" WHERE repository_name = ");
+        query_builder.push_bind(repository_name);
+        query_builder.push(" RETURNING repository_name, path, short_description, rules, patterns, created_at, updated_at, rules_version, patterns_version");
+
+        let project = query_builder
+            .build_query_as::<Project>()
+            .fetch_optional(pool)
+            .await?;
         Ok(project)
     }
 

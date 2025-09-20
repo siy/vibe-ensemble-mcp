@@ -29,6 +29,13 @@ pub struct AppState {
     pub mcp_server: Arc<McpServer>,
 }
 
+impl AppState {
+    /// Get an event emitter instance for centralized event emission
+    pub fn event_emitter(&self) -> crate::events::emitter::EventEmitter<'_> {
+        crate::events::emitter::EventEmitter::new(&self.db, &self.event_broadcaster)
+    }
+}
+
 pub async fn run_server(config: Config) -> Result<()> {
     // Initialize database
     let db = crate::database::create_pool(&config.database_url()).await?;

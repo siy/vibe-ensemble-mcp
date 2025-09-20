@@ -4,10 +4,10 @@ use tracing::{info, warn};
 
 use super::{
     tools::{
-        create_json_error_response, create_json_success_response, extract_optional_param, extract_param,
-        ToolHandler,
+        create_json_error_response, create_json_success_response, extract_optional_param,
+        extract_param, ToolHandler,
     },
-    types::{CallToolResponse, PaginationCursor, Tool, ToolContent},
+    types::{CallToolResponse, PaginationCursor, Tool},
 };
 use crate::{database::dag::TicketDependency, server::AppState};
 
@@ -212,13 +212,7 @@ impl ToolHandler for GetDependencyGraphTool {
                     graph.edges.len()
                 );
 
-                Ok(CallToolResponse {
-                    content: vec![ToolContent {
-                        content_type: "application/json".to_string(),
-                        text: serde_json::to_string_pretty(&graph)?,
-                    }],
-                    is_error: Some(false),
-                })
+                Ok(create_json_success_response(serde_json::to_value(graph)?))
             }
             Err(e) => {
                 warn!(
@@ -294,13 +288,7 @@ impl ToolHandler for ListReadyTicketsTool {
                     }
                 });
 
-                Ok(CallToolResponse {
-                    content: vec![ToolContent {
-                        content_type: "application/json".to_string(),
-                        text: serde_json::to_string_pretty(&response_data)?,
-                    }],
-                    is_error: Some(false),
-                })
+                Ok(create_json_success_response(response_data))
             }
             Err(e) => {
                 warn!("Failed to list ready tickets: {}", e);
@@ -377,13 +365,7 @@ impl ToolHandler for ListBlockedTicketsTool {
                     }
                 });
 
-                Ok(CallToolResponse {
-                    content: vec![ToolContent {
-                        content_type: "application/json".to_string(),
-                        text: serde_json::to_string_pretty(&response_data)?,
-                    }],
-                    is_error: Some(false),
-                })
+                Ok(create_json_success_response(response_data))
             }
             Err(e) => {
                 warn!("Failed to list blocked tickets: {}", e);

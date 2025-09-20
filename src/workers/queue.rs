@@ -419,8 +419,12 @@ impl QueueManager {
         }
 
         // Validate that the target worker type exists in the project
-        self.validate_worker_type_exists(ticket_id, target_stage)
-            .await?;
+        crate::validation::PipelineValidator::validate_worker_type_exists_for_ticket(
+            &self.db,
+            ticket_id.as_str(),
+            target_stage.as_str(),
+        )
+        .await?;
 
         info!(
             "Moving ticket {} to next stage: {}",
@@ -439,8 +443,12 @@ impl QueueManager {
         reason: &str,
     ) -> Result<()> {
         // Validate target stage
-        self.validate_worker_type_exists(ticket_id, target_stage)
-            .await?;
+        crate::validation::PipelineValidator::validate_worker_type_exists_for_ticket(
+            &self.db,
+            ticket_id.as_str(),
+            target_stage.as_str(),
+        )
+        .await?;
 
         warn!(
             "Moving ticket {} back to previous stage: {} (reason: {})",
@@ -538,8 +546,13 @@ impl QueueManager {
         )?;
 
         // CRITICAL: Validate that ALL stages exist as worker types before database update
-        self.validate_all_stages_exist(ticket, &new_pipeline_strings)
-            .await?;
+        crate::validation::PipelineValidator::validate_pipeline_stages(
+            &self.db,
+            &ticket.project_id,
+            &new_pipeline_strings,
+            "Pipeline update",
+        )
+        .await?;
 
         // Only proceed with database update if all validation passes
         let pipeline_json = serde_json::to_string(&new_pipeline_strings)
@@ -634,70 +647,6 @@ impl QueueManager {
             "Pipeline validation passed for ticket {}: past {} stages preserved",
             ticket_id,
             current_stage_index + 1
-        );
-
-        Ok(())
-    }
-
-    async fn validate_worker_type_exists(
-        self: &Arc<Self>,
-        ticket_id: &TicketId,
-        worker_type: &WorkerType,
-    ) -> Result<()> {
-        // Get ticket to find project_id
-        let ticket_with_comments =
-            crate::database::tickets::Ticket::get_by_id(&self.db, ticket_id.as_str())
-                .await?
-                .ok_or_else(|| anyhow::anyhow!("Ticket '{}' not found", ticket_id.as_str()))?;
-
-        // Check if worker type exists in the project
-        let worker_type_exists = crate::database::worker_types::WorkerType::get_by_type(
-            &self.db,
-            &ticket_with_comments.ticket.project_id,
-            worker_type.as_str(),
-        )
-        .await?
-        .is_some();
-
-        if !worker_type_exists {
-            return Err(anyhow::anyhow!(
-                "Worker type '{}' does not exist in project '{}'",
-                worker_type.as_str(),
-                ticket_with_comments.ticket.project_id
-            ));
-        }
-
-        Ok(())
-    }
-
-    /// Validate that ALL stages in the pipeline exist as worker types in the project
-    async fn validate_all_stages_exist(
-        &self,
-        ticket: &crate::database::tickets::Ticket,
-        pipeline_stages: &[String],
-    ) -> Result<()> {
-        for stage in pipeline_stages {
-            let worker_type_exists = crate::database::worker_types::WorkerType::get_by_type(
-                &self.db,
-                &ticket.project_id,
-                stage,
-            )
-            .await?
-            .is_some();
-
-            if !worker_type_exists {
-                return Err(anyhow::anyhow!(
-                    "Pipeline validation failed: worker type '{}' does not exist in project '{}'. All pipeline stages must exist as worker types before pipeline update.",
-                    stage,
-                    ticket.project_id
-                ));
-            }
-        }
-
-        info!(
-            "Pipeline validation passed: all {} stages exist as worker types in project '{}'",
-            pipeline_stages.len(),
-            ticket.project_id
         );
 
         Ok(())
