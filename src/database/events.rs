@@ -164,6 +164,37 @@ impl Event {
         Ok(events)
     }
 
+    pub async fn get_by_ids(pool: &DbPool, event_ids: &[i64]) -> Result<Vec<Event>> {
+        if event_ids.is_empty() {
+            return Ok(Vec::new());
+        }
+
+        let placeholders = event_ids
+            .iter()
+            .enumerate()
+            .map(|(i, _)| format!("?{}", i + 1))
+            .collect::<Vec<_>>()
+            .join(",");
+
+        let query = format!(
+            r#"
+            SELECT id, event_type, ticket_id, worker_id, stage, reason, created_at, processed, resolution_summary
+            FROM events
+            WHERE id IN ({})
+            ORDER BY created_at DESC
+        "#,
+            placeholders
+        );
+
+        let mut query_builder = sqlx::query_as::<_, Event>(&query);
+        for id in event_ids {
+            query_builder = query_builder.bind(id);
+        }
+
+        let events = query_builder.fetch_all(pool).await?;
+        Ok(events)
+    }
+
     pub async fn mark_processed(pool: &DbPool, event_ids: &[i64]) -> Result<u64> {
         if event_ids.is_empty() {
             return Ok(0);

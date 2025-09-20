@@ -1,3 +1,4 @@
+use crate::permissions::PermissionMode;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use tokio::sync::RwLock;
@@ -50,8 +51,9 @@ pub struct SpawnWorkerRequest {
     pub ticket_id: String,
     pub project_path: String,
     pub system_prompt: String,
+    pub server_host: String,
     pub server_port: u16,
-    pub permission_mode: String,
+    pub permission_mode: PermissionMode,
 }
 
 pub type WorkerRegistry = RwLock<HashMap<String, WorkerProcess>>;

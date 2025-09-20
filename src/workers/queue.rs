@@ -12,7 +12,9 @@ use super::types::TaskItem;
 use crate::{
     config::Config,
     database::DbPool,
-    sse::{notify_queue_change, notify_ticket_change, EventBroadcaster},
+    events::EventPayload,
+    permissions::PermissionMode,
+    sse::EventBroadcaster,
     workers::domain::{TicketId, WorkerCommand, WorkerCompletionEvent, WorkerType},
 };
 
@@ -42,11 +44,8 @@ pub struct QueueManager {
     db: DbPool,
 }
 
-impl Default for QueueManager {
-    fn default() -> Self {
-        panic!("QueueManager requires DbPool and Config parameters - use QueueManager::new(db, config) instead of default()")
-    }
-}
+// QueueManager intentionally does not implement Default to prevent misuse
+// Always use QueueManager::new(db, config, event_broadcaster) for proper initialization
 
 impl fmt::Debug for QueueManager {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
@@ -96,7 +95,6 @@ impl QueueManager {
         project_id: &str,
         worker_type: &str,
         ticket_id: &str,
-        db: &DbPool,
     ) -> Result<String> {
         let queue_name = Self::generate_queue_name(project_id, worker_type);
         let task_id = Uuid::new_v4().to_string();
@@ -110,9 +108,12 @@ impl QueueManager {
         );
 
         // Validate that the worker type exists for this project
-        let worker_type_exists =
-            crate::database::worker_types::WorkerType::get_by_type(db, project_id, worker_type)
-                .await?;
+        let worker_type_exists = crate::database::worker_types::WorkerType::get_by_type(
+            &self.db,
+            project_id,
+            worker_type,
+        )
+        .await?;
 
         if worker_type_exists.is_none() {
             return Err(anyhow::anyhow!(
@@ -126,7 +127,7 @@ impl QueueManager {
         // Claim the ticket before submitting to queue
         let worker_id = format!("consumer-{}-{}", worker_type, &task_id[..8]);
         let claim_result =
-            crate::database::tickets::Ticket::claim_for_processing(db, ticket_id, &worker_id)
+            crate::database::tickets::Ticket::claim_for_processing(&self.db, ticket_id, &worker_id)
                 .await?;
 
         if claim_result == 0 {
@@ -142,7 +143,8 @@ impl QueueManager {
         );
 
         // Notify about ticket being claimed for processing
-        notify_ticket_change(&self.event_broadcaster, ticket_id, "claimed").await;
+        let event = EventPayload::ticket_updated(ticket_id, project_id, "claimed");
+        self.event_broadcaster.broadcast(event);
 
         let task = TaskItem {
             task_id: task_id.clone(),
@@ -152,7 +154,7 @@ impl QueueManager {
 
         // Get or create queue with consumer
         let sender = self
-            .get_or_create_queue(&queue_name, project_id, worker_type, db)
+            .get_or_create_queue(&queue_name, project_id, worker_type)
             .await?;
 
         // Send task to queue
@@ -160,14 +162,17 @@ impl QueueManager {
             return Err(anyhow::anyhow!("Queue {} is closed", queue_name));
         }
 
-        info!(
+        debug!(
             "[QueueManager] Task {} submitted to queue {}",
             task_id, queue_name
         );
 
         // Notify about task submission
-        notify_queue_change(&self.event_broadcaster, &queue_name, "task_submitted").await;
-        notify_ticket_change(&self.event_broadcaster, ticket_id, "queued").await;
+        let queue_event = EventPayload::queue_updated(&queue_name, project_id, worker_type, 1);
+        self.event_broadcaster.broadcast(queue_event);
+
+        let ticket_event = EventPayload::ticket_updated(ticket_id, project_id, "queued");
+        self.event_broadcaster.broadcast(ticket_event);
 
         Ok(task_id)
     }
@@ -178,7 +183,6 @@ impl QueueManager {
         queue_name: &str,
         project_id: &str,
         worker_type: &str,
-        _db: &DbPool,
     ) -> Result<mpsc::UnboundedSender<TaskItem>> {
         // Check if queue already exists
         if let Some(sender) = self.queues.get(queue_name) {
@@ -203,9 +207,10 @@ impl QueueManager {
 
         let queue_name_for_error = queue_name_clone.clone();
         let completion_sender = self.completion_sender.clone();
-        let db_clone = _db.clone();
+        let db_clone = self.db.clone();
+        let server_host = self.config.host.clone();
         let server_port = self.config.port;
-        let permission_mode = self.config.permission_mode.clone();
+        let permission_mode = self.config.permission_mode;
 
         // Clone these for emergency release (after they're moved to consumer)
         let emergency_db = db_clone.clone();
@@ -220,6 +225,7 @@ impl QueueManager {
                 receiver,
                 completion_sender,
                 db_clone,
+                server_host,
                 server_port,
                 permission_mode,
             );
@@ -242,10 +248,11 @@ impl QueueManager {
             }
         });
 
-        info!("[QueueManager] Started consumer for queue: {}", queue_name);
+        debug!("[QueueManager] Started consumer for queue: {}", queue_name);
 
         // Notify about new queue creation
-        notify_queue_change(&self.event_broadcaster, queue_name, "created").await;
+        let event = EventPayload::queue_updated(queue_name, project_id, worker_type, 0);
+        self.event_broadcaster.broadcast(event);
 
         Ok(sender)
     }
@@ -361,6 +368,9 @@ impl QueueManager {
             }
         }
 
+        // Handle dependency cascades after any completion event
+        self.handle_dependency_cascade(event).await?;
+
         Ok(())
     }
 
@@ -377,10 +387,7 @@ impl QueueManager {
         let project_id = &ticket_with_comments.ticket.project_id;
 
         // Submit task to queue for the new stage
-        match self
-            .submit_task(project_id, target_stage, ticket_id, &self.db)
-            .await
-        {
+        match self.submit_task(project_id, target_stage, ticket_id).await {
             Ok(task_id) => {
                 info!(
                     "Auto-enqueued ticket {} for stage {} (task_id: {})",
@@ -412,8 +419,12 @@ impl QueueManager {
         }
 
         // Validate that the target worker type exists in the project
-        self.validate_worker_type_exists(ticket_id, target_stage)
-            .await?;
+        crate::validation::PipelineValidator::validate_worker_type_exists_for_ticket(
+            &self.db,
+            ticket_id.as_str(),
+            target_stage.as_str(),
+        )
+        .await?;
 
         info!(
             "Moving ticket {} to next stage: {}",
@@ -432,8 +443,12 @@ impl QueueManager {
         reason: &str,
     ) -> Result<()> {
         // Validate target stage
-        self.validate_worker_type_exists(ticket_id, target_stage)
-            .await?;
+        crate::validation::PipelineValidator::validate_worker_type_exists_for_ticket(
+            &self.db,
+            ticket_id.as_str(),
+            target_stage.as_str(),
+        )
+        .await?;
 
         warn!(
             "Moving ticket {} back to previous stage: {} (reason: {})",
@@ -501,22 +516,46 @@ impl QueueManager {
             new_pipeline
         );
 
-        // Get ticket to find project_id for pipeline validation
+        // Get ticket to find project_id and current state for validation
         let ticket_with_comments =
             crate::database::tickets::Ticket::get_by_id(&self.db, ticket_id.as_str())
                 .await?
                 .ok_or_else(|| anyhow::anyhow!("Ticket '{}' not found", ticket_id.as_str()))?;
 
-        let _project_id = &ticket_with_comments.ticket.project_id;
+        let ticket = &ticket_with_comments.ticket;
+        let _project_id = &ticket.project_id;
 
-        // Convert WorkerType to strings for database
-        let pipeline_strings: Vec<String> = new_pipeline
+        // Get original pipeline for past stage validation
+        let original_pipeline = ticket.get_execution_plan()?;
+
+        // Get current stage index for immutability validation
+        let current_stage_index = self.get_current_stage_index(ticket)?;
+
+        // Convert WorkerType to strings for validation and database
+        let new_pipeline_strings: Vec<String> = new_pipeline
             .iter()
             .map(|wt| wt.as_str().to_string())
             .collect();
 
-        // Update the execution_plan field in the database
-        let pipeline_json = serde_json::to_string(&pipeline_strings)
+        // CRITICAL: Validate that past stages are preserved (immutable history)
+        self.validate_pipeline_preserves_past_stages(
+            &original_pipeline,
+            &new_pipeline_strings,
+            current_stage_index,
+            ticket_id.as_str(),
+        )?;
+
+        // CRITICAL: Validate that ALL stages exist as worker types before database update
+        crate::validation::PipelineValidator::validate_pipeline_stages(
+            &self.db,
+            &ticket.project_id,
+            &new_pipeline_strings,
+            "Pipeline update",
+        )
+        .await?;
+
+        // Only proceed with database update if all validation passes
+        let pipeline_json = serde_json::to_string(&new_pipeline_strings)
             .map_err(|e| anyhow::anyhow!("Failed to serialize pipeline: {}", e))?;
 
         sqlx::query(
@@ -528,39 +567,87 @@ impl QueueManager {
         .await?;
 
         info!(
-            "Successfully updated pipeline for ticket {}",
-            ticket_id.as_str()
+            "Successfully updated pipeline for ticket {} (past {} stages preserved)",
+            ticket_id.as_str(),
+            current_stage_index + 1
         );
         Ok(())
     }
 
-    async fn validate_worker_type_exists(
-        self: &Arc<Self>,
-        ticket_id: &TicketId,
-        worker_type: &WorkerType,
-    ) -> Result<()> {
-        // Get ticket to find project_id
-        let ticket_with_comments =
-            crate::database::tickets::Ticket::get_by_id(&self.db, ticket_id.as_str())
-                .await?
-                .ok_or_else(|| anyhow::anyhow!("Ticket '{}' not found", ticket_id.as_str()))?;
+    /// Get the current stage index in the pipeline
+    /// Returns the index of the current stage, or 0 for "planning" stage
+    fn get_current_stage_index(&self, ticket: &crate::database::tickets::Ticket) -> Result<usize> {
+        let plan = ticket.get_execution_plan()?;
 
-        // Check if worker type exists in the project
-        let worker_type_exists = crate::database::worker_types::WorkerType::get_by_type(
-            &self.db,
-            &ticket_with_comments.ticket.project_id,
-            worker_type.as_str(),
-        )
-        .await?
-        .is_some();
-
-        if !worker_type_exists {
-            return Err(anyhow::anyhow!(
-                "Worker type '{}' does not exist in project '{}'",
-                worker_type.as_str(),
-                ticket_with_comments.ticket.project_id
-            ));
+        // Special case: planning stage is before the pipeline starts
+        if ticket.current_stage == "planning" {
+            return Ok(0);
         }
+
+        // Find current stage index in the pipeline
+        for (i, stage) in plan.iter().enumerate() {
+            if stage == &ticket.current_stage {
+                return Ok(i);
+            }
+        }
+
+        Err(anyhow::anyhow!(
+            "Current stage '{}' not found in pipeline: {:?}",
+            ticket.current_stage,
+            plan
+        ))
+    }
+
+    /// Validate that pipeline update preserves past stages (immutable history)
+    /// Past stages (up to and including current stage) cannot be modified
+    fn validate_pipeline_preserves_past_stages(
+        &self,
+        original_pipeline: &[String],
+        new_pipeline: &[String],
+        current_stage_index: usize,
+        ticket_id: &str,
+    ) -> Result<()> {
+        // For planning stage, we allow full pipeline replacement since no stages are completed yet
+        if current_stage_index == 0 && original_pipeline.len() <= 1 {
+            return Ok(());
+        }
+
+        // Verify that past stages (up to and including current stage) are preserved
+        for i in 0..=current_stage_index {
+            if i >= original_pipeline.len() {
+                return Err(anyhow::anyhow!(
+                    "Pipeline validation failed for ticket {}: original pipeline too short (index {} not found in pipeline of length {})",
+                    ticket_id,
+                    i,
+                    original_pipeline.len()
+                ));
+            }
+
+            if i >= new_pipeline.len() {
+                return Err(anyhow::anyhow!(
+                    "Pipeline validation failed for ticket {}: new pipeline truncates past stages (index {} not found in new pipeline of length {}). Past stages cannot be deleted.",
+                    ticket_id,
+                    i,
+                    new_pipeline.len()
+                ));
+            }
+
+            if original_pipeline[i] != new_pipeline[i] {
+                return Err(anyhow::anyhow!(
+                    "Pipeline validation failed for ticket {}: illegal modification of past stage at index {}: '{}' -> '{}'. Past stages are immutable.",
+                    ticket_id,
+                    i,
+                    original_pipeline[i],
+                    new_pipeline[i]
+                ));
+            }
+        }
+
+        info!(
+            "Pipeline validation passed for ticket {}: past {} stages preserved",
+            ticket_id,
+            current_stage_index + 1
+        );
 
         Ok(())
     }
@@ -627,6 +714,147 @@ impl QueueManager {
 
         Ok(())
     }
+
+    /// Handle dependency cascades when tickets complete or advance stages
+    async fn handle_dependency_cascade(
+        self: &Arc<Self>,
+        event: &WorkerCompletionEvent,
+    ) -> Result<()> {
+        let ticket_id = event.ticket_id.as_str();
+
+        // Get the ticket to check its current state
+        let ticket_with_comments = crate::database::tickets::Ticket::get_by_id(&self.db, ticket_id)
+            .await?
+            .ok_or_else(|| anyhow::anyhow!("Ticket '{}' not found", ticket_id))?;
+
+        let ticket = &ticket_with_comments.ticket;
+
+        match &event.command {
+            WorkerCommand::AdvanceToStage { .. } => {
+                // When ticket advances, check if this unblocks any dependent tickets
+                self.check_and_unblock_dependents(ticket_id).await?;
+
+                // If this ticket has a parent, resubmit parent for reassessment
+                if let Some(parent_id) = &ticket.parent_ticket_id {
+                    self.resubmit_parent_ticket(parent_id).await?;
+                }
+            }
+            WorkerCommand::RequestCoordinatorAttention { .. } => {
+                // Parent may need to reassess strategy when child needs attention
+                if let Some(parent_id) = &ticket.parent_ticket_id {
+                    self.resubmit_parent_ticket(parent_id).await?;
+                }
+            }
+            _ => {
+                // For other commands, still check dependencies
+                self.check_and_unblock_dependents(ticket_id).await?;
+            }
+        }
+
+        Ok(())
+    }
+
+    /// Check if ticket completion unblocks any dependent tickets
+    async fn check_and_unblock_dependents(
+        self: &Arc<Self>,
+        completed_ticket_id: &str,
+    ) -> Result<()> {
+        // Get all tickets that are blocked by this ticket
+        let blocked_tickets =
+            crate::database::dag::TicketDependency::get_blocked_by(&self.db, completed_ticket_id)
+                .await?;
+
+        for blocked_ticket_id in blocked_tickets {
+            // Check if this ticket's dependencies are now satisfied
+            if crate::database::dag::TicketDependency::all_dependencies_satisfied(
+                &self.db,
+                &blocked_ticket_id,
+            )
+            .await?
+            {
+                info!(
+                    "Unblocking ticket {} - all dependencies satisfied",
+                    blocked_ticket_id
+                );
+
+                // Update status to ready
+                crate::database::tickets::Ticket::update_dependency_status(
+                    &self.db,
+                    &blocked_ticket_id,
+                    "ready",
+                )
+                .await?;
+
+                // Get the ticket details for resubmission
+                if let Some(ticket_with_comments) =
+                    crate::database::tickets::Ticket::get_by_id(&self.db, &blocked_ticket_id)
+                        .await?
+                {
+                    let ticket = &ticket_with_comments.ticket;
+
+                    // Resubmit the now-ready ticket to its current stage
+                    if let Err(e) = self
+                        .auto_enqueue_ticket(&blocked_ticket_id, &ticket.current_stage)
+                        .await
+                    {
+                        warn!(
+                            "Failed to auto-enqueue unblocked ticket {} for stage {}: {}",
+                            blocked_ticket_id, ticket.current_stage, e
+                        );
+                    } else {
+                        info!(
+                            "Successfully resubmitted unblocked ticket {} to stage {}",
+                            blocked_ticket_id, ticket.current_stage
+                        );
+                    }
+                }
+            }
+        }
+
+        Ok(())
+    }
+
+    /// Resubmit parent ticket when child completes or needs attention
+    async fn resubmit_parent_ticket(self: &Arc<Self>, parent_ticket_id: &str) -> Result<()> {
+        // Get parent ticket details
+        if let Some(parent_with_comments) =
+            crate::database::tickets::Ticket::get_by_id(&self.db, parent_ticket_id).await?
+        {
+            let parent_ticket = &parent_with_comments.ticket;
+
+            // Only resubmit if parent is not already being processed and is open
+            if parent_ticket.processing_worker_id.is_none() && parent_ticket.state == "open" {
+                info!(
+                    "Resubmitting parent ticket {} at stage {} due to child activity",
+                    parent_ticket_id, parent_ticket.current_stage
+                );
+
+                if let Err(e) = self
+                    .auto_enqueue_ticket(parent_ticket_id, &parent_ticket.current_stage)
+                    .await
+                {
+                    warn!(
+                        "Failed to resubmit parent ticket {} for stage {}: {}",
+                        parent_ticket_id, parent_ticket.current_stage, e
+                    );
+                } else {
+                    info!(
+                        "Successfully resubmitted parent ticket {} to stage {}",
+                        parent_ticket_id, parent_ticket.current_stage
+                    );
+                }
+            } else {
+                debug!(
+                    "Parent ticket {} not resubmitted (already processing: {}, state: {})",
+                    parent_ticket_id,
+                    parent_ticket.processing_worker_id.is_some(),
+                    parent_ticket.state
+                );
+            }
+        }
+
+        Ok(())
+    }
 }
 
 /// Simplified consumer that processes tasks from mpsc channel
@@ -637,8 +865,9 @@ struct WorkerConsumer {
     receiver: mpsc::UnboundedReceiver<TaskItem>,
     completion_sender: mpsc::UnboundedSender<WorkerCompletionEvent>,
     db: DbPool,
+    server_host: String,
     server_port: u16,
-    permission_mode: String,
+    permission_mode: PermissionMode,
 }
 
 impl WorkerConsumer {
@@ -650,8 +879,9 @@ impl WorkerConsumer {
         receiver: mpsc::UnboundedReceiver<TaskItem>,
         completion_sender: mpsc::UnboundedSender<WorkerCompletionEvent>,
         db: DbPool,
+        server_host: String,
         server_port: u16,
-        permission_mode: String,
+        permission_mode: PermissionMode,
     ) -> Self {
         Self {
             project_id,
@@ -660,6 +890,7 @@ impl WorkerConsumer {
             receiver,
             completion_sender,
             db,
+            server_host,
             server_port,
             permission_mode,
         }
@@ -737,7 +968,7 @@ impl WorkerConsumer {
         };
 
         // Convert WorkerOutput to WorkerCompletionEvent
-        let completion_event = match self.convert_to_completion_event(&worker_output) {
+        let completion_event = match self.convert_to_completion_event(&worker_output).await {
             Ok(event) => event,
             Err(e) => {
                 error!(
@@ -774,8 +1005,11 @@ impl WorkerConsumer {
         Ok(())
     }
 
-    /// Convert WorkerOutput to WorkerCompletionEvent
-    fn convert_to_completion_event(&self, output: &WorkerOutput) -> Result<WorkerCompletionEvent> {
+    /// Convert WorkerOutput to WorkerCompletionEvent with validation
+    async fn convert_to_completion_event(
+        &self,
+        output: &WorkerOutput,
+    ) -> Result<WorkerCompletionEvent> {
         let ticket_id_str = output
             .ticket_id
             .as_ref()
@@ -783,21 +1017,58 @@ impl WorkerConsumer {
 
         let ticket_id = TicketId::new(ticket_id_str.clone())?;
 
-        // Convert WorkerOutcome to WorkerCommand
+        // Convert WorkerOutcome to WorkerCommand with validation
         let command = match output.outcome {
             WorkerOutcome::NextStage => {
                 if let Some(ref target_stage_str) = output.target_stage {
-                    let target_stage = WorkerType::new(target_stage_str.clone())?;
-                    let pipeline_update = output.pipeline_update.as_ref().map(|pipeline| {
-                        pipeline
-                            .iter()
-                            .filter_map(|s| WorkerType::new(s.clone()).ok())
-                            .collect()
-                    });
+                    // CRITICAL: Validate that target stage worker type exists before proceeding
+                    let validation_result = self.validate_target_stage(target_stage_str).await;
 
-                    WorkerCommand::AdvanceToStage {
-                        target_stage,
-                        pipeline_update,
+                    match validation_result {
+                        Ok(true) => {
+                            // Target stage exists, proceed normally
+                            let target_stage = WorkerType::new(target_stage_str.clone())?;
+                            let pipeline_update = output.pipeline_update.as_ref().map(|pipeline| {
+                                pipeline
+                                    .iter()
+                                    .filter_map(|s| WorkerType::new(s.clone()).ok())
+                                    .collect()
+                            });
+
+                            WorkerCommand::AdvanceToStage {
+                                target_stage,
+                                pipeline_update,
+                            }
+                        }
+                        Ok(false) => {
+                            // Target stage does not exist - convert to coordinator attention
+                            // This ensures invalid data never reaches the database
+                            warn!(
+                                "Worker specified non-existent target stage '{}' for project '{}'. Converting to coordinator attention.",
+                                target_stage_str, self.project_id
+                            );
+
+                            WorkerCommand::RequestCoordinatorAttention {
+                                reason: format!(
+                                    "Worker specified non-existent target stage '{}' for project '{}'. The stage pipeline contains a reference to a worker type that does not exist. Ticket needs to be reset to planning stage for re-planning with proper worker type validation.",
+                                    target_stage_str, self.project_id
+                                ),
+                            }
+                        }
+                        Err(e) => {
+                            // Database error during validation - fail safe to coordinator attention
+                            error!(
+                                "Failed to validate target stage '{}' for project '{}': {}",
+                                target_stage_str, self.project_id, e
+                            );
+
+                            WorkerCommand::RequestCoordinatorAttention {
+                                reason: format!(
+                                    "Failed to validate target stage '{}' due to database error: {}. Ticket needs manual review.",
+                                    target_stage_str, e
+                                ),
+                            }
+                        }
                     }
                 } else {
                     return Err(anyhow::anyhow!("NextStage outcome requires target_stage"));
@@ -805,10 +1076,46 @@ impl WorkerConsumer {
             }
             WorkerOutcome::PrevStage => {
                 if let Some(ref target_stage_str) = output.target_stage {
-                    let target_stage = WorkerType::new(target_stage_str.clone())?;
-                    WorkerCommand::ReturnToStage {
-                        target_stage,
-                        reason: output.reason.clone(),
+                    // CRITICAL: Validate that target stage worker type exists before proceeding
+                    let validation_result = self.validate_target_stage(target_stage_str).await;
+
+                    match validation_result {
+                        Ok(true) => {
+                            // Target stage exists, proceed normally
+                            let target_stage = WorkerType::new(target_stage_str.clone())?;
+                            WorkerCommand::ReturnToStage {
+                                target_stage,
+                                reason: output.reason.clone(),
+                            }
+                        }
+                        Ok(false) => {
+                            // Target stage does not exist - convert to coordinator attention
+                            warn!(
+                                "Worker specified non-existent target stage '{}' for project '{}' in PrevStage. Converting to coordinator attention.",
+                                target_stage_str, self.project_id
+                            );
+
+                            WorkerCommand::RequestCoordinatorAttention {
+                                reason: format!(
+                                    "Worker specified non-existent target stage '{}' for project '{}' in PrevStage operation. The stage pipeline contains a reference to a worker type that does not exist. Ticket needs to be reset to planning stage for re-planning.",
+                                    target_stage_str, self.project_id
+                                ),
+                            }
+                        }
+                        Err(e) => {
+                            // Database error during validation - fail safe to coordinator attention
+                            error!(
+                                "Failed to validate target stage '{}' for project '{}' in PrevStage: {}",
+                                target_stage_str, self.project_id, e
+                            );
+
+                            WorkerCommand::RequestCoordinatorAttention {
+                                reason: format!(
+                                    "Failed to validate target stage '{}' in PrevStage due to database error: {}. Ticket needs manual review.",
+                                    target_stage_str, e
+                                ),
+                            }
+                        }
                     }
                 } else {
                     return Err(anyhow::anyhow!("PrevStage outcome requires target_stage"));
@@ -824,6 +1131,21 @@ impl WorkerConsumer {
             command,
             comment: output.comment.clone(),
         })
+    }
+
+    /// Validate that a target stage worker type exists in the database
+    async fn validate_target_stage(&self, target_stage: &str) -> Result<bool> {
+        match crate::database::worker_types::WorkerType::get_by_type(
+            &self.db,
+            &self.project_id,
+            target_stage,
+        )
+        .await
+        {
+            Ok(Some(_)) => Ok(true),
+            Ok(None) => Ok(false),
+            Err(e) => Err(e),
+        }
     }
 
     /// Execute actual worker process - spawn Claude Code worker using ProcessManager
@@ -868,8 +1190,9 @@ impl WorkerConsumer {
             ticket_id: ticket_id.to_string(),
             project_path: project.path,
             system_prompt: worker_type_info.system_prompt,
+            server_host: self.server_host.clone(),
             server_port: self.server_port,
-            permission_mode: self.permission_mode.clone(),
+            permission_mode: self.permission_mode,
         };
 
         ProcessManager::spawn_worker(spawn_request).await

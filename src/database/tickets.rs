@@ -17,6 +17,14 @@ pub struct Ticket {
     pub created_at: String,
     pub updated_at: String,
     pub closed_at: Option<String>,
+    // New fields for DAG support
+    pub parent_ticket_id: Option<String>,
+    pub dependency_status: String,
+    pub created_by_worker_id: Option<String>,
+    pub ticket_type: String,
+    pub rules_version: Option<i32>,
+    pub patterns_version: Option<i32>,
+    pub inherited_from_parent: bool,
 }
 
 #[derive(Debug, Deserialize)]
@@ -26,6 +34,11 @@ pub struct CreateTicketRequest {
     pub title: String,
     pub description: String,
     pub execution_plan: Vec<String>,
+    // New fields for DAG support
+    pub parent_ticket_id: Option<String>,
+    pub ticket_type: Option<String>,
+    pub dependency_status: Option<String>,
+    pub created_by_worker_id: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -53,18 +66,44 @@ impl Ticket {
         // Create ticket
         let execution_plan_json = serde_json::to_string(&req.execution_plan)?;
 
+        // Get project info for rules/patterns versioning
+        let project = crate::database::projects::Project::get_by_name(pool, &req.project_id)
+            .await?
+            .ok_or_else(|| anyhow::anyhow!("Project '{}' not found", req.project_id))?;
+
+        // Determine initial stage from execution plan
+        let initial_stage = if req.execution_plan.is_empty() {
+            "planning".to_string()
+        } else {
+            req.execution_plan[0].clone()
+        };
+
         let ticket = sqlx::query_as::<_, Ticket>(
             r#"
-            INSERT INTO tickets (ticket_id, project_id, title, execution_plan, current_stage, state, priority)
-            VALUES (?1, ?2, ?3, ?4, 'planning', 'open', 'medium')
+            INSERT INTO tickets (
+                ticket_id, project_id, title, execution_plan, current_stage, state, priority,
+                parent_ticket_id, dependency_status, created_by_worker_id, ticket_type,
+                rules_version, patterns_version, inherited_from_parent
+            )
+            VALUES (?1, ?2, ?3, ?4, ?5, 'open', 'medium', ?6, ?7, ?8, ?9, ?10, ?11, ?12)
             RETURNING ticket_id, project_id, title, execution_plan, current_stage, state, priority,
-                     processing_worker_id, created_at, updated_at, closed_at
+                     processing_worker_id, created_at, updated_at, closed_at,
+                     parent_ticket_id, dependency_status, created_by_worker_id, ticket_type,
+                     rules_version, patterns_version, inherited_from_parent
         "#,
         )
         .bind(&req.ticket_id)
         .bind(&req.project_id)
         .bind(&req.title)
         .bind(&execution_plan_json)
+        .bind(&initial_stage)
+        .bind(&req.parent_ticket_id)
+        .bind(req.dependency_status.as_deref().unwrap_or("ready"))
+        .bind(&req.created_by_worker_id)
+        .bind(req.ticket_type.as_deref().unwrap_or("task"))
+        .bind(project.rules_version.unwrap_or(1))
+        .bind(project.patterns_version.unwrap_or(1))
+        .bind(req.parent_ticket_id.is_some()) // inherited_from_parent
         .fetch_one(&mut *tx)
         .await?;
 
@@ -88,7 +127,9 @@ impl Ticket {
         let ticket = sqlx::query_as::<_, Ticket>(
             r#"
             SELECT ticket_id, project_id, title, execution_plan, current_stage, state, priority,
-                   processing_worker_id, created_at, updated_at, closed_at
+                   processing_worker_id, created_at, updated_at, closed_at,
+                   parent_ticket_id, dependency_status, created_by_worker_id, ticket_type,
+                   rules_version, patterns_version, inherited_from_parent
             FROM tickets
             WHERE ticket_id = ?1
         "#,
@@ -114,7 +155,9 @@ impl Ticket {
         let mut query = String::from(
             r#"
             SELECT ticket_id, project_id, title, execution_plan, current_stage, state, priority,
-                   processing_worker_id, created_at, updated_at, closed_at
+                   processing_worker_id, created_at, updated_at, closed_at,
+                   parent_ticket_id, dependency_status, created_by_worker_id, ticket_type,
+                   rules_version, patterns_version, inherited_from_parent
             FROM tickets
         "#,
         );
@@ -162,11 +205,13 @@ impl Ticket {
     ) -> Result<Option<Ticket>> {
         let ticket = sqlx::query_as::<_, Ticket>(
             r#"
-            UPDATE tickets 
+            UPDATE tickets
             SET current_stage = ?1, updated_at = datetime('now')
             WHERE ticket_id = ?2
             RETURNING ticket_id, project_id, title, execution_plan, current_stage, state, priority,
-                     processing_worker_id, created_at, updated_at, closed_at
+                     processing_worker_id, created_at, updated_at, closed_at,
+                     parent_ticket_id, dependency_status, created_by_worker_id, ticket_type,
+                     rules_version, patterns_version, inherited_from_parent
         "#,
         )
         .bind(new_stage)
@@ -187,11 +232,13 @@ impl Ticket {
         // Update ticket status
         let ticket = sqlx::query_as::<_, Ticket>(
             r#"
-            UPDATE tickets 
+            UPDATE tickets
             SET current_stage = ?1, state = 'closed', updated_at = datetime('now'), closed_at = datetime('now')
             WHERE ticket_id = ?2
             RETURNING ticket_id, project_id, title, execution_plan, current_stage, state, priority,
-                     processing_worker_id, created_at, updated_at, closed_at
+                     processing_worker_id, created_at, updated_at, closed_at,
+                     parent_ticket_id, dependency_status, created_by_worker_id, ticket_type,
+                     rules_version, patterns_version, inherited_from_parent
         "#,
         )
         .bind(status)
@@ -255,11 +302,13 @@ impl Ticket {
     ) -> Result<Option<Ticket>> {
         let ticket = sqlx::query_as::<_, Ticket>(
             r#"
-            UPDATE tickets 
+            UPDATE tickets
             SET state = ?1, updated_at = datetime('now')
             WHERE ticket_id = ?2
             RETURNING ticket_id, project_id, title, execution_plan, current_stage, state, priority,
-                     processing_worker_id, created_at, updated_at, closed_at
+                     processing_worker_id, created_at, updated_at, closed_at,
+                     parent_ticket_id, dependency_status, created_by_worker_id, ticket_type,
+                     rules_version, patterns_version, inherited_from_parent
         "#,
         )
         .bind(state)
@@ -277,11 +326,13 @@ impl Ticket {
     ) -> Result<Option<Ticket>> {
         let ticket = sqlx::query_as::<_, Ticket>(
             r#"
-            UPDATE tickets 
+            UPDATE tickets
             SET priority = ?1, updated_at = datetime('now')
             WHERE ticket_id = ?2
             RETURNING ticket_id, project_id, title, execution_plan, current_stage, state, priority,
-                     processing_worker_id, created_at, updated_at, closed_at
+                     processing_worker_id, created_at, updated_at, closed_at,
+                     parent_ticket_id, dependency_status, created_by_worker_id, ticket_type,
+                     rules_version, patterns_version, inherited_from_parent
         "#,
         )
         .bind(priority)
@@ -300,11 +351,13 @@ impl Ticket {
         let tickets = sqlx::query_as::<_, Ticket>(
             r#"
             SELECT ticket_id, project_id, title, execution_plan, current_stage, state, priority,
-                   processing_worker_id, created_at, updated_at, closed_at
+                   processing_worker_id, created_at, updated_at, closed_at,
+                   parent_ticket_id, dependency_status, created_by_worker_id, ticket_type,
+                   rules_version, patterns_version, inherited_from_parent
             FROM tickets
-            WHERE project_id = ?1 
-              AND current_stage = ?2 
-              AND processing_worker_id IS NULL 
+            WHERE project_id = ?1
+              AND current_stage = ?2
+              AND processing_worker_id IS NULL
               AND state = 'open'
             ORDER BY priority DESC, created_at ASC
         "#,
@@ -346,9 +399,11 @@ impl Ticket {
     ) -> Result<Option<TicketWithProjectInfo>> {
         let result = sqlx::query(
             r#"
-            SELECT t.ticket_id, t.project_id, t.title, t.execution_plan, t.current_stage, 
+            SELECT t.ticket_id, t.project_id, t.title, t.execution_plan, t.current_stage,
                    t.state, t.priority, t.processing_worker_id, t.created_at, t.updated_at, t.closed_at,
-                   p.project_rules, p.project_patterns
+                   t.parent_ticket_id, t.dependency_status, t.created_by_worker_id, t.ticket_type,
+                   t.rules_version, t.patterns_version, t.inherited_from_parent,
+                   p.rules, p.patterns
             FROM tickets t
             LEFT JOIN projects p ON t.project_id = p.repository_name
             WHERE t.ticket_id = ?1
@@ -371,17 +426,152 @@ impl Ticket {
                 created_at: row.get("created_at"),
                 updated_at: row.get("updated_at"),
                 closed_at: row.get("closed_at"),
+                parent_ticket_id: row.get("parent_ticket_id"),
+                dependency_status: row.get("dependency_status"),
+                created_by_worker_id: row.get("created_by_worker_id"),
+                ticket_type: row.get("ticket_type"),
+                rules_version: row.get("rules_version"),
+                patterns_version: row.get("patterns_version"),
+                inherited_from_parent: row.get("inherited_from_parent"),
             };
 
             let ticket_with_info = TicketWithProjectInfo {
                 ticket,
-                project_rules: row.get("project_rules"),
-                project_patterns: row.get("project_patterns"),
+                project_rules: row.get("rules"),
+                project_patterns: row.get("patterns"),
             };
 
             Ok(Some(ticket_with_info))
         } else {
             Ok(None)
         }
+    }
+
+    /// Update dependency status of a ticket
+    pub async fn update_dependency_status(
+        pool: &DbPool,
+        ticket_id: &str,
+        new_status: &str,
+    ) -> Result<()> {
+        sqlx::query(
+            "UPDATE tickets SET dependency_status = ?1, updated_at = datetime('now') WHERE ticket_id = ?2"
+        )
+        .bind(new_status)
+        .bind(ticket_id)
+        .execute(pool)
+        .await?;
+
+        Ok(())
+    }
+
+    /// Get all child tickets of a parent ticket
+    pub async fn get_children(pool: &DbPool, parent_ticket_id: &str) -> Result<Vec<Ticket>> {
+        let tickets = sqlx::query_as::<_, Ticket>(
+            r#"
+            SELECT ticket_id, project_id, title, execution_plan, current_stage, state, priority,
+                   processing_worker_id, created_at, updated_at, closed_at,
+                   parent_ticket_id, dependency_status, created_by_worker_id, ticket_type,
+                   rules_version, patterns_version, inherited_from_parent
+            FROM tickets
+            WHERE parent_ticket_id = ?1
+            ORDER BY created_at ASC
+        "#,
+        )
+        .bind(parent_ticket_id)
+        .fetch_all(pool)
+        .await?;
+
+        Ok(tickets)
+    }
+
+    /// Get all tickets that are ready to process (dependency_status = 'ready' and state = 'open')
+    pub async fn get_ready_tickets(pool: &DbPool, project_id: Option<&str>) -> Result<Vec<Ticket>> {
+        let tickets = if let Some(project_id) = project_id {
+            sqlx::query_as::<_, Ticket>(
+                r#"
+                SELECT ticket_id, project_id, title, execution_plan, current_stage, state, priority,
+                       processing_worker_id, created_at, updated_at, closed_at,
+                       parent_ticket_id, dependency_status, created_by_worker_id, ticket_type,
+                       rules_version, patterns_version, inherited_from_parent
+                FROM tickets
+                WHERE project_id = ?1 AND dependency_status = 'ready' AND state = 'open'
+                ORDER BY
+                    CASE priority
+                        WHEN 'urgent' THEN 1
+                        WHEN 'high' THEN 2
+                        WHEN 'medium' THEN 3
+                        WHEN 'low' THEN 4
+                        ELSE 5
+                    END,
+                    created_at ASC
+            "#,
+            )
+            .bind(project_id)
+            .fetch_all(pool)
+            .await?
+        } else {
+            sqlx::query_as::<_, Ticket>(
+                r#"
+                SELECT ticket_id, project_id, title, execution_plan, current_stage, state, priority,
+                       processing_worker_id, created_at, updated_at, closed_at,
+                       parent_ticket_id, dependency_status, created_by_worker_id, ticket_type,
+                       rules_version, patterns_version, inherited_from_parent
+                FROM tickets
+                WHERE dependency_status = 'ready' AND state = 'open'
+                ORDER BY
+                    CASE priority
+                        WHEN 'urgent' THEN 1
+                        WHEN 'high' THEN 2
+                        WHEN 'medium' THEN 3
+                        WHEN 'low' THEN 4
+                        ELSE 5
+                    END,
+                    created_at ASC
+            "#,
+            )
+            .fetch_all(pool)
+            .await?
+        };
+
+        Ok(tickets)
+    }
+
+    /// Get all blocked tickets (dependency_status = 'blocked' and state = 'open')
+    pub async fn get_blocked_tickets(
+        pool: &DbPool,
+        project_id: Option<&str>,
+    ) -> Result<Vec<Ticket>> {
+        let tickets = if let Some(project_id) = project_id {
+            sqlx::query_as::<_, Ticket>(
+                r#"
+                SELECT ticket_id, project_id, title, execution_plan, current_stage, state, priority,
+                       processing_worker_id, created_at, updated_at, closed_at,
+                       parent_ticket_id, dependency_status, created_by_worker_id, ticket_type,
+                       rules_version, patterns_version, inherited_from_parent
+                FROM tickets
+                WHERE project_id = ?1 AND dependency_status = 'blocked' AND state = 'open'
+                ORDER BY created_at ASC
+            "#,
+            )
+            .bind(project_id)
+            .fetch_all(pool)
+            .await?
+        } else {
+            sqlx::query_as::<_, Ticket>(
+                r#"
+                SELECT ticket_id, project_id, title, execution_plan, current_stage, state, priority,
+                       processing_worker_id, created_at, updated_at, closed_at,
+                       parent_ticket_id, dependency_status, created_by_worker_id, ticket_type,
+                       rules_version, patterns_version, inherited_from_parent
+                FROM tickets
+                WHERE dependency_status = 'blocked' AND state = 'open'
+                ORDER BY created_at ASC
+            "#,
+            )
+            .fetch_all(pool)
+            .await?
+        };
+
+        Ok(tickets)
     }
 }

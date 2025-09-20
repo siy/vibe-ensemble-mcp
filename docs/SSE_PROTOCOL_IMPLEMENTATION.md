@@ -85,31 +85,26 @@ let cors = CorsLayer::new()
 ```rust
 #[derive(Clone)]
 pub struct EventBroadcaster {
-    sender: Arc<broadcast::Sender<String>>,
+    sender: Arc<broadcast::Sender<EventPayload>>,
 }
 
 impl EventBroadcaster {
     pub fn new() -> Self {
-        let (sender, _) = broadcast::channel(100); // 100 message buffer
+        let (sender, _) = broadcast::channel::<EventPayload>(512); // 512 typed event buffer
         Self {
             sender: Arc::new(sender),
         }
     }
 
-    pub fn broadcast_event(&self, event_type: &str, data: serde_json::Value) {
-        let event_data = json!({
-            "type": event_type,
-            "timestamp": chrono::Utc::now().to_rfc3339(),
-            "data": data
-        });
-        let _ = self.sender.send(event_data.to_string());
+    /// Broadcast a typed event to all connected SSE clients
+    pub fn broadcast(&self, event: EventPayload) {
+        if let Err(e) = self.sender.send(event) {
+            debug!("SSE broadcast failed: {}", e);
+        }
     }
 
-    pub fn broadcast(&self, event_data: String) -> Result<usize, broadcast::error::SendError<String>> {
-        self.sender.send(event_data)
-    }
-
-    pub fn subscribe(&self) -> broadcast::Receiver<String> {
+    /// Create a new receiver for SSE connections
+    pub fn subscribe(&self) -> broadcast::Receiver<EventPayload> {
         self.sender.subscribe()
     }
 }
@@ -122,101 +117,46 @@ pub async fn sse_handler(
 ) -> Sse<impl Stream<Item = Result<Event, axum::Error>>> {
     let broadcaster = &state.event_broadcaster;
 
-    // Send MCP protocol initialization notification
-    let init_notification = json!({
-        "jsonrpc": "2.0",
-        "method": "notifications/initialized",
-        "params": {
-            "protocolVersion": MCP_PROTOCOL_VERSION,
-            "serverInfo": {
-                "name": "vibe-ensemble-mcp",
-                "version": env!("CARGO_PKG_VERSION")
-            },
-            "capabilities": {
-                "tools": {},
-                "notifications": {
-                    "events": true,
-                    "tickets": true,
-                    "workers": true,
-                    "queues": true
-                }
-            }
-        }
-    });
-
-    broadcaster.broadcast_event("mcp_notification", init_notification.clone());
-
-    // Send endpoint event for Claude Code SSE transport compatibility
+    // Create typed events for initialization
+    let host = &state.server_info.host;
     let port = state.server_info.port;
-    let endpoint_event = json!({
-        "jsonrpc": "2.0",
-        "method": "notifications/message",
-        "params": {
-            "level": "info",
-            "logger": "vibe-ensemble-sse",
-            "data": json!({
-                "type": "endpoint",
-                "uri": format!("http://localhost:{}/messages", port)
-            })
-        }
-    });
-    
-    broadcaster.broadcast_event("endpoint", endpoint_event);
-    
+    let system_init_event = EventPayload::system_init();
+    let endpoint_discovery_event = EventPayload::endpoint_discovery(
+        &format!("http://{}:{}/messages", host, port),
+        &format!("http://{}:{}/sse", host, port),
+    );
+
+    // Create receiver for this connection
     let mut receiver = broadcaster.subscribe();
 
     let stream = async_stream::stream! {
-        // Send initialization message immediately to new clients
+        // Send initialization events immediately to new clients
+        let init_json = system_init_event.to_jsonrpc_notification();
         yield Ok(Event::default()
             .event("message")
-            .data(init_notification.to_string()));
+            .data(init_json.to_string()));
+
+        let endpoint_json = endpoint_discovery_event.to_jsonrpc_notification();
+        yield Ok(Event::default()
+            .event("message")
+            .data(endpoint_json.to_string()));
 
         loop {
             match receiver.recv().await {
-                Ok(data) => {
-                    // Wrap events in MCP notification format
-                    let mcp_event = if let Ok(parsed) = serde_json::from_str::<serde_json::Value>(&data) {
-                        if parsed.get("jsonrpc").is_some() {
-                            data // Already MCP-compliant
-                        } else {
-                            // Wrap non-MCP events in MCP notification format
-                            json!({
-                                "jsonrpc": "2.0",
-                                "method": "notifications/resources/updated",
-                                "params": {
-                                    "uri": "vibe-ensemble://events",
-                                    "event": parsed
-                                }
-                            }).to_string()
-                        }
-                    } else {
-                        // Fallback for malformed JSON
-                        json!({
-                            "jsonrpc": "2.0",
-                            "method": "notifications/message",
-                            "params": {
-                                "level": "info",
-                                "logger": "vibe-ensemble-sse",
-                                "data": data
-                            }
-                        }).to_string()
-                    };
-
+                Ok(event_payload) => {
+                    // Serialize typed event to JSON-RPC at the boundary
+                    let mcp_event = event_payload.to_jsonrpc_notification();
                     yield Ok(Event::default()
                         .event("message")
-                        .data(mcp_event));
+                        .data(mcp_event.to_string()));
                 }
-                Err(broadcast::error::RecvError::Lagged(_)) => {
-                    // Send MCP-compliant heartbeat
-                    let heartbeat = json!({
-                        "jsonrpc": "2.0",
-                        "method": "notifications/ping",
-                        "params": {
-                            "timestamp": chrono::Utc::now().to_rfc3339()
-                        }
-                    });
+                Err(broadcast::error::RecvError::Lagged(skipped_messages)) => {
+                    debug!("SSE client lagged, skipped {} messages", skipped_messages);
+                    // Send MCP-compliant heartbeat using JSON-RPC envelope helper
+                    use crate::mcp::constants::JsonRpcEnvelopes;
+                    let heartbeat = JsonRpcEnvelopes::ping();
                     yield Ok(Event::default()
-                        .event("ping")
+                        .event("message")
                         .data(heartbeat.to_string()));
                 }
                 Err(_) => break, // Channel closed
@@ -239,62 +179,50 @@ pub async fn sse_message_handler(
     JsonExtractor(payload): JsonExtractor<Value>,
 ) -> Result<Json<Value>, (StatusCode, Json<Value>)> {
     debug!("Received SSE message: {}", payload);
-    
+
     // Parse the JSON as an MCP JsonRpcRequest
     let request: JsonRpcRequest = match serde_json::from_value(payload.clone()) {
         Ok(req) => req,
         Err(e) => {
-            let error_response = json!({
-                "jsonrpc": "2.0",
-                "error": {
-                    "code": -32700,
-                    "message": format!("Parse error: {}", e)
-                },
-                "id": payload.get("id")
-            });
+            use crate::mcp::constants::JsonRpcEnvelopes;
+            let error_response = JsonRpcEnvelopes::error_response(
+                -32700,
+                &format!("Parse error: {}", e),
+                payload.get("id").cloned(),
+            );
             return Err((StatusCode::BAD_REQUEST, Json(error_response)));
         }
     };
-    
-    // Create MCP server and handle the request
-    let mcp_server = McpServer::new();
-    let response = mcp_server.handle_request(&state, request).await;
-    
-    info!("SSE message processed successfully");
-    
+
+    // Use stored MCP server and handle the request
+    let response = state.mcp_server.handle_request(&state, request).await;
+
+    debug!("SSE message processed successfully");
+
     // Convert the response to JSON
     let response_value = match serde_json::to_value(&response) {
         Ok(val) => val,
         Err(e) => {
-            let error_response = json!({
-                "jsonrpc": "2.0",
-                "error": {
-                    "code": -32603,
-                    "message": format!("Internal error: {}", e)
-                },
-                "id": response.id
-            });
+            use crate::mcp::constants::JsonRpcEnvelopes;
+            let error_response = JsonRpcEnvelopes::error_response(
+                -32603,
+                &format!("Internal error: {}", e),
+                response.id,
+            );
             return Err((StatusCode::INTERNAL_SERVER_ERROR, Json(error_response)));
         }
     };
-    
-    // If this is a successful MCP response, broadcast it to SSE clients
+
+    // If this is a successful MCP response, we may want to broadcast it
     if let Some(result) = response.result {
-        let notification = json!({
-            "jsonrpc": "2.0",
-            "method": "notifications/message",
-            "params": {
-                "level": "info",
-                "logger": "vibe-ensemble-sse",
-                "data": result
-            }
-        });
-        
-        if let Err(e) = state.event_broadcaster.broadcast(notification.to_string()) {
-            tracing::warn!("Failed to broadcast SSE response: {}", e);
-        }
+        use crate::events::EventPayload;
+
+        let event =
+            EventPayload::system_message("mcp_response", "MCP request processed", Some(result));
+
+        state.event_broadcaster.broadcast(event);
     }
-    
+
     Ok(Json(response_value))
 }
 ```
@@ -304,27 +232,16 @@ pub async fn sse_message_handler(
 **Example: Project Tools Integration (`src/mcp/project_tools.rs`)**
 ```rust
 // After successful project creation
-let event = json!({
-    "jsonrpc": "2.0",
-    "method": "notifications/resources/updated",
-    "params": {
-        "uri": "vibe-ensemble://projects",
-        "event": {
-            "type": "project_created",
-            "project": {
-                "repository_name": project.repository_name,
-                "path": project.path,
-                "description": project.short_description,
-                "created_at": project.created_at
-            },
-            "timestamp": chrono::Utc::now().to_rfc3339()
-        }
-    }
-});
+use crate::events::EventPayload;
 
-if let Err(e) = state.event_broadcaster.broadcast(event.to_string()) {
-    tracing::warn!("Failed to broadcast project_created event: {}", e);
-}
+let event = EventPayload::project_created(
+    &project.id.to_string(),
+    &project.repository_name,
+    &project.path,
+    &project.short_description,
+);
+
+state.event_broadcaster.broadcast(event);
 ```
 
 ## Protocol Specification
@@ -459,31 +376,18 @@ data: {JSON-RPC 2.0 message}
 
 ### Event Broadcasting Helpers
 
-**Notification Functions** (`src/sse.rs`):
+**Event Broadcasting Pattern** (`src/events.rs`):
 ```rust
-pub async fn notify_event_change(
-    broadcaster: &EventBroadcaster,
-    event_type: &str,
-    event_data: serde_json::Value,
-)
+// EventPayload provides type-safe event creation methods
+impl EventPayload {
+    pub fn project_created(id: &str, name: &str, path: &str, description: &str) -> Self
+    pub fn ticket_updated(ticket_id: &str, stage: &str, status: &str) -> Self
+    pub fn worker_spawned(worker_id: &str, worker_type: &str, project_id: &str) -> Self
+    pub fn system_message(category: &str, message: &str, metadata: Option<Value>) -> Self
+}
 
-pub async fn notify_ticket_change(
-    broadcaster: &EventBroadcaster,
-    ticket_id: &str,
-    change_type: &str,
-)
-
-pub async fn notify_worker_change(
-    broadcaster: &EventBroadcaster, 
-    worker_id: &str, 
-    status: &str
-)
-
-pub async fn notify_queue_change(
-    broadcaster: &EventBroadcaster,
-    queue_name: &str,
-    change_type: &str,
-)
+// Broadcasting is done through the EventBroadcaster
+state.event_broadcaster.broadcast(event);
 ```
 
 ## Claude Code Integration

@@ -1,7 +1,7 @@
 use async_trait::async_trait;
 use serde_json::{json, Value};
 
-use super::tools::{create_success_response, ToolHandler};
+use super::tools::{create_json_success_response, ToolHandler};
 use super::types::{CallToolResponse, Tool};
 use crate::{error::Result, server::AppState};
 
@@ -46,7 +46,7 @@ impl ToolHandler for GetPermissionModelTool {
         });
 
         let response = json!({
-            "permission_mode": permission_mode,
+            "permission_mode": permission_mode.as_str(),
             "config_file": config_file,
             "description": description,
             "example_config_path": example_path,
@@ -82,9 +82,7 @@ impl ToolHandler for GetPermissionModelTool {
             }
         });
 
-        Ok(create_success_response(&serde_json::to_string_pretty(
-            &response,
-        )?))
+        Ok(create_json_success_response(response))
     }
 
     fn definition(&self) -> Tool {

@@ -125,7 +125,7 @@ Each worker operates independently with their specialized knowledge, ensuring fo
 
 ## MCP Tools
 
-Vibe-Ensemble provides 20 MCP tools organized into five categories:
+Vibe-Ensemble provides 25 MCP tools organized into five categories:
 
 ### Project Management
 - `create_project` - Create a new project with rules and patterns
@@ -170,7 +170,7 @@ Vibe-Ensemble provides 20 MCP tools organized into five categories:
 The server accepts the following command-line options:
 
 - `--configure-claude-code`: Generate Claude Code integration files and exit
-- `--database-path`: SQLite database file path (default: `./vibe-ensemble.db`)
+- `--database-path`: SQLite database file path (default: `./.vibe-ensemble-mcp/vibe-ensemble.db`)
 - `--host`: Server bind address (default: `127.0.0.1`)
 - `--port`: Server port (default: `3000`)
 - `--log-level`: Log level (default: `info`)
@@ -363,7 +363,7 @@ Permission files are read fresh from disk each time a worker starts, allowing yo
 - **📊 Real-Time SSE Integration**: Full Server-Sent Events protocol for live progress monitoring and event streaming
 - **🔧 Improved Worker Templates**: 8 specialized worker templates with task sizing methodology integration
 - **📋 Enhanced Coordinator Prompts**: Updated coordination with systematic task delegation and sizing guidance
-- **🛠️ Robust MCP Tools**: 22 MCP tools with enhanced project metadata and worker coordination
+- **🛠️ Robust MCP Tools**: 25 MCP tools with enhanced project metadata and worker coordination
 - **📚 Comprehensive Documentation**: Complete SSE protocol implementation and task breakdown sizing methodology
 - **🔒 Enhanced Security**: Removed manual ticket manipulation tools to prevent pipeline stalls
 

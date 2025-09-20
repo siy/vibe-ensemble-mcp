@@ -3,12 +3,10 @@ use serde_json::Value;
 use tracing::{debug, error, info, trace, warn};
 
 use super::{
-    event_tools::*, permission_tools::*, project_tools::*, ticket_tools::*, tools::ToolRegistry,
-    types::*, worker_type_tools::*,
+    dependency_tools::*, event_tools::*, permission_tools::*, project_tools::*, ticket_tools::*,
+    tools::ToolRegistry, types::*, worker_type_tools::*, MCP_PROTOCOL_VERSION,
 };
 use crate::{error::Result, server::AppState};
-
-const MCP_PROTOCOL_VERSION: &str = "2024-11-05";
 
 pub struct McpServer {
     pub tools: ToolRegistry,
@@ -20,41 +18,53 @@ impl Default for McpServer {
     }
 }
 
+/// Macro to register multiple tools at once
+macro_rules! register_tools {
+    ($registry:expr, $($tool:expr),+ $(,)?) => {
+        $(
+            $registry.register($tool);
+        )+
+    };
+}
+
 impl McpServer {
     pub fn new() -> Self {
         let mut tools = ToolRegistry::new();
 
-        // Register project management tools
-        tools.register(CreateProjectTool);
-        tools.register(ListProjectsTool);
-        tools.register(GetProjectTool);
-        tools.register(UpdateProjectTool);
-        tools.register(DeleteProjectTool);
-
-        // Worker management is handled automatically by the queue system
-
-        // Register worker type management tools
-        tools.register(CreateWorkerTypeTool);
-        tools.register(ListWorkerTypesTool);
-        tools.register(GetWorkerTypeTool);
-        tools.register(UpdateWorkerTypeTool);
-        tools.register(DeleteWorkerTypeTool);
-
-        // Register ticket management tools
-        tools.register(CreateTicketTool);
-        tools.register(GetTicketTool);
-        tools.register(ListTicketsTool);
-        tools.register(AddTicketCommentTool);
-        tools.register(CloseTicketTool);
-        tools.register(ResumeTicketProcessingTool);
-
-        // Register event and stage management tools
-        tools.register(ListEventsTool);
-        tools.register(ResolveEventTool);
-        tools.register(GetTicketsByStageTool);
-
-        // Register permission management tools
-        tools.register(GetPermissionModelTool);
+        register_tools!(
+            tools,
+            // Project management tools
+            CreateProjectTool,
+            ListProjectsTool,
+            GetProjectTool,
+            UpdateProjectTool,
+            DeleteProjectTool,
+            // Worker type management tools
+            CreateWorkerTypeTool,
+            ListWorkerTypesTool,
+            GetWorkerTypeTool,
+            UpdateWorkerTypeTool,
+            DeleteWorkerTypeTool,
+            // Ticket management tools
+            CreateTicketTool,
+            GetTicketTool,
+            ListTicketsTool,
+            AddTicketCommentTool,
+            CloseTicketTool,
+            ResumeTicketProcessingTool,
+            // Event and stage management tools
+            ListEventsTool,
+            ResolveEventTool,
+            GetTicketsByStageTool,
+            // Dependency management tools
+            AddTicketDependencyTool,
+            RemoveTicketDependencyTool,
+            GetDependencyGraphTool,
+            ListReadyTicketsTool,
+            ListBlockedTicketsTool,
+            // Permission management tools
+            GetPermissionModelTool,
+        );
 
         Self { tools }
     }
@@ -69,10 +79,17 @@ impl McpServer {
         let response = match request.method.as_str() {
             "initialize" => self.handle_initialize(request.params).await,
             "notifications/initialized" => self.handle_initialized().await,
-            "list_tools" | "tools/list" => self.handle_list_tools().await,
-            "call_tool" | "tools/call" => self.handle_call_tool(state, request.params).await,
-            "list_prompts" | "prompts/list" => self.handle_list_prompts().await,
-            "get_prompt" | "prompts/get" => self.handle_get_prompt(request.params).await,
+            "tools/list" => {
+                // Check if this is a paginated request by looking for params
+                if request.params.is_some() {
+                    self.handle_list_tools_with_pagination(request.params).await
+                } else {
+                    self.handle_list_tools().await
+                }
+            }
+            "tools/call" => self.handle_call_tool(state, request.params).await,
+            "prompts/list" => self.handle_list_prompts().await,
+            "prompts/get" => self.handle_get_prompt(request.params).await,
             _ => Err(JsonRpcError {
                 code: METHOD_NOT_FOUND,
                 message: format!("Method '{}' not found", request.method),
@@ -168,10 +185,61 @@ impl McpServer {
     }
 
     async fn handle_list_tools(&self) -> std::result::Result<Value, JsonRpcError> {
-        info!("Handling list_tools request");
+        self.handle_list_tools_with_pagination(None).await
+    }
 
-        let tools = self.tools.list_tools();
-        let response = ListToolsResponse { tools };
+    async fn handle_list_tools_with_pagination(
+        &self,
+        params: Option<Value>,
+    ) -> std::result::Result<Value, JsonRpcError> {
+        info!("Handling list_tools request with pagination");
+
+        // Parse pagination parameters if provided
+        let pagination_params = if let Some(params) = params {
+            serde_json::from_value::<PaginationParams>(params).map_err(|e| JsonRpcError {
+                code: INVALID_PARAMS,
+                message: format!("Invalid pagination params: {}", e),
+                data: None,
+            })?
+        } else {
+            PaginationParams { cursor: None }
+        };
+
+        // Parse cursor
+        let cursor =
+            PaginationCursor::from_cursor_string(pagination_params.cursor).map_err(|e| {
+                JsonRpcError {
+                    code: INVALID_PARAMS,
+                    message: format!("Invalid cursor: {}", e),
+                    data: None,
+                }
+            })?;
+
+        // Get all tools and apply pagination
+        let all_tools = self.tools.list_tools();
+        let total_tools = all_tools.len();
+
+        let start = cursor.offset;
+        let end = std::cmp::min(start + cursor.page_size, total_tools);
+        let has_more = end < total_tools;
+
+        let paginated_tools = if start >= total_tools {
+            Vec::new()
+        } else {
+            all_tools[start..end].to_vec()
+        };
+
+        // Generate next cursor if there are more results
+        let next_cursor = if has_more {
+            cursor.next_cursor(true)
+        } else {
+            None
+        };
+
+        let response = ListToolsResponse {
+            tools: paginated_tools,
+            next_cursor,
+        };
 
         let result = serde_json::to_value(response).map_err(|e| JsonRpcError {
             code: INTERNAL_ERROR,
@@ -203,6 +271,22 @@ impl McpServer {
         };
 
         info!("Calling tool: {}", request.name);
+
+        // Log parameters if they exist and are not empty
+        if let Some(ref args) = request.arguments {
+            let should_log = match args {
+                Value::Null => false,
+                Value::Object(map) => !map.is_empty(),
+                _ => true,
+            };
+            if should_log {
+                info!(
+                    "Tool parameters: {}",
+                    serde_json::to_string_pretty(args)
+                        .unwrap_or_else(|_| "Failed to serialize parameters".to_string())
+                );
+            }
+        }
 
         let response = self.tools.call_tool(state, request).await.map_err(|e| {
             error!("Tool execution error: {}", e);
@@ -255,7 +339,10 @@ impl McpServer {
             },
         ];
 
-        let response = ListPromptsResponse { prompts };
+        let response = ListPromptsResponse {
+            prompts,
+            next_cursor: None,
+        };
 
         let result = serde_json::to_value(response).map_err(|e| JsonRpcError {
             code: INTERNAL_ERROR,
@@ -324,7 +411,7 @@ impl McpServer {
 - Tickets automatically advance through stages as workers complete their tasks
 - Monitor stage progress with `get_tickets_by_stage` and `list_events`
 
-## Available Tools (20 total)
+## Available Tools (25 total)
 
 **Project Management**: create_project, list_projects, get_project, update_project, delete_project
 **Worker Types**: create_worker_type, list_worker_types, get_worker_type, update_worker_type, delete_worker_type
@@ -446,16 +533,16 @@ Each worker type needs its own system prompt tailored to its specialization.
 - Break work into tickets with 3-5 stages
 - Each stage should specify which worker type handles it
 - Include clear success criteria
-- Use `update_ticket_stage` to route tickets to appropriate stages
+- Use `resume_ticket_processing(ticket_id, stage=...)` to route tickets to appropriate stages
 
 ### Step 4: Update Ticket Stages (Workers Auto-Spawn)
 **⚠️ CRITICAL: Workers are now AUTO-SPAWNED when tickets reach specific stages!**
 
 Simply update tickets to appropriate stage names:
 - **\"planning\"**: For design and architecture work
-- **\"coding\"**: For implementation work
+- **\"implementation\"**: For implementation work
 - **\"testing\"**: For validation and QA work
-- **\"reviewing\"**: For code review work
+- **\"review\"**: For code review work
 - **\"documentation\"**: For documentation work
 
 The system automatically:
@@ -488,7 +575,7 @@ The system automatically:
 1. **CREATE PROJECTS**: Using create_project tool
 2. **DEFINE WORKER TYPES**: Using create_worker_type with system prompts
 3. **CREATE TICKETS**: For ALL work (even 'simple' tasks)
-4. **UPDATE TICKET STAGES**: Using update_ticket_stage (workers auto-spawn)
+4. **UPDATE TICKET STAGES**: Using resume_ticket_processing (workers auto-spawn)
 5. **MONITOR PROGRESS**: Using list_events, get_tickets_by_stage, list_tickets
 
 ## Key Success Factors
@@ -529,36 +616,36 @@ This delegation-first approach prevents context drift, ensures specialization, a
 
 ### 1. Task Stage Architecture
 **For {} Tasks, organize work into specialized stages:**
-- **analysis**: Requirements analysis, dependency mapping
-- **coding**: Feature implementation, coding
+- **planning**: Requirements analysis, dependency mapping
+- **implementation**: Feature implementation, coding
 - **testing**: Validation, QA, automated testing
-- **reviewing**: Code reviews, optimization
+- **review**: Code reviews, optimization
 - **documentation**: Docs, guides, README updates
 
 ### 2. Auto-Spawn Worker Pattern
 Workers are automatically spawned when tickets are updated to specific stages:
 ```
-update_ticket_stage(ticket_id, \"analysis\")    # Auto-spawns analyzer worker if needed
-update_ticket_stage(ticket_id, \"coding\")     # Auto-spawns implementer worker if needed  
-update_ticket_stage(ticket_id, \"testing\")   # Auto-spawns tester worker if needed
-update_ticket_stage(ticket_id, \"reviewing\") # Auto-spawns reviewer worker if needed
+resume_ticket_processing(ticket_id, \"planning\")       # Auto-spawns planner worker if needed
+resume_ticket_processing(ticket_id, \"implementation\")  # Auto-spawns implementer worker if needed
+resume_ticket_processing(ticket_id, \"testing\")        # Auto-spawns tester worker if needed
+resume_ticket_processing(ticket_id, \"review\")         # Auto-spawns reviewer worker if needed
 ```
 
 Workers automatically pull tasks from their assigned stage and complete when stage work is done.
 
 ### 3. Ticket-to-Stage Assignment Flow
 1. **Coordinator**: Create ticket with multi-stage execution plan
-2. **Coordinator**: Update ticket to first stage: `update_ticket_stage(ticket_id, \"analysis\")`
-3. **Analyzer Worker**: Automatically picks up task, completes analysis stage
-4. **Analyzer Worker**: Adds detailed report via `add_ticket_comment`
-5. **Coordinator**: Moves ticket to next stage: `update_ticket_stage(ticket_id, \"coding\")`
-6. **Developer Worker**: Continues from analysis, implements features
+2. **Coordinator**: Update ticket to first stage: `resume_ticket_processing(ticket_id, \"planning\")`
+3. **Planning Worker**: Automatically picks up task, completes planning stage
+4. **Planning Worker**: Adds detailed report via `add_ticket_comment`
+5. **Coordinator**: Moves ticket to next stage: `resume_ticket_processing(ticket_id, \"implementation\")`
+6. **Implementation Worker**: Continues from planning, implements features
 7. **Repeat** through all stages until completion
 
 ### 4. Stage-Aware Communication Protocol
 - Workers use `get_tickets_by_stage(stage_name)` to get their tasks
 - Workers use `add_ticket_comment` with stage reports
-- Workers use `update_ticket_stage` when stage is done
+- Workers signal stage transitions via JSON outcome
 - Coordinator uses `get_tickets_by_stage` to monitor stage loads
 - Coordinator uses `list_events` to track overall progress
 - Coordinator uses `resolve_event` to mark events as resolved with investigation summary
@@ -599,7 +686,7 @@ Workers automatically pull tasks from their assigned stage and complete when sta
 ### ✅ What Coordinators SHOULD Do:
 - Create projects and define worker types
 - Create tickets for ALL technical tasks (no exceptions)
-- Update tickets to appropriate stages (workers auto-spawn as needed)
+- Resume tickets to appropriate stages using resume_ticket_processing (workers auto-spawn as needed)
 - Coordinate workflow between specialized workers
 - Ensure proper handoffs between stages
 
@@ -661,8 +748,7 @@ pub async fn mcp_handler(
         debug!("No MCP-Protocol-Version header present (optional for HTTP transport)");
     }
 
-    let mcp_server = McpServer::new();
-    let response = mcp_server.handle_request(&state, request).await;
+    let response = state.mcp_server.handle_request(&state, request).await;
 
     trace!(
         "MCP response: {}",
