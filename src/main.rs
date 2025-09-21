@@ -39,14 +39,6 @@ struct Args {
     #[arg(long, default_value_t = PermissionMode::Inherit)]
     permission_mode: PermissionMode,
 
-    /// Enable WebSocket transport for bidirectional communication
-    #[arg(long, default_value = "true")]
-    enable_websocket: bool,
-
-    /// Require authentication for WebSocket connections
-    #[arg(long, default_value = "false")]
-    websocket_auth_required: bool,
-
     /// Timeout for client tool calls in seconds
     #[arg(long, default_value = "30")]
     client_tool_timeout_secs: u64,
@@ -106,8 +98,6 @@ async fn main() -> Result<()> {
         port: args.port,
         no_respawn: args.no_respawn,
         permission_mode: args.permission_mode,
-        enable_websocket: args.enable_websocket,
-        websocket_auth_required: args.websocket_auth_required,
         client_tool_timeout_secs: args.client_tool_timeout_secs,
         max_concurrent_client_requests: args.max_concurrent_client_requests,
         sse_echo_allowlist: args

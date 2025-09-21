@@ -56,17 +56,13 @@ pub async fn run_server(config: Config) -> Result<()> {
     // Initialize single MCP server instance with config-based tool registration
     let mcp_server = Arc::new(McpServer::new(&config));
 
-    // Initialize WebSocket manager (conditionally based on config)
-    let websocket_manager = if config.enable_websocket {
-        Arc::new(WebSocketManager::with_concurrency_limit(
-            config.max_concurrent_client_requests,
-        ))
-    } else {
-        Arc::new(WebSocketManager::disabled())
-    };
+    // Initialize WebSocket manager with concurrency limits
+    let websocket_manager = Arc::new(WebSocketManager::with_concurrency_limit(
+        config.max_concurrent_client_requests,
+    ));
 
-    // Generate WebSocket token and create lock file if WebSocket is enabled
-    let websocket_token = if config.enable_websocket {
+    // Generate WebSocket token and create lock file
+    let websocket_token = {
         let lock_manager = LockFileManager::new(config.host.clone(), config.port);
         match lock_manager.create_lock_file() {
             Ok(token) => {
@@ -78,8 +74,6 @@ pub async fn run_server(config: Config) -> Result<()> {
                 None
             }
         }
-    } else {
-        None
     };
 
     let state = AppState {
@@ -117,13 +111,9 @@ pub async fn run_server(config: Config) -> Result<()> {
         .route("/sse", get(sse_handler))
         .route("/messages", post(sse_message_handler));
 
-    // Conditionally add WebSocket route if enabled
-    if config.enable_websocket {
-        app = app.route("/ws", get(websocket_handler));
-        info!("WebSocket support enabled at /ws");
-    } else {
-        info!("WebSocket support disabled");
-    }
+    // Add WebSocket route
+    app = app.route("/ws", get(websocket_handler));
+    info!("WebSocket support enabled at /ws");
 
     let app = app
         .layer(RequestBodyLimitLayer::new(1024 * 1024)) // 1 MiB

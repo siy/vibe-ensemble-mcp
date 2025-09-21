@@ -71,7 +71,7 @@ impl ToolHandler for ValidateWebSocketIntegrationTool {
         // Test 5: Validate MCP protocol version consistency
         info!("Test 5: MCP protocol version consistency");
         let protocol_version = super::MCP_PROTOCOL_VERSION;
-        if protocol_version == "2024-11-05" {
+        if protocol_version == "2025-03-26" {
             validation_results.push(json!({
                 "test": "mcp_protocol_version",
                 "status": "passed",
@@ -87,7 +87,7 @@ impl ToolHandler for ValidateWebSocketIntegrationTool {
                 "status": "failed",
                 "description": "MCP protocol version mismatch",
                 "details": {
-                    "expected": "2024-11-05",
+                    "expected": "2025-03-26",
                     "actual": protocol_version
                 }
             }));
@@ -96,27 +96,18 @@ impl ToolHandler for ValidateWebSocketIntegrationTool {
 
         // Test 6: Check WebSocket configuration
         info!("Test 6: WebSocket configuration");
-        if state.config.enable_websocket {
-            validation_results.push(json!({
-                "test": "websocket_config",
-                "status": "passed",
-                "description": "WebSocket is enabled in configuration",
-                "details": {
-                    "enable_websocket": state.config.enable_websocket,
-                    "websocket_auth_required": state.config.websocket_auth_required,
-                    "client_tool_timeout_secs": state.config.client_tool_timeout_secs,
-                    "max_concurrent_client_requests": state.config.max_concurrent_client_requests
-                }
-            }));
-            passed_tests += 1;
-        } else {
-            validation_results.push(json!({
-                "test": "websocket_config",
-                "status": "failed",
-                "description": "WebSocket is disabled in configuration"
-            }));
-            failed_tests += 1;
-        }
+        validation_results.push(json!({
+            "test": "websocket_config",
+            "status": "passed",
+            "description": "WebSocket is always enabled",
+            "details": {
+                "enable_websocket": true,
+                "websocket_auth_required": true,
+                "client_tool_timeout_secs": state.config.client_tool_timeout_secs,
+                "max_concurrent_client_requests": state.config.max_concurrent_client_requests
+            }
+        }));
+        passed_tests += 1;
 
         // Test 7: Validate tool registrations
         info!("Test 7: Tool registrations");
@@ -303,7 +294,7 @@ impl ToolHandler for TestWebSocketCompatibilityTool {
             "server_info": {
                 "version": env!("CARGO_PKG_VERSION"),
                 "mcp_protocol_version": super::MCP_PROTOCOL_VERSION,
-                "websocket_enabled": state.config.enable_websocket
+                "websocket_enabled": true
             },
             "compatibility_matrix": compatibility_results,
             "integration_notes": [

@@ -229,10 +229,7 @@ impl WebSocketManager {
         query: &WebSocketQuery,
         state: &AppState,
     ) -> Result<()> {
-        // If authentication is not required, allow connection
-        if !state.config.websocket_auth_required {
-            return Ok(());
-        }
+        // Authentication is always required
 
         // Check for token in query parameters
         if let Some(token) = &query.token {
@@ -279,25 +276,19 @@ impl WebSocketManager {
             return false;
         }
 
-        // If authentication is required, validate against server token
-        if state.config.websocket_auth_required {
-            // Check against server-generated token from AppState
-            if let Some(expected_token) = &state.websocket_token {
-                return self.constant_time_compare(token, expected_token);
-            }
-
-            // Fall back to environment variable
-            if let Ok(expected_token) = std::env::var("WEBSOCKET_AUTH_TOKEN") {
-                return self.constant_time_compare(token, &expected_token);
-            }
-
-            // If no configured token found, reject
-            warn!("WebSocket authentication required but no token configured");
-            return false;
+        // Check against server-generated token from AppState
+        if let Some(expected_token) = &state.websocket_token {
+            return self.constant_time_compare(token, expected_token);
         }
 
-        // If authentication is optional, any non-empty token is valid
-        true
+        // Fall back to environment variable
+        if let Ok(expected_token) = std::env::var("WEBSOCKET_AUTH_TOKEN") {
+            return self.constant_time_compare(token, &expected_token);
+        }
+
+        // If no configured token found, reject
+        warn!("WebSocket authentication required but no token configured");
+        false
     }
 
     /// Constant-time string comparison to prevent timing attacks

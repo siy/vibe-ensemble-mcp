@@ -22,8 +22,6 @@ impl Default for McpServer {
             port: 0,
             no_respawn: false,
             permission_mode: crate::permissions::PermissionMode::Inherit,
-            enable_websocket: true,
-            websocket_auth_required: false,
             client_tool_timeout_secs: 30,
             max_concurrent_client_requests: 50,
             sse_echo_allowlist: std::collections::HashSet::new(),
@@ -42,7 +40,7 @@ macro_rules! register_tools {
 }
 
 impl McpServer {
-    pub fn new(config: &Config) -> Self {
+    pub fn new(_config: &Config) -> Self {
         let mut tools = ToolRegistry::new();
 
         Self::register_project_tools(&mut tools);
@@ -50,10 +48,8 @@ impl McpServer {
         Self::register_event_tools(&mut tools);
         Self::register_permission_tools(&mut tools);
 
-        // Only register WebSocket tools if WebSocket is enabled
-        if config.enable_websocket {
-            Self::register_websocket_tools(&mut tools);
-        }
+        // Always register WebSocket tools (WebSocket is always enabled)
+        Self::register_websocket_tools(&mut tools);
 
         Self { tools }
     }

@@ -2,7 +2,7 @@
 use serde_json::{json, Value};
 
 /// MCP Protocol Version - single source of truth
-pub const MCP_PROTOCOL_VERSION: &str = "2024-11-05";
+pub const MCP_PROTOCOL_VERSION: &str = "2025-03-26";
 
 /// JSON-RPC envelope builders to ensure consistency
 pub struct JsonRpcEnvelopes;
