@@ -124,6 +124,24 @@ impl QueueManager {
             ));
         }
 
+        // Ensure ticket is open and ready (dependency_status)
+        let readiness = sqlx::query_as::<_, (String, String)>(
+            "SELECT state, dependency_status FROM tickets WHERE ticket_id = ?1"
+        )
+        .bind(ticket_id)
+        .fetch_optional(&self.db)
+        .await?;
+        if let Some((state, dep)) = readiness {
+            if state != "open" || dep != "ready" {
+                return Err(anyhow::anyhow!(
+                    "Ticket {} is not ready (state='{}', dependency_status='{}')",
+                    ticket_id, state, dep
+                ));
+            }
+        } else {
+            return Err(anyhow::anyhow!(format!("Ticket '{}' not found", ticket_id)));
+        }
+
         // Claim the ticket before submitting to queue
         let worker_id = format!("consumer-{}-{}", worker_type, &task_id[..8]);
         let ticket_id_domain = TicketId::new(ticket_id.to_string())?;
@@ -942,12 +960,15 @@ impl WorkerConsumer {
                         Ok(true) => {
                             // Target stage exists, proceed normally
                             let target_stage = WorkerType::new(target_stage_str.clone())?;
-                            let pipeline_update = output.pipeline_update.as_ref().map(|pipeline| {
-                                pipeline
-                                    .iter()
-                                    .filter_map(|s| WorkerType::new(s.clone()).ok())
-                                    .collect()
-                            });
+                            let pipeline_update = if let Some(pipeline) = &output.pipeline_update {
+                                let mut out = Vec::with_capacity(pipeline.len());
+                                for s in pipeline {
+                                    out.push(WorkerType::new(s.clone())?);
+                                }
+                                Some(out)
+                            } else {
+                                None
+                            };
 
                             WorkerCommand::AdvanceToStage {
                                 target_stage,

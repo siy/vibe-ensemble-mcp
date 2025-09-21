@@ -126,6 +126,7 @@ impl Project {
             }
             query_builder.push("rules = ");
             query_builder.push_bind(rules);
+            query_builder.push(", rules_version = COALESCE(rules_version, 0) + 1");
             has_field = true;
         }
         if let Some(ref patterns) = req.patterns {
@@ -134,6 +135,7 @@ impl Project {
             }
             query_builder.push("patterns = ");
             query_builder.push_bind(patterns);
+            query_builder.push(", patterns_version = COALESCE(patterns_version, 0) + 1");
             has_field = true;
         }
 

@@ -435,9 +435,10 @@ impl Ticket {
             r#"
             UPDATE tickets 
             SET processing_worker_id = ?1, updated_at = datetime('now')
-            WHERE ticket_id = ?2 
-              AND processing_worker_id IS NULL 
+            WHERE ticket_id = ?2
+              AND processing_worker_id IS NULL
               AND state = 'open'
+              AND dependency_status = 'ready'
         "#,
         )
         .bind(worker_id)

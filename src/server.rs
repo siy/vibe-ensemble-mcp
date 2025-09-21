@@ -159,18 +159,19 @@ async fn respawn_workers_for_unfinished_tasks(state: &AppState) -> Result<()> {
         SELECT ticket_id, project_id, current_stage, state, processing_worker_id,
                datetime('now') AS current_time, updated_at,
                (julianday('now') - julianday(updated_at)) * 24 * 60 AS minutes_since_update
-        FROM tickets 
-        WHERE (
+        FROM tickets
+        WHERE dependency_status = 'ready'
+          AND (
             -- Case 1: Open tickets not being processed
             (state = 'open' AND processing_worker_id IS NULL)
             OR
             -- Case 2: Open tickets claimed but stalled (no update for >5 minutes)
-            (state = 'open' AND processing_worker_id IS NOT NULL 
+            (state = 'open' AND processing_worker_id IS NOT NULL
              AND (julianday('now') - julianday(updated_at)) * 24 * 60 > 5)
-            OR  
-            -- Case 3: On-hold tickets that may be recoverable 
+            OR
+            -- Case 3: On-hold tickets that may be recoverable
             (state = 'on_hold')
-        )
+          )
         ORDER BY project_id, current_stage, priority DESC, created_at ASC
         "#,
     )

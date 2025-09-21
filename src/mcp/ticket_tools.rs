@@ -66,6 +66,10 @@ impl ToolHandler for CreateTicketTool {
 
         // Use provided execution plan or default to single stage
         let execution_plan = execution_plan_input.unwrap_or_else(|| vec![initial_stage.clone()]);
+        let first_stage = execution_plan
+            .first()
+            .cloned()
+            .ok_or_else(|| crate::error::AppError::BadRequest("Execution plan is empty".to_string()))?;
 
         // Validate all stages in execution plan exist as worker types
         if let Err(e) = crate::validation::PipelineValidator::validate_pipeline_stages(
@@ -107,16 +111,16 @@ impl ToolHandler for CreateTicketTool {
             warn!("Failed to emit ticket_created event: {}", e);
         }
 
-        // Automatically submit the ticket to the initial stage queue
+        // Automatically submit the ticket to the first stage queue
         match state
             .queue_manager
-            .submit_task(&project_id, &initial_stage, &ticket_id)
+            .submit_task(&project_id, &first_stage, &ticket_id)
             .await
         {
             Ok(task_id) => {
                 info!(
                     "Successfully submitted ticket {} to {}-queue as task {}",
-                    ticket_id, initial_stage, task_id
+                    ticket_id, first_stage, task_id
                 );
             }
             Err(e) => {

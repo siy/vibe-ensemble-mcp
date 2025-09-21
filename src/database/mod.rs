@@ -9,8 +9,8 @@ pub mod worker_types;
 pub mod workers;
 
 use anyhow::Result;
-use sqlx::{sqlite::SqlitePool, Pool, Sqlite};
-use std::{fs, path::Path};
+use sqlx::{sqlite::{SqlitePoolOptions, SqliteConnectOptions}, Pool, Sqlite};
+use std::{fs, path::Path, str::FromStr};
 use tracing::info;
 
 pub type DbPool = Pool<Sqlite>;
@@ -63,7 +63,15 @@ pub async fn create_pool(database_url: &str) -> Result<DbPool> {
     // Ensure directory structure exists
     ensure_directory_structure(database_url)?;
 
-    let pool = SqlitePool::connect(database_url).await?;
+    let connect_opts = SqliteConnectOptions::from_str(database_url)?
+        .foreign_keys(true);
+    let pool = SqlitePoolOptions::new()
+        .after_connect(|conn, _meta| Box::pin(async move {
+            sqlx::query("PRAGMA journal_mode=WAL;").execute(conn).await?;
+            Ok(())
+        }))
+        .connect_with(connect_opts)
+        .await?;
 
     info!("Running database migrations");
     migrations::run_migrations(&pool).await?;
