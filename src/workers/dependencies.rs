@@ -1,11 +1,11 @@
-use anyhow::Result;
-use std::sync::Arc;
-use tracing::{error, info, warn};
 use crate::{
     database::{tickets::Ticket, DbPool},
     sse::EventBroadcaster,
     workers::{domain::TicketId, queue::QueueManager},
 };
+use anyhow::Result;
+use std::sync::Arc;
+use tracing::{error, info, warn};
 
 /// Dependency management functionality for queue operations
 pub struct DependencyManager;
@@ -18,7 +18,10 @@ impl DependencyManager {
         queue_manager: Arc<QueueManager>,
         ticket_id: &TicketId,
     ) -> Result<()> {
-        info!("Checking for dependent tickets to unblock after completing {}", ticket_id);
+        info!(
+            "Checking for dependent tickets to unblock after completing {}",
+            ticket_id
+        );
 
         // Find all tickets that depend on this ticket
         let dependent_tickets = sqlx::query_as::<_, Ticket>(
@@ -37,7 +40,10 @@ impl DependencyManager {
         .await?;
 
         for dependent_ticket in dependent_tickets {
-            info!("Checking if dependent ticket {} can be unblocked", dependent_ticket.ticket_id);
+            info!(
+                "Checking if dependent ticket {} can be unblocked",
+                dependent_ticket.ticket_id
+            );
 
             // Check if all dependencies are satisfied
             let blocking_dependencies = sqlx::query_scalar::<_, i64>(
@@ -55,7 +61,10 @@ impl DependencyManager {
 
             if blocking_dependencies == 0 {
                 // All dependencies satisfied, unblock the ticket
-                info!("All dependencies satisfied for ticket {}, unblocking", dependent_ticket.ticket_id);
+                info!(
+                    "All dependencies satisfied for ticket {}, unblocking",
+                    dependent_ticket.ticket_id
+                );
 
                 sqlx::query(
                     "UPDATE tickets SET dependency_status = 'ready', updated_at = datetime('now') WHERE ticket_id = ?1"
@@ -73,7 +82,8 @@ impl DependencyManager {
                     &ticket_id,
                     &dependent_ticket.project_id,
                     &dependent_ticket.current_stage,
-                ).await?;
+                )
+                .await?;
 
                 // Publish event
                 let event = crate::events::EventPayload::ticket_updated(
@@ -102,7 +112,10 @@ impl DependencyManager {
         project_id: &str,
         current_stage: &str,
     ) -> Result<()> {
-        info!("Resubmitting parent ticket {} for processing in stage {}", ticket_id, current_stage);
+        info!(
+            "Resubmitting parent ticket {} for processing in stage {}",
+            ticket_id, current_stage
+        );
 
         // Get fresh ticket data
         let _ticket = match Ticket::get_by_id(db, ticket_id.as_str()).await? {
@@ -114,11 +127,10 @@ impl DependencyManager {
         };
 
         // Submit to queue for the current stage
-        match queue_manager.submit_task(
-            project_id,
-            current_stage,
-            ticket_id.as_str(),
-        ).await {
+        match queue_manager
+            .submit_task(project_id, current_stage, ticket_id.as_str())
+            .await
+        {
             Ok(_) => {
                 info!("Successfully resubmitted ticket {} to queue", ticket_id);
 

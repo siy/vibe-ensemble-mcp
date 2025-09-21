@@ -6,7 +6,11 @@ use crate::mcp::constants::build_mcp_config;
 use crate::permissions::{ClaudePermissions, ClaudeSettings, PermissionMode};
 
 /// Generate Claude Code integration files
-pub async fn configure_claude_code(host: &str, port: u16, permission_mode: PermissionMode) -> Result<()> {
+pub async fn configure_claude_code(
+    host: &str,
+    port: u16,
+    permission_mode: PermissionMode,
+) -> Result<()> {
     println!("🔧 Configuring Claude Code integration...");
 
     // Generate WebSocket authentication token
@@ -65,12 +69,18 @@ async fn create_mcp_config(host: &str, port: u16, websocket_token: &str) -> Resu
 
     // Add WebSocket authentication to the configuration
     if let Some(servers) = config.get_mut("mcpServers").and_then(|v| v.as_object_mut()) {
-        if let Some(ws_server) = servers.get_mut("vibe-ensemble-ws").and_then(|v| v.as_object_mut()) {
-            ws_server.insert("auth".to_string(), serde_json::json!({
-                "type": "token",
-                "token_file": ".claude/websocket-token",
-                "token": websocket_token
-            }));
+        if let Some(ws_server) = servers
+            .get_mut("vibe-ensemble-ws")
+            .and_then(|v| v.as_object_mut())
+        {
+            ws_server.insert(
+                "auth".to_string(),
+                serde_json::json!({
+                    "type": "token",
+                    "token_file": ".claude/websocket-token",
+                    "token": websocket_token
+                }),
+            );
         }
     }
 
@@ -127,14 +137,38 @@ async fn create_vibe_ensemble_command(host: &str, port: u16) -> Result<()> {
 async fn create_worker_templates() -> Result<()> {
     // Load templates from external files using include_str!
     let templates = vec![
-        ("planning.md", include_str!("../templates/worker-templates/planning.md")),
-        ("design.md", include_str!("../templates/worker-templates/design.md")),
-        ("implementation.md", include_str!("../templates/worker-templates/implementation.md")),
-        ("testing.md", include_str!("../templates/worker-templates/testing.md")),
-        ("review.md", include_str!("../templates/worker-templates/review.md")),
-        ("deployment.md", include_str!("../templates/worker-templates/deployment.md")),
-        ("research.md", include_str!("../templates/worker-templates/research.md")),
-        ("documentation.md", include_str!("../templates/worker-templates/documentation.md")),
+        (
+            "planning.md",
+            include_str!("../templates/worker-templates/planning.md"),
+        ),
+        (
+            "design.md",
+            include_str!("../templates/worker-templates/design.md"),
+        ),
+        (
+            "implementation.md",
+            include_str!("../templates/worker-templates/implementation.md"),
+        ),
+        (
+            "testing.md",
+            include_str!("../templates/worker-templates/testing.md"),
+        ),
+        (
+            "review.md",
+            include_str!("../templates/worker-templates/review.md"),
+        ),
+        (
+            "deployment.md",
+            include_str!("../templates/worker-templates/deployment.md"),
+        ),
+        (
+            "research.md",
+            include_str!("../templates/worker-templates/research.md"),
+        ),
+        (
+            "documentation.md",
+            include_str!("../templates/worker-templates/documentation.md"),
+        ),
     ];
 
     // Create .claude/worker-templates directory

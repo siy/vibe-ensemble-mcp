@@ -1,7 +1,7 @@
+use axum::extract::ws::{Message, WebSocket};
 use axum::extract::{Query, State, WebSocketUpgrade};
 use axum::http::HeaderMap;
 use axum::response::Response;
-use axum::extract::ws::{Message, WebSocket};
 use dashmap::DashMap;
 use futures::{SinkExt, StreamExt};
 use serde::{Deserialize, Serialize};
@@ -139,9 +139,8 @@ impl WebSocketManager {
     ) -> Response {
         let manager = self.clone();
 
-        ws_upgrade.on_upgrade(move |socket| {
-            manager.handle_socket(socket, headers, query.0, state.0)
-        })
+        ws_upgrade
+            .on_upgrade(move |socket| manager.handle_socket(socket, headers, query.0, state.0))
     }
 
     /// Handle WebSocket communication for a client
@@ -187,13 +186,16 @@ impl WebSocketManager {
         };
 
         self.clients.insert(client_id.clone(), connection);
-        info!("Client {} connected with capabilities: {:?}", client_id, capabilities);
+        info!(
+            "Client {} connected with capabilities: {:?}",
+            client_id, capabilities
+        );
 
         // Handle incoming messages
         while let Some(msg) = receiver.next().await {
             match msg {
                 Ok(Message::Text(text)) => {
-                    if let Err(e) = self.handle_message(&client_id, &text).await {
+                    if let Err(e) = self.handle_message(&client_id, &text, &state).await {
                         error!("Error handling message from {}: {}", client_id, e);
                     }
                 }
@@ -257,12 +259,23 @@ impl WebSocketManager {
             }
         }
 
-        Err(AppError::BadRequest("Invalid or missing authentication token".to_string()))
+        Err(AppError::BadRequest(
+            "Invalid or missing authentication token".to_string(),
+        ))
     }
 
     /// Validate authentication token
     async fn validate_token(&self, token: &str, state: &AppState) -> bool {
-        if token.is_empty() {
+        // Basic token format validation
+        if token.is_empty() || token.len() < 8 || token.len() > 256 {
+            return false;
+        }
+
+        // Check for valid characters (alphanumeric, hyphens, underscores)
+        if !token
+            .chars()
+            .all(|c| c.is_alphanumeric() || c == '-' || c == '_')
+        {
             return false;
         }
 
@@ -271,12 +284,12 @@ impl WebSocketManager {
             // Try to read the WebSocket token file
             if let Ok(expected_token) = std::fs::read_to_string(".claude/websocket-token") {
                 let expected_token = expected_token.trim();
-                return token == expected_token;
+                return self.constant_time_compare(token, expected_token);
             }
 
             // Fall back to environment variable
             if let Ok(expected_token) = std::env::var("WEBSOCKET_AUTH_TOKEN") {
-                return token == expected_token;
+                return self.constant_time_compare(token, &expected_token);
             }
 
             // If no configured token found, reject
@@ -286,6 +299,19 @@ impl WebSocketManager {
 
         // If authentication is optional, any non-empty token is valid
         true
+    }
+
+    /// Constant-time string comparison to prevent timing attacks
+    fn constant_time_compare(&self, a: &str, b: &str) -> bool {
+        if a.len() != b.len() {
+            return false;
+        }
+
+        let mut result = 0u8;
+        for (byte_a, byte_b) in a.bytes().zip(b.bytes()) {
+            result |= byte_a ^ byte_b;
+        }
+        result == 0
     }
 
     /// Negotiate client capabilities
@@ -306,52 +332,44 @@ impl WebSocketManager {
     }
 
     /// Handle incoming JSON-RPC message
-    async fn handle_message(&self, client_id: &str, message: &str) -> Result<()> {
+    async fn handle_message(&self, client_id: &str, message: &str, state: &AppState) -> Result<()> {
         debug!("Received message from {}: {}", client_id, message);
 
         let request: JsonRpcRequest = serde_json::from_str(message)?;
 
         match request.method.as_str() {
-            "initialize" => self.handle_initialize(client_id, &request).await,
+            // WebSocket-specific methods handled locally
             "tools/register" => self.handle_tool_registration(client_id, &request).await,
-            "tools/call" => self.handle_tool_call(client_id, &request).await,
             "notifications/initialized" => self.handle_initialized(client_id).await,
+
+            // Standard MCP methods forwarded to unified handler
+            "initialize" | "tools/list" | "tools/call" | "prompts/list" | "prompts/get" => {
+                let response = state.mcp_server.handle_request(state, request).await;
+                let response_value = serde_json::to_value(&response)?;
+                self.send_message(client_id, &response_value).await
+            }
+
             _ => {
                 // Check if this is a response to a server-initiated request
                 if request.id.is_some() {
                     self.handle_response(client_id, message).await
                 } else {
-                    warn!("Unknown method from client {}: {}", client_id, request.method);
+                    warn!(
+                        "Unknown method from client {}: {}",
+                        client_id, request.method
+                    );
                     Ok(())
                 }
             }
         }
     }
 
-    /// Handle client initialize request
-    async fn handle_initialize(&self, client_id: &str, request: &JsonRpcRequest) -> Result<()> {
-        let response = json!({
-            "jsonrpc": "2.0",
-            "id": request.id,
-            "result": {
-                "protocol_version": "2024-11-05",
-                "capabilities": {
-                    "bidirectional": true,
-                    "server_initiated_requests": true,
-                    "client_tool_registration": true
-                },
-                "server_info": {
-                    "name": "vibe-ensemble-mcp",
-                    "version": env!("CARGO_PKG_VERSION")
-                }
-            }
-        });
-
-        self.send_message(client_id, &response).await
-    }
-
     /// Handle tool registration from client
-    async fn handle_tool_registration(&self, client_id: &str, request: &JsonRpcRequest) -> Result<()> {
+    async fn handle_tool_registration(
+        &self,
+        client_id: &str,
+        request: &JsonRpcRequest,
+    ) -> Result<()> {
         if let Some(params) = &request.params {
             if let Ok(tool_def) = serde_json::from_value::<ClientToolDefinition>(params.clone()) {
                 let mut tool = tool_def;
@@ -384,13 +402,6 @@ impl WebSocketManager {
         });
 
         self.send_message(client_id, &error_response).await
-    }
-
-    /// Handle tool call from client
-    async fn handle_tool_call(&self, _client_id: &str, _request: &JsonRpcRequest) -> Result<()> {
-        // Forward tool calls to the main MCP server
-        // This would integrate with the existing tool system
-        Ok(())
     }
 
     /// Handle initialized notification
@@ -427,7 +438,9 @@ impl WebSocketManager {
         if let Some(client) = self.clients.get(client_id) {
             let text = serde_json::to_string(message)?;
             if client.sender.send(Message::Text(text)).is_err() {
-                return Err(AppError::BadRequest("Failed to send message to client".to_string()));
+                return Err(AppError::BadRequest(
+                    "Failed to send message to client".to_string(),
+                ));
             }
         }
         Ok(())
@@ -489,7 +502,10 @@ impl WebSocketManager {
 
     /// List connected clients
     pub fn list_clients(&self) -> Vec<String> {
-        self.clients.iter().map(|entry| entry.key().clone()).collect()
+        self.clients
+            .iter()
+            .map(|entry| entry.key().clone())
+            .collect()
     }
 }
 
@@ -520,13 +536,17 @@ impl ClientToolRegistry {
 
     /// Remove all tools from a client
     pub fn remove_client_tools(&self, client_id: &str) {
-        self.tools.retain(|key, _| !key.starts_with(&format!("{}:", client_id)));
+        self.tools
+            .retain(|key, _| !key.starts_with(&format!("{}:", client_id)));
         self.client_capabilities.remove(client_id);
     }
 
     /// List all available client tools
     pub fn list_tools(&self) -> Vec<ClientToolDefinition> {
-        self.tools.iter().map(|entry| entry.value().clone()).collect()
+        self.tools
+            .iter()
+            .map(|entry| entry.value().clone())
+            .collect()
     }
 
     /// Get tool by name and client

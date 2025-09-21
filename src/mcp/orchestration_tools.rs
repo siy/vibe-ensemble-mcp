@@ -3,7 +3,9 @@ use serde_json::{json, Value};
 use std::collections::HashMap;
 use tracing::{error, info, warn};
 
-use super::tools::{create_json_success_response, create_json_error_response, extract_param, ToolHandler};
+use super::tools::{
+    create_json_error_response, create_json_success_response, extract_param, ToolHandler,
+};
 use super::types::{CallToolResponse, Tool};
 use crate::{error::Result, server::AppState};
 
@@ -16,40 +18,51 @@ impl ToolHandler for ExecuteWorkflowTool {
         let workflow: Vec<Value> = extract_param(&arguments, "workflow")?;
         let workflow_id: String = extract_param(&arguments, "workflow_id")?;
 
-        info!("Executing workflow '{}' with {} steps", workflow_id, workflow.len());
+        info!(
+            "Executing workflow '{}' with {} steps",
+            workflow_id,
+            workflow.len()
+        );
 
         let mut results = Vec::new();
         let mut context: HashMap<String, Value> = HashMap::new();
 
         for (step_index, step) in workflow.iter().enumerate() {
             let default_name = format!("step_{}", step_index);
-            let step_name = step.get("name")
+            let step_name = step
+                .get("name")
                 .and_then(|v| v.as_str())
                 .unwrap_or(&default_name);
 
-            let client_id = step.get("client_id")
+            let client_id = step
+                .get("client_id")
                 .and_then(|v| v.as_str())
-                .ok_or_else(|| crate::error::AppError::BadRequest(
-                    format!("Missing client_id in step {}", step_index)
-                ))?;
+                .ok_or_else(|| {
+                    crate::error::AppError::BadRequest(format!(
+                        "Missing client_id in step {}",
+                        step_index
+                    ))
+                })?;
 
-            let tool_name = step.get("tool_name")
+            let tool_name = step
+                .get("tool_name")
                 .and_then(|v| v.as_str())
-                .ok_or_else(|| crate::error::AppError::BadRequest(
-                    format!("Missing tool_name in step {}", step_index)
-                ))?;
+                .ok_or_else(|| {
+                    crate::error::AppError::BadRequest(format!(
+                        "Missing tool_name in step {}",
+                        step_index
+                    ))
+                })?;
 
             // Process arguments with context substitution
-            let mut step_arguments = step.get("arguments")
-                .cloned()
-                .unwrap_or_else(|| json!({}));
+            let mut step_arguments = step.get("arguments").cloned().unwrap_or_else(|| json!({}));
 
             // Simple context substitution for ${variable} patterns
             if let Some(arguments_obj) = step_arguments.as_object_mut() {
                 for (_key, value) in arguments_obj.iter_mut() {
                     if let Some(str_value) = value.as_str() {
                         if str_value.starts_with("${") && str_value.ends_with("}") {
-                            let var_name = &str_value[2..str_value.len()-1];
+                            let var_name = &str_value[2..str_value.len() - 1];
                             if let Some(context_value) = context.get(var_name) {
                                 *value = context_value.clone();
                             }
@@ -58,10 +71,22 @@ impl ToolHandler for ExecuteWorkflowTool {
                 }
             }
 
-            info!("Executing step {}: {} -> {}", step_index, tool_name, client_id);
+            info!(
+                "Executing step {}: {} -> {}",
+                step_index, tool_name, client_id
+            );
 
             // Execute the tool call
-            match state.websocket_manager.call_client_tool(client_id, tool_name, step_arguments, state.config.client_tool_timeout_secs).await {
+            match state
+                .websocket_manager
+                .call_client_tool(
+                    client_id,
+                    tool_name,
+                    step_arguments,
+                    state.config.client_tool_timeout_secs,
+                )
+                .await
+            {
                 Ok(result) => {
                     info!("Step {} completed successfully", step_index);
 
@@ -82,7 +107,8 @@ impl ToolHandler for ExecuteWorkflowTool {
                     error!("Step {} failed: {}", step_index, e);
 
                     // Check if this step is marked as optional
-                    let is_optional = step.get("optional")
+                    let is_optional = step
+                        .get("optional")
                         .and_then(|v| v.as_bool())
                         .unwrap_or(false);
 
@@ -95,9 +121,13 @@ impl ToolHandler for ExecuteWorkflowTool {
                     }));
 
                     if !is_optional {
-                        warn!("Workflow '{}' failed at step {}: {}", workflow_id, step_index, e);
+                        warn!(
+                            "Workflow '{}' failed at step {}: {}",
+                            workflow_id, step_index, e
+                        );
                         return Ok(create_json_error_response(&format!(
-                            "Workflow failed at step {}: {}", step_index, e
+                            "Workflow failed at step {}: {}",
+                            step_index, e
                         )));
                     } else {
                         warn!("Optional step {} failed, continuing workflow", step_index);
@@ -176,26 +206,36 @@ impl ToolHandler for ParallelCallTool {
         let calls: Vec<Value> = extract_param(&arguments, "calls")?;
         let call_id: String = extract_param(&arguments, "call_id")?;
 
-        info!("Executing {} parallel client tool calls for '{}'", calls.len(), call_id);
+        info!(
+            "Executing {} parallel client tool calls for '{}'",
+            calls.len(),
+            call_id
+        );
 
         let mut futures = Vec::new();
 
         for (index, call) in calls.iter().enumerate() {
-            let client_id = call.get("client_id")
+            let client_id = call
+                .get("client_id")
                 .and_then(|v| v.as_str())
-                .ok_or_else(|| crate::error::AppError::BadRequest(
-                    format!("Missing client_id in call {}", index)
-                ))?;
+                .ok_or_else(|| {
+                    crate::error::AppError::BadRequest(format!(
+                        "Missing client_id in call {}",
+                        index
+                    ))
+                })?;
 
-            let tool_name = call.get("tool_name")
+            let tool_name = call
+                .get("tool_name")
                 .and_then(|v| v.as_str())
-                .ok_or_else(|| crate::error::AppError::BadRequest(
-                    format!("Missing tool_name in call {}", index)
-                ))?;
+                .ok_or_else(|| {
+                    crate::error::AppError::BadRequest(format!(
+                        "Missing tool_name in call {}",
+                        index
+                    ))
+                })?;
 
-            let tool_arguments = call.get("arguments")
-                .cloned()
-                .unwrap_or_else(|| json!({}));
+            let tool_arguments = call.get("arguments").cloned().unwrap_or_else(|| json!({}));
 
             let ws_manager = state.websocket_manager.clone();
             let client_id = client_id.to_string();
@@ -203,7 +243,9 @@ impl ToolHandler for ParallelCallTool {
             let timeout_secs = state.config.client_tool_timeout_secs;
 
             let future = async move {
-                let result = ws_manager.call_client_tool(&client_id, &tool_name, tool_arguments, timeout_secs).await;
+                let result = ws_manager
+                    .call_client_tool(&client_id, &tool_name, tool_arguments, timeout_secs)
+                    .await;
                 (index, client_id, tool_name, result)
             };
 
@@ -242,7 +284,10 @@ impl ToolHandler for ParallelCallTool {
             }
         }
 
-        info!("Parallel calls completed: {} succeeded, {} failed", success_count, failure_count);
+        info!(
+            "Parallel calls completed: {} succeeded, {} failed",
+            success_count, failure_count
+        );
 
         let response = json!({
             "call_id": call_id,
@@ -311,7 +356,8 @@ impl ToolHandler for BroadcastToClientsTool {
 
         // Filter clients if a filter is provided
         let target_clients: Vec<String> = if let Some(filter) = client_filter {
-            client_ids.into_iter()
+            client_ids
+                .into_iter()
                 .filter(|id| id.contains(filter))
                 .collect()
         } else {
@@ -330,7 +376,11 @@ impl ToolHandler for BroadcastToClientsTool {
                 }
             });
 
-            match state.websocket_manager.send_message(&client_id, &notification).await {
+            match state
+                .websocket_manager
+                .send_message(&client_id, &notification)
+                .await
+            {
                 Ok(_) => {
                     results.push(json!({
                         "client_id": client_id,

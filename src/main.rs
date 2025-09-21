@@ -7,12 +7,6 @@ use vibe_ensemble_mcp::{
     server::run_server,
 };
 
-fn validate_permission_mode(mode: &str) -> Result<String, String> {
-    mode.parse::<PermissionMode>()
-        .map(|_| mode.to_string())
-        .map_err(|e| e.to_string())
-}
-
 #[derive(Parser)]
 #[command(name = "vibe-ensemble-mcp")]
 #[command(about = "A multi-agent coordination MCP server")]
@@ -42,8 +36,8 @@ struct Args {
     no_respawn: bool,
 
     /// Permission mode for worker processes
-    #[arg(long, default_value = "inherit", value_parser = validate_permission_mode)]
-    permission_mode: String,
+    #[arg(long, default_value_t = PermissionMode::Inherit)]
+    permission_mode: PermissionMode,
 
     /// Enable WebSocket transport for bidirectional communication
     #[arg(long, default_value = "true")]
@@ -60,6 +54,10 @@ struct Args {
     /// Maximum concurrent client requests
     #[arg(long, default_value = "50")]
     max_concurrent_client_requests: usize,
+
+    /// Comma-separated list of MCP tool names whose responses can be echoed over SSE
+    #[arg(long, default_value = "get_health,list_projects,list_tickets")]
+    sse_echo_allowlist: String,
 }
 
 #[tokio::main]
@@ -68,8 +66,7 @@ async fn main() -> Result<()> {
 
     // Handle configuration mode
     if args.configure_claude_code {
-        let permission_mode: PermissionMode = args.permission_mode.parse()?;
-        configure_claude_code(&args.host, args.port, permission_mode).await?;
+        configure_claude_code(&args.host, args.port, args.permission_mode).await?;
         return Ok(());
     }
 
@@ -100,8 +97,7 @@ async fn main() -> Result<()> {
     info!("Version: {}", env!("CARGO_PKG_VERSION"));
     info!("Database: {}", args.database_path);
     info!("Server: {}:{}", args.host, args.port);
-    let permission_mode: PermissionMode = args.permission_mode.parse()?;
-    info!("Permission mode: {}", permission_mode.as_str());
+    info!("Permission mode: {}", args.permission_mode.as_str());
     info!("Respawn disabled: {}", args.no_respawn);
 
     let config = Config {
@@ -109,11 +105,17 @@ async fn main() -> Result<()> {
         host: args.host,
         port: args.port,
         no_respawn: args.no_respawn,
-        permission_mode,
+        permission_mode: args.permission_mode,
         enable_websocket: args.enable_websocket,
         websocket_auth_required: args.websocket_auth_required,
         client_tool_timeout_secs: args.client_tool_timeout_secs,
         max_concurrent_client_requests: args.max_concurrent_client_requests,
+        sse_echo_allowlist: args
+            .sse_echo_allowlist
+            .split(',')
+            .map(|s| s.trim().to_lowercase())
+            .filter(|s| !s.is_empty())
+            .collect(),
     };
 
     run_server(config).await?;

@@ -71,7 +71,7 @@ impl ClaudePermissions {
 }
 
 /// Permission modes supported by the system
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, clap::ValueEnum)]
 pub enum PermissionMode {
     /// No restrictions - workers run with --dangerously-skip-permissions
     Bypass,
@@ -79,6 +79,16 @@ pub enum PermissionMode {
     Inherit,
     /// Use permissions from .vibe-ensemble-mcp/worker-permissions.json
     File,
+}
+
+impl std::fmt::Display for PermissionMode {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            PermissionMode::Bypass => write!(f, "bypass"),
+            PermissionMode::Inherit => write!(f, "inherit"),
+            PermissionMode::File => write!(f, "file"),
+        }
+    }
 }
 
 impl FromStr for PermissionMode {
@@ -176,15 +186,6 @@ impl PermissionPolicy {
             PermissionPolicy::Enforce(perms) => Some(perms),
         }
     }
-}
-
-/// Load permissions based on the permission mode (deprecated - use load_permission_policy)
-pub fn load_permissions(
-    mode: PermissionMode,
-    project_path: &str,
-) -> Result<Option<ClaudePermissions>> {
-    let policy = load_permission_policy(mode, project_path)?;
-    Ok(policy.permissions().cloned())
 }
 
 /// Load permission policy based on the permission mode

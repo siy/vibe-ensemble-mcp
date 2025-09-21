@@ -1,4 +1,5 @@
 use crate::permissions::PermissionMode;
+use std::collections::HashSet;
 
 #[derive(Debug, Clone)]
 pub struct Config {
@@ -11,6 +12,7 @@ pub struct Config {
     pub websocket_auth_required: bool,
     pub client_tool_timeout_secs: u64,
     pub max_concurrent_client_requests: usize,
+    pub sse_echo_allowlist: HashSet<String>,
 }
 
 impl Config {

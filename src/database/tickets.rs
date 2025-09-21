@@ -1,8 +1,62 @@
 use anyhow::Result;
 use serde::{Deserialize, Serialize};
 use sqlx::{FromRow, Row};
+use std::fmt;
 
 use super::DbPool;
+
+/// Ticket state enum for type safety
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum TicketState {
+    Open,
+    Closed,
+    OnHold,
+}
+
+impl fmt::Display for TicketState {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            TicketState::Open => write!(f, "open"),
+            TicketState::Closed => write!(f, "closed"),
+            TicketState::OnHold => write!(f, "on_hold"),
+        }
+    }
+}
+
+impl std::str::FromStr for TicketState {
+    type Err = anyhow::Error;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s {
+            "open" => Ok(TicketState::Open),
+            "closed" => Ok(TicketState::Closed),
+            "on_hold" => Ok(TicketState::OnHold),
+            _ => Err(anyhow::anyhow!("Invalid ticket state: {}", s)),
+        }
+    }
+}
+
+impl TicketState {
+    /// Get all valid ticket states
+    pub fn all() -> Vec<TicketState> {
+        vec![TicketState::Open, TicketState::Closed, TicketState::OnHold]
+    }
+
+    /// Get all valid ticket state strings
+    pub fn all_strings() -> Vec<&'static str> {
+        vec!["open", "closed", "on_hold"]
+    }
+
+    /// Get the string representation for SQL queries (same as Display but explicit)
+    pub fn as_sql_value(&self) -> &'static str {
+        match self {
+            TicketState::Open => "open",
+            TicketState::Closed => "closed",
+            TicketState::OnHold => "on_hold",
+        }
+    }
+}
 
 #[derive(Debug, Clone, Serialize, Deserialize, FromRow)]
 pub struct Ticket {
@@ -85,7 +139,7 @@ impl Ticket {
                 parent_ticket_id, dependency_status, created_by_worker_id, ticket_type,
                 rules_version, patterns_version, inherited_from_parent
             )
-            VALUES (?1, ?2, ?3, ?4, ?5, 'open', 'medium', ?6, ?7, ?8, ?9, ?10, ?11, ?12)
+            VALUES (?1, ?2, ?3, ?4, ?5, ?6, 'medium', ?7, ?8, ?9, ?10, ?11, ?12, ?13)
             RETURNING ticket_id, project_id, title, execution_plan, current_stage, state, priority,
                      processing_worker_id, created_at, updated_at, closed_at,
                      parent_ticket_id, dependency_status, created_by_worker_id, ticket_type,
@@ -97,6 +151,7 @@ impl Ticket {
         .bind(&req.title)
         .bind(&execution_plan_json)
         .bind(&initial_stage)
+        .bind(TicketState::Open.as_sql_value())
         .bind(&req.parent_ticket_id)
         .bind(req.dependency_status.as_deref().unwrap_or("ready"))
         .bind(&req.created_by_worker_id)
@@ -233,8 +288,8 @@ impl Ticket {
         let ticket = sqlx::query_as::<_, Ticket>(
             r#"
             UPDATE tickets
-            SET current_stage = ?1, state = 'closed', updated_at = datetime('now'), closed_at = datetime('now')
-            WHERE ticket_id = ?2
+            SET current_stage = ?1, state = ?2, updated_at = datetime('now'), closed_at = datetime('now')
+            WHERE ticket_id = ?3
             RETURNING ticket_id, project_id, title, execution_plan, current_stage, state, priority,
                      processing_worker_id, created_at, updated_at, closed_at,
                      parent_ticket_id, dependency_status, created_by_worker_id, ticket_type,
@@ -242,6 +297,7 @@ impl Ticket {
         "#,
         )
         .bind(status)
+        .bind(TicketState::Closed.as_sql_value())
         .bind(ticket_id)
         .fetch_optional(&mut *tx)
         .await?;
@@ -601,5 +657,25 @@ impl Ticket {
         .await?;
 
         Ok(tickets)
+    }
+
+    /// Get the ticket state as an enum
+    pub fn get_state(&self) -> Result<TicketState> {
+        self.state.parse()
+    }
+
+    /// Check if ticket is open
+    pub fn is_open(&self) -> bool {
+        self.state == "open"
+    }
+
+    /// Check if ticket is closed
+    pub fn is_closed(&self) -> bool {
+        self.state == "closed"
+    }
+
+    /// Check if ticket is on hold
+    pub fn is_on_hold(&self) -> bool {
+        self.state == "on_hold"
     }
 }

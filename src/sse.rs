@@ -129,6 +129,18 @@ pub async fn sse_message_handler(
         }
     };
 
+    // Extract tool name for security check if this is a tool call
+    let tool_name = if request.method == "tools/call" {
+        request
+            .params
+            .as_ref()
+            .and_then(|params| params.get("name"))
+            .and_then(|name| name.as_str())
+            .map(|s| s.to_string())
+    } else {
+        None
+    };
+
     // Use stored MCP server and handle the request
     let response = state.mcp_server.handle_request(&state, request).await;
 
@@ -148,14 +160,26 @@ pub async fn sse_message_handler(
         }
     };
 
-    // If this is a successful MCP response, we may want to broadcast it
+    // If this is a successful MCP response, check if it should be broadcast over SSE
     if let Some(result) = response.result {
-        use crate::events::EventPayload;
+        let should_broadcast = match &tool_name {
+            Some(name) => state.config.sse_echo_allowlist.contains(name),
+            None => true, // Allow non-tool requests (like list_tools, initialize, etc.)
+        };
 
-        let event =
-            EventPayload::system_message("mcp_response", "MCP request processed", Some(result));
+        if should_broadcast {
+            use crate::events::EventPayload;
 
-        state.event_broadcaster.broadcast(event);
+            let event =
+                EventPayload::system_message("mcp_response", "MCP request processed", Some(result));
+
+            state.event_broadcaster.broadcast(event);
+        } else {
+            debug!(
+                "Skipping SSE broadcast for tool '{}' (not in allowlist)",
+                tool_name.unwrap_or_default()
+            );
+        }
     }
 
     Ok(Json(response_value))

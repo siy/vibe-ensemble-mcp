@@ -121,9 +121,14 @@ impl ToolHandler for ValidateWebSocketIntegrationTool {
         // Test 7: Validate tool registrations
         info!("Test 7: Tool registrations");
         let mcp_tools = state.mcp_server.tools.list_tools();
-        let websocket_tools = mcp_tools.iter()
-            .filter(|tool| tool.name.contains("client") || tool.name.contains("websocket") ||
-                           tool.name.contains("workflow") || tool.name.contains("sync"))
+        let websocket_tools = mcp_tools
+            .iter()
+            .filter(|tool| {
+                tool.name.contains("client")
+                    || tool.name.contains("websocket")
+                    || tool.name.contains("workflow")
+                    || tool.name.contains("sync")
+            })
             .count();
 
         if websocket_tools >= 10 {
@@ -165,7 +170,11 @@ impl ToolHandler for ValidateWebSocketIntegrationTool {
         }));
         passed_tests += 1;
 
-        let overall_status = if failed_tests == 0 { "passed" } else { "failed" };
+        let overall_status = if failed_tests == 0 {
+            "passed"
+        } else {
+            "failed"
+        };
         let success_rate = (passed_tests as f64) / (passed_tests + failed_tests) as f64 * 100.0;
 
         info!(
@@ -194,7 +203,8 @@ impl ToolHandler for ValidateWebSocketIntegrationTool {
     fn definition(&self) -> Tool {
         Tool {
             name: "validate_websocket_integration".to_string(),
-            description: "Comprehensive validation of WebSocket bidirectional MCP integration".to_string(),
+            description: "Comprehensive validation of WebSocket bidirectional MCP integration"
+                .to_string(),
             input_schema: json!({
                 "type": "object",
                 "properties": {},
@@ -310,7 +320,8 @@ impl ToolHandler for TestWebSocketCompatibilityTool {
     fn definition(&self) -> Tool {
         Tool {
             name: "test_websocket_compatibility".to_string(),
-            description: "Test WebSocket implementation compatibility with various MCP clients".to_string(),
+            description: "Test WebSocket implementation compatibility with various MCP clients"
+                .to_string(),
             input_schema: json!({
                 "type": "object",
                 "properties": {},

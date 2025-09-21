@@ -465,8 +465,12 @@ impl QueueManager {
         );
 
         // Set ticket to on_hold
-        crate::database::tickets::Ticket::update_state(&self.db, ticket_id.as_str(), "on_hold")
-            .await?;
+        crate::database::tickets::Ticket::update_state(
+            &self.db,
+            ticket_id.as_str(),
+            &crate::database::tickets::TicketState::OnHold.to_string(),
+        )
+        .await?;
 
         // Create coordinator attention event
         crate::database::events::Event::create_stage_completed(
@@ -720,7 +724,8 @@ impl QueueManager {
             &self.event_broadcaster,
             self.clone(),
             &ticket_id,
-        ).await
+        )
+        .await
     }
 
     /// Resubmit parent ticket when child completes or needs attention
@@ -732,7 +737,7 @@ impl QueueManager {
             let parent_ticket = &parent_with_comments.ticket;
 
             // Only resubmit if parent is not already being processed and is open
-            if parent_ticket.processing_worker_id.is_none() && parent_ticket.state == "open" {
+            if parent_ticket.processing_worker_id.is_none() && parent_ticket.is_open() {
                 info!(
                     "Resubmitting parent ticket {} at stage {} due to child activity",
                     parent_ticket_id, parent_ticket.current_stage

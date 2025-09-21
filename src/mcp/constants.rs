@@ -62,6 +62,98 @@ impl JsonRpcEnvelopes {
             "id": id
         })
     }
+
+    /// Create notifications/sync/started
+    pub fn sync_started(sync_id: &str, data: Value) -> Value {
+        json!({
+            "jsonrpc": "2.0",
+            "method": "notifications/sync/started",
+            "params": {
+                "sync_id": sync_id,
+                "data": data
+            }
+        })
+    }
+
+    /// Create notifications/sync/update
+    pub fn sync_update(sync_id: &str, data: Value) -> Value {
+        json!({
+            "jsonrpc": "2.0",
+            "method": "notifications/sync/update",
+            "params": {
+                "sync_id": sync_id,
+                "data": data
+            }
+        })
+    }
+
+    /// Create notifications/sync/completed
+    pub fn sync_completed(sync_id: &str, data: Value) -> Value {
+        json!({
+            "jsonrpc": "2.0",
+            "method": "notifications/sync/completed",
+            "params": {
+                "sync_id": sync_id,
+                "data": data
+            }
+        })
+    }
+
+    /// Create notifications/sync/ended
+    pub fn sync_ended(sync_id: &str, data: Value) -> Value {
+        json!({
+            "jsonrpc": "2.0",
+            "method": "notifications/sync/ended",
+            "params": {
+                "sync_id": sync_id,
+                "data": data
+            }
+        })
+    }
+
+    /// Create notifications/group/joined
+    pub fn group_joined(group_name: &str, members: Vec<String>) -> Value {
+        json!({
+            "jsonrpc": "2.0",
+            "method": "notifications/group/joined",
+            "params": {
+                "group_name": group_name,
+                "members": members
+            }
+        })
+    }
+
+    /// Create notifications/group/message
+    pub fn group_message(group_name: &str, message: Value) -> Value {
+        json!({
+            "jsonrpc": "2.0",
+            "method": "notifications/group/message",
+            "params": {
+                "group_name": group_name,
+                "message": message
+            }
+        })
+    }
+
+    /// Create notifications/group/dissolved
+    pub fn group_dissolved(group_name: &str) -> Value {
+        json!({
+            "jsonrpc": "2.0",
+            "method": "notifications/group/dissolved",
+            "params": {
+                "group_name": group_name
+            }
+        })
+    }
+
+    /// Create custom notification with method and params
+    pub fn notification(method: &str, params: Value) -> Value {
+        json!({
+            "jsonrpc": "2.0",
+            "method": method,
+            "params": params
+        })
+    }
 }
 
 /// Build MCP config JSON for server endpoints

@@ -2,7 +2,9 @@ use async_trait::async_trait;
 use serde_json::{json, Value};
 use tracing::{info, warn};
 
-use super::tools::{create_json_success_response, create_json_error_response, extract_param, ToolHandler};
+use super::tools::{
+    create_json_error_response, create_json_success_response, extract_param, ToolHandler,
+};
 use super::types::{CallToolResponse, Tool};
 use crate::{error::Result, server::AppState};
 
@@ -62,19 +64,40 @@ impl ToolHandler for CallClientToolTool {
             .cloned()
             .unwrap_or_else(|| json!({}));
 
-        info!("Calling client tool: {} on client: {}", tool_name, client_id);
+        info!(
+            "Calling client tool: {} on client: {}",
+            tool_name, client_id
+        );
 
         // Verify the tool exists
-        if state.websocket_manager.tool_registry().get_tool(&client_id, &tool_name).is_none() {
+        if state
+            .websocket_manager
+            .tool_registry()
+            .get_tool(&client_id, &tool_name)
+            .is_none()
+        {
             return Ok(create_json_error_response(&format!(
-                "Tool '{}' not found on client '{}'", tool_name, client_id
+                "Tool '{}' not found on client '{}'",
+                tool_name, client_id
             )));
         }
 
         // Call the client tool
-        match state.websocket_manager.call_client_tool(&client_id, &tool_name, tool_arguments, state.config.client_tool_timeout_secs).await {
+        match state
+            .websocket_manager
+            .call_client_tool(
+                &client_id,
+                &tool_name,
+                tool_arguments,
+                state.config.client_tool_timeout_secs,
+            )
+            .await
+        {
             Ok(result) => {
-                info!("Client tool call successful: {} -> {}", tool_name, client_id);
+                info!(
+                    "Client tool call successful: {} -> {}",
+                    tool_name, client_id
+                );
                 let response = json!({
                     "client_id": client_id,
                     "tool_name": tool_name,
@@ -83,9 +106,13 @@ impl ToolHandler for CallClientToolTool {
                 Ok(create_json_success_response(response))
             }
             Err(e) => {
-                warn!("Client tool call failed: {} -> {} - {}", tool_name, client_id, e);
+                warn!(
+                    "Client tool call failed: {} -> {} - {}",
+                    tool_name, client_id, e
+                );
                 Ok(create_json_error_response(&format!(
-                    "Failed to call tool '{}' on client '{}': {}", tool_name, client_id, e
+                    "Failed to call tool '{}' on client '{}': {}",
+                    tool_name, client_id, e
                 )))
             }
         }
@@ -128,22 +155,26 @@ impl ToolHandler for ListConnectedClientsTool {
         let clients_info: Vec<Value> = client_ids
             .into_iter()
             .filter_map(|client_id| {
-                state.websocket_manager.clients.get(&client_id).map(|entry| {
-                    let client = entry.value();
-                    json!({
-                        "client_id": client.client_id,
-                        "connected_at": client.connected_at.to_rfc3339(),
-                        "capabilities": {
-                            "bidirectional": client.capabilities.bidirectional,
-                            "tools_count": client.capabilities.tools.len(),
-                            "client_info": {
-                                "name": client.capabilities.client_info.name,
-                                "version": client.capabilities.client_info.version,
-                                "environment": client.capabilities.client_info.environment
+                state
+                    .websocket_manager
+                    .clients
+                    .get(&client_id)
+                    .map(|entry| {
+                        let client = entry.value();
+                        json!({
+                            "client_id": client.client_id,
+                            "connected_at": client.connected_at.to_rfc3339(),
+                            "capabilities": {
+                                "bidirectional": client.capabilities.bidirectional,
+                                "tools_count": client.capabilities.tools.len(),
+                                "client_info": {
+                                    "name": client.capabilities.client_info.name,
+                                    "version": client.capabilities.client_info.version,
+                                    "environment": client.capabilities.client_info.environment
+                                }
                             }
-                        }
+                        })
                     })
-                })
             })
             .collect();
 

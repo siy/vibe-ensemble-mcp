@@ -3,10 +3,11 @@ use serde_json::Value;
 use tracing::{debug, error, info, trace, warn};
 
 use super::{
-    bidirectional_tools::*, client_tools::*, dependency_tools::*, event_tools::*, integration_tools::*, orchestration_tools::*, permission_tools::*, project_tools::*, ticket_tools::*,
-    tools::ToolRegistry, types::*, worker_type_tools::*, MCP_PROTOCOL_VERSION,
+    bidirectional_tools::*, client_tools::*, dependency_tools::*, event_tools::*,
+    integration_tools::*, orchestration_tools::*, permission_tools::*, project_tools::*,
+    ticket_tools::*, tools::ToolRegistry, types::*, worker_type_tools::*, MCP_PROTOCOL_VERSION,
 };
-use crate::{error::Result, server::AppState};
+use crate::{config::Config, error::Result, server::AppState};
 
 pub struct McpServer {
     pub tools: ToolRegistry,
@@ -14,7 +15,20 @@ pub struct McpServer {
 
 impl Default for McpServer {
     fn default() -> Self {
-        Self::new()
+        // Create a default config with WebSocket enabled
+        let config = Config {
+            database_path: String::new(),
+            host: String::new(),
+            port: 0,
+            no_respawn: false,
+            permission_mode: crate::permissions::PermissionMode::Inherit,
+            enable_websocket: true,
+            websocket_auth_required: false,
+            client_tool_timeout_secs: 30,
+            max_concurrent_client_requests: 50,
+            sse_echo_allowlist: std::collections::HashSet::new(),
+        };
+        Self::new(&config)
     }
 }
 
@@ -28,9 +42,24 @@ macro_rules! register_tools {
 }
 
 impl McpServer {
-    pub fn new() -> Self {
+    pub fn new(config: &Config) -> Self {
         let mut tools = ToolRegistry::new();
 
+        Self::register_project_tools(&mut tools);
+        Self::register_ticket_tools(&mut tools);
+        Self::register_event_tools(&mut tools);
+        Self::register_permission_tools(&mut tools);
+
+        // Only register WebSocket tools if WebSocket is enabled
+        if config.enable_websocket {
+            Self::register_websocket_tools(&mut tools);
+        }
+
+        Self { tools }
+    }
+
+    /// Register project and worker type management tools
+    fn register_project_tools(tools: &mut ToolRegistry) {
         register_tools!(
             tools,
             // Project management tools
@@ -45,6 +74,13 @@ impl McpServer {
             GetWorkerTypeTool,
             UpdateWorkerTypeTool,
             DeleteWorkerTypeTool,
+        );
+    }
+
+    /// Register ticket and dependency management tools
+    fn register_ticket_tools(tools: &mut ToolRegistry) {
+        register_tools!(
+            tools,
             // Ticket management tools
             CreateTicketTool,
             GetTicketTool,
@@ -52,18 +88,34 @@ impl McpServer {
             AddTicketCommentTool,
             CloseTicketTool,
             ResumeTicketProcessingTool,
-            // Event and stage management tools
-            ListEventsTool,
-            ResolveEventTool,
-            GetTicketsByStageTool,
             // Dependency management tools
             AddTicketDependencyTool,
             RemoveTicketDependencyTool,
             GetDependencyGraphTool,
             ListReadyTicketsTool,
             ListBlockedTicketsTool,
-            // Permission management tools
-            GetPermissionModelTool,
+        );
+    }
+
+    /// Register event and stage management tools
+    fn register_event_tools(tools: &mut ToolRegistry) {
+        register_tools!(
+            tools,
+            ListEventsTool,
+            ResolveEventTool,
+            GetTicketsByStageTool,
+        );
+    }
+
+    /// Register permission management tools
+    fn register_permission_tools(tools: &mut ToolRegistry) {
+        register_tools!(tools, GetPermissionModelTool,);
+    }
+
+    /// Register WebSocket and bidirectional communication tools
+    fn register_websocket_tools(tools: &mut ToolRegistry) {
+        register_tools!(
+            tools,
             // Client tools for bidirectional communication
             ListClientToolsTool,
             CallClientToolTool,
@@ -82,8 +134,6 @@ impl McpServer {
             ValidateWebSocketIntegrationTool,
             TestWebSocketCompatibilityTool,
         );
-
-        Self { tools }
     }
 
     pub async fn handle_request(
@@ -392,50 +442,47 @@ impl McpServer {
         info!("Getting prompt: {}", request.name);
 
         let messages = match request.name.as_str() {
-            "vibe-ensemble-overview" => vec![
-                PromptMessage {
-                    role: "user".to_string(),
-                    content: PromptContent {
-                        content_type: "text".to_string(),
-                        text: include_str!("../../templates/prompts/vibe-ensemble-overview.md").to_string(),
-                    },
-                }
-            ],
+            "vibe-ensemble-overview" => vec![PromptMessage {
+                role: "user".to_string(),
+                content: PromptContent {
+                    content_type: "text".to_string(),
+                    text: include_str!("../../templates/prompts/vibe-ensemble-overview.md")
+                        .to_string(),
+                },
+            }],
             "project-setup" => {
-                let project_name = request.arguments
+                let project_name = request
+                    .arguments
                     .as_ref()
                     .and_then(|args| args.get("project_name"))
                     .and_then(|name| name.as_str())
                     .unwrap_or("my-project");
 
                 let template = include_str!("../../templates/prompts/project-setup.md");
-                vec![
-                    PromptMessage {
-                        role: "user".to_string(),
-                        content: PromptContent {
-                            content_type: "text".to_string(),
-                            text: template.replace("{project_name}", project_name),
-                        },
-                    }
-                ]
+                vec![PromptMessage {
+                    role: "user".to_string(),
+                    content: PromptContent {
+                        content_type: "text".to_string(),
+                        text: template.replace("{project_name}", project_name),
+                    },
+                }]
             }
             "multi-agent-workflow" => {
-                let task_type = request.arguments
+                let task_type = request
+                    .arguments
                     .as_ref()
                     .and_then(|args| args.get("task_type"))
                     .and_then(|t| t.as_str())
                     .unwrap_or("development");
 
                 let template = include_str!("../../templates/prompts/multi-agent-workflow.md");
-                vec![
-                    PromptMessage {
-                        role: "user".to_string(),
-                        content: PromptContent {
-                            content_type: "text".to_string(),
-                            text: template.replace("{task_type}", task_type),
-                        },
-                    }
-                ]
+                vec![PromptMessage {
+                    role: "user".to_string(),
+                    content: PromptContent {
+                        content_type: "text".to_string(),
+                        text: template.replace("{task_type}", task_type),
+                    },
+                }]
             }
             _ => {
                 return Err(JsonRpcError {

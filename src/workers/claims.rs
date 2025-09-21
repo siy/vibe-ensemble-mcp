@@ -1,10 +1,10 @@
-use anyhow::Result;
-use tracing::{error, info, warn};
 use crate::{
     database::{tickets::Ticket, DbPool},
     sse::EventBroadcaster,
     workers::domain::TicketId,
 };
+use anyhow::Result;
+use tracing::{error, info, warn};
 
 /// Claim management functionality for queue operations
 pub struct ClaimManager;
@@ -16,7 +16,9 @@ impl ClaimManager {
         ticket_id: &TicketId,
         worker_id: &str,
     ) -> Result<()> {
-        Ticket::claim_for_processing(db, ticket_id.as_str(), worker_id).await.map(|_| ())
+        Ticket::claim_for_processing(db, ticket_id.as_str(), worker_id)
+            .await
+            .map(|_| ())
     }
 
     /// Release a ticket claim if it's currently claimed
@@ -45,7 +47,8 @@ impl ClaimManager {
             .await?;
 
             // Publish event
-            let event = crate::events::EventPayload::ticket_updated(ticket_id.as_str(), "", "released");
+            let event =
+                crate::events::EventPayload::ticket_updated(ticket_id.as_str(), "", "released");
             event_broadcaster.broadcast(event);
 
             info!("Successfully released claim on ticket: {}", ticket_id);
@@ -120,7 +123,10 @@ impl ClaimManager {
         .rows_affected();
 
         if rows_affected > 0 {
-            warn!("Emergency released {} additional ticket claims", rows_affected);
+            warn!(
+                "Emergency released {} additional ticket claims",
+                rows_affected
+            );
         }
 
         // Publish emergency release event

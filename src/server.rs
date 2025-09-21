@@ -1,3 +1,4 @@
+use axum::extract::WebSocketUpgrade;
 use axum::{
     extract::{Query, State},
     http::{HeaderMap, Method},
@@ -5,7 +6,6 @@ use axum::{
     routing::{get, post},
     Router,
 };
-use axum::extract::WebSocketUpgrade;
 use serde_json::{json, Value};
 use sqlx::Row;
 use std::sync::Arc;
@@ -51,12 +51,14 @@ pub async fn run_server(config: Config) -> Result<()> {
     // Initialize queue manager (spawns completion event processor internally)
     let queue_manager = QueueManager::new(db.clone(), config.clone(), event_broadcaster.clone());
 
-    // Initialize single MCP server instance
-    let mcp_server = Arc::new(McpServer::new());
+    // Initialize single MCP server instance with config-based tool registration
+    let mcp_server = Arc::new(McpServer::new(&config));
 
     // Initialize WebSocket manager (conditionally based on config)
     let websocket_manager = if config.enable_websocket {
-        Arc::new(WebSocketManager::with_concurrency_limit(config.max_concurrent_client_requests))
+        Arc::new(WebSocketManager::with_concurrency_limit(
+            config.max_concurrent_client_requests,
+        ))
     } else {
         Arc::new(WebSocketManager::disabled())
     };

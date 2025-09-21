@@ -2,7 +2,11 @@ use async_trait::async_trait;
 use serde_json::{json, Value};
 use tracing::info;
 
-use super::tools::{create_json_success_response, create_json_error_response, extract_param, ToolHandler};
+use super::constants::JsonRpcEnvelopes;
+
+use super::tools::{
+    create_json_error_response, create_json_success_response, extract_param, ToolHandler,
+};
 use super::types::{CallToolResponse, Tool};
 use crate::{error::Result, server::AppState};
 
@@ -25,16 +29,14 @@ impl ToolHandler for CollaborativeSyncTool {
                 let mut notifications_sent = 0;
 
                 for client_id in client_ids {
-                    let notification = json!({
-                        "jsonrpc": "2.0",
-                        "method": "notifications/sync/started",
-                        "params": {
-                            "sync_id": sync_id,
-                            "data": data
-                        }
-                    });
+                    let notification = JsonRpcEnvelopes::sync_started(&sync_id, data.clone());
 
-                    if state.websocket_manager.send_message(&client_id, &notification).await.is_ok() {
+                    if state
+                        .websocket_manager
+                        .send_message(&client_id, &notification)
+                        .await
+                        .is_ok()
+                    {
                         notifications_sent += 1;
                     }
                 }
@@ -53,16 +55,14 @@ impl ToolHandler for CollaborativeSyncTool {
                 let mut updates_sent = 0;
 
                 for client_id in client_ids {
-                    let notification = json!({
-                        "jsonrpc": "2.0",
-                        "method": "notifications/sync/update",
-                        "params": {
-                            "sync_id": sync_id,
-                            "data": data
-                        }
-                    });
+                    let notification = JsonRpcEnvelopes::sync_update(&sync_id, data.clone());
 
-                    if state.websocket_manager.send_message(&client_id, &notification).await.is_ok() {
+                    if state
+                        .websocket_manager
+                        .send_message(&client_id, &notification)
+                        .await
+                        .is_ok()
+                    {
                         updates_sent += 1;
                     }
                 }
@@ -81,16 +81,14 @@ impl ToolHandler for CollaborativeSyncTool {
                 let mut notifications_sent = 0;
 
                 for client_id in client_ids {
-                    let notification = json!({
-                        "jsonrpc": "2.0",
-                        "method": "notifications/sync/ended",
-                        "params": {
-                            "sync_id": sync_id,
-                            "data": data
-                        }
-                    });
+                    let notification = JsonRpcEnvelopes::sync_ended(&sync_id, data.clone());
 
-                    if state.websocket_manager.send_message(&client_id, &notification).await.is_ok() {
+                    if state
+                        .websocket_manager
+                        .send_message(&client_id, &notification)
+                        .await
+                        .is_ok()
+                    {
                         notifications_sent += 1;
                     }
                 }
@@ -103,7 +101,10 @@ impl ToolHandler for CollaborativeSyncTool {
 
                 Ok(create_json_success_response(response))
             }
-            _ => Ok(create_json_error_response(&format!("Unknown sync action: {}", action)))
+            _ => Ok(create_json_error_response(&format!(
+                "Unknown sync action: {}",
+                action
+            ))),
         }
     }
 
@@ -155,7 +156,8 @@ impl ToolHandler for PollClientStatusTool {
 
         let client_ids = state.websocket_manager.list_clients();
         let target_clients: Vec<String> = if let Some(filter) = client_filter {
-            client_ids.into_iter()
+            client_ids
+                .into_iter()
                 .filter(|id| id.contains(filter))
                 .collect()
         } else {
@@ -168,7 +170,11 @@ impl ToolHandler for PollClientStatusTool {
             // Try to call a status tool on the client
             let status_request = json!({});
 
-            match state.websocket_manager.call_client_tool(&client_id, "get_status", status_request, timeout_secs).await {
+            match state
+                .websocket_manager
+                .call_client_tool(&client_id, "get_status", status_request, timeout_secs)
+                .await
+            {
                 Ok(status) => {
                     status_results.push(json!({
                         "client_id": client_id,
@@ -243,7 +249,12 @@ impl ToolHandler for ClientGroupManagerTool {
                         }
                     });
 
-                    if state.websocket_manager.send_message(client_id, &notification).await.is_ok() {
+                    if state
+                        .websocket_manager
+                        .send_message(client_id, &notification)
+                        .await
+                        .is_ok()
+                    {
                         notifications_sent += 1;
                     }
                 }
@@ -273,7 +284,12 @@ impl ToolHandler for ClientGroupManagerTool {
                         }
                     });
 
-                    if state.websocket_manager.send_message(client_id, &notification).await.is_ok() {
+                    if state
+                        .websocket_manager
+                        .send_message(client_id, &notification)
+                        .await
+                        .is_ok()
+                    {
                         messages_sent += 1;
                     }
                 }
@@ -301,7 +317,12 @@ impl ToolHandler for ClientGroupManagerTool {
                         }
                     });
 
-                    if state.websocket_manager.send_message(client_id, &notification).await.is_ok() {
+                    if state
+                        .websocket_manager
+                        .send_message(client_id, &notification)
+                        .await
+                        .is_ok()
+                    {
                         notifications_sent += 1;
                     }
                 }
@@ -314,7 +335,10 @@ impl ToolHandler for ClientGroupManagerTool {
 
                 Ok(create_json_success_response(response))
             }
-            _ => Ok(create_json_error_response(&format!("Unknown group action: {}", action)))
+            _ => Ok(create_json_error_response(&format!(
+                "Unknown group action: {}",
+                action
+            ))),
         }
     }
 
@@ -364,16 +388,14 @@ impl ToolHandler for ClientHealthMonitorTool {
                 let mut ping_results = Vec::new();
 
                 for client_id in client_ids {
-                    let ping_notification = json!({
-                        "jsonrpc": "2.0",
-                        "method": "notifications/ping",
-                        "params": {
-                            "timestamp": chrono::Utc::now().to_rfc3339()
-                        }
-                    });
+                    let ping_notification = JsonRpcEnvelopes::ping();
 
                     let start_time = std::time::Instant::now();
-                    match state.websocket_manager.send_message(&client_id, &ping_notification).await {
+                    match state
+                        .websocket_manager
+                        .send_message(&client_id, &ping_notification)
+                        .await
+                    {
                         Ok(_) => {
                             let latency = start_time.elapsed().as_millis();
                             ping_results.push(json!({
@@ -430,7 +452,10 @@ impl ToolHandler for ClientHealthMonitorTool {
 
                 Ok(create_json_success_response(response))
             }
-            _ => Ok(create_json_error_response(&format!("Unknown health monitor action: {}", action)))
+            _ => Ok(create_json_error_response(&format!(
+                "Unknown health monitor action: {}",
+                action
+            ))),
         }
     }
 

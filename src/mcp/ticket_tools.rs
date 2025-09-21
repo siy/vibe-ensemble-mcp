@@ -13,7 +13,7 @@ use super::{
 use crate::{
     database::{
         comments::{Comment, CreateCommentRequest},
-        tickets::{CreateTicketRequest, Ticket},
+        tickets::{CreateTicketRequest, Ticket, TicketState},
     },
     server::AppState,
 };
@@ -507,8 +507,13 @@ impl ToolHandler for ResumeTicketProcessingTool {
             return Ok(create_json_error_response(&e.to_string()));
         }
 
-        // Determine state to use (provided or "open")
-        let target_state = state_param.unwrap_or_else(|| "open".to_string());
+        // Determine state to use (provided or Open)
+        let target_state_enum = if let Some(state_str) = state_param {
+            state_str.parse::<TicketState>()?
+        } else {
+            TicketState::Open
+        };
+        let target_state = target_state_enum.to_string();
 
         // Update ticket stage if different
         if target_stage != ticket_data.current_stage {
@@ -543,8 +548,8 @@ impl ToolHandler for ResumeTicketProcessingTool {
             .await?;
         }
 
-        // If state is "open", submit to queue for processing
-        if target_state == "open" {
+        // If state is Open, submit to queue for processing
+        if matches!(target_state_enum, TicketState::Open) {
             match state
                 .queue_manager
                 .submit_task(&ticket_data.project_id, &target_stage, &ticket_id)
@@ -608,7 +613,7 @@ impl ToolHandler for ResumeTicketProcessingTool {
                     "state": {
                         "type": "string",
                         "description": "Optional ticket state (open/closed/on_hold, defaults to 'open')",
-                        "enum": ["open", "closed", "on_hold"]
+                        "enum": TicketState::all_strings()
                     }
                 },
                 "required": ["ticket_id"]

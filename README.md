@@ -129,7 +129,7 @@ Each worker operates independently with their specialized knowledge, ensuring fo
 
 ## MCP Tools
 
-Vibe-Ensemble provides 38+ MCP tools organized into eight categories:
+Vibe-Ensemble provides 47 MCP tools organized into ten categories:
 
 ### Project Management
 - `create_project` - Create a new project with rules and patterns
@@ -390,8 +390,34 @@ Permission files are read fresh from disk each time a worker starts, allowing yo
 **Security concerns**: Switch to `file` mode and create restrictive permissions tailored to your specific use case
 
 **Permission file location issues**: Ensure files are in the correct location relative to your project directory:
-- Inherit mode: `.claude/settings.local.json` 
+- Inherit mode: `.claude/settings.local.json`
 - File mode: `.vibe-ensemble-mcp/worker-permissions.json`
+
+## Customization
+
+### Worker Templates
+
+Vibe-Ensemble includes pre-built worker templates that define specialized AI workers for different stages of development. These templates are located in the `templates/` directory and can be customized to fit your specific needs.
+
+**Available Worker Templates:**
+- `templates/worker-templates/planning.md` - Strategic planning and architecture workers
+- `templates/worker-templates/design.md` - UI/UX and system design workers
+- `templates/worker-templates/implementation.md` - Development and coding workers
+- `templates/worker-templates/testing.md` - QA and testing specialists
+- `templates/worker-templates/review.md` - Code review and security analysis
+- `templates/worker-templates/deployment.md` - DevOps and deployment workers
+- `templates/worker-templates/research.md` - Investigation and analysis workers
+- `templates/worker-templates/documentation.md` - Technical writing specialists
+
+**Customizing Templates:**
+To customize worker behavior, edit the template files directly. Changes are automatically reflected when creating new worker types. Each template includes:
+- Specialized system prompts for the worker role
+- Task-specific guidance and methodologies
+- Output format requirements
+- Domain-specific best practices
+
+**System Prompts:**
+The `templates/system_prompts/` directory contains core prompts used for worker spawning and coordination. These control how workers interact with the system and can be modified for advanced customization.
 
 ## What's New in v0.9.0
 

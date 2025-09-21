@@ -1,9 +1,9 @@
-use anyhow::Result;
-use tracing::info;
 use crate::{
     database::{tickets::Ticket, DbPool},
     validation::PipelineValidator,
 };
+use anyhow::Result;
+use tracing::info;
 
 /// Pipeline management functionality for queue operations
 pub struct PipelineManager;
@@ -79,17 +79,16 @@ impl PipelineManager {
             &ticket.project_id,
             &new_pipeline,
             "pipeline update",
-        ).await?;
+        )
+        .await?;
 
         // Update pipeline in database
         let new_execution_plan = serde_json::to_string(&new_pipeline)?;
-        sqlx::query(
-            "UPDATE tickets SET execution_plan = ?1 WHERE ticket_id = ?2"
-        )
-        .bind(new_execution_plan)
-        .bind(&ticket.ticket_id)
-        .execute(db)
-        .await?;
+        sqlx::query("UPDATE tickets SET execution_plan = ?1 WHERE ticket_id = ?2")
+            .bind(new_execution_plan)
+            .bind(&ticket.ticket_id)
+            .execute(db)
+            .await?;
 
         info!(
             "Updated pipeline for ticket {}: {:?} -> {:?}",
