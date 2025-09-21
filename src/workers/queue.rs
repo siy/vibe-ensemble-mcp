@@ -1,7 +1,6 @@
 use anyhow::Result;
 use dashmap::DashMap;
 use serde::{Deserialize, Serialize};
-use sqlx::Row;
 use std::fmt;
 use std::sync::Arc;
 use tokio::sync::mpsc;
@@ -1142,26 +1141,42 @@ impl WorkerConsumer {
             project_id, worker_type
         );
 
-        // Release all tickets claimed by workers with matching prefix for this worker type
+        // First capture the ticket IDs that will be released
         let worker_prefix = format!("consumer-{}-", worker_type);
 
-        let result = sqlx::query(
+        let released_tickets = sqlx::query_scalar::<_, String>(
             r#"
-            UPDATE tickets 
-            SET processing_worker_id = NULL, updated_at = datetime('now')
-            WHERE project_id = ?1 
-              AND current_stage = ?2 
-              AND processing_worker_id IS NOT NULL 
+            SELECT ticket_id FROM tickets
+            WHERE project_id = ?1
+              AND current_stage = ?2
+              AND processing_worker_id IS NOT NULL
               AND processing_worker_id LIKE ?3
             "#,
         )
         .bind(project_id)
         .bind(worker_type)
         .bind(format!("{}%", worker_prefix))
-        .execute(db)
+        .fetch_all(db)
         .await?;
 
-        if result.rows_affected() > 0 {
+        if !released_tickets.is_empty() {
+            // Now release the tickets
+            let result = sqlx::query(
+                r#"
+                UPDATE tickets
+                SET processing_worker_id = NULL, updated_at = datetime('now')
+                WHERE project_id = ?1
+                  AND current_stage = ?2
+                  AND processing_worker_id IS NOT NULL
+                  AND processing_worker_id LIKE ?3
+                "#,
+            )
+            .bind(project_id)
+            .bind(worker_type)
+            .bind(format!("{}%", worker_prefix))
+            .execute(db)
+            .await?;
+
             error!(
                 "Emergency released {} claimed tickets for project={}, worker_type={} due to consumer thread failure",
                 result.rows_affected(),
@@ -1170,25 +1185,10 @@ impl WorkerConsumer {
             );
 
             // Add system comments to released tickets explaining what happened
-            let released_tickets = sqlx::query(
-                r#"
-                SELECT ticket_id FROM tickets 
-                WHERE project_id = ?1 
-                  AND current_stage = ?2 
-                  AND processing_worker_id IS NULL
-                  AND updated_at >= datetime('now', '-5 seconds')
-                "#,
-            )
-            .bind(project_id)
-            .bind(worker_type)
-            .fetch_all(db)
-            .await?;
-
-            for ticket_row in released_tickets {
-                let ticket_id: String = ticket_row.get("ticket_id");
+            for ticket_id in &released_tickets {
                 let _ = crate::database::comments::Comment::create(
                     db,
-                    &ticket_id,
+                    ticket_id,
                     Some("system"),
                     Some("system"),
                     Some(999), // Special stage for system messages
