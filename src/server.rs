@@ -54,8 +54,12 @@ pub async fn run_server(config: Config) -> Result<()> {
     // Initialize single MCP server instance
     let mcp_server = Arc::new(McpServer::new());
 
-    // Initialize WebSocket manager
-    let websocket_manager = Arc::new(WebSocketManager::new());
+    // Initialize WebSocket manager (conditionally based on config)
+    let websocket_manager = if config.enable_websocket {
+        Arc::new(WebSocketManager::with_concurrency_limit(config.max_concurrent_client_requests))
+    } else {
+        Arc::new(WebSocketManager::disabled())
+    };
 
     let state = AppState {
         config: config.clone(),
@@ -79,17 +83,27 @@ pub async fn run_server(config: Config) -> Result<()> {
             axum::http::header::CACHE_CONTROL,
             axum::http::header::AUTHORIZATION,
             axum::http::header::HeaderName::from_static("x-api-key"),
+            axum::http::header::HeaderName::from_static("x-claude-code-ide-authorization"),
             axum::http::header::HeaderName::from_static("last-event-id"),
             axum::http::header::HeaderName::from_static("mcp-protocol-version"),
         ])
         .allow_origin(axum::http::header::HeaderValue::from_static("*"));
 
-    let app = Router::new()
+    let mut app = Router::new()
         .route("/health", get(health_check))
         .route("/mcp", post(mcp_handler))
         .route("/sse", get(sse_handler))
-        .route("/messages", post(sse_message_handler))
-        .route("/ws", get(websocket_handler))
+        .route("/messages", post(sse_message_handler));
+
+    // Conditionally add WebSocket route if enabled
+    if config.enable_websocket {
+        app = app.route("/ws", get(websocket_handler));
+        info!("WebSocket support enabled at /ws");
+    } else {
+        info!("WebSocket support disabled");
+    }
+
+    let app = app
         .layer(RequestBodyLimitLayer::new(1024 * 1024)) // 1 MiB
         .layer(TraceLayer::new_for_http())
         .layer(cors)

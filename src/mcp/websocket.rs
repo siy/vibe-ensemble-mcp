@@ -7,7 +7,7 @@ use futures::{SinkExt, StreamExt};
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use std::sync::Arc;
-use tokio::sync::mpsc;
+use tokio::sync::{mpsc, Semaphore};
 use tracing::{debug, error, info, warn};
 use uuid::Uuid;
 
@@ -24,6 +24,8 @@ pub struct WebSocketManager {
     tool_registry: Arc<ClientToolRegistry>,
     /// Pending server-initiated requests
     pending_requests: Arc<DashMap<String, PendingRequest>>,
+    /// Semaphore to limit concurrent client tool calls
+    concurrency_semaphore: Option<Arc<Semaphore>>,
 }
 
 /// Individual client connection
@@ -97,7 +99,24 @@ impl WebSocketManager {
             clients: Arc::new(DashMap::new()),
             tool_registry: Arc::new(ClientToolRegistry::new()),
             pending_requests: Arc::new(DashMap::new()),
+            concurrency_semaphore: None,
         }
+    }
+
+    /// Create a WebSocket manager with concurrency limits
+    pub fn with_concurrency_limit(max_concurrent: usize) -> Self {
+        Self {
+            clients: Arc::new(DashMap::new()),
+            tool_registry: Arc::new(ClientToolRegistry::new()),
+            pending_requests: Arc::new(DashMap::new()),
+            concurrency_semaphore: Some(Arc::new(Semaphore::new(max_concurrent))),
+        }
+    }
+
+    /// Create a disabled WebSocket manager (when WebSocket is disabled in config)
+    pub fn disabled() -> Self {
+        // Same structure but will return errors for most operations
+        Self::new()
     }
 
     /// Get client tool registry
@@ -131,13 +150,13 @@ impl WebSocketManager {
         socket: WebSocket,
         headers: HeaderMap,
         query: WebSocketQuery,
-        _state: AppState,
+        state: AppState,
     ) {
         let client_id = Uuid::new_v4().to_string();
         info!("New WebSocket connection attempt: {}", client_id);
 
         // Authenticate connection
-        if let Err(e) = self.authenticate_connection(&headers, &query).await {
+        if let Err(e) = self.authenticate_connection(&headers, &query, &state).await {
             warn!("WebSocket authentication failed for {}: {}", client_id, e);
             return;
         }
@@ -206,10 +225,16 @@ impl WebSocketManager {
         &self,
         headers: &HeaderMap,
         query: &WebSocketQuery,
+        state: &AppState,
     ) -> Result<()> {
+        // If authentication is not required, allow connection
+        if !state.config.websocket_auth_required {
+            return Ok(());
+        }
+
         // Check for token in query parameters
         if let Some(token) = &query.token {
-            if self.validate_token(token).await {
+            if self.validate_token(token, state).await {
                 return Ok(());
             }
         }
@@ -217,7 +242,16 @@ impl WebSocketManager {
         // Check for token in headers (Claude Code style)
         if let Some(auth_header) = headers.get("x-claude-code-ide-authorization") {
             if let Ok(token) = auth_header.to_str() {
-                if self.validate_token(token).await {
+                if self.validate_token(token, state).await {
+                    return Ok(());
+                }
+            }
+        }
+
+        // Check for token in x-api-key header (alternative auth method)
+        if let Some(api_key_header) = headers.get("x-api-key") {
+            if let Ok(token) = api_key_header.to_str() {
+                if self.validate_token(token, state).await {
                     return Ok(());
                 }
             }
@@ -227,10 +261,31 @@ impl WebSocketManager {
     }
 
     /// Validate authentication token
-    async fn validate_token(&self, _token: &str) -> bool {
-        // For now, accept any non-empty token
-        // In production, implement proper token validation
-        !_token.is_empty()
+    async fn validate_token(&self, token: &str, state: &AppState) -> bool {
+        if token.is_empty() {
+            return false;
+        }
+
+        // If authentication is required, validate against configured token
+        if state.config.websocket_auth_required {
+            // Try to read the WebSocket token file
+            if let Ok(expected_token) = std::fs::read_to_string(".claude/websocket-token") {
+                let expected_token = expected_token.trim();
+                return token == expected_token;
+            }
+
+            // Fall back to environment variable
+            if let Ok(expected_token) = std::env::var("WEBSOCKET_AUTH_TOKEN") {
+                return token == expected_token;
+            }
+
+            // If no configured token found, reject
+            warn!("WebSocket authentication required but no token configured");
+            return false;
+        }
+
+        // If authentication is optional, any non-empty token is valid
+        true
     }
 
     /// Negotiate client capabilities
@@ -384,7 +439,16 @@ impl WebSocketManager {
         client_id: &str,
         tool_name: &str,
         arguments: Value,
+        timeout_secs: u64,
     ) -> Result<Value> {
+        // Acquire semaphore permit if concurrency limiting is enabled
+        let _permit = if let Some(semaphore) = &self.concurrency_semaphore {
+            Some(semaphore.acquire().await.map_err(|_| {
+                AppError::BadRequest("Concurrency limit reached for client tool calls".to_string())
+            })?)
+        } else {
+            None
+        };
         let request_id = Uuid::new_v4().to_string();
 
         let request = json!({
@@ -413,7 +477,7 @@ impl WebSocketManager {
         self.send_message(client_id, &request).await?;
 
         // Wait for response with timeout
-        match tokio::time::timeout(std::time::Duration::from_secs(30), rx).await {
+        match tokio::time::timeout(std::time::Duration::from_secs(timeout_secs), rx).await {
             Ok(Ok(result)) => result,
             Ok(Err(_)) => Err(AppError::BadRequest("Request cancelled".to_string())),
             Err(_) => {
@@ -435,6 +499,7 @@ impl Clone for WebSocketManager {
             clients: Arc::clone(&self.clients),
             tool_registry: Arc::clone(&self.tool_registry),
             pending_requests: Arc::clone(&self.pending_requests),
+            concurrency_semaphore: self.concurrency_semaphore.clone(),
         }
     }
 }

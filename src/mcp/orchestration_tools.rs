@@ -61,7 +61,7 @@ impl ToolHandler for ExecuteWorkflowTool {
             info!("Executing step {}: {} -> {}", step_index, tool_name, client_id);
 
             // Execute the tool call
-            match state.websocket_manager.call_client_tool(client_id, tool_name, step_arguments).await {
+            match state.websocket_manager.call_client_tool(client_id, tool_name, step_arguments, state.config.client_tool_timeout_secs).await {
                 Ok(result) => {
                     info!("Step {} completed successfully", step_index);
 
@@ -200,9 +200,10 @@ impl ToolHandler for ParallelCallTool {
             let ws_manager = state.websocket_manager.clone();
             let client_id = client_id.to_string();
             let tool_name = tool_name.to_string();
+            let timeout_secs = state.config.client_tool_timeout_secs;
 
             let future = async move {
-                let result = ws_manager.call_client_tool(&client_id, &tool_name, tool_arguments).await;
+                let result = ws_manager.call_client_tool(&client_id, &tool_name, tool_arguments, timeout_secs).await;
                 (index, client_id, tool_name, result)
             };
 

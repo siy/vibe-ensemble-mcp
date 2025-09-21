@@ -72,7 +72,7 @@ impl ToolHandler for CallClientToolTool {
         }
 
         // Call the client tool
-        match state.websocket_manager.call_client_tool(&client_id, &tool_name, tool_arguments).await {
+        match state.websocket_manager.call_client_tool(&client_id, &tool_name, tool_arguments, state.config.client_tool_timeout_secs).await {
             Ok(result) => {
                 info!("Client tool call successful: {} -> {}", tool_name, client_id);
                 let response = json!({

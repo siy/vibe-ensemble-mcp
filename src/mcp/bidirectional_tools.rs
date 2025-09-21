@@ -1,6 +1,5 @@
 use async_trait::async_trait;
 use serde_json::{json, Value};
-use std::time::Duration;
 use tracing::info;
 
 use super::tools::{create_json_success_response, create_json_error_response, extract_param, ToolHandler};
@@ -169,28 +168,19 @@ impl ToolHandler for PollClientStatusTool {
             // Try to call a status tool on the client
             let status_request = json!({});
 
-            match tokio::time::timeout(
-                Duration::from_secs(timeout_secs),
-                state.websocket_manager.call_client_tool(&client_id, "get_status", status_request)
-            ).await {
-                Ok(Ok(status)) => {
+            match state.websocket_manager.call_client_tool(&client_id, "get_status", status_request, timeout_secs).await {
+                Ok(status) => {
                     status_results.push(json!({
                         "client_id": client_id,
                         "status": "responsive",
                         "data": status
                     }));
                 }
-                Ok(Err(e)) => {
+                Err(e) => {
                     status_results.push(json!({
                         "client_id": client_id,
                         "status": "error",
                         "error": e.to_string()
-                    }));
-                }
-                Err(_) => {
-                    status_results.push(json!({
-                        "client_id": client_id,
-                        "status": "timeout"
                     }));
                 }
             }
