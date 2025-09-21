@@ -5,8 +5,8 @@ use uuid::Uuid;
 
 use super::{
     tools::{
-        create_json_error_response, create_json_success_response, create_success_response,
-        extract_optional_param, extract_param, ToolHandler,
+        create_json_error_response, create_json_success_response, extract_optional_param,
+        extract_param, ToolHandler,
     },
     types::{CallToolResponse, PaginationCursor, Tool},
 };
@@ -36,7 +36,7 @@ impl ToolHandler for CreateTicketTool {
             extract_optional_param(&Some(args.clone()), "description")?.unwrap_or_default();
         let ticket_type: String = extract_optional_param(&Some(args.clone()), "ticket_type")?
             .unwrap_or_else(|| "task".to_string());
-        let _priority: String = extract_optional_param(&Some(args.clone()), "priority")?
+        let priority: String = extract_optional_param(&Some(args.clone()), "priority")?
             .unwrap_or_else(|| "medium".to_string());
         let initial_stage: String = extract_optional_param(&Some(args.clone()), "initial_stage")?
             .unwrap_or_else(|| "planning".to_string());
@@ -49,15 +49,17 @@ impl ToolHandler for CreateTicketTool {
         let created_by_worker_id: Option<String> =
             extract_optional_param(&Some(args.clone()), "created_by_worker_id")?;
 
-        // Validate that the initial stage worker type exists for this project
-        if let Err(e) = crate::validation::PipelineValidator::validate_initial_stage(
-            &state.db,
-            &project_id,
-            &initial_stage,
-        )
-        .await
-        {
-            return Ok(create_json_error_response(&e.to_string()));
+        // Validate initial_stage only if no execution_plan is supplied
+        if execution_plan_input.is_none() {
+            if let Err(e) = crate::validation::PipelineValidator::validate_initial_stage(
+                &state.db,
+                &project_id,
+                &initial_stage,
+            )
+            .await
+            {
+                return Ok(create_json_error_response(&e.to_string()));
+            }
         }
 
         info!("Creating ticket: {} in project {}", title, project_id);
@@ -92,9 +94,18 @@ impl ToolHandler for CreateTicketTool {
             ticket_type: Some(ticket_type),
             dependency_status: None, // Will default to 'ready' in database
             created_by_worker_id,
+            priority: Some(priority),
         };
 
-        let ticket = Ticket::create(&state.db, req).await?;
+        let ticket = match Ticket::create(&state.db, req).await {
+            Ok(t) => t,
+            Err(e) => {
+                return Ok(create_json_error_response(&format!(
+                    "Failed to create ticket: {}",
+                    e
+                )))
+            }
+        };
 
         // Emit ticket_created event
         if let Err(e) = state
@@ -125,15 +136,17 @@ impl ToolHandler for CreateTicketTool {
             Err(e) => {
                 warn!(
                     "Failed to submit ticket {} to {}-queue: {}",
-                    ticket_id, initial_stage, e
+                    ticket_id, first_stage, e
                 );
             }
         }
 
-        Ok(create_success_response(&format!(
-            "Created ticket {} with ID: {}",
-            title, ticket.ticket_id
-        )))
+        Ok(create_json_success_response(json!({
+            "message": format!("Created ticket '{}'", title),
+            "ticket_id": ticket.ticket_id,
+            "project_id": ticket.project_id,
+            "current_stage": ticket.current_stage
+        })))
     }
 
     fn definition(&self) -> Tool {
@@ -209,14 +222,10 @@ impl ToolHandler for GetTicketTool {
         let ticket = Ticket::get_by_id(&state.db, &ticket_id).await?;
 
         match ticket {
-            Some(ticket) => {
-                let comments = Comment::get_by_ticket_id(&state.db, &ticket_id).await?;
-
-                Ok(create_json_success_response(json!({
-                    "ticket": ticket,
-                    "comments": comments
-                })))
-            }
+            Some(ticket_with_comments) => Ok(create_json_success_response(json!({
+                "ticket": ticket_with_comments.ticket,
+                "comments": ticket_with_comments.comments
+            }))),
             None => Ok(create_json_error_response(&format!(
                 "Ticket {} not found",
                 ticket_id
@@ -294,7 +303,8 @@ impl ToolHandler for ListTicketsTool {
                     },
                     "status": {
                         "type": "string",
-                        "description": "Optional status filter (open, in_progress, completed, closed)"
+                        "description": "Optional status filter (open, closed)",
+                        "enum": ["open", "closed"]
                     },
                     "cursor": {
                         "type": "string",
@@ -355,10 +365,11 @@ impl ToolHandler for AddTicketCommentTool {
             warn!("Failed to emit ticket_updated event: {}", e);
         }
 
-        Ok(create_success_response(&format!(
-            "Added comment to ticket {}: {}",
-            ticket_id, comment.id
-        )))
+        Ok(create_json_success_response(json!({
+            "message": format!("Added comment to ticket {}", ticket_id),
+            "ticket_id": ticket_id,
+            "comment_id": comment.id
+        })))
     }
 
     fn definition(&self) -> Tool {
@@ -512,7 +523,15 @@ impl ToolHandler for ResumeTicketProcessingTool {
 
         // Determine state to use (provided or Open)
         let target_state_enum = if let Some(state_str) = state_param {
-            state_str.parse::<TicketState>()?
+            match state_str.parse::<TicketState>() {
+                Ok(state) => state,
+                Err(_) => {
+                    return Ok(create_json_error_response(&format!(
+                        "Invalid state '{}'. Valid states are: open, closed",
+                        state_str
+                    )))
+                }
+            }
         } else {
             TicketState::Open
         };

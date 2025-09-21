@@ -93,6 +93,7 @@ pub struct CreateTicketRequest {
     pub ticket_type: Option<String>,
     pub dependency_status: Option<String>,
     pub created_by_worker_id: Option<String>,
+    pub priority: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -139,7 +140,7 @@ impl Ticket {
                 parent_ticket_id, dependency_status, created_by_worker_id, ticket_type,
                 rules_version, patterns_version, inherited_from_parent
             )
-            VALUES (?1, ?2, ?3, ?4, ?5, ?6, 'medium', ?7, ?8, ?9, ?10, ?11, ?12, ?13)
+            VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14)
             RETURNING ticket_id, project_id, title, execution_plan, current_stage, state, priority,
                      processing_worker_id, created_at, updated_at, closed_at,
                      parent_ticket_id, dependency_status, created_by_worker_id, ticket_type,
@@ -152,6 +153,7 @@ impl Ticket {
         .bind(&execution_plan_json)
         .bind(&initial_stage)
         .bind(TicketState::Open.as_sql_value())
+        .bind(req.priority.as_deref().unwrap_or("medium"))
         .bind(&req.parent_ticket_id)
         .bind(req.dependency_status.as_deref().unwrap_or("ready"))
         .bind(&req.created_by_worker_id)

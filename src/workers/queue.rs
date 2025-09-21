@@ -165,12 +165,30 @@ impl QueueManager {
         };
 
         // Get or create queue with consumer
-        let sender = self
+        let sender = match self
             .get_or_create_queue(&queue_name, project_id, worker_type)
-            .await?;
+            .await
+        {
+            Ok(s) => s,
+            Err(e) => {
+                let _ = ClaimManager::release_ticket_if_claimed(
+                    &self.db,
+                    &self.event_broadcaster,
+                    &ticket_id_domain,
+                )
+                .await;
+                return Err(e);
+            }
+        };
 
         // Send task to queue
         if sender.send(task).is_err() {
+            let _ = ClaimManager::release_ticket_if_claimed(
+                &self.db,
+                &self.event_broadcaster,
+                &ticket_id_domain,
+            )
+            .await;
             return Err(anyhow::anyhow!("Queue {} is closed", queue_name));
         }
 
@@ -612,7 +630,7 @@ impl QueueManager {
         ticket_id: &str,
     ) -> Result<()> {
         // For planning stage, we allow full pipeline replacement since no stages are completed yet
-        if current_stage_index == 0 && original_pipeline.len() <= 1 {
+        if current_stage_index == 0 {
             return Ok(());
         }
 
