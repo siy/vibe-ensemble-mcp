@@ -279,11 +279,10 @@ impl WebSocketManager {
             return false;
         }
 
-        // If authentication is required, validate against configured token
+        // If authentication is required, validate against server token
         if state.config.websocket_auth_required {
-            // Try to read the WebSocket token file
-            if let Ok(expected_token) = std::fs::read_to_string(".claude/websocket-token") {
-                let expected_token = expected_token.trim();
+            // Check against server-generated token from AppState
+            if let Some(expected_token) = &state.websocket_token {
                 return self.constant_time_compare(token, expected_token);
             }
 

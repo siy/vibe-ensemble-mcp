@@ -2,6 +2,7 @@ use anyhow::Result;
 use std::fs;
 use uuid::Uuid;
 
+use crate::lockfile::LockFileManager;
 use crate::mcp::constants::build_mcp_config;
 use crate::permissions::{ClaudePermissions, ClaudeSettings, PermissionMode};
 
@@ -13,8 +14,18 @@ pub async fn configure_claude_code(
 ) -> Result<()> {
     println!("🔧 Configuring Claude Code integration...");
 
-    // Generate WebSocket authentication token
-    let websocket_token = Uuid::new_v4().to_string();
+    // Try to read existing lock file first, generate new token if not found
+    let lock_manager = LockFileManager::new(host.to_string(), port);
+    let websocket_token = match lock_manager.read_lock_file() {
+        Ok(lock_file) => {
+            println!("📖 Using existing WebSocket token from lock file");
+            lock_file.token
+        }
+        Err(_) => {
+            println!("🔑 Generating new WebSocket authentication token");
+            Uuid::new_v4().to_string()
+        }
+    };
 
     // Create .mcp.json file with WebSocket auth
     create_mcp_config(host, port, &websocket_token).await?;

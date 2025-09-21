@@ -16,6 +16,7 @@ use crate::{
     config::Config,
     database::DbPool,
     error::Result,
+    lockfile::LockFileManager,
     mcp::{
         server::{mcp_handler, McpServer},
         websocket::{WebSocketManager, WebSocketQuery},
@@ -32,6 +33,7 @@ pub struct AppState {
     pub event_broadcaster: EventBroadcaster,
     pub mcp_server: Arc<McpServer>,
     pub websocket_manager: Arc<WebSocketManager>,
+    pub websocket_token: Option<String>,
 }
 
 impl AppState {
@@ -63,6 +65,23 @@ pub async fn run_server(config: Config) -> Result<()> {
         Arc::new(WebSocketManager::disabled())
     };
 
+    // Generate WebSocket token and create lock file if WebSocket is enabled
+    let websocket_token = if config.enable_websocket {
+        let lock_manager = LockFileManager::new(config.host.clone(), config.port);
+        match lock_manager.create_lock_file() {
+            Ok(token) => {
+                info!("Created lock file with WebSocket token");
+                Some(token)
+            }
+            Err(e) => {
+                error!("Failed to create lock file: {}", e);
+                None
+            }
+        }
+    } else {
+        None
+    };
+
     let state = AppState {
         config: config.clone(),
         db,
@@ -70,6 +89,7 @@ pub async fn run_server(config: Config) -> Result<()> {
         event_broadcaster,
         mcp_server,
         websocket_manager,
+        websocket_token,
     };
 
     // Respawn workers for unfinished tasks if enabled
