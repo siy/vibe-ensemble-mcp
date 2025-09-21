@@ -574,4 +574,32 @@ impl Ticket {
 
         Ok(tickets)
     }
+
+    /// List open tickets by current stage with priority ordering
+    pub async fn list_open_by_stage(pool: &DbPool, stage: &str) -> Result<Vec<Ticket>> {
+        let tickets = sqlx::query_as::<_, Ticket>(
+            r#"
+            SELECT ticket_id, project_id, title, execution_plan, current_stage, state, priority,
+                   processing_worker_id, created_at, updated_at, closed_at,
+                   parent_ticket_id, dependency_status, created_by_worker_id, ticket_type,
+                   rules_version, patterns_version, inherited_from_parent
+            FROM tickets
+            WHERE current_stage = ?1 AND state = 'open'
+            ORDER BY
+                CASE priority
+                    WHEN 'urgent' THEN 1
+                    WHEN 'high' THEN 2
+                    WHEN 'medium' THEN 3
+                    WHEN 'low' THEN 4
+                    ELSE 5
+                END,
+                created_at ASC
+        "#,
+        )
+        .bind(stage)
+        .fetch_all(pool)
+        .await?;
+
+        Ok(tickets)
+    }
 }

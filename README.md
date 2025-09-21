@@ -12,6 +12,8 @@ Vibe-Ensemble allows you to break down complex projects into specialized stages,
 - **👀 Real-time Monitoring**: Track progress through tickets, comments, and live notifications
 - **🔄 Adaptive Workflows**: Workers can dynamically update execution plans as they discover new requirements
 - **💾 Persistent State**: All progress is saved, allowing you to pause and resume complex projects
+- **🌐 Bidirectional Communication**: Full WebSocket support for real-time coordination with connected Claude Code clients
+- **🔗 Multi-Client Orchestration**: Coordinate work across multiple specialized Claude Code instances simultaneously
 
 ## Installation
 
@@ -63,9 +65,11 @@ cargo build --release
 ```
 
 This command automatically creates:
-- `.mcp.json` - MCP server configuration (HTTP + SSE transports)
+- `.mcp.json` - MCP server configuration (HTTP + SSE + WebSocket transports)
 - `.claude/settings.local.json` - Claude Code permissions
 - `.claude/commands/vibe-ensemble.md` - Coordinator initialization command
+- `.claude/websocket-token` - Authentication token for WebSocket connections
+- `.vibe-ensemble-mcp/worker-permissions.json` - Worker permissions (if using file permission mode)
 
 **Manual Setup (Alternative):**
 ```bash
@@ -125,7 +129,7 @@ Each worker operates independently with their specialized knowledge, ensuring fo
 
 ## MCP Tools
 
-Vibe-Ensemble provides 25 MCP tools organized into five categories:
+Vibe-Ensemble provides 38+ MCP tools organized into eight categories:
 
 ### Project Management
 - `create_project` - Create a new project with rules and patterns
@@ -157,7 +161,37 @@ Vibe-Ensemble provides 25 MCP tools organized into five categories:
 ### Permission Management
 - `get_permission_model` - Get information about the current permission model and configuration
 
+### Dependency Management
+- `add_ticket_dependency` - Add dependencies between tickets to control execution order
+- `remove_ticket_dependency` - Remove ticket dependencies
+- `get_dependency_graph` - Visualize ticket dependencies and execution order
+- `list_ready_tickets` - List tickets ready for execution (dependencies satisfied)
+- `list_blocked_tickets` - List tickets blocked by pending dependencies
+
+### WebSocket Client Management (Bidirectional Communication)
+- `list_connected_clients` - View all connected Claude Code instances with their capabilities
+- `list_client_tools` - Discover tools available on connected clients
+- `client_health_monitor` - Monitor connection status and client health metrics
+- `client_group_manager` - Organize clients into logical groups for targeted operations
+
+### Bidirectional Tool Execution
+- `call_client_tool` - Execute tools on specific connected Claude Code clients
+- `list_pending_requests` - Track ongoing client tool calls and their status
+- `parallel_call` - Execute the same tool across multiple clients simultaneously
+- `broadcast_to_clients` - Send notifications or commands to all connected clients
+
+### Workflow Orchestration
+- `execute_workflow` - Coordinate complex multi-step workflows across clients
+- `collaborative_sync` - Synchronize state and data between coordinator and clients
+- `poll_client_status` - Get real-time status updates from specific clients
+
+### Integration Testing
+- `validate_websocket_integration` - Comprehensive WebSocket functionality validation
+- `test_websocket_compatibility` - Test compatibility with different MCP client types
+
 > **Note on Worker Management**: Workers are automatically spawned when tickets are assigned to stages. There are no explicit worker spawn/stop tools - the queue system handles worker lifecycle automatically based on workload.
+
+> **Note on Bidirectional Communication**: WebSocket tools enable real-time coordination with connected Claude Code clients, allowing for distributed task execution and multi-client workflows. This is particularly useful for complex projects requiring specialized environments or parallel processing capabilities.
 
 ## Requirements
 
@@ -176,6 +210,10 @@ The server accepts the following command-line options:
 - `--log-level`: Log level (default: `info`)
 - `--permission-mode`: Permission mode for workers (default: `inherit`)
 - `--no-respawn`: Disable automatic respawning of workers on startup
+- `--enable-websocket`: Enable WebSocket transport for bidirectional communication (default: `true`)
+- `--websocket-auth-required`: Require authentication for WebSocket connections (default: `false`)
+- `--client-tool-timeout-secs`: Timeout for client tool calls in seconds (default: `30`)
+- `--max-concurrent-client-requests`: Maximum concurrent client requests (default: `50`)
 
 ## Security & Permissions
 
@@ -367,24 +405,104 @@ Permission files are read fresh from disk each time a worker starts, allowing yo
 - **📚 Comprehensive Documentation**: Complete SSE protocol implementation and task breakdown sizing methodology
 - **🔒 Enhanced Security**: Removed manual ticket manipulation tools to prevent pipeline stalls
 
+## Bidirectional WebSocket Communication
+
+Vibe-Ensemble v0.9.1 introduces **full bidirectional WebSocket communication** with Claude Code clients, enabling advanced multi-client coordination and real-time collaboration.
+
+### Key Capabilities
+
+**🔗 Real-time Client Coordination:**
+- Connect multiple Claude Code instances as specialized clients
+- Server can initiate tool calls on connected clients
+- Clients can register their own tools for server use
+- Bi-directional JSON-RPC 2.0 over WebSocket protocol
+
+**🚀 Advanced Workflow Patterns:**
+- **Distributed Task Execution**: Delegate specialized tasks to clients with specific capabilities
+- **Parallel Processing**: Execute tasks across multiple client environments simultaneously
+- **Multi-Environment Development**: Coordinate across different OS, tools, or configuration setups
+- **Expert Specialization**: Route tasks to clients with domain-specific expertise
+
+**🛠️ Integration Features:**
+- **Authentication**: Secure token-based authentication for WebSocket connections
+- **Health Monitoring**: Real-time monitoring of client connections and capabilities
+- **Group Management**: Organize clients into logical groups for targeted operations
+- **Workflow Orchestration**: Complex multi-step workflows spanning multiple clients
+
+### Getting Started with WebSocket
+
+1. **Configure with WebSocket Support**:
+   ```bash
+   ./vibe-ensemble-mcp --configure-claude-code --host 127.0.0.1 --port 3000
+   ```
+   This automatically generates WebSocket authentication tokens and configuration.
+
+2. **Start Server with WebSocket Enabled** (default):
+   ```bash
+   ./vibe-ensemble-mcp --port 3000
+   ```
+
+3. **Connect Claude Code Clients**:
+   - Use the generated `.mcp.json` configuration which includes WebSocket transport
+   - Clients authenticate using the generated `.claude/websocket-token`
+   - Multiple clients can connect simultaneously for distributed coordination
+
+4. **Use Bidirectional Tools**:
+   - `list_connected_clients` - See available client environments
+   - `call_client_tool` - Execute tools on specific clients
+   - `parallel_call` - Execute across multiple clients simultaneously
+   - `collaborative_sync` - Synchronize state across clients
+
+### Use Cases
+
+**Multi-Platform Development:**
+- Windows client for Windows-specific testing
+- Linux client for deployment and Docker operations
+- macOS client for iOS-related development tasks
+
+**Specialized Environments:**
+- Client with specialized security analysis tools
+- Client with access to cloud infrastructure
+- Client with specific development environment setup
+
+**Large-Scale Operations:**
+- Distributed code analysis across multiple instances
+- Parallel testing across different environments
+- Multi-region deployment coordination
+
 ## How It Works
 
 ```
     ┌─────────────────┐      ┌──────────────────┐      ┌─────────────┐
-    │   Coordinator   │─────►│ Vibe-Ensemble    │─────►│  Workers    │
+    │   Coordinator   │◄────►│ Vibe-Ensemble    │─────►│  Workers    │
     │ (Claude Code)   │      │    Server        │      │ (Headless)  │
     │                 │      │                  │      │             │
     │ • Plans tasks   │      │ • Manages state  │      │ • Execute   │
-    │ • Creates flows │      │ • Routes work    │      │ • Report    │ 
+    │ • Creates flows │      │ • Routes work    │      │ • Report    │
     │ • Monitors      │      │ • Coordinates    │      │ • Handoff   │
-    └─────────────────┘      └──────────────────┘      └─────────────┘
+    └─────────────────┘      └────────┬─────────┘      └─────────────┘
+                                      │
+                                      │ WebSocket
+                                      │ (Bidirectional)
+                                      ▼
+                             ┌─────────────────┐
+                             │ Connected Clients│
+                             │ (Claude Code)    │
+                             │                  │
+                             │ • Specialized    │
+                             │ • Distributed    │
+                             │ • Collaborative  │
+                             └─────────────────┘
 ```
 
 **Key Benefits:**
 - **No Context Drift**: Each worker focuses on one specific task
-- **Parallel Processing**: Multiple workers can run simultaneously  
+- **Parallel Processing**: Multiple workers can run simultaneously
 - **Persistent Progress**: All work is saved and can be resumed
 - **Smart Coordination**: Automatic workflow progression based on completion
+- **Bidirectional Communication**: Real-time coordination with connected Claude Code clients
+- **Distributed Execution**: Leverage specialized environments and tools across multiple clients
+- **Multi-Client Orchestration**: Coordinate complex workflows across diverse client capabilities
 
 ## Contributing
 

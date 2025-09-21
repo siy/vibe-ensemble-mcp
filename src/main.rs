@@ -44,6 +44,22 @@ struct Args {
     /// Permission mode for worker processes
     #[arg(long, default_value = "inherit", value_parser = validate_permission_mode)]
     permission_mode: String,
+
+    /// Enable WebSocket transport for bidirectional communication
+    #[arg(long, default_value = "true")]
+    enable_websocket: bool,
+
+    /// Require authentication for WebSocket connections
+    #[arg(long, default_value = "false")]
+    websocket_auth_required: bool,
+
+    /// Timeout for client tool calls in seconds
+    #[arg(long, default_value = "30")]
+    client_tool_timeout_secs: u64,
+
+    /// Maximum concurrent client requests
+    #[arg(long, default_value = "50")]
+    max_concurrent_client_requests: usize,
 }
 
 #[tokio::main]
@@ -52,7 +68,8 @@ async fn main() -> Result<()> {
 
     // Handle configuration mode
     if args.configure_claude_code {
-        configure_claude_code(&args.host, args.port).await?;
+        let permission_mode: PermissionMode = args.permission_mode.parse()?;
+        configure_claude_code(&args.host, args.port, permission_mode).await?;
         return Ok(());
     }
 
@@ -93,6 +110,10 @@ async fn main() -> Result<()> {
         port: args.port,
         no_respawn: args.no_respawn,
         permission_mode,
+        enable_websocket: args.enable_websocket,
+        websocket_auth_required: args.websocket_auth_required,
+        client_tool_timeout_secs: args.client_tool_timeout_secs,
+        max_concurrent_client_requests: args.max_concurrent_client_requests,
     };
 
     run_server(config).await?;

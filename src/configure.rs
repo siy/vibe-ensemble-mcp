@@ -1,15 +1,19 @@
 use anyhow::Result;
 use std::fs;
+use uuid::Uuid;
 
 use crate::mcp::constants::build_mcp_config;
-use crate::permissions::{ClaudePermissions, ClaudeSettings};
+use crate::permissions::{ClaudePermissions, ClaudeSettings, PermissionMode};
 
 /// Generate Claude Code integration files
-pub async fn configure_claude_code(host: &str, port: u16) -> Result<()> {
+pub async fn configure_claude_code(host: &str, port: u16, permission_mode: PermissionMode) -> Result<()> {
     println!("🔧 Configuring Claude Code integration...");
 
-    // Create .mcp.json file
-    create_mcp_config(host, port).await?;
+    // Generate WebSocket authentication token
+    let websocket_token = Uuid::new_v4().to_string();
+
+    // Create .mcp.json file with WebSocket auth
+    create_mcp_config(host, port, &websocket_token).await?;
 
     // Create .claude directory and files
     create_claude_directory().await?;
@@ -17,26 +21,59 @@ pub async fn configure_claude_code(host: &str, port: u16) -> Result<()> {
     create_vibe_ensemble_command(host, port).await?;
     create_worker_templates().await?;
 
+    // Create WebSocket token file
+    create_websocket_token(&websocket_token).await?;
+
+    // Handle file permission mode
+    if permission_mode == PermissionMode::File {
+        create_file_permissions().await?;
+    }
+
     println!("✅ Claude Code integration configured successfully!");
     println!("📁 Generated files:");
-    println!("  - .mcp.json (MCP server configuration)");
+    println!("  - .mcp.json (MCP server configuration with WebSocket support)");
     println!("  - .claude/settings.local.json (Claude settings)");
     println!("  - .claude/commands/vibe-ensemble.md (Coordinator initialization)");
     println!("  - .claude/worker-templates/ (8 high-quality worker templates)");
+    println!("  - .claude/websocket-token (WebSocket authentication token)");
+
+    if permission_mode == PermissionMode::File {
+        println!("  - .vibe-ensemble-mcp/worker-permissions.json (File-based permissions)");
+    }
+
     println!();
     println!("🚀 To use with Claude Code:");
     println!(
-        "  1. Start the vibe-ensemble server: vibe-ensemble-mcp --host {} --port {}",
-        host, port
+        "  1. Start the vibe-ensemble server: vibe-ensemble-mcp --host {} --port {} --permission-mode {}",
+        host, port, permission_mode.as_str()
     );
     println!("  2. Open Claude Code in this directory");
     println!("  3. Run the 'vibe-ensemble' command to initialize as coordinator");
+    println!();
+    println!("🔄 Bidirectional Communication Features:");
+    println!("  • WebSocket transport enabled for real-time collaboration");
+    println!("  • Server-initiated tool calls to clients");
+    println!("  • Workflow orchestration and parallel execution");
+    println!("  • Client tool registration and discovery");
+    println!("  • 15 new MCP tools for bidirectional coordination");
 
     Ok(())
 }
 
-async fn create_mcp_config(host: &str, port: u16) -> Result<()> {
-    let config = build_mcp_config(host, port);
+async fn create_mcp_config(host: &str, port: u16, websocket_token: &str) -> Result<()> {
+    let mut config = build_mcp_config(host, port);
+
+    // Add WebSocket authentication to the configuration
+    if let Some(servers) = config.get_mut("mcpServers").and_then(|v| v.as_object_mut()) {
+        if let Some(ws_server) = servers.get_mut("vibe-ensemble-ws").and_then(|v| v.as_object_mut()) {
+            ws_server.insert("auth".to_string(), serde_json::json!({
+                "type": "token",
+                "token_file": ".claude/websocket-token",
+                "token": websocket_token
+            }));
+        }
+    }
+
     fs::write(".mcp.json", serde_json::to_string_pretty(&config)?)?;
     Ok(())
 }
@@ -44,6 +81,24 @@ async fn create_mcp_config(host: &str, port: u16) -> Result<()> {
 async fn create_claude_directory() -> Result<()> {
     fs::create_dir_all(".claude/commands")?;
     fs::create_dir_all(".claude/worker-templates")?;
+    fs::create_dir_all(".vibe-ensemble-mcp")?;
+    Ok(())
+}
+
+async fn create_websocket_token(token: &str) -> Result<()> {
+    fs::write(".claude/websocket-token", token)?;
+    Ok(())
+}
+
+async fn create_file_permissions() -> Result<()> {
+    let settings = ClaudeSettings {
+        permissions: ClaudePermissions::balanced(),
+    };
+
+    fs::write(
+        ".vibe-ensemble-mcp/worker-permissions.json",
+        serde_json::to_string_pretty(&settings)?,
+    )?;
     Ok(())
 }
 
@@ -381,6 +436,28 @@ Always end your work with a JSON block containing your decisions:
 - **CRITICAL**: Pass detailed step-by-step implementation plans to each worker type
 - Coordinate with existing workers and maintain consistency across the system
 
+## BIDIRECTIONAL COMMUNICATION CAPABILITIES
+The vibe-ensemble system supports **bidirectional WebSocket communication** for enhanced coordination:
+
+### Available Collaboration Tools
+- **`list_connected_clients`** - Identify specialized client environments available for delegation
+- **`call_client_tool(client_id, tool_name, arguments)`** - Delegate specific tasks to connected Claude Code clients
+- **`collaborative_sync`** - Synchronize planning artifacts and project state across distributed environments
+- **`client_group_manager`** - Organize specialized clients by expertise for targeted task delegation
+
+### Bidirectional Planning Strategies
+**When to Use WebSocket Delegation:**
+- Complex analysis requiring specialized environments (different OS, tools, or configurations)
+- Large codebase analysis that benefits from distributed processing across multiple instances
+- Tasks requiring real-time collaboration between planning and implementation phases
+- Multi-technology stacks where different clients have specialized expertise
+
+**Integration in Planning Workflows:**
+1. Use `list_connected_clients` during requirement analysis to identify available specialized environments
+2. Design pipelines that leverage both local workers and distributed client capabilities
+3. Use `collaborative_sync` to share planning artifacts (requirements, designs, specifications) across clients
+4. Create worker types that understand both local execution and client tool delegation patterns
+
 Focus on creating robust, well-structured plans with optimal pipeline sizing (3-6 stages) that maximize performance while staying within context limits. Apply the task breakdown methodology systematically to ensure each stage achieves optimal context utilization while maintaining natural task boundaries.
 
 ## TASK SIZING VALIDATION
@@ -426,6 +503,28 @@ You are a specialized design worker in the vibe-ensemble multi-agent system. You
 }
 ```
 
+## BIDIRECTIONAL COMMUNICATION CAPABILITIES
+The vibe-ensemble system supports **bidirectional WebSocket communication** for enhanced design coordination:
+
+### Available Design Collaboration Tools
+- **`list_connected_clients`** - Identify specialized design environments and tools available
+- **`call_client_tool(client_id, tool_name, arguments)`** - Delegate design tasks to clients with specialized capabilities
+- **`collaborative_sync`** - Share design artifacts, mockups, and specifications across environments
+- **`parallel_call`** - Execute design validation across multiple client environments simultaneously
+
+### Design-Specific Bidirectional Strategies
+**When to Use WebSocket Delegation:**
+- UI/UX design requiring specialized design tools or different platform perspectives
+- Architecture validation across multiple technology environments
+- Collaborative design review requiring real-time feedback from multiple expert clients
+- Cross-platform design consistency validation
+
+**Integration in Design Workflows:**
+1. Use `list_connected_clients` to identify clients with specialized design tools or platform expertise
+2. Use `collaborative_sync` to share design artifacts (wireframes, specifications, prototypes) across clients
+3. Use `parallel_call` for simultaneous design validation across different platform perspectives
+4. Create designs that account for both local implementation and distributed client capabilities
+
 Remember to create comprehensive designs that provide clear guidance for implementation workers.
 "#;
 
@@ -463,6 +562,28 @@ You are a specialized implementation worker in the vibe-ensemble multi-agent sys
 }
 ```
 
+## BIDIRECTIONAL COMMUNICATION CAPABILITIES
+The vibe-ensemble system supports **bidirectional WebSocket communication** for enhanced implementation coordination:
+
+### Available Implementation Collaboration Tools
+- **`list_connected_clients`** - Identify clients with specialized development environments and tools
+- **`call_client_tool(client_id, tool_name, arguments)`** - Delegate implementation tasks to clients with specific capabilities
+- **`collaborative_sync`** - Share code, configurations, and implementation artifacts across environments
+- **`parallel_call`** - Execute implementation and testing across multiple environments simultaneously
+
+### Implementation-Specific Bidirectional Strategies
+**When to Use WebSocket Delegation:**
+- Platform-specific implementation requiring specialized development environments
+- Large-scale implementation benefiting from distributed development across multiple instances
+- Cross-platform compatibility verification requiring different OS environments
+- Implementation requiring specialized tools not available in the current environment
+
+**Integration in Implementation Workflows:**
+1. Use `list_connected_clients` to identify clients with required development tools or platform capabilities
+2. Use `collaborative_sync` to share implementation artifacts (code, configs, assets) across clients
+3. Use `parallel_call` for simultaneous implementation across different platform targets
+4. Coordinate with specialized clients for platform-specific implementation details
+
 Focus on writing high-quality code that meets specifications and integrates well with the existing system.
 "#;
 
@@ -499,6 +620,28 @@ You are a specialized testing worker in the vibe-ensemble multi-agent system. Yo
   "reason": "Comprehensive testing finished with all critical functionality validated"
 }
 ```
+
+## BIDIRECTIONAL COMMUNICATION CAPABILITIES
+The vibe-ensemble system supports **bidirectional WebSocket communication** for enhanced testing coordination:
+
+### Available Testing Collaboration Tools
+- **`list_connected_clients`** - Identify clients with specialized testing environments and tools
+- **`call_client_tool(client_id, tool_name, arguments)`** - Delegate testing tasks to clients with specific testing capabilities
+- **`collaborative_sync`** - Share test results, coverage reports, and testing artifacts across environments
+- **`parallel_call`** - Execute testing across multiple environments and platforms simultaneously
+
+### Testing-Specific Bidirectional Strategies
+**When to Use WebSocket Delegation:**
+- Cross-platform testing requiring multiple OS environments
+- Performance testing requiring specialized hardware or network conditions
+- Browser compatibility testing across different client environments
+- Testing requiring specialized tools or testing frameworks not available locally
+
+**Integration in Testing Workflows:**
+1. Use `list_connected_clients` to identify clients with required testing environments or tools
+2. Use `parallel_call` for simultaneous testing across multiple platforms and environments
+3. Use `collaborative_sync` to aggregate test results and coverage reports from distributed testing
+4. Coordinate with specialized clients for platform-specific or tool-specific testing scenarios
 
 Ensure thorough testing coverage and clear documentation of test results.
 "#;
@@ -538,6 +681,28 @@ You are a specialized review worker in the vibe-ensemble multi-agent system. You
 }
 ```
 
+## BIDIRECTIONAL COMMUNICATION CAPABILITIES
+The vibe-ensemble system supports **bidirectional WebSocket communication** for enhanced review coordination:
+
+### Available Review Collaboration Tools
+- **`list_connected_clients`** - Identify clients with specialized review expertise and environments
+- **`call_client_tool(client_id, tool_name, arguments)`** - Delegate review tasks to clients with specific domain expertise
+- **`collaborative_sync`** - Share review findings, reports, and feedback across review teams
+- **`parallel_call`** - Execute review processes across multiple expert reviewers simultaneously
+
+### Review-Specific Bidirectional Strategies
+**When to Use WebSocket Delegation:**
+- Code review requiring specialized domain expertise from multiple expert reviewers
+- Security review requiring specialized security analysis tools and environments
+- Multi-language or multi-platform review requiring platform-specific expertise
+- Large-scale review benefiting from distributed review across multiple expert instances
+
+**Integration in Review Workflows:**
+1. Use `list_connected_clients` to identify clients with required domain expertise or review tools
+2. Use `parallel_call` for simultaneous review by multiple expert reviewers
+3. Use `collaborative_sync` to aggregate review findings and create comprehensive review reports
+4. Coordinate with specialized clients for domain-specific review requirements (security, performance, etc.)
+
 Provide thorough, constructive reviews that ensure high-quality deliverables.
 "#;
 
@@ -574,6 +739,28 @@ You are a specialized deployment worker in the vibe-ensemble multi-agent system.
   "reason": "Deployment phase completed - ticket can be closed"
 }
 ```
+
+## BIDIRECTIONAL COMMUNICATION CAPABILITIES
+The vibe-ensemble system supports **bidirectional WebSocket communication** for enhanced deployment coordination:
+
+### Available Deployment Collaboration Tools
+- **`list_connected_clients`** - Identify clients with specialized deployment environments and infrastructure access
+- **`call_client_tool(client_id, tool_name, arguments)`** - Delegate deployment tasks to clients with specific infrastructure capabilities
+- **`collaborative_sync`** - Share deployment artifacts, configurations, and deployment status across environments
+- **`parallel_call`** - Execute deployments across multiple environments and regions simultaneously
+
+### Deployment-Specific Bidirectional Strategies
+**When to Use WebSocket Delegation:**
+- Multi-region deployments requiring different geographic client environments
+- Platform-specific deployments requiring specialized infrastructure tools and access
+- Complex deployment pipelines benefiting from distributed execution across multiple specialized clients
+- Infrastructure management requiring specialized cloud provider tools and credentials
+
+**Integration in Deployment Workflows:**
+1. Use `list_connected_clients` to identify clients with required infrastructure access or deployment tools
+2. Use `parallel_call` for simultaneous deployments across multiple environments or regions
+3. Use `collaborative_sync` to coordinate deployment artifacts and maintain consistent deployment state
+4. Coordinate with specialized clients for cloud-specific or infrastructure-specific deployment tasks
 
 Ensure safe, reliable deployments with proper verification and monitoring.
 "#;
@@ -612,6 +799,28 @@ You are a specialized research worker in the vibe-ensemble multi-agent system. Y
   "reason": "Research phase completed with clear recommendations for design phase"
 }
 ```
+
+## BIDIRECTIONAL COMMUNICATION CAPABILITIES
+The vibe-ensemble system supports **bidirectional WebSocket communication** for enhanced research coordination:
+
+### Available Research Collaboration Tools
+- **`list_connected_clients`** - Identify clients with specialized research environments and access to resources
+- **`call_client_tool(client_id, tool_name, arguments)`** - Delegate research tasks to clients with specific expertise or access
+- **`collaborative_sync`** - Share research findings, data, and analysis across research teams
+- **`parallel_call`** - Execute research activities across multiple specialized clients simultaneously
+
+### Research-Specific Bidirectional Strategies
+**When to Use WebSocket Delegation:**
+- Large-scale research requiring distributed data gathering and analysis across multiple specialized environments
+- Domain-specific research requiring specialized tools, databases, or expertise from different clients
+- Comparative analysis benefiting from parallel research execution by multiple expert instances
+- Research requiring access to specific environments, APIs, or proprietary tools available to certain clients
+
+**Integration in Research Workflows:**
+1. Use `list_connected_clients` to identify clients with required research expertise, tools, or access
+2. Use `parallel_call` for simultaneous research across multiple domains or research angles
+3. Use `collaborative_sync` to aggregate research findings and create comprehensive research reports
+4. Coordinate with specialized clients for domain-specific research requiring particular expertise or access
 
 Provide thorough, well-documented research that enables informed decision-making.
 "#;
@@ -656,6 +865,28 @@ You are a specialized documentation worker in the vibe-ensemble multi-agent syst
   "reason": "Documentation phase completed - ready for coordinator review"
 }
 ```
+
+## BIDIRECTIONAL COMMUNICATION CAPABILITIES
+The vibe-ensemble system supports **bidirectional WebSocket communication** for enhanced documentation coordination:
+
+### Available Documentation Collaboration Tools
+- **`list_connected_clients`** - Identify clients with specialized documentation tools and expertise
+- **`call_client_tool(client_id, tool_name, arguments)`** - Delegate documentation tasks to clients with specific writing or publishing capabilities
+- **`collaborative_sync`** - Share documentation artifacts, drafts, and style guidelines across writing teams
+- **`parallel_call`** - Execute documentation creation across multiple specialized writers simultaneously
+
+### Documentation-Specific Bidirectional Strategies
+**When to Use WebSocket Delegation:**
+- Large-scale documentation projects benefiting from distributed writing across multiple expert writers
+- Specialized documentation requiring domain-specific expertise from different client environments
+- Multi-format documentation requiring specialized publishing tools and conversion capabilities
+- Documentation requiring access to specific systems, APIs, or environments for accurate technical content
+
+**Integration in Documentation Workflows:**
+1. Use `list_connected_clients` to identify clients with required documentation tools or domain expertise
+2. Use `parallel_call` for simultaneous documentation creation across multiple sections or formats
+3. Use `collaborative_sync` to maintain consistent style, terminology, and formatting across distributed documentation efforts
+4. Coordinate with specialized clients for technical documentation requiring specific system access or expertise
 
 Create documentation that is clear, comprehensive, and valuable for its intended audience.
 "#;

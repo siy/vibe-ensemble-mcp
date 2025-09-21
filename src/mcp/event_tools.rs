@@ -3,11 +3,12 @@ use serde_json::Value;
 use tracing::info;
 
 use super::{
+    pagination::extract_cursor,
     tools::{
         create_json_success_response, create_success_response, extract_optional_param,
         extract_param, ToolHandler,
     },
-    types::{CallToolResponse, PaginationCursor, Tool},
+    types::{CallToolResponse, Tool},
 };
 use crate::{
     database::{events::Event, tickets::Ticket},
@@ -31,10 +32,8 @@ impl ToolHandler for ListEventsTool {
             extract_optional_param(&Some(args.clone()), "include_processed")?.unwrap_or(false);
         let event_ids: Option<Vec<i64>> = extract_optional_param(&Some(args.clone()), "event_ids")?;
 
-        // Parse pagination parameters
-        let cursor_str: Option<String> = extract_optional_param(&Some(args.clone()), "cursor")?;
-        let cursor = PaginationCursor::from_cursor_string(cursor_str)
-            .map_err(crate::error::AppError::BadRequest)?;
+        // Parse pagination parameters using helper
+        let cursor = extract_cursor(&Some(args.clone()))?;
 
         let events = if let Some(ref ids) = event_ids {
             // Get specific events by IDs (ignores processed filter when using specific IDs)
@@ -183,34 +182,13 @@ impl ToolHandler for GetTicketsByStageTool {
 
         let stage: String = extract_param(&Some(args.clone()), "stage")?;
 
-        // Parse pagination parameters
-        let cursor_str: Option<String> = extract_optional_param(&Some(args.clone()), "cursor")?;
-        let cursor = PaginationCursor::from_cursor_string(cursor_str)
-            .map_err(crate::error::AppError::BadRequest)?;
+        // Parse pagination parameters using helper
+        let cursor = extract_cursor(&Some(args.clone()))?;
 
         info!("Getting tickets for stage: {}", stage);
 
-        // Get all tickets with matching current_stage
-        let all_tickets = sqlx::query_as::<_, Ticket>(
-            r#"
-            SELECT ticket_id, project_id, title, execution_plan, current_stage, state, priority,
-                   processing_worker_id, created_at, updated_at, closed_at
-            FROM tickets
-            WHERE current_stage = ?1 AND state = 'open'
-            ORDER BY
-                CASE priority
-                    WHEN 'urgent' THEN 1
-                    WHEN 'high' THEN 2
-                    WHEN 'medium' THEN 3
-                    WHEN 'low' THEN 4
-                    ELSE 5
-                END,
-                created_at ASC
-        "#,
-        )
-        .bind(&stage)
-        .fetch_all(&state.db)
-        .await?;
+        // Get all tickets with matching current_stage using database function
+        let all_tickets = Ticket::list_open_by_stage(&state.db, &stage).await?;
 
         // Apply pagination using helper
         let pagination_result = cursor.paginate(all_tickets);

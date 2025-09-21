@@ -9,6 +9,7 @@ use tracing::{debug, error, info, trace, warn};
 use uuid::Uuid;
 
 use super::types::TaskItem;
+use super::{claims::ClaimManager, dependencies::DependencyManager, pipeline::PipelineManager};
 use crate::{
     config::Config,
     database::DbPool,
@@ -126,16 +127,8 @@ impl QueueManager {
 
         // Claim the ticket before submitting to queue
         let worker_id = format!("consumer-{}-{}", worker_type, &task_id[..8]);
-        let claim_result =
-            crate::database::tickets::Ticket::claim_for_processing(&self.db, ticket_id, &worker_id)
-                .await?;
-
-        if claim_result == 0 {
-            return Err(anyhow::anyhow!(
-                "Ticket {} already claimed by another worker",
-                ticket_id
-            ));
-        }
+        let ticket_id_domain = TicketId::new(ticket_id.to_string())?;
+        ClaimManager::claim_for_processing(&self.db, &ticket_id_domain, &worker_id).await?;
 
         info!(
             "[QueueManager] Claimed ticket {} with worker {}",
@@ -577,25 +570,13 @@ impl QueueManager {
     /// Get the current stage index in the pipeline
     /// Returns the index of the current stage, or 0 for "planning" stage
     fn get_current_stage_index(&self, ticket: &crate::database::tickets::Ticket) -> Result<usize> {
-        let plan = ticket.get_execution_plan()?;
-
         // Special case: planning stage is before the pipeline starts
         if ticket.current_stage == "planning" {
             return Ok(0);
         }
 
-        // Find current stage index in the pipeline
-        for (i, stage) in plan.iter().enumerate() {
-            if stage == &ticket.current_stage {
-                return Ok(i);
-            }
-        }
-
-        Err(anyhow::anyhow!(
-            "Current stage '{}' not found in pipeline: {:?}",
-            ticket.current_stage,
-            plan
-        ))
+        // Use PipelineManager for actual pipeline logic
+        PipelineManager::get_current_stage_index(ticket)
     }
 
     /// Validate that pipeline update preserves past stages (immutable history)
@@ -687,32 +668,7 @@ impl QueueManager {
     }
 
     async fn release_ticket_if_claimed(self: &Arc<Self>, ticket_id: &TicketId) -> Result<()> {
-        debug!("Releasing ticket {} if claimed", ticket_id.as_str());
-
-        let result = sqlx::query(
-            r#"
-            UPDATE tickets 
-            SET processing_worker_id = NULL, updated_at = datetime('now')
-            WHERE ticket_id = ?1 AND processing_worker_id IS NOT NULL
-            "#,
-        )
-        .bind(ticket_id.as_str())
-        .execute(&self.db)
-        .await?;
-
-        if result.rows_affected() > 0 {
-            info!(
-                "Released claimed ticket {} for stage transition",
-                ticket_id.as_str()
-            );
-        } else {
-            debug!(
-                "Ticket {} was not claimed, no release needed",
-                ticket_id.as_str()
-            );
-        }
-
-        Ok(())
+        ClaimManager::release_ticket_if_claimed(&self.db, &self.event_broadcaster, ticket_id).await
     }
 
     /// Handle dependency cascades when tickets complete or advance stages
@@ -759,59 +715,13 @@ impl QueueManager {
         self: &Arc<Self>,
         completed_ticket_id: &str,
     ) -> Result<()> {
-        // Get all tickets that are blocked by this ticket
-        let blocked_tickets =
-            crate::database::dag::TicketDependency::get_blocked_by(&self.db, completed_ticket_id)
-                .await?;
-
-        for blocked_ticket_id in blocked_tickets {
-            // Check if this ticket's dependencies are now satisfied
-            if crate::database::dag::TicketDependency::all_dependencies_satisfied(
-                &self.db,
-                &blocked_ticket_id,
-            )
-            .await?
-            {
-                info!(
-                    "Unblocking ticket {} - all dependencies satisfied",
-                    blocked_ticket_id
-                );
-
-                // Update status to ready
-                crate::database::tickets::Ticket::update_dependency_status(
-                    &self.db,
-                    &blocked_ticket_id,
-                    "ready",
-                )
-                .await?;
-
-                // Get the ticket details for resubmission
-                if let Some(ticket_with_comments) =
-                    crate::database::tickets::Ticket::get_by_id(&self.db, &blocked_ticket_id)
-                        .await?
-                {
-                    let ticket = &ticket_with_comments.ticket;
-
-                    // Resubmit the now-ready ticket to its current stage
-                    if let Err(e) = self
-                        .auto_enqueue_ticket(&blocked_ticket_id, &ticket.current_stage)
-                        .await
-                    {
-                        warn!(
-                            "Failed to auto-enqueue unblocked ticket {} for stage {}: {}",
-                            blocked_ticket_id, ticket.current_stage, e
-                        );
-                    } else {
-                        info!(
-                            "Successfully resubmitted unblocked ticket {} to stage {}",
-                            blocked_ticket_id, ticket.current_stage
-                        );
-                    }
-                }
-            }
-        }
-
-        Ok(())
+        let ticket_id = TicketId::new(completed_ticket_id.to_string())?;
+        DependencyManager::check_and_unblock_dependents(
+            &self.db,
+            &self.event_broadcaster,
+            self.clone(),
+            &ticket_id,
+        ).await
     }
 
     /// Resubmit parent ticket when child completes or needs attention
@@ -1203,11 +1113,7 @@ impl WorkerConsumer {
         debug!("Releasing claim for ticket {} due to error", ticket_id);
 
         let result = sqlx::query(
-            r#"
-            UPDATE tickets 
-            SET processing_worker_id = NULL, updated_at = datetime('now')
-            WHERE ticket_id = ?1 AND processing_worker_id IS NOT NULL
-            "#,
+            "UPDATE tickets SET processing_worker_id = NULL, updated_at = datetime('now') WHERE ticket_id = ?1 AND processing_worker_id IS NOT NULL"
         )
         .bind(ticket_id)
         .execute(&self.db)

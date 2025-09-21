@@ -7,6 +7,10 @@ pub struct Config {
     pub port: u16,
     pub no_respawn: bool,
     pub permission_mode: PermissionMode,
+    pub enable_websocket: bool,
+    pub websocket_auth_required: bool,
+    pub client_tool_timeout_secs: u64,
+    pub max_concurrent_client_requests: usize,
 }
 
 impl Config {
@@ -16,5 +20,9 @@ impl Config {
 
     pub fn server_address(&self) -> String {
         format!("{}:{}", self.host, self.port)
+    }
+
+    pub fn websocket_url(&self) -> String {
+        format!("ws://{}:{}/ws", self.host, self.port)
     }
 }

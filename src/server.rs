@@ -1,10 +1,11 @@
 use axum::{
-    extract::State,
-    http::Method,
-    response::Json,
+    extract::{Query, State},
+    http::{HeaderMap, Method},
+    response::{Json, Response},
     routing::{get, post},
     Router,
 };
+use axum::extract::WebSocketUpgrade;
 use serde_json::{json, Value};
 use sqlx::Row;
 use std::sync::Arc;
@@ -15,7 +16,10 @@ use crate::{
     config::Config,
     database::DbPool,
     error::Result,
-    mcp::server::{mcp_handler, McpServer},
+    mcp::{
+        server::{mcp_handler, McpServer},
+        websocket::{WebSocketManager, WebSocketQuery},
+    },
     sse::{sse_handler, sse_message_handler, EventBroadcaster},
     workers::queue::QueueManager,
 };
@@ -27,6 +31,7 @@ pub struct AppState {
     pub queue_manager: Arc<QueueManager>,
     pub event_broadcaster: EventBroadcaster,
     pub mcp_server: Arc<McpServer>,
+    pub websocket_manager: Arc<WebSocketManager>,
 }
 
 impl AppState {
@@ -49,12 +54,16 @@ pub async fn run_server(config: Config) -> Result<()> {
     // Initialize single MCP server instance
     let mcp_server = Arc::new(McpServer::new());
 
+    // Initialize WebSocket manager
+    let websocket_manager = Arc::new(WebSocketManager::new());
+
     let state = AppState {
         config: config.clone(),
         db,
         queue_manager,
         event_broadcaster,
         mcp_server,
+        websocket_manager,
     };
 
     // Respawn workers for unfinished tasks if enabled
@@ -80,6 +89,7 @@ pub async fn run_server(config: Config) -> Result<()> {
         .route("/mcp", post(mcp_handler))
         .route("/sse", get(sse_handler))
         .route("/messages", post(sse_message_handler))
+        .route("/ws", get(websocket_handler))
         .layer(RequestBodyLimitLayer::new(1024 * 1024)) // 1 MiB
         .layer(TraceLayer::new_for_http())
         .layer(cors)
@@ -243,4 +253,17 @@ async fn respawn_workers_for_unfinished_tasks(state: &AppState) -> Result<()> {
     );
 
     Ok(())
+}
+
+/// WebSocket handler for bidirectional MCP communication
+async fn websocket_handler(
+    ws: WebSocketUpgrade,
+    headers: HeaderMap,
+    Query(query): Query<WebSocketQuery>,
+    State(state): State<AppState>,
+) -> Response {
+    state
+        .websocket_manager
+        .handle_connection(ws, headers, Query(query), State(state.clone()))
+        .await
 }

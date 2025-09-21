@@ -77,6 +77,18 @@ pub fn build_mcp_config(host: &str, port: u16) -> Value {
                 "type": "sse",
                 "url": format!("http://{}:{}/sse", host, port),
                 "protocol_version": MCP_PROTOCOL_VERSION
+            },
+            "vibe-ensemble-ws": {
+                "type": "websocket",
+                "url": format!("ws://{}:{}/ws", host, port),
+                "protocol_version": MCP_PROTOCOL_VERSION,
+                "bidirectional": true,
+                "features": [
+                    "server_initiated_requests",
+                    "client_tool_registration",
+                    "real_time_collaboration",
+                    "workflow_orchestration"
+                ]
             }
         }
     })

@@ -3,11 +3,12 @@ use serde_json::{json, Value};
 use std::fs;
 use tracing::{debug, info, warn};
 
+use super::pagination::extract_cursor;
 use super::tools::{
     create_json_error_response, create_json_success_response, extract_optional_param,
     extract_param, ToolHandler,
 };
-use super::types::{CallToolResponse, PaginationCursor, Tool};
+use super::types::{CallToolResponse, Tool};
 use crate::{
     database::projects::{CreateProjectRequest, Project, UpdateProjectRequest},
     error::Result,
@@ -122,10 +123,8 @@ impl ToolHandler for ListProjectsTool {
     async fn call(&self, state: &AppState, arguments: Option<Value>) -> Result<CallToolResponse> {
         let args = arguments.unwrap_or_default();
 
-        // Parse pagination parameters
-        let cursor_str: Option<String> = extract_optional_param(&Some(args.clone()), "cursor")?;
-        let cursor = PaginationCursor::from_cursor_string(cursor_str)
-            .map_err(crate::error::AppError::BadRequest)?;
+        // Parse pagination parameters using helper
+        let cursor = extract_cursor(&Some(args.clone()))?;
 
         match Project::list_all(&state.db).await {
             Ok(all_projects) => {
