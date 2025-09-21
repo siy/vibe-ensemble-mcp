@@ -126,7 +126,7 @@ impl QueueManager {
 
         // Ensure ticket is open and ready (dependency_status)
         let readiness = sqlx::query_as::<_, (String, String)>(
-            "SELECT state, dependency_status FROM tickets WHERE ticket_id = ?1"
+            "SELECT state, dependency_status FROM tickets WHERE ticket_id = ?1",
         )
         .bind(ticket_id)
         .fetch_optional(&self.db)
@@ -135,7 +135,9 @@ impl QueueManager {
             if state != "open" || dep != "ready" {
                 return Err(anyhow::anyhow!(
                     "Ticket {} is not ready (state='{}', dependency_status='{}')",
-                    ticket_id, state, dep
+                    ticket_id,
+                    state,
+                    dep
                 ));
             }
         } else {

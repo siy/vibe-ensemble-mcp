@@ -66,10 +66,9 @@ impl ToolHandler for CreateTicketTool {
 
         // Use provided execution plan or default to single stage
         let execution_plan = execution_plan_input.unwrap_or_else(|| vec![initial_stage.clone()]);
-        let first_stage = execution_plan
-            .first()
-            .cloned()
-            .ok_or_else(|| crate::error::AppError::BadRequest("Execution plan is empty".to_string()))?;
+        let first_stage = execution_plan.first().cloned().ok_or_else(|| {
+            crate::error::AppError::BadRequest("Execution plan is empty".to_string())
+        })?;
 
         // Validate all stages in execution plan exist as worker types
         if let Err(e) = crate::validation::PipelineValidator::validate_pipeline_stages(
