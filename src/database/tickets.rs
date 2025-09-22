@@ -778,11 +778,17 @@ impl Ticket {
 
     /// Check if ticket dependency status is ready
     pub fn is_dependency_ready(&self) -> bool {
-        matches!(self.get_dependency_status().ok(), Some(DependencyStatus::Ready))
+        matches!(
+            self.get_dependency_status().ok(),
+            Some(DependencyStatus::Ready)
+        )
     }
 
     /// Check if ticket dependency status is blocked
     pub fn is_dependency_blocked(&self) -> bool {
-        matches!(self.get_dependency_status().ok(), Some(DependencyStatus::Blocked))
+        matches!(
+            self.get_dependency_status().ok(),
+            Some(DependencyStatus::Blocked)
+        )
     }
 }

@@ -6,15 +6,15 @@ use tokio::sync::mpsc;
 use tracing::{debug, error, info, warn};
 
 use super::{
-    claims::ClaimManager,
-    consumer::WorkerConsumer,
-    dependencies::DependencyManager,
-    pipeline::PipelineManager,
-    types::TaskItem,
+    claims::ClaimManager, consumer::WorkerConsumer, dependencies::DependencyManager,
+    pipeline::PipelineManager, types::TaskItem,
 };
 use crate::{
     config::Config,
-    database::{tickets::{DependencyStatus, TicketState}, DbPool},
+    database::{
+        tickets::{DependencyStatus, TicketState},
+        DbPool,
+    },
     events::EventPayload,
     sse::EventBroadcaster,
     workers::domain::{TicketId, WorkerCommand, WorkerCompletionEvent, WorkerType},
@@ -139,7 +139,8 @@ impl QueueManager {
             let dep_enum: Result<DependencyStatus, _> = dep.parse();
 
             if !matches!(state_enum.ok(), Some(TicketState::Open))
-                || !matches!(dep_enum.ok(), Some(DependencyStatus::Ready)) {
+                || !matches!(dep_enum.ok(), Some(DependencyStatus::Ready))
+            {
                 return Err(anyhow::anyhow!(
                     "Ticket {} is not ready (state='{}', dependency_status='{}')",
                     ticket_id,
@@ -269,8 +270,16 @@ impl QueueManager {
                 error!("Consumer failed for queue {}: {}", queue_name_for_error, e);
 
                 // Emergency release of claimed tickets when consumer fails
-                if let Err(release_error) = ClaimManager::emergency_release_claimed_tickets(&db_for_cleanup, &event_broadcaster_for_cleanup).await {
-                    error!("Failed to emergency release tickets after consumer failure: {}", release_error);
+                if let Err(release_error) = ClaimManager::emergency_release_claimed_tickets(
+                    &db_for_cleanup,
+                    &event_broadcaster_for_cleanup,
+                )
+                .await
+                {
+                    error!(
+                        "Failed to emergency release tickets after consumer failure: {}",
+                        release_error
+                    );
                 }
             }
         });
@@ -805,4 +814,3 @@ impl QueueManager {
         Ok(())
     }
 }
-

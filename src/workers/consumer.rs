@@ -6,10 +6,7 @@ use tracing::{debug, error, info, warn};
 use super::types::TaskItem;
 use super::{claims::ClaimManager, process::ProcessManager};
 use crate::{
-    config::Config,
-    database::DbPool,
-    events::EventPayload,
-    sse::EventBroadcaster,
+    config::Config, database::DbPool, events::EventPayload, sse::EventBroadcaster,
     workers::domain::WorkerCompletionEvent,
 };
 
@@ -43,10 +40,7 @@ impl WorkerConsumer {
     }
 
     /// Spawn and run the consumer loop for this project/stage combination
-    pub async fn run(
-        self: Arc<Self>,
-        mut receiver: mpsc::Receiver<TaskItem>,
-    ) -> Result<()> {
+    pub async fn run(self: Arc<Self>, mut receiver: mpsc::Receiver<TaskItem>) -> Result<()> {
         let queue_key = format!("{}:{}", self.project_id, self.stage);
         info!(
             project_id = %self.project_id,
@@ -83,12 +77,14 @@ impl WorkerConsumer {
         );
 
         // Attempt to claim the ticket for processing
-        let ticket_id = crate::workers::domain::TicketId::new(task.ticket_id.clone()).map_err(|e| anyhow::anyhow!("Invalid ticket ID: {}", e))?;
+        let ticket_id = crate::workers::domain::TicketId::new(task.ticket_id.clone())
+            .map_err(|e| anyhow::anyhow!("Invalid ticket ID: {}", e))?;
         let worker_id = format!("{}:{}:{}", self.project_id, self.stage, ticket_id.as_str());
-        let claim_result = ClaimManager::claim_for_processing(&self.db, &ticket_id, &worker_id).await;
+        let claim_result =
+            ClaimManager::claim_for_processing(&self.db, &ticket_id, &worker_id).await;
 
         match claim_result {
-            Ok(()) => {},
+            Ok(()) => {}
             Err(e) => {
                 warn!(
                     ticket_id = %task.ticket_id,
@@ -137,9 +133,13 @@ impl WorkerConsumer {
 
                 // Send completion event for processing
                 // Determine next stage from ticket pipeline or use current stage
-                let target_stage = if let Ok(Some(ticket_info)) = crate::database::tickets::Ticket::get_by_id(&self.db, &task.ticket_id).await {
+                let target_stage = if let Ok(Some(ticket_info)) =
+                    crate::database::tickets::Ticket::get_by_id(&self.db, &task.ticket_id).await
+                {
                     // Parse pipeline to find next stage
-                    if let Ok(pipeline) = serde_json::from_str::<Vec<String>>(&ticket_info.ticket.execution_plan) {
+                    if let Ok(pipeline) =
+                        serde_json::from_str::<Vec<String>>(&ticket_info.ticket.execution_plan)
+                    {
                         if let Some(current_idx) = pipeline.iter().position(|s| s == &self.stage) {
                             if current_idx + 1 < pipeline.len() {
                                 pipeline[current_idx + 1].clone()
@@ -151,7 +151,10 @@ impl WorkerConsumer {
                             "completed".to_string()
                         }
                     } else {
-                        warn!("Failed to parse execution plan for ticket {}", task.ticket_id);
+                        warn!(
+                            "Failed to parse execution plan for ticket {}",
+                            task.ticket_id
+                        );
                         "completed".to_string()
                     }
                 } else {
@@ -191,7 +194,13 @@ impl WorkerConsumer {
                 );
 
                 // Release the claim on failure
-                if let Err(release_error) = ClaimManager::release_ticket_claim(&self.db, &self.event_broadcaster, &task.ticket_id).await {
+                if let Err(release_error) = ClaimManager::release_ticket_claim(
+                    &self.db,
+                    &self.event_broadcaster,
+                    &task.ticket_id,
+                )
+                .await
+                {
                     error!(
                         ticket_id = %task.ticket_id,
                         worker_id = %worker_id,
@@ -201,7 +210,8 @@ impl WorkerConsumer {
                 }
 
                 // Emit event for worker failure
-                let event_payload = EventPayload::worker_failed(&worker_id, &self.stage, &self.project_id);
+                let event_payload =
+                    EventPayload::worker_failed(&worker_id, &self.stage, &self.project_id);
                 self.event_broadcaster.broadcast(event_payload);
             }
         }

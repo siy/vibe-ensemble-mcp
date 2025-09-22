@@ -32,11 +32,14 @@ impl AuthTokenManager {
         if let Ok(mut tokens) = self.tokens.write() {
             let now = Instant::now();
 
-            tokens.insert(token.clone(), TokenEntry {
-                created_at: now,
-                last_used: now,
-                usage_count: 0,
-            });
+            tokens.insert(
+                token.clone(),
+                TokenEntry {
+                    created_at: now,
+                    last_used: now,
+                    usage_count: 0,
+                },
+            );
 
             info!("Added token to cache: {}...", &token[..8.min(token.len())]);
             debug!("Total cached tokens: {}", tokens.len());
@@ -54,7 +57,10 @@ impl AuthTokenManager {
                 // Check if token has expired
                 if now.duration_since(entry.created_at) > self.token_lifetime {
                     tokens.remove(token);
-                    warn!("Token expired and removed: {}...", &token[..8.min(token.len())]);
+                    warn!(
+                        "Token expired and removed: {}...",
+                        &token[..8.min(token.len())]
+                    );
                     return false;
                 }
 
@@ -71,7 +77,10 @@ impl AuthTokenManager {
 
                 true
             } else {
-                debug!("Token not found in cache: {}...", &token[..8.min(token.len())]);
+                debug!(
+                    "Token not found in cache: {}...",
+                    &token[..8.min(token.len())]
+                );
                 false
             }
         } else {
@@ -84,7 +93,10 @@ impl AuthTokenManager {
     pub fn remove_token(&self, token: &str) {
         if let Ok(mut tokens) = self.tokens.write() {
             if tokens.remove(token).is_some() {
-                info!("Removed token from cache: {}...", &token[..8.min(token.len())]);
+                info!(
+                    "Removed token from cache: {}...",
+                    &token[..8.min(token.len())]
+                );
             }
         } else {
             warn!("Failed to acquire write lock for token cache when removing token");
@@ -94,16 +106,19 @@ impl AuthTokenManager {
     /// Cleanup expired tokens
     pub fn cleanup_expired_tokens(&self) -> usize {
         if let Ok(mut tokens) = self.tokens.write() {
-        let now = Instant::now();
-        let initial_count = tokens.len();
+            let now = Instant::now();
+            let initial_count = tokens.len();
 
-        tokens.retain(|token, entry| {
-            let is_expired = now.duration_since(entry.created_at) > self.token_lifetime;
-            if is_expired {
-                debug!("Cleaning up expired token: {}...", &token[..8.min(token.len())]);
-            }
-            !is_expired
-        });
+            tokens.retain(|token, entry| {
+                let is_expired = now.duration_since(entry.created_at) > self.token_lifetime;
+                if is_expired {
+                    debug!(
+                        "Cleaning up expired token: {}...",
+                        &token[..8.min(token.len())]
+                    );
+                }
+                !is_expired
+            });
 
             let removed_count = initial_count - tokens.len();
             if removed_count > 0 {
@@ -119,30 +134,30 @@ impl AuthTokenManager {
     /// Get statistics about cached tokens
     pub fn get_stats(&self) -> TokenCacheStats {
         if let Ok(tokens) = self.tokens.read() {
-        let now = Instant::now();
+            let now = Instant::now();
 
-        let mut stats = TokenCacheStats {
-            total_tokens: tokens.len(),
-            expired_tokens: 0,
-            total_usage: 0,
-            average_age_secs: 0.0,
-        };
+            let mut stats = TokenCacheStats {
+                total_tokens: tokens.len(),
+                expired_tokens: 0,
+                total_usage: 0,
+                average_age_secs: 0.0,
+            };
 
-        if tokens.is_empty() {
-            return stats;
-        }
-
-        let mut total_age = Duration::new(0, 0);
-        for entry in tokens.values() {
-            stats.total_usage += entry.usage_count;
-
-            let age = now.duration_since(entry.created_at);
-            total_age += age;
-
-            if age > self.token_lifetime {
-                stats.expired_tokens += 1;
+            if tokens.is_empty() {
+                return stats;
             }
-        }
+
+            let mut total_age = Duration::new(0, 0);
+            for entry in tokens.values() {
+                stats.total_usage += entry.usage_count;
+
+                let age = now.duration_since(entry.created_at);
+                total_age += age;
+
+                if age > self.token_lifetime {
+                    stats.expired_tokens += 1;
+                }
+            }
 
             stats.average_age_secs = total_age.as_secs_f64() / tokens.len() as f64;
             stats

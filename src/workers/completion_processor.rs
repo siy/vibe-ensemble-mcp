@@ -5,8 +5,7 @@ use tokio::sync::mpsc;
 use tracing::{debug, error, info, warn};
 
 use super::{
-    claims::ClaimManager, dependencies::DependencyManager,
-    transitions::TicketTransitionManager,
+    claims::ClaimManager, dependencies::DependencyManager, transitions::TicketTransitionManager,
 };
 use crate::{
     database::DbPool,
@@ -99,22 +98,41 @@ impl CompletionProcessor {
 
         // Process the completion based on command
         let _next_stage = match &event.command {
-            WorkerCommand::AdvanceToStage { target_stage, pipeline_update: _ } => {
-                self.handle_next_stage(ticket_id, target_stage.as_str(), &event.comment, queue_submit_sender)
-                    .await?
+            WorkerCommand::AdvanceToStage {
+                target_stage,
+                pipeline_update: _,
+            } => {
+                self.handle_next_stage(
+                    ticket_id,
+                    target_stage.as_str(),
+                    &event.comment,
+                    queue_submit_sender,
+                )
+                .await?
             }
-            WorkerCommand::ReturnToStage { target_stage, reason: _ } => {
-                self.handle_prev_stage(ticket_id, target_stage.as_str(), &event.comment, queue_submit_sender)
-                    .await?
+            WorkerCommand::ReturnToStage {
+                target_stage,
+                reason: _,
+            } => {
+                self.handle_prev_stage(
+                    ticket_id,
+                    target_stage.as_str(),
+                    &event.comment,
+                    queue_submit_sender,
+                )
+                .await?
             }
             WorkerCommand::RequestCoordinatorAttention { reason: _ } => {
-                self.handle_coordinator_attention(ticket_id, &event.comment).await?;
+                self.handle_coordinator_attention(ticket_id, &event.comment)
+                    .await?;
                 None
             }
         };
 
         // Release the claim
-        if let Err(e) = ClaimManager::release_ticket_claim(&self.db, &self.event_broadcaster, ticket_id).await {
+        if let Err(e) =
+            ClaimManager::release_ticket_claim(&self.db, &self.event_broadcaster, ticket_id).await
+        {
             error!(
                 ticket_id = %ticket_id,
                 error = %e,
@@ -123,12 +141,17 @@ impl CompletionProcessor {
         }
 
         // Emit completion event with proper project info
-        if let Ok(Some(ticket_info)) = crate::database::tickets::Ticket::get_by_id(&self.db, ticket_id).await {
-            let worker_id = format!("{}:{}:{}", ticket_info.ticket.project_id, ticket_info.ticket.current_stage, ticket_id);
+        if let Ok(Some(ticket_info)) =
+            crate::database::tickets::Ticket::get_by_id(&self.db, ticket_id).await
+        {
+            let worker_id = format!(
+                "{}:{}:{}",
+                ticket_info.ticket.project_id, ticket_info.ticket.current_stage, ticket_id
+            );
             let event_payload = EventPayload::worker_completed(
                 &worker_id,
                 &ticket_info.ticket.current_stage,
-                &ticket_info.ticket.project_id
+                &ticket_info.ticket.project_id,
             );
             self.event_broadcaster.broadcast(event_payload);
         } else {
@@ -141,7 +164,9 @@ impl CompletionProcessor {
             &self.event_broadcaster,
             self.queue_manager.clone(),
             &crate::workers::domain::TicketId::new(ticket_id.to_string()).unwrap(),
-        ).await {
+        )
+        .await
+        {
             error!(
                 ticket_id = %ticket_id,
                 error = %e,
@@ -175,7 +200,10 @@ impl CompletionProcessor {
         if next_stage != "completed" {
             let (project_id, _) = self.transition_manager.get_ticket_info(ticket_id).await?;
 
-            if let Err(e) = queue_submit_sender.send((project_id, next_stage.clone(), ticket_id.to_string())).await {
+            if let Err(e) = queue_submit_sender
+                .send((project_id, next_stage.clone(), ticket_id.to_string()))
+                .await
+            {
                 error!(
                     ticket_id = %ticket_id,
                     next_stage = %next_stage,
@@ -207,7 +235,10 @@ impl CompletionProcessor {
         // Submit to queue
         let (project_id, _) = self.transition_manager.get_ticket_info(ticket_id).await?;
 
-        if let Err(e) = queue_submit_sender.send((project_id, prev_stage.clone(), ticket_id.to_string())).await {
+        if let Err(e) = queue_submit_sender
+            .send((project_id, prev_stage.clone(), ticket_id.to_string()))
+            .await
+        {
             error!(
                 ticket_id = %ticket_id,
                 prev_stage = %prev_stage,
@@ -220,11 +251,7 @@ impl CompletionProcessor {
     }
 
     /// Handle coordinator attention
-    async fn handle_coordinator_attention(
-        &self,
-        ticket_id: &str,
-        comment: &str,
-    ) -> Result<()> {
+    async fn handle_coordinator_attention(&self, ticket_id: &str, comment: &str) -> Result<()> {
         // Place ticket on hold for coordinator attention
         self.transition_manager
             .place_on_hold(ticket_id, comment)
@@ -238,5 +265,4 @@ impl CompletionProcessor {
 
         Ok(())
     }
-
 }

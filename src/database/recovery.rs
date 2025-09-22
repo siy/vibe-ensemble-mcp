@@ -134,12 +134,14 @@ impl TicketRecovery {
             // Handle different recovery scenarios
             if ticket.is_open() && ticket.processing_worker_id.is_some() {
                 // Stalled claimed ticket - release claim first
-                let worker_id = ticket.processing_worker_id.as_ref().unwrap_or(&"unknown".to_string()).clone();
+                let worker_id = ticket
+                    .processing_worker_id
+                    .as_ref()
+                    .unwrap_or(&"unknown".to_string())
+                    .clone();
                 warn!(
                     "Releasing stalled claim for ticket {} (worker: {}, stalled for {:.1} minutes)",
-                    ticket.ticket_id,
-                    worker_id,
-                    ticket.minutes_since_update
+                    ticket.ticket_id, worker_id, ticket.minutes_since_update
                 );
 
                 if Self::release_stalled_claim(db, &ticket.ticket_id).await? {
@@ -155,7 +157,10 @@ impl TicketRecovery {
 
                 if Self::recover_on_hold_ticket(db, &ticket.ticket_id).await? {
                     stats.on_hold_tickets_recovered += 1;
-                    info!("Recovered on-hold ticket {} back to open state", ticket.ticket_id);
+                    info!(
+                        "Recovered on-hold ticket {} back to open state",
+                        ticket.ticket_id
+                    );
                 }
             }
 
@@ -172,7 +177,9 @@ impl TicketRecovery {
     }
 
     /// Get tickets ready for resubmission to queues
-    pub async fn get_tickets_for_resubmission(db: &DbPool) -> Result<Vec<(String, String, String)>> {
+    pub async fn get_tickets_for_resubmission(
+        db: &DbPool,
+    ) -> Result<Vec<(String, String, String)>> {
         let rows = sqlx::query(
             r#"
             SELECT ticket_id, project_id, current_stage
