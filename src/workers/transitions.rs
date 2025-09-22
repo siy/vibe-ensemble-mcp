@@ -46,10 +46,9 @@ impl TicketTransitionManager {
         let comment_text = format!("Stage transition: {}", comment);
         sqlx::query!(
             r#"
-            INSERT INTO comments (comment_id, ticket_id, content, created_at)
-            VALUES (?1, ?2, ?3, datetime('now'))
+            INSERT INTO comments (ticket_id, content, created_at)
+            VALUES (?1, ?2, datetime('now'))
             "#,
-            uuid::Uuid::new_v4().to_string(),
             ticket_id,
             comment_text
         )
@@ -91,10 +90,9 @@ impl TicketTransitionManager {
         let comment_text = format!("Placed on hold: {}", reason);
         sqlx::query!(
             r#"
-            INSERT INTO comments (comment_id, ticket_id, content, created_at)
-            VALUES (?1, ?2, ?3, datetime('now'))
+            INSERT INTO comments (ticket_id, content, created_at)
+            VALUES (?1, ?2, datetime('now'))
             "#,
-            uuid::Uuid::new_v4().to_string(),
             ticket_id,
             comment_text
         )
@@ -113,10 +111,9 @@ impl TicketTransitionManager {
     pub async fn get_next_stage(&self, ticket_id: &str) -> Result<Option<String>> {
         let result = sqlx::query!(
             r#"
-            SELECT p.pipeline, t.current_stage
-            FROM tickets t
-            JOIN projects p ON t.project_id = p.project_id
-            WHERE t.ticket_id = ?1
+            SELECT execution_plan, current_stage
+            FROM tickets
+            WHERE ticket_id = ?1
             "#,
             ticket_id
         )
@@ -124,7 +121,7 @@ impl TicketTransitionManager {
         .await?;
 
         if let Some(row) = result {
-            let pipeline: Vec<String> = serde_json::from_str(&row.pipeline)?;
+            let pipeline: Vec<String> = serde_json::from_str(&row.execution_plan)?;
             let current_stage = row.current_stage;
 
             // Find current stage index and return next stage
@@ -142,10 +139,9 @@ impl TicketTransitionManager {
     pub async fn get_previous_stage(&self, ticket_id: &str) -> Result<Option<String>> {
         let result = sqlx::query!(
             r#"
-            SELECT p.pipeline, t.current_stage
-            FROM tickets t
-            JOIN projects p ON t.project_id = p.project_id
-            WHERE t.ticket_id = ?1
+            SELECT execution_plan, current_stage
+            FROM tickets
+            WHERE ticket_id = ?1
             "#,
             ticket_id
         )
@@ -153,7 +149,7 @@ impl TicketTransitionManager {
         .await?;
 
         if let Some(row) = result {
-            let pipeline: Vec<String> = serde_json::from_str(&row.pipeline)?;
+            let pipeline: Vec<String> = serde_json::from_str(&row.execution_plan)?;
             let current_stage = row.current_stage;
 
             // Find current stage index and return previous stage
@@ -191,10 +187,9 @@ impl TicketTransitionManager {
     ) -> Result<bool> {
         let result = sqlx::query!(
             r#"
-            SELECT p.pipeline, t.current_stage
-            FROM tickets t
-            JOIN projects p ON t.project_id = p.project_id
-            WHERE t.ticket_id = ?1
+            SELECT execution_plan, current_stage
+            FROM tickets
+            WHERE ticket_id = ?1
             "#,
             ticket_id
         )
@@ -202,7 +197,7 @@ impl TicketTransitionManager {
         .await?;
 
         if let Some(row) = result {
-            let pipeline: Vec<String> = serde_json::from_str(&row.pipeline)?;
+            let pipeline: Vec<String> = serde_json::from_str(&row.execution_plan)?;
             let current_stage = row.current_stage;
 
             let current_index = pipeline.iter().position(|s| s == &current_stage);
@@ -246,10 +241,9 @@ impl TicketTransitionManager {
         let comment_text = format!("Completed: {}", final_comment);
         sqlx::query!(
             r#"
-            INSERT INTO comments (comment_id, ticket_id, content, created_at)
-            VALUES (?1, ?2, ?3, datetime('now'))
+            INSERT INTO comments (ticket_id, content, created_at)
+            VALUES (?1, ?2, datetime('now'))
             "#,
-            uuid::Uuid::new_v4().to_string(),
             ticket_id,
             comment_text
         )

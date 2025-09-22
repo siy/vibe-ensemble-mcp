@@ -124,7 +124,7 @@ impl WorkerConsumer {
             system_prompt: format!("Process ticket {} in stage {}", task.ticket_id, self.stage),
             server_host: self.config.host.clone(),
             server_port: self.config.port,
-            permission_mode: self.config.permission_mode.clone(),
+            permission_mode: self.config.permission_mode,
         };
 
         match ProcessManager::spawn_worker(spawn_request).await {

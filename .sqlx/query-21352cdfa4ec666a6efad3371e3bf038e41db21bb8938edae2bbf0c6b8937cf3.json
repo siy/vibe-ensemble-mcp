@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "\n            UPDATE tickets\n            SET current_stage = ?1,\n                state = 'open',\n                processing_worker_id = NULL,\n                updated_at = datetime('now')\n            WHERE ticket_id = ?2\n            ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 2
+    },
+    "nullable": []
+  },
+  "hash": "21352cdfa4ec666a6efad3371e3bf038e41db21bb8938edae2bbf0c6b8937cf3"
+}

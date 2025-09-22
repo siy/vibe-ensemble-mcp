@@ -9,6 +9,12 @@ use tracing::{error, info, warn};
 /// Claim management functionality for queue operations
 pub struct ClaimManager;
 
+impl Default for ClaimManager {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl ClaimManager {
     /// Create a new ClaimManager instance
     pub fn new() -> Self {

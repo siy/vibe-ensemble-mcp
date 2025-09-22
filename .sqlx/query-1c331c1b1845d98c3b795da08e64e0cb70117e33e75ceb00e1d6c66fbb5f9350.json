@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "\n            INSERT INTO comments (ticket_id, content, created_at)\n            VALUES (?1, ?2, datetime('now'))\n            ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 2
+    },
+    "nullable": []
+  },
+  "hash": "1c331c1b1845d98c3b795da08e64e0cb70117e33e75ceb00e1d6c66fbb5f9350"
+}

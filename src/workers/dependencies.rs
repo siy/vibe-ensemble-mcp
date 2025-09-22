@@ -10,6 +10,12 @@ use tracing::{error, info, warn};
 /// Dependency management functionality for queue operations
 pub struct DependencyManager;
 
+impl Default for DependencyManager {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl DependencyManager {
     /// Create a new DependencyManager instance
     pub fn new() -> Self {

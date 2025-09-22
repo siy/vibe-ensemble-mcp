@@ -1,0 +1,26 @@
+{
+  "db_name": "SQLite",
+  "query": "\n            SELECT execution_plan, current_stage\n            FROM tickets\n            WHERE ticket_id = ?1\n            ",
+  "describe": {
+    "columns": [
+      {
+        "name": "execution_plan",
+        "ordinal": 0,
+        "type_info": "Text"
+      },
+      {
+        "name": "current_stage",
+        "ordinal": 1,
+        "type_info": "Text"
+      }
+    ],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": [
+      false,
+      false
+    ]
+  },
+  "hash": "763305b824ac5e073e8b85af3a167edab79edf2c7c37a493b28924c2bfae4674"
+}

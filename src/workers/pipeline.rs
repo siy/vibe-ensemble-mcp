@@ -8,6 +8,12 @@ use tracing::info;
 /// Pipeline management functionality for queue operations
 pub struct PipelineManager;
 
+impl Default for PipelineManager {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl PipelineManager {
     /// Create a new PipelineManager instance
     pub fn new() -> Self {

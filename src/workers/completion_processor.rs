@@ -113,21 +113,21 @@ impl CompletionProcessor {
         // Process the completion based on command
         let _next_stage = match &event.command {
             WorkerCommand::AdvanceToStage { target_stage, pipeline_update: _ } => {
-                self.handle_next_stage(&ticket_id, &target_stage.as_str(), &event.comment, queue_submit_sender)
+                self.handle_next_stage(ticket_id, target_stage.as_str(), &event.comment, queue_submit_sender)
                     .await?
             }
             WorkerCommand::ReturnToStage { target_stage, reason: _ } => {
-                self.handle_prev_stage(&ticket_id, &target_stage.as_str(), &event.comment, queue_submit_sender)
+                self.handle_prev_stage(ticket_id, target_stage.as_str(), &event.comment, queue_submit_sender)
                     .await?
             }
             WorkerCommand::RequestCoordinatorAttention { reason: _ } => {
-                self.handle_coordinator_attention(&ticket_id, &event.comment).await?;
+                self.handle_coordinator_attention(ticket_id, &event.comment).await?;
                 None
             }
         };
 
         // Release the claim
-        if let Err(e) = ClaimManager::release_ticket_claim(&self.db, &self.event_broadcaster, &ticket_id).await {
+        if let Err(e) = ClaimManager::release_ticket_claim(&self.db, &self.event_broadcaster, ticket_id).await {
             error!(
                 ticket_id = %ticket_id,
                 error = %e,
