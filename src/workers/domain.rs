@@ -63,6 +63,11 @@ impl TicketId {
     pub fn as_str(&self) -> &str {
         &self.0
     }
+
+    /// Extract ticket ID from worker ID format: "project_id:stage:ticket_id"
+    pub fn extract_from_worker_id(worker_id: &str) -> Option<String> {
+        worker_id.split(':').nth(2).map(|s| s.to_string())
+    }
 }
 
 impl TaskId {

@@ -328,28 +328,28 @@ impl WebSocketManager {
         let request: JsonRpcRequest = serde_json::from_str(message)?;
 
         match request.method.as_str() {
-            // WebSocket-specific methods handled locally
+            // WebSocket-specific methods that need special handling
             "tools/register" => self.handle_tool_registration(client_id, &request).await,
             "notifications/initialized" => self.handle_initialized(client_id).await,
 
-            // Standard MCP methods forwarded to unified handler
-            "initialize" | "tools/list" | "tools/call" | "prompts/list" | "prompts/get" => {
+            // Check if this is a response to a server-initiated request
+            _ if request.id.is_some() => {
+                if let Some(id) = &request.id {
+                    if self.pending_requests.contains_key(&id.to_string()) {
+                        return self.handle_response(client_id, message).await;
+                    }
+                }
+                // Fall through to unified handler for regular requests
                 let response = state.mcp_server.handle_request(state, request).await;
                 let response_value = serde_json::to_value(&response)?;
                 self.send_message(client_id, &response_value).await
             }
 
+            // All other methods (including standard MCP) forwarded to unified handler
             _ => {
-                // Check if this is a response to a server-initiated request
-                if request.id.is_some() {
-                    self.handle_response(client_id, message).await
-                } else {
-                    warn!(
-                        "Unknown method from client {}: {}",
-                        client_id, request.method
-                    );
-                    Ok(())
-                }
+                let response = state.mcp_server.handle_request(state, request).await;
+                let response_value = serde_json::to_value(&response)?;
+                self.send_message(client_id, &response_value).await
             }
         }
     }

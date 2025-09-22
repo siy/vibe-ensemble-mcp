@@ -21,6 +21,7 @@ pub enum EventType {
     TicketUpdated,
     TicketStageChanged,
     TicketClosed,
+    TicketUnblocked,
     WorkerSpawned,
     WorkerFinished,
     WorkerFailed,
@@ -138,6 +139,21 @@ impl EventPayload {
         }
     }
 
+    /// Create a ticket unblocked event
+    pub fn ticket_unblocked(ticket_id: &str, project_id: &str) -> Self {
+        Self {
+            event_type: EventType::TicketUnblocked,
+            timestamp: Utc::now(),
+            data: EventData::Ticket(TicketEventData {
+                ticket_id: ticket_id.to_string(),
+                project_id: project_id.to_string(),
+                stage: None,
+                state: Some("open".to_string()),
+                change_type: "unblocked".to_string(),
+            }),
+        }
+    }
+
     /// Create a ticket stage change event
     pub fn ticket_stage_changed(
         ticket_id: &str,
@@ -168,6 +184,48 @@ impl EventPayload {
                 worker_type: worker_type.to_string(),
                 project_id: project_id.to_string(),
                 status: "spawning".to_string(),
+            }),
+        }
+    }
+
+    /// Create a worker started event
+    pub fn worker_started(worker_id: &str, worker_type: &str, project_id: &str) -> Self {
+        Self {
+            event_type: EventType::WorkerSpawned,
+            timestamp: Utc::now(),
+            data: EventData::Worker(WorkerEventData {
+                worker_id: worker_id.to_string(),
+                worker_type: worker_type.to_string(),
+                project_id: project_id.to_string(),
+                status: "started".to_string(),
+            }),
+        }
+    }
+
+    /// Create a worker completed event
+    pub fn worker_completed(worker_id: &str, worker_type: &str, project_id: &str) -> Self {
+        Self {
+            event_type: EventType::WorkerFinished,
+            timestamp: Utc::now(),
+            data: EventData::Worker(WorkerEventData {
+                worker_id: worker_id.to_string(),
+                worker_type: worker_type.to_string(),
+                project_id: project_id.to_string(),
+                status: "completed".to_string(),
+            }),
+        }
+    }
+
+    /// Create a worker failed event
+    pub fn worker_failed(worker_id: &str, worker_type: &str, project_id: &str) -> Self {
+        Self {
+            event_type: EventType::WorkerFailed,
+            timestamp: Utc::now(),
+            data: EventData::Worker(WorkerEventData {
+                worker_id: worker_id.to_string(),
+                worker_type: worker_type.to_string(),
+                project_id: project_id.to_string(),
+                status: "failed".to_string(),
             }),
         }
     }

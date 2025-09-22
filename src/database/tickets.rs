@@ -14,6 +14,24 @@ pub enum TicketState {
     OnHold,
 }
 
+/// Dependency status enum for type safety
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum DependencyStatus {
+    Ready,
+    Blocked,
+}
+
+/// Priority enum for type safety
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum Priority {
+    Low,
+    Medium,
+    High,
+    Urgent,
+}
+
 impl fmt::Display for TicketState {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
@@ -37,6 +55,52 @@ impl std::str::FromStr for TicketState {
     }
 }
 
+impl fmt::Display for DependencyStatus {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            DependencyStatus::Ready => write!(f, "ready"),
+            DependencyStatus::Blocked => write!(f, "blocked"),
+        }
+    }
+}
+
+impl std::str::FromStr for DependencyStatus {
+    type Err = anyhow::Error;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s {
+            "ready" => Ok(DependencyStatus::Ready),
+            "blocked" => Ok(DependencyStatus::Blocked),
+            _ => Err(anyhow::anyhow!("Invalid dependency status: {}", s)),
+        }
+    }
+}
+
+impl fmt::Display for Priority {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Priority::Low => write!(f, "low"),
+            Priority::Medium => write!(f, "medium"),
+            Priority::High => write!(f, "high"),
+            Priority::Urgent => write!(f, "urgent"),
+        }
+    }
+}
+
+impl std::str::FromStr for Priority {
+    type Err = anyhow::Error;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s {
+            "low" => Ok(Priority::Low),
+            "medium" => Ok(Priority::Medium),
+            "high" => Ok(Priority::High),
+            "urgent" => Ok(Priority::Urgent),
+            _ => Err(anyhow::anyhow!("Invalid priority: {}", s)),
+        }
+    }
+}
+
 impl TicketState {
     /// Get all valid ticket states
     pub fn all() -> Vec<TicketState> {
@@ -54,6 +118,26 @@ impl TicketState {
             TicketState::Open => "open",
             TicketState::Closed => "closed",
             TicketState::OnHold => "on_hold",
+        }
+    }
+}
+
+impl DependencyStatus {
+    pub fn as_sql_value(&self) -> &'static str {
+        match self {
+            DependencyStatus::Ready => "ready",
+            DependencyStatus::Blocked => "blocked",
+        }
+    }
+}
+
+impl Priority {
+    pub fn as_sql_value(&self) -> &'static str {
+        match self {
+            Priority::Low => "low",
+            Priority::Medium => "medium",
+            Priority::High => "high",
+            Priority::Urgent => "urgent",
         }
     }
 }
@@ -667,18 +751,38 @@ impl Ticket {
         self.state.parse()
     }
 
+    /// Get dependency status as typed enum
+    pub fn get_dependency_status(&self) -> Result<DependencyStatus> {
+        self.dependency_status.parse()
+    }
+
+    /// Get priority as typed enum
+    pub fn get_priority(&self) -> Result<Priority> {
+        self.priority.parse()
+    }
+
     /// Check if ticket is open
     pub fn is_open(&self) -> bool {
-        self.state == "open"
+        matches!(self.get_state().ok(), Some(TicketState::Open))
     }
 
     /// Check if ticket is closed
     pub fn is_closed(&self) -> bool {
-        self.state == "closed"
+        matches!(self.get_state().ok(), Some(TicketState::Closed))
     }
 
     /// Check if ticket is on hold
     pub fn is_on_hold(&self) -> bool {
-        self.state == "on_hold"
+        matches!(self.get_state().ok(), Some(TicketState::OnHold))
+    }
+
+    /// Check if ticket dependency status is ready
+    pub fn is_dependency_ready(&self) -> bool {
+        matches!(self.get_dependency_status().ok(), Some(DependencyStatus::Ready))
+    }
+
+    /// Check if ticket dependency status is blocked
+    pub fn is_dependency_blocked(&self) -> bool {
+        matches!(self.get_dependency_status().ok(), Some(DependencyStatus::Blocked))
     }
 }

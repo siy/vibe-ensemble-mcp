@@ -4,11 +4,16 @@ use std::process::Stdio;
 use tokio::process::Command;
 use tracing::{debug, info, warn};
 
-use super::queue::WorkerOutput;
 use super::types::SpawnWorkerRequest;
 use crate::permissions::{
     load_permission_policy, ClaudePermissions, PermissionMode, PermissionPolicy,
 };
+
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct WorkerOutput {
+    pub success: bool,
+    pub message: String,
+}
 
 pub struct ProcessManager;
 

@@ -9,6 +9,10 @@ use tracing::info;
 pub struct PipelineManager;
 
 impl PipelineManager {
+    /// Create a new PipelineManager instance
+    pub fn new() -> Self {
+        Self
+    }
     /// Get the current stage index in the execution plan
     pub fn get_current_stage_index(ticket: &Ticket) -> Result<usize> {
         let pipeline: Vec<String> = serde_json::from_str(&ticket.execution_plan)?;

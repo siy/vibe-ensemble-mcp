@@ -11,6 +11,10 @@ use tracing::{error, info, warn};
 pub struct DependencyManager;
 
 impl DependencyManager {
+    /// Create a new DependencyManager instance
+    pub fn new() -> Self {
+        Self
+    }
     /// Check and unblock dependent tickets when a ticket is completed
     pub async fn check_and_unblock_dependents(
         db: &DbPool,
@@ -74,7 +78,17 @@ impl DependencyManager {
                 .await?;
 
                 // Resubmit to queue for processing
-                let ticket_id = TicketId::new(dependent_ticket.ticket_id.clone()).unwrap();
+                let ticket_id = match TicketId::new(dependent_ticket.ticket_id.clone()) {
+                    Ok(id) => id,
+                    Err(e) => {
+                        error!(
+                            ticket_id = %dependent_ticket.ticket_id,
+                            error = %e,
+                            "Failed to create TicketId for resubmission"
+                        );
+                        continue; // Skip this ticket and continue with others
+                    }
+                };
                 Self::resubmit_parent_ticket(
                     db,
                     event_broadcaster,

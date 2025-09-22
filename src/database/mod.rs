@@ -3,6 +3,7 @@ pub mod dag;
 pub mod events;
 pub mod migrations;
 pub mod projects;
+pub mod recovery;
 pub mod schema;
 pub mod tickets;
 pub mod worker_types;

@@ -1,44 +1,47 @@
 use anyhow::Result;
 use dashmap::DashMap;
-use serde::{Deserialize, Serialize};
 use std::fmt;
 use std::sync::Arc;
 use tokio::sync::mpsc;
-use tracing::{debug, error, info, trace, warn};
-use uuid::Uuid;
+use tracing::{debug, error, info, warn};
 
-use super::types::TaskItem;
-use super::{claims::ClaimManager, dependencies::DependencyManager, pipeline::PipelineManager};
+use super::{
+    claims::ClaimManager,
+    consumer::WorkerConsumer,
+    dependencies::DependencyManager,
+    pipeline::PipelineManager,
+    types::TaskItem,
+};
 use crate::{
     config::Config,
-    database::DbPool,
+    database::{tickets::{DependencyStatus, TicketState}, DbPool},
     events::EventPayload,
-    permissions::PermissionMode,
     sse::EventBroadcaster,
     workers::domain::{TicketId, WorkerCommand, WorkerCompletionEvent, WorkerType},
 };
+use tracing::trace;
+use uuid::Uuid;
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+// Simplified worker output for this implementation
+#[derive(Debug, Clone)]
 pub struct WorkerOutput {
-    pub ticket_id: Option<String>,
-    pub outcome: WorkerOutcome,
-    pub target_stage: Option<String>,
-    pub pipeline_update: Option<Vec<String>>,
-    pub comment: String,
-    pub reason: String,
+    pub success: bool,
+    pub message: String,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(rename_all = "snake_case")]
+#[derive(Debug, Clone)]
 pub enum WorkerOutcome {
     NextStage,
     PrevStage,
     CoordinatorAttention,
 }
 
+/// Default buffer size for bounded channels
+const DEFAULT_CHANNEL_BUFFER_SIZE: usize = 1000;
+
 pub struct QueueManager {
-    queues: DashMap<String, mpsc::UnboundedSender<TaskItem>>,
-    completion_sender: mpsc::UnboundedSender<WorkerCompletionEvent>,
+    queues: DashMap<String, mpsc::Sender<TaskItem>>,
+    completion_sender: mpsc::Sender<WorkerCompletionEvent>,
     config: Config,
     event_broadcaster: EventBroadcaster,
     db: DbPool,
@@ -57,7 +60,7 @@ impl fmt::Debug for QueueManager {
 
 impl QueueManager {
     pub fn new(db: DbPool, config: Config, event_broadcaster: EventBroadcaster) -> Arc<Self> {
-        let (completion_sender, completion_receiver) = mpsc::unbounded_channel();
+        let (completion_sender, completion_receiver) = mpsc::channel(DEFAULT_CHANNEL_BUFFER_SIZE);
 
         let queue_manager = Arc::new(Self {
             queues: DashMap::new(),
@@ -79,7 +82,7 @@ impl QueueManager {
     }
 
     /// Get a sender for WorkerCompletionEvent processing
-    pub fn get_completion_sender(&self) -> mpsc::UnboundedSender<WorkerCompletionEvent> {
+    pub fn get_completion_sender(&self) -> mpsc::Sender<WorkerCompletionEvent> {
         self.completion_sender.clone()
     }
 
@@ -132,7 +135,11 @@ impl QueueManager {
         .fetch_optional(&self.db)
         .await?;
         if let Some((state, dep)) = readiness {
-            if state != "open" || dep != "ready" {
+            let state_enum: Result<TicketState, _> = state.parse();
+            let dep_enum: Result<DependencyStatus, _> = dep.parse();
+
+            if !matches!(state_enum.ok(), Some(TicketState::Open))
+                || !matches!(dep_enum.ok(), Some(DependencyStatus::Ready)) {
                 return Err(anyhow::anyhow!(
                     "Ticket {} is not ready (state='{}', dependency_status='{}')",
                     ticket_id,
@@ -182,7 +189,7 @@ impl QueueManager {
         };
 
         // Send task to queue
-        if sender.send(task).is_err() {
+        if sender.send(task).await.is_err() {
             let _ = ClaimManager::release_ticket_if_claimed(
                 &self.db,
                 &self.event_broadcaster,
@@ -213,7 +220,7 @@ impl QueueManager {
         queue_name: &str,
         project_id: &str,
         worker_type: &str,
-    ) -> Result<mpsc::UnboundedSender<TaskItem>> {
+    ) -> Result<mpsc::Sender<TaskItem>> {
         // Check if queue already exists
         if let Some(sender) = self.queues.get(queue_name) {
             trace!("[QueueManager] Using existing queue: {}", queue_name);
@@ -225,7 +232,7 @@ impl QueueManager {
             "[QueueManager] Creating new queue and consumer: {}",
             queue_name
         );
-        let (sender, receiver) = mpsc::unbounded_channel();
+        let (sender, receiver) = mpsc::channel(DEFAULT_CHANNEL_BUFFER_SIZE);
 
         // Insert sender into map
         self.queues.insert(queue_name.to_string(), sender.clone());
@@ -238,42 +245,32 @@ impl QueueManager {
         let queue_name_for_error = queue_name_clone.clone();
         let completion_sender = self.completion_sender.clone();
         let db_clone = self.db.clone();
-        let server_host = self.config.host.clone();
-        let server_port = self.config.port;
-        let permission_mode = self.config.permission_mode;
+        let _server_host = self.config.host.clone();
+        let _server_port = self.config.port;
+        let _permission_mode = self.config.permission_mode;
 
-        // Clone these for emergency release (after they're moved to consumer)
-        let emergency_db = db_clone.clone();
-        let emergency_project_id = project_id_clone.clone();
-        let emergency_worker_type = worker_type_clone.clone();
+        let config_clone = self.config.clone();
+        let event_broadcaster_clone = self.event_broadcaster.clone();
 
         tokio::spawn(async move {
-            let consumer = WorkerConsumer::new(
-                project_id_clone,
-                worker_type_clone,
-                queue_name_clone,
-                receiver,
-                completion_sender,
-                db_clone,
-                server_host,
-                server_port,
-                permission_mode,
-            );
+            let db_for_cleanup = db_clone.clone();
+            let event_broadcaster_for_cleanup = event_broadcaster_clone.clone();
 
-            if let Err(e) = consumer.start().await {
+            let consumer = Arc::new(WorkerConsumer::new(
+                project_id_clone,
+                worker_type_clone, // This becomes the 'stage' parameter in the new consumer
+                config_clone,
+                db_clone,
+                completion_sender,
+                event_broadcaster_clone,
+            ));
+
+            if let Err(e) = consumer.run(receiver).await {
                 error!("Consumer failed for queue {}: {}", queue_name_for_error, e);
-                // Critical: Release any claimed tickets for this queue when thread fails entirely
-                if let Err(release_err) = WorkerConsumer::emergency_release_claimed_tickets(
-                    &emergency_db,
-                    &emergency_project_id,
-                    &emergency_worker_type,
-                )
-                .await
-                {
-                    error!(
-                        "Failed to release claimed tickets after consumer failure: {}",
-                        release_err
-                    );
+
+                // Emergency release of claimed tickets when consumer fails
+                if let Err(release_error) = ClaimManager::emergency_release_claimed_tickets(&db_for_cleanup, &event_broadcaster_for_cleanup).await {
+                    error!("Failed to emergency release tickets after consumer failure: {}", release_error);
                 }
             }
         });
@@ -303,7 +300,7 @@ impl QueueManager {
     /// Start processing WorkerCompletionEvent messages with auto-enqueue
     pub async fn start_completion_event_processor(
         self: Arc<Self>,
-        mut receiver: mpsc::UnboundedReceiver<WorkerCompletionEvent>,
+        mut receiver: mpsc::Receiver<WorkerCompletionEvent>,
     ) {
         info!("[QueueManager] Starting WorkerCompletionEvent processor with auto-enqueue");
 
@@ -809,448 +806,3 @@ impl QueueManager {
     }
 }
 
-/// Simplified consumer that processes tasks from mpsc channel
-struct WorkerConsumer {
-    project_id: String,
-    worker_type: String,
-    queue_name: String,
-    receiver: mpsc::UnboundedReceiver<TaskItem>,
-    completion_sender: mpsc::UnboundedSender<WorkerCompletionEvent>,
-    db: DbPool,
-    server_host: String,
-    server_port: u16,
-    permission_mode: PermissionMode,
-}
-
-impl WorkerConsumer {
-    #[allow(clippy::too_many_arguments)]
-    fn new(
-        project_id: String,
-        worker_type: String,
-        queue_name: String,
-        receiver: mpsc::UnboundedReceiver<TaskItem>,
-        completion_sender: mpsc::UnboundedSender<WorkerCompletionEvent>,
-        db: DbPool,
-        server_host: String,
-        server_port: u16,
-        permission_mode: PermissionMode,
-    ) -> Self {
-        Self {
-            project_id,
-            worker_type,
-            queue_name,
-            receiver,
-            completion_sender,
-            db,
-            server_host,
-            server_port,
-            permission_mode,
-        }
-    }
-
-    async fn start(mut self) -> Result<()> {
-        info!(
-            "[WorkerConsumer] Starting consumer for {}-{} (queue: {})",
-            self.project_id, self.worker_type, self.queue_name
-        );
-
-        while let Some(task) = self.receiver.recv().await {
-            trace!(
-                "[WorkerConsumer] Received task {} for ticket {}",
-                task.task_id,
-                task.ticket_id
-            );
-
-            if let Err(e) = self.process_task(&task).await {
-                error!("Failed to process task {}: {}", task.task_id, e);
-                // Continue processing other tasks even if one fails
-            }
-        }
-
-        info!(
-            "[WorkerConsumer] Consumer shut down for queue: {}",
-            self.queue_name
-        );
-        Ok(())
-    }
-
-    async fn process_task(&self, task: &TaskItem) -> Result<()> {
-        trace!(
-            "[WorkerConsumer] Processing task {} for ticket {}",
-            task.task_id,
-            task.ticket_id
-        );
-
-        info!(
-            "[WorkerConsumer] Processing ticket {} with worker type {}",
-            task.ticket_id, self.worker_type
-        );
-
-        // Execute worker and handle all 3 cases
-        let worker_output = match self.execute_worker(&task.ticket_id).await {
-            Ok(mut output) => {
-                // Case 1: Success - fill ticket_id and pass through
-                output.ticket_id = Some(task.ticket_id.clone());
-                info!(
-                    "Worker completed successfully for ticket {} with outcome {:?}",
-                    task.ticket_id, output.outcome
-                );
-                output
-            }
-            Err(e) => {
-                // Case 2: Worker crash or Case 3: Internal error
-                // Both handled as CoordinatorAttention
-                error!("Worker failed for ticket {}: {}", task.ticket_id, e);
-
-                WorkerOutput {
-                    ticket_id: Some(task.ticket_id.clone()),
-                    outcome: crate::workers::queue::WorkerOutcome::CoordinatorAttention,
-                    target_stage: None,
-                    pipeline_update: None,
-                    comment: format!(
-                        "Worker {} failed for ticket {}",
-                        self.worker_type, task.ticket_id
-                    ),
-                    reason: format!(
-                        "Worker execution failed: {}. Worker type: {}, Queue: {}",
-                        e, self.worker_type, self.queue_name
-                    ),
-                }
-            }
-        };
-
-        // Convert WorkerOutput to WorkerCompletionEvent
-        let completion_event = match self.convert_to_completion_event(&worker_output).await {
-            Ok(event) => event,
-            Err(e) => {
-                error!(
-                    "Failed to convert WorkerOutput to WorkerCompletionEvent for ticket {}: {}",
-                    task.ticket_id, e
-                );
-                // Release claim on conversion failure to prevent ticket from being stuck
-                if let Err(release_err) = self.release_ticket_claim(&task.ticket_id).await {
-                    error!(
-                        "Failed to release claim for ticket {} after conversion error: {}",
-                        task.ticket_id, release_err
-                    );
-                }
-                return Err(e);
-            }
-        };
-
-        // Send event to centralized processor
-        if self.completion_sender.send(completion_event).is_err() {
-            warn!(
-                "Output processor has shut down, cannot send completion event for ticket {}",
-                task.ticket_id
-            );
-            // Release claim when event cannot be sent to prevent ticket from being stuck
-            if let Err(release_err) = self.release_ticket_claim(&task.ticket_id).await {
-                error!(
-                    "Failed to release claim for ticket {} after send failure: {}",
-                    task.ticket_id, release_err
-                );
-            }
-            return Err(anyhow::anyhow!("Output processor shut down"));
-        }
-
-        Ok(())
-    }
-
-    /// Convert WorkerOutput to WorkerCompletionEvent with validation
-    async fn convert_to_completion_event(
-        &self,
-        output: &WorkerOutput,
-    ) -> Result<WorkerCompletionEvent> {
-        let ticket_id_str = output
-            .ticket_id
-            .as_ref()
-            .ok_or_else(|| anyhow::anyhow!("WorkerOutput must have ticket_id"))?;
-
-        let ticket_id = TicketId::new(ticket_id_str.clone())?;
-
-        // Convert WorkerOutcome to WorkerCommand with validation
-        let command = match output.outcome {
-            WorkerOutcome::NextStage => {
-                if let Some(ref target_stage_str) = output.target_stage {
-                    // CRITICAL: Validate that target stage worker type exists before proceeding
-                    let validation_result = self.validate_target_stage(target_stage_str).await;
-
-                    match validation_result {
-                        Ok(true) => {
-                            // Target stage exists, proceed normally
-                            let target_stage = WorkerType::new(target_stage_str.clone())?;
-                            let pipeline_update = if let Some(pipeline) = &output.pipeline_update {
-                                let mut out = Vec::with_capacity(pipeline.len());
-                                for s in pipeline {
-                                    out.push(WorkerType::new(s.clone())?);
-                                }
-                                Some(out)
-                            } else {
-                                None
-                            };
-
-                            WorkerCommand::AdvanceToStage {
-                                target_stage,
-                                pipeline_update,
-                            }
-                        }
-                        Ok(false) => {
-                            // Target stage does not exist - convert to coordinator attention
-                            // This ensures invalid data never reaches the database
-                            warn!(
-                                "Worker specified non-existent target stage '{}' for project '{}'. Converting to coordinator attention.",
-                                target_stage_str, self.project_id
-                            );
-
-                            WorkerCommand::RequestCoordinatorAttention {
-                                reason: format!(
-                                    "Worker specified non-existent target stage '{}' for project '{}'. The stage pipeline contains a reference to a worker type that does not exist. Ticket needs to be reset to planning stage for re-planning with proper worker type validation.",
-                                    target_stage_str, self.project_id
-                                ),
-                            }
-                        }
-                        Err(e) => {
-                            // Database error during validation - fail safe to coordinator attention
-                            error!(
-                                "Failed to validate target stage '{}' for project '{}': {}",
-                                target_stage_str, self.project_id, e
-                            );
-
-                            WorkerCommand::RequestCoordinatorAttention {
-                                reason: format!(
-                                    "Failed to validate target stage '{}' due to database error: {}. Ticket needs manual review.",
-                                    target_stage_str, e
-                                ),
-                            }
-                        }
-                    }
-                } else {
-                    return Err(anyhow::anyhow!("NextStage outcome requires target_stage"));
-                }
-            }
-            WorkerOutcome::PrevStage => {
-                if let Some(ref target_stage_str) = output.target_stage {
-                    // CRITICAL: Validate that target stage worker type exists before proceeding
-                    let validation_result = self.validate_target_stage(target_stage_str).await;
-
-                    match validation_result {
-                        Ok(true) => {
-                            // Target stage exists, proceed normally
-                            let target_stage = WorkerType::new(target_stage_str.clone())?;
-                            WorkerCommand::ReturnToStage {
-                                target_stage,
-                                reason: output.reason.clone(),
-                            }
-                        }
-                        Ok(false) => {
-                            // Target stage does not exist - convert to coordinator attention
-                            warn!(
-                                "Worker specified non-existent target stage '{}' for project '{}' in PrevStage. Converting to coordinator attention.",
-                                target_stage_str, self.project_id
-                            );
-
-                            WorkerCommand::RequestCoordinatorAttention {
-                                reason: format!(
-                                    "Worker specified non-existent target stage '{}' for project '{}' in PrevStage operation. The stage pipeline contains a reference to a worker type that does not exist. Ticket needs to be reset to planning stage for re-planning.",
-                                    target_stage_str, self.project_id
-                                ),
-                            }
-                        }
-                        Err(e) => {
-                            // Database error during validation - fail safe to coordinator attention
-                            error!(
-                                "Failed to validate target stage '{}' for project '{}' in PrevStage: {}",
-                                target_stage_str, self.project_id, e
-                            );
-
-                            WorkerCommand::RequestCoordinatorAttention {
-                                reason: format!(
-                                    "Failed to validate target stage '{}' in PrevStage due to database error: {}. Ticket needs manual review.",
-                                    target_stage_str, e
-                                ),
-                            }
-                        }
-                    }
-                } else {
-                    return Err(anyhow::anyhow!("PrevStage outcome requires target_stage"));
-                }
-            }
-            WorkerOutcome::CoordinatorAttention => WorkerCommand::RequestCoordinatorAttention {
-                reason: output.reason.clone(),
-            },
-        };
-
-        Ok(WorkerCompletionEvent {
-            ticket_id,
-            command,
-            comment: output.comment.clone(),
-        })
-    }
-
-    /// Validate that a target stage worker type exists in the database
-    async fn validate_target_stage(&self, target_stage: &str) -> Result<bool> {
-        match crate::database::worker_types::WorkerType::get_by_type(
-            &self.db,
-            &self.project_id,
-            target_stage,
-        )
-        .await
-        {
-            Ok(Some(_)) => Ok(true),
-            Ok(None) => Ok(false),
-            Err(e) => Err(e),
-        }
-    }
-
-    /// Execute actual worker process - spawn Claude Code worker using ProcessManager
-    async fn execute_worker(&self, ticket_id: &str) -> Result<WorkerOutput> {
-        use crate::workers::process::ProcessManager;
-        use crate::workers::types::SpawnWorkerRequest;
-        use uuid::Uuid;
-
-        info!(
-            "[execute_worker] Processing ticket {} with worker type {}",
-            ticket_id, self.worker_type
-        );
-
-        // Gather required data for SpawnWorkerRequest from database
-        let worker_id = format!("worker-{}", Uuid::new_v4());
-
-        // Get project path from database
-        let project = crate::database::projects::Project::get_by_name(&self.db, &self.project_id)
-            .await?
-            .ok_or_else(|| anyhow::anyhow!("Project '{}' not found", self.project_id))?;
-
-        // Get system prompt from worker type in database
-        let worker_type_info = crate::database::worker_types::WorkerType::get_by_type(
-            &self.db,
-            &self.project_id,
-            &self.worker_type,
-        )
-        .await?
-        .ok_or_else(|| {
-            anyhow::anyhow!(
-                "Worker type '{}' not found for project '{}'",
-                self.worker_type,
-                self.project_id
-            )
-        })?;
-
-        let spawn_request = SpawnWorkerRequest {
-            worker_id,
-            project_id: self.project_id.clone(),
-            worker_type: self.worker_type.clone(),
-            queue_name: self.queue_name.clone(),
-            ticket_id: ticket_id.to_string(),
-            project_path: project.path,
-            system_prompt: worker_type_info.system_prompt,
-            server_host: self.server_host.clone(),
-            server_port: self.server_port,
-            permission_mode: self.permission_mode,
-        };
-
-        ProcessManager::spawn_worker(spawn_request).await
-    }
-
-    /// Release claim for a specific ticket
-    async fn release_ticket_claim(&self, ticket_id: &str) -> Result<()> {
-        debug!("Releasing claim for ticket {} due to error", ticket_id);
-
-        let result = sqlx::query(
-            "UPDATE tickets SET processing_worker_id = NULL, updated_at = datetime('now') WHERE ticket_id = ?1 AND processing_worker_id IS NOT NULL"
-        )
-        .bind(ticket_id)
-        .execute(&self.db)
-        .await?;
-
-        if result.rows_affected() > 0 {
-            warn!(
-                "Released claim for ticket {} due to processing error",
-                ticket_id
-            );
-        } else {
-            debug!("Ticket {} was not claimed, no release needed", ticket_id);
-        }
-
-        Ok(())
-    }
-
-    /// Emergency function to release all claimed tickets for a specific worker type when consumer thread fails
-    async fn emergency_release_claimed_tickets(
-        db: &DbPool,
-        project_id: &str,
-        worker_type: &str,
-    ) -> Result<()> {
-        warn!(
-            "Emergency releasing claimed tickets for project={}, worker_type={}",
-            project_id, worker_type
-        );
-
-        // First capture the ticket IDs that will be released
-        let worker_prefix = format!("consumer-{}-", worker_type);
-
-        let released_tickets = sqlx::query_scalar::<_, String>(
-            r#"
-            SELECT ticket_id FROM tickets
-            WHERE project_id = ?1
-              AND current_stage = ?2
-              AND processing_worker_id IS NOT NULL
-              AND processing_worker_id LIKE ?3
-            "#,
-        )
-        .bind(project_id)
-        .bind(worker_type)
-        .bind(format!("{}%", worker_prefix))
-        .fetch_all(db)
-        .await?;
-
-        if !released_tickets.is_empty() {
-            // Now release the tickets
-            let result = sqlx::query(
-                r#"
-                UPDATE tickets
-                SET processing_worker_id = NULL, updated_at = datetime('now')
-                WHERE project_id = ?1
-                  AND current_stage = ?2
-                  AND processing_worker_id IS NOT NULL
-                  AND processing_worker_id LIKE ?3
-                "#,
-            )
-            .bind(project_id)
-            .bind(worker_type)
-            .bind(format!("{}%", worker_prefix))
-            .execute(db)
-            .await?;
-
-            error!(
-                "Emergency released {} claimed tickets for project={}, worker_type={} due to consumer thread failure",
-                result.rows_affected(),
-                project_id,
-                worker_type
-            );
-
-            // Add system comments to released tickets explaining what happened
-            for ticket_id in &released_tickets {
-                let _ = crate::database::comments::Comment::create(
-                    db,
-                    ticket_id,
-                    Some("system"),
-                    Some("system"),
-                    Some(999), // Special stage for system messages
-                    &format!(
-                        "🚨 EMERGENCY RELEASE: Consumer thread for worker type '{}' failed. Ticket released for manual intervention or retry.",
-                        worker_type
-                    ),
-                ).await;
-            }
-        } else {
-            info!(
-                "No claimed tickets found to release for project={}, worker_type={}",
-                project_id, worker_type
-            );
-        }
-
-        Ok(())
-    }
-}

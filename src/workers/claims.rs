@@ -10,6 +10,10 @@ use tracing::{error, info, warn};
 pub struct ClaimManager;
 
 impl ClaimManager {
+    /// Create a new ClaimManager instance
+    pub fn new() -> Self {
+        Self
+    }
     /// Claim a ticket for processing (wrapper around database function)
     pub async fn claim_for_processing(
         db: &DbPool,
