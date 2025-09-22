@@ -5,11 +5,10 @@ use tokio::sync::mpsc;
 use tracing::{debug, error, info, warn};
 
 use super::{
-    claims::ClaimManager, dependencies::DependencyManager, pipeline::PipelineManager,
+    claims::ClaimManager, dependencies::DependencyManager,
     transitions::TicketTransitionManager,
 };
 use crate::{
-    config::Config,
     database::DbPool,
     events::EventPayload,
     sse::EventBroadcaster,
@@ -37,11 +36,7 @@ pub enum WorkerOutcome {
 /// Processes worker completion events and handles ticket state transitions
 pub struct CompletionProcessor {
     db: DbPool,
-    config: Config,
     event_broadcaster: EventBroadcaster,
-    claim_manager: ClaimManager,
-    dependency_manager: DependencyManager,
-    pipeline_manager: PipelineManager,
     transition_manager: TicketTransitionManager,
     queue_manager: std::sync::Arc<super::queue::QueueManager>,
 }
@@ -49,22 +44,14 @@ pub struct CompletionProcessor {
 impl CompletionProcessor {
     pub fn new(
         db: DbPool,
-        config: Config,
         event_broadcaster: EventBroadcaster,
         queue_manager: std::sync::Arc<super::queue::QueueManager>,
     ) -> Self {
-        let claim_manager = ClaimManager::new();
-        let dependency_manager = DependencyManager::new();
-        let pipeline_manager = PipelineManager::new();
         let transition_manager = TicketTransitionManager::new(db.clone());
 
         Self {
             db,
-            config,
             event_broadcaster,
-            claim_manager,
-            dependency_manager,
-            pipeline_manager,
             transition_manager,
             queue_manager,
         }
