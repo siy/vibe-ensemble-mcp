@@ -2,6 +2,10 @@
 
 A multi-agent coordination system that enables Claude Code to manage specialized AI workers for complex development tasks.
 
+This architecture addresses context drift and focus dilution in complex projects by breaking 
+them down into specialized stages, allowing workers to focus on specific tasks. The high-level planning is left to the 
+coordinator, which serves as a single point of control.  
+
 ## What It Does
 
 Vibe-Ensemble allows you to break down complex projects into specialized stages, with each stage handled by a dedicated AI worker:
@@ -83,11 +87,11 @@ Once the server is running and Claude Code is configured, here's the typical wor
 
 The coordinator will break down your project into tickets, spawn appropriate workers for each stage, and manage the workflow automatically.
 
-**WARNING:** Vibe-Ensemble is still work in progress. Some features may not be fully implemented or may have bugs. So, 
+**WARNING:** Vibe-Ensemble is still a work in progress. Some features may not be fully implemented or may have bugs. So, 
 periodically ask Claude Code to check ticket status and event queue. Sometimes it may report issues, but not address them.
 Sending prompt like "Act as a coordinator" usually helps.
 
-**SECURITY WARNING:** Always review and test permission configurations before production use. While the permission system is designed to be secure, proper configuration is essential. Use 'bypass' mode only in isolated development environments as it grants unrestricted access. For production use, the default 'file' mode provides explicit permission control, while 'inherit' mode is available for advanced scenarios.
+**SECURITY WARNING:** Always review and test permission configurations before production use. While the permission system is designed to be secure, proper configuration is essential. Use 'bypass' mode only in isolated development environments as it grants unrestricted access. For production use, the default 'file' mode provides explicit permission control.
 
 ### Example Project Types
 
@@ -224,16 +228,8 @@ vibe-ensemble-mcp --permission-mode file
 vibe-ensemble-mcp
 ```
 
-#### 2. **Inherit Mode** (`--permission-mode inherit`)
-- **Use Case**: When you want workers to have the same permissions as your coordinator session
-- **Behavior**: Workers inherit permissions from your project's `.claude/settings.local.json` file
-- **Security Level**: 🛡️ **Project-level control** - uses the same permissions as your interactive Claude Code session
 
-```bash
-vibe-ensemble-mcp --permission-mode inherit
-```
-
-#### 3. **Bypass Mode** (`--permission-mode bypass`)
+#### 2. **Bypass Mode** (`--permission-mode bypass`)
 - **Use Case**: Development, testing, or when you need unrestricted access
 - **Behavior**: Workers run with `--dangerously-skip-permissions` flag
 - **Security Level**: ⚠️ **No restrictions** - workers have access to all tools and system capabilities
@@ -243,7 +239,7 @@ vibe-ensemble-mcp --permission-mode inherit
 vibe-ensemble-mcp --permission-mode bypass
 ```
 
-To change permission mode, start the server with: `vibe-ensemble-mcp --permission-mode [file|inherit|bypass]`
+To change permission mode, start the server with: `vibe-ensemble-mcp --permission-mode [file|bypass]`
 
 ### Permission File Format
 
@@ -291,23 +287,6 @@ All permission modes use the same JSON structure that Claude Code uses internall
 
 ### Setting Up Permissions
 
-#### For Inherit Mode (Recommended)
-
-1. **Auto-setup** (creates basic permissions):
-   ```bash
-   ./vibe-ensemble-mcp --configure-claude-code --port 3000
-   ```
-
-2. **Manual setup** - Create/edit `.claude/settings.local.json`:
-   ```json
-   {
-     "permissions": {
-       "allow": ["Read", "Write", "Edit", "Bash", "mcp__*"],
-       "deny": ["WebFetch", "WebSearch"],
-       "defaultMode": "acceptEdits"
-     }
-   }
-   ```
 
 #### For File Mode (Advanced)
 
@@ -375,8 +354,7 @@ Permission files are read fresh from disk each time a worker starts, allowing yo
 
 **Security concerns**: Switch to `file` mode and create restrictive permissions tailored to your specific use case
 
-**Permission file location issues**: Ensure files are in the correct location relative to your project directory:
-- Inherit mode: `.claude/settings.local.json`
+**Permission file location issues**: Ensure the file is in the correct location relative to your project directory:
 - File mode: `.vibe-ensemble-mcp/worker-permissions.json`
 
 ## Customization

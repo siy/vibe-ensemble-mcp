@@ -69,7 +69,10 @@
       <section class="section">
         <h2>What is Vibe Ensemble?</h2>
         <p>
-          Vibe Ensemble is an MCP server that turns Claude Code into a reliable multi‑agent coordinator. You define projects and specialized worker types, create tickets with a minimal pipeline, and Vibe Ensemble handles the handoffs. Tasks progress through focused stages without context drift or focus dilution.
+          Vibe Ensemble is a multi-agent coordination system that enables Claude Code to manage specialized AI workers for complex development tasks.
+        </p>
+        <p>
+          This architecture addresses context drift and focus dilution in complex projects by breaking them down into specialized stages, allowing workers to focus on specific tasks. The high-level planning is left to the coordinator, which serves as a single point of control.
         </p>
       </section>
 
@@ -197,15 +200,11 @@ mkdir vibe-coordinator && cd vibe-coordinator && vibe-ensemble-mcp --configure-c
             <p>Workers use project-specific permissions from <code>.vibe-ensemble-mcp/worker-permissions.json</code>. Each project gets comprehensive default permissions including all MCP tools and essential Claude Code tools (Read, Write, Edit, Bash, etc.). Provides project isolation and security.</p>
           </div>
           <div class="feature-card">
-            <h3>Inherit Mode</h3>
-            <p>Workers inherit permissions from the project's <code>.claude/settings.local.json</code>. Useful when you want workers to have the same permissions as your coordinator session.</p>
-          </div>
-          <div class="feature-card">
             <h3>Bypass Mode</h3>
             <p>Workers run without permission restrictions (--dangerously-skip-permissions). Not recommended for production use. Only use in controlled environments where you trust all code being executed.</p>
           </div>
         </div>
-        <p>To change permission mode, start the server with: <code>vibe-ensemble-mcp --permission-mode [file|inherit|bypass]</code></p>
+        <p>To change permission mode, start the server with: <code>vibe-ensemble-mcp --permission-mode [file|bypass]</code></p>
       </section>
 
       <section class="section">
@@ -229,7 +228,7 @@ mkdir vibe-coordinator && cd vibe-coordinator && vibe-ensemble-mcp --configure-c
       <section class="section">
         <h2>Security & Status</h2>
         <ul>
-          <li>Worker permission modes: <code>file</code> (default, settings from .vibe-ensemble-mcp/worker-permissions.json), <code>inherit</code> (project Claude Code permissions), or <code>bypass</code> (not recommended).</li>
+          <li>Worker permission modes: <code>file</code> (default, settings from .vibe-ensemble-mcp/worker-permissions.json) or <code>bypass</code> (not recommended).</li>
           <li>SSE and MCP integrations are evolving.</li>
           <li>Interfaces may change between early releases.</li>
           <li>Use in controlled environments and review the repository README for the latest warnings.</li>
