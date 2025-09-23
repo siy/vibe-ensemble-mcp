@@ -62,26 +62,8 @@ pub async fn run_server(config: Config) -> Result<()> {
         config.max_concurrent_client_requests,
     ));
 
-    // Generate WebSocket token and create lock file
-    let websocket_token = {
-        let lock_manager = LockFileManager::new(config.host.clone(), config.port);
-        match lock_manager.create_lock_file() {
-            Ok(token) => {
-                info!("Created lock file with WebSocket token");
-                Some(token)
-            }
-            Err(e) => {
-                error!("Failed to create lock file: {}", e);
-                None
-            }
-        }
-    };
-
-    // Create auth token manager and add the websocket token if available
+    // Create auth token manager (we'll add the websocket token after binding to the port)
     let auth_manager = Arc::new(AuthTokenManager::new(3600)); // 1 hour token lifetime
-    if let Some(ref token) = websocket_token {
-        auth_manager.add_token(token.clone());
-    }
 
     let state = AppState {
         config: config.clone(),
@@ -90,7 +72,7 @@ pub async fn run_server(config: Config) -> Result<()> {
         event_broadcaster,
         mcp_server,
         websocket_manager,
-        websocket_token,
+        websocket_token: None, // Will be set after binding to port
         auth_manager: Arc::clone(&auth_manager),
     };
 
@@ -146,6 +128,25 @@ pub async fn run_server(config: Config) -> Result<()> {
     info!("Server listening on {}", address);
 
     let listener = tokio::net::TcpListener::bind(&address).await?;
+
+    // Now that we're successfully bound to the port, create/update the Claude IDE lock file
+    let _websocket_token = {
+        let lock_manager = LockFileManager::new(config.host.clone(), config.port);
+        match lock_manager.create_or_update_claude_lock_file() {
+            Ok(token) => {
+                info!("Created/updated Claude IDE lock file with WebSocket token");
+                auth_manager.add_token(token.clone());
+                Some(token)
+            }
+            Err(e) => {
+                error!("Failed to create Claude IDE lock file: {}", e);
+                None
+            }
+        }
+    };
+
+    // Update the state with the websocket token (this is a bit tricky since state is immutable)
+    // For now, the token is added to the auth_manager which is what matters for authentication
 
     match axum::serve(listener, app).await {
         Ok(_) => info!("Server stopped gracefully"),

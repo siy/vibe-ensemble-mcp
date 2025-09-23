@@ -1,6 +1,5 @@
 use anyhow::Result;
 use std::fs;
-use uuid::Uuid;
 
 use crate::lockfile::LockFileManager;
 use crate::mcp::constants::build_mcp_config;
@@ -14,16 +13,19 @@ pub async fn configure_claude_code(
 ) -> Result<()> {
     println!("🔧 Configuring Claude Code integration...");
 
-    // Try to read existing lock file first, generate new token if not found
+    // Client mode: Check if Claude IDE lock file exists and validate workspace folder
     let lock_manager = LockFileManager::new(host.to_string(), port);
-    let websocket_token = match lock_manager.read_lock_file() {
-        Ok(lock_file) => {
-            println!("📖 Using existing WebSocket token from lock file");
-            lock_file.token
+    let websocket_token = match lock_manager.validate_claude_lock_file_for_client() {
+        Ok(token) => {
+            println!("📖 Using existing WebSocket token from Claude IDE lock file");
+            token
         }
-        Err(_) => {
-            println!("🔑 Generating new WebSocket authentication token");
-            Uuid::new_v4().to_string()
+        Err(e) => {
+            println!("❌ Error: {}", e);
+            println!(
+                "💡 Hint: Start the vibe-ensemble server first, then run --configure-claude-code"
+            );
+            return Err(anyhow::anyhow!("Claude IDE lock file validation failed"));
         }
     };
 
@@ -39,9 +41,6 @@ pub async fn configure_claude_code(
     // Create WebSocket token file
     create_websocket_token(&websocket_token).await?;
 
-    // Create Claude Code discovery lock file if we have server info
-    create_claude_code_lock_file(host, port, &websocket_token).await?;
-
     // Handle file permission mode
     if permission_mode == PermissionMode::File {
         create_file_permissions().await?;
@@ -49,13 +48,14 @@ pub async fn configure_claude_code(
 
     println!("✅ Claude Code integration configured successfully!");
     println!("📁 Generated files:");
-    println!("  - .mcp.json (MCP server configuration with WebSocket support)");
+    println!("  - .mcp.json (MCP server configuration)");
     println!("  - .claude/settings.local.json (Claude settings)");
     println!("  - .claude/commands/vibe-ensemble.md (Coordinator initialization)");
     println!("  - .claude/worker-templates/ (8 high-quality worker templates)");
     println!("  - .claude/websocket-token (WebSocket authentication token)");
+    println!("📄 Updated existing file:");
     println!(
-        "  - ~/.claude/ide/{}.lock (Claude Code discovery file)",
+        "  - ~/.claude/ide/{}.lock (added current workspace folder)",
         port
     );
 
@@ -82,26 +82,8 @@ pub async fn configure_claude_code(
     Ok(())
 }
 
-async fn create_mcp_config(host: &str, port: u16, websocket_token: &str) -> Result<()> {
-    let mut config = build_mcp_config(host, port);
-
-    // Add WebSocket authentication to the configuration
-    if let Some(servers) = config.get_mut("mcpServers").and_then(|v| v.as_object_mut()) {
-        if let Some(ws_server) = servers
-            .get_mut("vibe-ensemble-ws")
-            .and_then(|v| v.as_object_mut())
-        {
-            ws_server.insert(
-                "auth".to_string(),
-                serde_json::json!({
-                    "type": "token",
-                    "token_file": ".claude/websocket-token",
-                    "token": websocket_token
-                }),
-            );
-        }
-    }
-
+async fn create_mcp_config(host: &str, port: u16, _websocket_token: &str) -> Result<()> {
+    let config = build_mcp_config(host, port);
     fs::write(".mcp.json", serde_json::to_string_pretty(&config)?)?;
     Ok(())
 }
@@ -196,39 +178,6 @@ async fn create_worker_templates() -> Result<()> {
     for (filename, content) in templates {
         fs::write(format!(".claude/worker-templates/{}", filename), content)?;
     }
-
-    Ok(())
-}
-
-async fn create_claude_code_lock_file(_host: &str, port: u16, websocket_token: &str) -> Result<()> {
-    // Create Claude Code discovery lock file at ~/.claude/ide/{port}.lock
-    let home_dir =
-        dirs::home_dir().ok_or_else(|| anyhow::anyhow!("Unable to determine home directory"))?;
-
-    let claude_ide_dir = home_dir.join(".claude").join("ide");
-    fs::create_dir_all(&claude_ide_dir)?;
-
-    let lock_file_path = claude_ide_dir.join(format!("{}.lock", port));
-
-    // Get current working directory for workspaceFolders
-    let current_dir = std::env::current_dir()?;
-
-    let claude_lock_data = serde_json::json!({
-        "pid": std::process::id(),
-        "workspaceFolders": [current_dir.to_string_lossy()],
-        "ideName": "Vibe Ensemble MCP",
-        "transport": "ws",
-        "authToken": websocket_token
-    });
-
-    fs::write(
-        &lock_file_path,
-        serde_json::to_string_pretty(&claude_lock_data)?,
-    )?;
-    println!(
-        "📍 Created Claude Code discovery file: {}",
-        lock_file_path.display()
-    );
 
     Ok(())
 }

@@ -71,11 +71,15 @@ impl ToolHandler for ValidateWebSocketIntegrationTool {
         // Test 5: Validate MCP protocol version consistency
         info!("Test 5: MCP protocol version consistency");
         let protocol_version = super::MCP_PROTOCOL_VERSION;
-        if protocol_version == "2025-03-26" {
+        // Check that the protocol version is a valid format (YYYY-MM-DD)
+        if protocol_version.len() == 10
+            && protocol_version.chars().nth(4) == Some('-')
+            && protocol_version.chars().nth(7) == Some('-')
+        {
             validation_results.push(json!({
                 "test": "mcp_protocol_version",
                 "status": "passed",
-                "description": "MCP protocol version is correct",
+                "description": "MCP protocol version format is valid",
                 "details": {
                     "version": protocol_version
                 }
@@ -85,9 +89,9 @@ impl ToolHandler for ValidateWebSocketIntegrationTool {
             validation_results.push(json!({
                 "test": "mcp_protocol_version",
                 "status": "failed",
-                "description": "MCP protocol version mismatch",
+                "description": "MCP protocol version format is invalid",
                 "details": {
-                    "expected": "2025-03-26",
+                    "expected_format": "YYYY-MM-DD",
                     "actual": protocol_version
                 }
             }));

@@ -2,7 +2,7 @@
 use serde_json::{json, Value};
 
 /// MCP Protocol Version - single source of truth
-pub const MCP_PROTOCOL_VERSION: &str = "2025-03-26";
+pub const MCP_PROTOCOL_VERSION: &str = "2024-11-05";
 
 /// JSON-RPC envelope builders to ensure consistency
 pub struct JsonRpcEnvelopes;
@@ -164,23 +164,6 @@ pub fn build_mcp_config(host: &str, port: u16) -> Value {
                 "type": "http",
                 "url": format!("http://{}:{}/mcp", host, port),
                 "protocol_version": MCP_PROTOCOL_VERSION
-            },
-            "vibe-ensemble-sse": {
-                "type": "sse",
-                "url": format!("http://{}:{}/sse", host, port),
-                "protocol_version": MCP_PROTOCOL_VERSION
-            },
-            "vibe-ensemble-ws": {
-                "type": "websocket",
-                "url": format!("ws://{}:{}/ws", host, port),
-                "protocol_version": MCP_PROTOCOL_VERSION,
-                "bidirectional": true,
-                "features": [
-                    "server_initiated_requests",
-                    "client_tool_registration",
-                    "real_time_collaboration",
-                    "workflow_orchestration"
-                ]
             }
         }
     })
