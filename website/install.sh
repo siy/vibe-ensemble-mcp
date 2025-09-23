@@ -5,7 +5,7 @@ set -e
 # Vibe Ensemble MCP Server Installer
 # This script automatically downloads and installs the latest release
 
-REPO="sergiyyevtushenko/vibe-ensemble-mcp"
+REPO="siy/vibe-ensemble-mcp"
 INSTALL_DIR="${HOME}/.local/bin"
 BINARY_NAME="vibe-ensemble-mcp"
 
@@ -69,9 +69,8 @@ detect_platform() {
 
 # Get latest release version
 get_latest_version() {
-    print_status "Fetching latest release information..."
     local latest_url="https://api.github.com/repos/${REPO}/releases/latest"
-    
+
     if command -v curl >/dev/null 2>&1; then
         curl -s "$latest_url" | grep '"tag_name":' | sed -E 's/.*"([^"]+)".*/\1/'
     elif command -v wget >/dev/null 2>&1; then
@@ -174,14 +173,16 @@ main() {
     # Detect system
     local arch=$(detect_arch)
     local platform=$(detect_platform)
+
+    print_status "Detected platform: ${arch}-${platform}"
+    print_status "Fetching latest release information..."
     local version=$(get_latest_version)
-    
+
     if [ -z "$version" ]; then
         print_error "Failed to get latest version information"
         exit 1
     fi
-    
-    print_status "Detected platform: ${arch}-${platform}"
+
     print_status "Latest version: ${version}"
     
     # Install
