@@ -2,6 +2,10 @@
 
 A multi-agent coordination system that enables Claude Code to manage specialized AI workers for complex development tasks.
 
+This architecture addresses context drift and focus dilution in complex projects by breaking 
+them down into specialized stages, allowing workers to focus on specific tasks. The high-level planning is left to the 
+coordinator, which serves as a single point of control.  
+
 ## What It Does
 
 Vibe-Ensemble allows you to break down complex projects into specialized stages, with each stage handled by a dedicated AI worker:
@@ -21,12 +25,12 @@ Vibe-Ensemble allows you to break down complex projects into specialized stages,
 
 **Linux/macOS:**
 ```bash
-curl -fsSL https://get.vibeensemble.dev/install.sh | sh
+curl -fsSL https://www.vibeensemble.dev/install.sh | sh
 ```
 
 **Windows:**
 ```powershell
-iwr -useb https://get.vibeensemble.dev/install.ps1 | iex
+iwr -useb https://www.vibeensemble.dev/install.ps1 | iex
 ```
 
 ### From Release
@@ -41,27 +45,20 @@ cd vibe-ensemble-mcp
 cargo build --release
 ```
 
-## Usage
+## Setup Steps
 
-### 1. Start the Server
+### Step 1: Start the Server (separate directory recommended)
 
 ```bash
-# Default configuration (port 3000)
-./target/release/vibe-ensemble-mcp
-
-# Custom port
-./target/release/vibe-ensemble-mcp --port 8080
-
-# Custom database location
-./target/release/vibe-ensemble-mcp --database-path ./my-project.db
+# Create and start server in separate directory
+mkdir vibe-server && cd vibe-server && vibe-ensemble-mcp
 ```
 
-### 2. Configure Claude Code Integration
+### Step 2: Configure Claude Code (separate coordinator directory)
 
-**Automated Setup (Recommended):**
 ```bash
-# Generate all necessary Claude Code configuration files
-./target/release/vibe-ensemble-mcp --configure-claude-code --host 127.0.0.1 --port 3000
+# Create coordinator directory and configure Claude Code
+mkdir vibe-coordinator && cd vibe-coordinator && vibe-ensemble-mcp --configure-claude-code
 ```
 
 This command automatically creates:
@@ -69,36 +66,32 @@ This command automatically creates:
 - `.claude/settings.local.json` - Claude Code permissions
 - `.claude/commands/vibe-ensemble.md` - Coordinator initialization command
 - `.claude/websocket-token` - Authentication token for WebSocket connections
-- `.vibe-ensemble-mcp/worker-permissions.json` - Worker permissions (if using file permission mode)
 
-**Manual Setup (Alternative):**
-```bash
-claude mcp add --transport http vibe-ensemble http://localhost:3000/mcp
-```
+### Step 3: Start Claude Code and Initialize
 
-### 3. Quick Start
+1. **Open Claude Code** in the coordinator directory
+2. **Run the command**: `/vibe-ensemble` to initialize as coordinator
+3. **Create your first project** and define the work you want to accomplish
 
-1. **Setup**: Run `./vibe-ensemble-mcp --configure-claude-code --port 3000` to auto-configure Claude Code
-2. **Start server**: `./vibe-ensemble-mcp` 
-3. **Open Claude Code** in the configured directory
-4. **Initialize**: Run `/vibe-ensemble` command to become the coordinator
-5. **Create your first project** and define the work you want to accomplish
+> **Note**: Bidirectional WebSocket communication is experimental and may not always work reliably. This feature isn't documented in Claude Code, so we're doing our best to make it as convenient as possible.
 
-## Usage Workflow
+## Intended Usage Workflow
 
-Once you have Vibe-Ensemble configured and running with Claude Code, you can coordinate complex development tasks:
+Once the server is running and Claude Code is configured, here's the typical workflow:
 
-1. **Start as Coordinator**: Use the `/vibe-ensemble` command in Claude Code to initialize your coordinator session
-2. **Define Your Project**: Create projects with specific rules, patterns, and worker types for your domain
-3. **Create Workflows**: Set up tickets that define work stages and which specialized workers handle each stage
-4. **Monitor Progress**: Workers automatically progress through stages, providing updates and handing off to the next worker
-5. **Handle Issues**: Use coordination tools to resume stalled work or adjust workflows as needed
+1. **Start Claude Code**: Open Claude Code in your coordinator directory and run the `/vibe-ensemble` command to initialize as a coordinator
+2. **Create Project**: Write a prompt describing your intended project and answer the coordinator's questions about scope and requirements
+3. **Monitor Progress**: Periodically prompt Claude Code with:
+   - **"address events"** - Handle any issues or escalations
+   - **"report project state"** - Get overall progress updates
 
-**WARNING:** Vibe-Ensemble is still work in progress. Some features may not be fully implemented or may have bugs. So, 
+The coordinator will break down your project into tickets, spawn appropriate workers for each stage, and manage the workflow automatically.
+
+**WARNING:** Vibe-Ensemble is still a work in progress. Some features may not be fully implemented or may have bugs. So, 
 periodically ask Claude Code to check ticket status and event queue. Sometimes it may report issues, but not address them.
 Sending prompt like "Act as a coordinator" usually helps.
 
-**SECURITY WARNING:** Always review and test permission configurations before production use. While the permission system is designed to be secure, proper configuration is essential. Use 'bypass' mode only in isolated development environments as it grants unrestricted access. For production use, the default 'file' mode provides explicit permission control, while 'inherit' mode is available for advanced scenarios.
+**SECURITY WARNING:** Always review and test permission configurations before production use. While the permission system is designed to be secure, proper configuration is essential. Use 'bypass' mode only in isolated development environments as it grants unrestricted access. For production use, the default 'file' mode provides explicit permission control.
 
 ### Example Project Types
 
@@ -215,50 +208,38 @@ The server accepts the following command-line options:
 - `--client-tool-timeout-secs`: Timeout for client tool calls in seconds (default: `30`)
 - `--max-concurrent-client-requests`: Maximum concurrent client requests (default: `50`)
 
-## Security & Permissions
+## Permission System
 
-Vibe-Ensemble includes a comprehensive permission system to control what tools and capabilities are available to AI workers. This is essential for security since workers run headless with access to system resources.
+Vibe-Ensemble supports flexible permission modes to control worker access to tools and resources. Workers use project-specific permissions for security and isolation.
 
 ### Permission Modes
 
 The server supports three permission modes controlled by the `--permission-mode` flag:
 
-#### 1. **Bypass Mode** (`--permission-mode bypass`)
+#### 1. **File Mode** (`--permission-mode file`) - **Default**
+- **Use Case**: Project-specific permissions with comprehensive defaults
+- **Behavior**: Workers use permissions from `.vibe-ensemble-mcp/worker-permissions.json`
+- **Security Level**: 🔐 **Project-specific control** - each project gets its own permissions
+- **Auto-Generated**: New projects automatically get comprehensive default permissions including all MCP tools and essential Claude Code tools (Read, Write, Edit, Bash, etc.)
+
+```bash
+vibe-ensemble-mcp --permission-mode file
+# or simply (default)
+vibe-ensemble-mcp
+```
+
+
+#### 2. **Bypass Mode** (`--permission-mode bypass`)
 - **Use Case**: Development, testing, or when you need unrestricted access
 - **Behavior**: Workers run with `--dangerously-skip-permissions` flag
 - **Security Level**: ⚠️ **No restrictions** - workers have access to all tools and system capabilities
 - **When to Use**: Only in trusted environments where full system access is acceptable
 
 ```bash
-./vibe-ensemble-mcp --permission-mode bypass
+vibe-ensemble-mcp --permission-mode bypass
 ```
 
-#### 2. **Inherit Mode** (`--permission-mode inherit`)
-- **Use Case**: Production deployments where you want to reuse existing Claude Code permissions
-- **Behavior**: Workers inherit permissions from your project's `.claude/settings.local.json` file
-- **Security Level**: 🛡️ **Project-level control** - uses the same permissions as your interactive Claude Code session
-- **When to Use**: When you want workers to have the same access level as your coordinator session
-
-```bash
-./vibe-ensemble-mcp --permission-mode inherit
-./vibe-ensemble-mcp
-```
-
-**Required File**: `.claude/settings.local.json` in your project directory
-
-#### 3. **File Mode** (`--permission-mode file`) - **Default**
-- **Use Case**: Custom worker-specific permissions different from your coordinator permissions
-- **Behavior**: Workers use permissions from `.vibe-ensemble-mcp/worker-permissions.json`
-- **Security Level**: 🔐 **Worker-specific control** - precisely control what workers can access
-- **When to Use**: When you want fine-grained control over worker capabilities
-
-```bash
-./vibe-ensemble-mcp --permission-mode file
-# or simply (default)
-./vibe-ensemble-mcp
-```
-
-**Required File**: `.vibe-ensemble-mcp/worker-permissions.json` in your project directory
+To change permission mode, start the server with: `vibe-ensemble-mcp --permission-mode [file|bypass]`
 
 ### Permission File Format
 
@@ -306,23 +287,6 @@ All permission modes use the same JSON structure that Claude Code uses internall
 
 ### Setting Up Permissions
 
-#### For Inherit Mode (Recommended)
-
-1. **Auto-setup** (creates basic permissions):
-   ```bash
-   ./vibe-ensemble-mcp --configure-claude-code --port 3000
-   ```
-
-2. **Manual setup** - Create/edit `.claude/settings.local.json`:
-   ```json
-   {
-     "permissions": {
-       "allow": ["Read", "Write", "Edit", "Bash", "mcp__*"],
-       "deny": ["WebFetch", "WebSearch"],
-       "defaultMode": "acceptEdits"
-     }
-   }
-   ```
 
 #### For File Mode (Advanced)
 
@@ -390,8 +354,7 @@ Permission files are read fresh from disk each time a worker starts, allowing yo
 
 **Security concerns**: Switch to `file` mode and create restrictive permissions tailored to your specific use case
 
-**Permission file location issues**: Ensure files are in the correct location relative to your project directory:
-- Inherit mode: `.claude/settings.local.json`
+**Permission file location issues**: Ensure the file is in the correct location relative to your project directory:
 - File mode: `.vibe-ensemble-mcp/worker-permissions.json`
 
 ## Customization

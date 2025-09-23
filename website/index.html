@@ -69,7 +69,10 @@
       <section class="section">
         <h2>What is Vibe Ensemble?</h2>
         <p>
-          Vibe Ensemble is an MCP server that turns Claude Code into a reliable multi‑agent coordinator. You define projects and specialized worker types, create tickets with a minimal pipeline, and Vibe Ensemble handles the handoffs. Tasks progress through focused stages without context drift or focus dilution.
+          Vibe Ensemble is a multi-agent coordination system that enables Claude Code to manage specialized AI workers for complex development tasks.
+        </p>
+        <p>
+          This architecture addresses context drift and focus dilution in complex projects by breaking them down into specialized stages, allowing workers to focus on specific tasks. The high-level planning is left to the coordinator, which serves as a single point of control.
         </p>
       </section>
 
@@ -138,31 +141,70 @@
         </div>
         <div id="install-unix" class="command-content active">
           <div class="code-block">
-            <button class="copy-btn" onclick="copyToClipboard('curl -fsSL https://get.vibeensemble.dev/install.sh | sh', this)">Copy</button>
-curl -fsSL https://get.vibeensemble.dev/install.sh | sh
+            <button class="copy-btn" onclick="copyToClipboard('curl -fsSL https://www.vibeensemble.dev/install.sh | sh', this)">Copy</button>
+curl -fsSL https://www.vibeensemble.dev/install.sh | sh
           </div>
         </div>
         <div id="install-windows" class="command-content">
           <div class="code-block">
-            <button class="copy-btn" onclick="copyToClipboard('iwr -useb https://get.vibeensemble.dev/install.ps1 | iex', this)">Copy</button>
-iwr -useb https://get.vibeensemble.dev/install.ps1 | iex
+            <button class="copy-btn" onclick="copyToClipboard('iwr -useb https://www.vibeensemble.dev/install.ps1 | iex', this)">Copy</button>
+iwr -useb https://www.vibeensemble.dev/install.ps1 | iex
           </div>
         </div>
 
-        <h3 style="color:white; margin-top:1rem;">Usage</h3>
-        <p>Configure Claude Code integration and start the server.</p>
+        <h3 style="color:white; margin-top:1rem;">Setup Steps</h3>
+        <p><strong>Step 1:</strong> Start the server (create a separate directory for the server)</p>
         <div class="code-block">
-          <button class="copy-btn" onclick="copyToClipboard('vibe-ensemble-mcp --configure-claude-code --host 127.0.0.1 --port 3000', this)">Copy</button>
-vibe-ensemble-mcp --configure-claude-code --host 127.0.0.1 --port 3000
+          <button class="copy-btn" onclick="copyToClipboard('mkdir vibe-server && cd vibe-server && vibe-ensemble-mcp', this)">Copy</button>
+mkdir vibe-server && cd vibe-server && vibe-ensemble-mcp
         </div>
+        <p><strong>Step 2:</strong> Configure Claude Code (in a separate coordinator directory)</p>
         <div class="code-block">
-          <button class="copy-btn" onclick="copyToClipboard('vibe-ensemble-mcp --port 3000', this)">Copy</button>
-vibe-ensemble-mcp --port 3000
+          <button class="copy-btn" onclick="copyToClipboard('mkdir vibe-coordinator && cd vibe-coordinator && vibe-ensemble-mcp --configure-claude-code', this)">Copy</button>
+mkdir vibe-coordinator && cd vibe-coordinator && vibe-ensemble-mcp --configure-claude-code
         </div>
+        <p><strong>Step 3:</strong> Start Claude Code in the coordinator directory and run the command</p>
         <div class="code-block">
-          <button class="copy-btn" onclick="copyToClipboard('vibe-ensemble', this)">Copy</button>
-vibe-ensemble
+          <button class="copy-btn" onclick="copyToClipboard('/vibe-ensemble', this)">Copy</button>
+/vibe-ensemble
         </div>
+
+        <p style="margin-top:1rem;"><em>Note: Bidirectional WebSocket communication is experimental and may not always work reliably. This feature isn't documented in Claude Code, so we're doing our best to make it as convenient as possible.</em></p>
+      </section>
+
+      <section class="section">
+        <h2>Intended Usage Workflow</h2>
+        <p>Once the server is running and Claude Code is configured, here's the typical workflow:</p>
+        <div class="feature-grid">
+          <div class="feature-card">
+            <h3>1. Start Claude Code</h3>
+            <p>Open Claude Code in your coordinator directory and run the <code>/vibe-ensemble</code> command to initialize as a coordinator.</p>
+          </div>
+          <div class="feature-card">
+            <h3>2. Create Project</h3>
+            <p>Write a prompt describing your intended project and answer the coordinator's questions about scope and requirements.</p>
+          </div>
+          <div class="feature-card">
+            <h3>3. Monitor Progress</h3>
+            <p>Periodically prompt Claude Code with "address events" to handle any issues and "report project state" to see overall progress.</p>
+          </div>
+        </div>
+      </section>
+
+      <section class="section">
+        <h2>Permission System</h2>
+        <p>Vibe Ensemble supports flexible permission modes to control worker access to tools and resources:</p>
+        <div class="feature-grid">
+          <div class="feature-card">
+            <h3>File Mode (Default)</h3>
+            <p>Workers use project-specific permissions from <code>.vibe-ensemble-mcp/worker-permissions.json</code>. Each project gets comprehensive default permissions including all MCP tools and essential Claude Code tools (Read, Write, Edit, Bash, etc.). Provides project isolation and security.</p>
+          </div>
+          <div class="feature-card">
+            <h3>Bypass Mode</h3>
+            <p>Workers run without permission restrictions (--dangerously-skip-permissions). Not recommended for production use. Only use in controlled environments where you trust all code being executed.</p>
+          </div>
+        </div>
+        <p>To change permission mode, start the server with: <code>vibe-ensemble-mcp --permission-mode [file|bypass]</code></p>
       </section>
 
       <section class="section">
@@ -186,7 +228,7 @@ vibe-ensemble
       <section class="section">
         <h2>Security & Status</h2>
         <ul>
-          <li>Worker permission modes: <code>file</code> (default, settings from .vibe-ensemble-mcp/worker-permissions.json), <code>inherit</code> (project Claude Code permissions), or <code>bypass</code> (not recommended).</li>
+          <li>Worker permission modes: <code>file</code> (default, settings from .vibe-ensemble-mcp/worker-permissions.json) or <code>bypass</code> (not recommended).</li>
           <li>SSE and MCP integrations are evolving.</li>
           <li>Interfaces may change between early releases.</li>
           <li>Use in controlled environments and review the repository README for the latest warnings.</li>
