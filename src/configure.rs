@@ -2,8 +2,8 @@ use anyhow::Result;
 use std::fs;
 
 use crate::lockfile::LockFileManager;
-use crate::mcp::constants::build_mcp_config;
-use crate::permissions::{ClaudePermissions, ClaudeSettings, PermissionMode};
+use crate::mcp::constants::{build_claude_permissions, build_mcp_config};
+use crate::permissions::PermissionMode;
 
 /// Generate Claude Code integration files
 pub async fn configure_claude_code(
@@ -101,9 +101,7 @@ async fn create_websocket_token(token: &str) -> Result<()> {
 }
 
 async fn create_file_permissions() -> Result<()> {
-    let settings = ClaudeSettings {
-        permissions: ClaudePermissions::balanced(),
-    };
+    let settings = build_claude_permissions();
 
     fs::write(
         ".vibe-ensemble-mcp/worker-permissions.json",
@@ -113,9 +111,7 @@ async fn create_file_permissions() -> Result<()> {
 }
 
 async fn create_claude_settings() -> Result<()> {
-    let settings = ClaudeSettings {
-        permissions: ClaudePermissions::minimal(),
-    };
+    let settings = build_claude_permissions();
 
     fs::write(
         ".claude/settings.local.json",

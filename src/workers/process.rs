@@ -52,17 +52,34 @@ impl ProcessManager {
         // For workers, we need to ensure our own MCP tools are always allowed
         let mut enhanced_allow_list = permissions.allow.clone();
 
-        // Ensure our vibe-ensemble-mcp tools are always allowed
-        if !enhanced_allow_list
+        // Ensure our vibe-ensemble-mcp tools are always allowed (using explicit tool names)
+        use crate::mcp::constants::get_all_mcp_tool_names;
+        let mcp_tools = get_all_mcp_tool_names();
+
+        // Check if we already have explicit MCP tools or wildcard
+        let has_mcp_tools = enhanced_allow_list
             .iter()
-            .any(|tool| tool.starts_with("mcp__vibe-ensemble-mcp__") || tool == "mcp__*")
-        {
-            enhanced_allow_list.push("mcp__vibe-ensemble-mcp__*".to_string());
-            debug!("Auto-added vibe-ensemble-mcp tools to worker permissions");
+            .any(|tool| tool.starts_with("mcp__vibe-ensemble-mcp__") || tool == "mcp__*");
+
+        if !has_mcp_tools {
+            enhanced_allow_list.extend(mcp_tools);
+            debug!(
+                "Auto-added {} explicit vibe-ensemble-mcp tools to worker permissions",
+                enhanced_allow_list.len()
+            );
         }
 
         // Add essential tools if not present
-        let essential_tools = ["TodoWrite", "Bash", "Read", "Write", "Edit", "Glob", "Grep"];
+        let essential_tools = [
+            "TodoWrite",
+            "Bash",
+            "Read",
+            "Write",
+            "Edit",
+            "MultiEdit",
+            "Glob",
+            "Grep",
+        ];
         for essential_tool in essential_tools {
             if !enhanced_allow_list
                 .iter()
