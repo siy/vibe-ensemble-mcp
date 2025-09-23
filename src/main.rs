@@ -36,7 +36,7 @@ struct Args {
     no_respawn: bool,
 
     /// Permission mode for worker processes
-    #[arg(long, default_value_t = PermissionMode::Inherit)]
+    #[arg(long, default_value_t = PermissionMode::File)]
     permission_mode: PermissionMode,
 
     /// Timeout for client tool calls in seconds
