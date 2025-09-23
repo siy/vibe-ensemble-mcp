@@ -208,8 +208,15 @@ async fn websocket_handler(
     Query(query): Query<WebSocketQuery>,
     State(state): State<AppState>,
 ) -> Response {
-    state
+    tracing::info!("WebSocket connection request received at /ws endpoint");
+    tracing::trace!("WebSocket upgrade request headers: {:?}", headers);
+    tracing::trace!("WebSocket query parameters: {:?}", query);
+
+    let response = state
         .websocket_manager
         .handle_connection(ws, headers, Query(query), State(state.clone()))
-        .await
+        .await;
+
+    tracing::trace!("WebSocket handler returning response");
+    response
 }

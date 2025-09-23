@@ -114,7 +114,6 @@ impl fmt::Display for TaskId {
 pub enum WorkerCommand {
     AdvanceToStage {
         target_stage: WorkerType,
-        pipeline_update: Option<Vec<WorkerType>>,
     },
     ReturnToStage {
         target_stage: WorkerType,

@@ -72,6 +72,11 @@ impl Project {
         Ok(project)
     }
 
+    /// Alias for get_by_name since repository_name serves as the project ID
+    pub async fn get_by_id(pool: &DbPool, project_id: &str) -> Result<Option<Project>> {
+        Self::get_by_name(pool, project_id).await
+    }
+
     pub async fn list_all(pool: &DbPool) -> Result<Vec<Project>> {
         let projects = sqlx::query_as::<_, Project>(
             r#"

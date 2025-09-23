@@ -5,7 +5,6 @@ pub struct WorkerOutput {
     pub ticket_id: Option<String>,
     pub outcome: WorkerOutcome,
     pub target_stage: Option<String>,
-    pub pipeline_update: Option<Vec<String>>,
     pub comment: String,
     pub reason: String,
 }

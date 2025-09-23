@@ -109,6 +109,119 @@ impl WorkerConsumer {
         let event_payload = EventPayload::worker_started(&worker_id, &self.stage, &self.project_id);
         self.event_broadcaster.broadcast(event_payload);
 
+        // Get project details to obtain the correct project path
+        let project =
+            match crate::database::projects::Project::get_by_id(&self.db, &self.project_id).await {
+                Ok(Some(project)) => project,
+                Ok(None) => {
+                    error!(
+                        project_id = %self.project_id,
+                        ticket_id = %task.ticket_id,
+                        "Project not found"
+                    );
+                    // Release the claim on project lookup failure
+                    if let Err(release_error) = ClaimManager::release_ticket_claim(
+                        &self.db,
+                        &self.event_broadcaster,
+                        &task.ticket_id,
+                    )
+                    .await
+                    {
+                        error!(
+                            ticket_id = %task.ticket_id,
+                            worker_id = %worker_id,
+                            error = %release_error,
+                            "Failed to release claim after project lookup failure"
+                        );
+                    }
+                    return Ok(());
+                }
+                Err(e) => {
+                    error!(
+                        project_id = %self.project_id,
+                        ticket_id = %task.ticket_id,
+                        error = %e,
+                        "Failed to fetch project details"
+                    );
+                    // Release the claim on database error
+                    if let Err(release_error) = ClaimManager::release_ticket_claim(
+                        &self.db,
+                        &self.event_broadcaster,
+                        &task.ticket_id,
+                    )
+                    .await
+                    {
+                        error!(
+                            ticket_id = %task.ticket_id,
+                            worker_id = %worker_id,
+                            error = %release_error,
+                            "Failed to release claim after database error"
+                        );
+                    }
+                    return Ok(());
+                }
+            };
+
+        // Get the worker type details to get the proper system prompt
+        let worker_type_data = match crate::database::worker_types::WorkerType::get_by_type(
+            &self.db,
+            &self.project_id,
+            &self.stage,
+        )
+        .await
+        {
+            Ok(Some(wt)) => wt,
+            Ok(None) => {
+                error!(
+                    project_id = %self.project_id,
+                    worker_type = %self.stage,
+                    ticket_id = %task.ticket_id,
+                    "Worker type not found"
+                );
+                // Release the claim on worker type lookup failure
+                if let Err(release_error) = ClaimManager::release_ticket_claim(
+                    &self.db,
+                    &self.event_broadcaster,
+                    &task.ticket_id,
+                )
+                .await
+                {
+                    error!(
+                        ticket_id = %task.ticket_id,
+                        worker_id = %worker_id,
+                        error = %release_error,
+                        "Failed to release claim after worker type lookup failure"
+                    );
+                }
+                return Ok(());
+            }
+            Err(e) => {
+                error!(
+                    project_id = %self.project_id,
+                    worker_type = %self.stage,
+                    ticket_id = %task.ticket_id,
+                    error = %e,
+                    "Failed to fetch worker type details"
+                );
+                // Release the claim on database error
+                if let Err(release_error) = ClaimManager::release_ticket_claim(
+                    &self.db,
+                    &self.event_broadcaster,
+                    &task.ticket_id,
+                )
+                .await
+                {
+                    error!(
+                        ticket_id = %task.ticket_id,
+                        worker_id = %worker_id,
+                        error = %release_error,
+                        "Failed to release claim after database error"
+                    );
+                }
+                return Ok(());
+            }
+        };
+
         // Spawn the worker process
         let spawn_request = crate::workers::types::SpawnWorkerRequest {
             worker_id: worker_id.clone(),
@@ -116,8 +229,8 @@ impl WorkerConsumer {
             worker_type: self.stage.clone(),
             queue_name: format!("{}:{}", self.project_id, self.stage),
             ticket_id: task.ticket_id.clone(),
-            project_path: ".".to_string(),
-            system_prompt: format!("Process ticket {} in stage {}", task.ticket_id, self.stage),
+            project_path: project.path,
+            system_prompt: worker_type_data.system_prompt,
             server_host: self.config.host.clone(),
             server_port: self.config.port,
             permission_mode: self.config.permission_mode,
@@ -135,25 +248,6 @@ impl WorkerConsumer {
                 let command = match output.outcome {
                     crate::workers::completion_processor::WorkerOutcome::NextStage => {
                         if let Some(target_stage) = output.target_stage {
-                            // Convert pipeline_update from Vec<String> to Vec<WorkerType> if present
-                            let pipeline_update = if let Some(pipeline_strings) =
-                                output.pipeline_update
-                            {
-                                let mut worker_types = Vec::new();
-                                for stage_name in pipeline_strings {
-                                    match crate::workers::domain::WorkerType::new(stage_name) {
-                                        Ok(wt) => worker_types.push(wt),
-                                        Err(e) => {
-                                            error!("Failed to create WorkerType from pipeline stage: {}", e);
-                                            return Ok(());
-                                        }
-                                    }
-                                }
-                                Some(worker_types)
-                            } else {
-                                None
-                            };
-
                             crate::workers::domain::WorkerCommand::AdvanceToStage {
                                 target_stage: match crate::workers::domain::WorkerType::new(
                                     target_stage,
@@ -164,7 +258,6 @@ impl WorkerConsumer {
                                         return Ok(()); // Skip this completion event
                                     }
                                 },
-                                pipeline_update,
                             }
                         } else {
                             error!("Worker specified next_stage but no target_stage provided");

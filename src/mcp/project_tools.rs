@@ -12,6 +12,7 @@ use super::types::{CallToolResponse, Tool};
 use crate::{
     database::projects::{CreateProjectRequest, Project, UpdateProjectRequest},
     error::Result,
+    permissions::create_project_permissions,
     server::AppState,
 };
 
@@ -39,6 +40,13 @@ impl ToolHandler for CreateProjectTool {
             info!("✓ Successfully created project directory: {}", path);
         } else {
             debug!("Project directory already exists: {}", path);
+        }
+
+        // Create project-specific worker permissions file if it doesn't exist
+        debug!("Creating project-specific worker permissions for: {}", path);
+        if let Err(e) = create_project_permissions(&path) {
+            warn!("Failed to create project permissions file: {}", e);
+            // Don't fail the whole project creation for this - it's not critical
         }
 
         let request = CreateProjectRequest {

@@ -41,10 +41,8 @@ pub async fn configure_claude_code(
     // Create WebSocket token file
     create_websocket_token(&websocket_token).await?;
 
-    // Handle file permission mode
-    if permission_mode == PermissionMode::File {
-        create_file_permissions().await?;
-    }
+    // Note: Worker permissions are now generated per-project during project creation
+    // to support project-specific permission isolation
 
     println!("✅ Claude Code integration configured successfully!");
     println!("📁 Generated files:");
@@ -60,7 +58,9 @@ pub async fn configure_claude_code(
     );
 
     if permission_mode == PermissionMode::File {
-        println!("  - .vibe-ensemble-mcp/worker-permissions.json (File-based permissions)");
+        println!(
+            "📝 Note: Worker permissions will be generated automatically when creating projects"
+        );
     }
 
     println!();
@@ -100,15 +100,7 @@ async fn create_websocket_token(token: &str) -> Result<()> {
     Ok(())
 }
 
-async fn create_file_permissions() -> Result<()> {
-    let settings = build_claude_permissions();
-
-    fs::write(
-        ".vibe-ensemble-mcp/worker-permissions.json",
-        serde_json::to_string_pretty(&settings)?,
-    )?;
-    Ok(())
-}
+// Removed: create_file_permissions() - permissions are now generated per-project
 
 async fn create_claude_settings() -> Result<()> {
     let settings = build_claude_permissions();

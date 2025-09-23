@@ -98,7 +98,7 @@ Once you have Vibe-Ensemble configured and running with Claude Code, you can coo
 periodically ask Claude Code to check ticket status and event queue. Sometimes it may report issues, but not address them.
 Sending prompt like "Act as a coordinator" usually helps.
 
-**SECURITY WARNING:** Always review and test permission configurations before production use. While the permission system is designed to be secure, proper configuration is essential. Use 'bypass' mode only in isolated development environments as it grants unrestricted access. For production use, prefer 'inherit' or 'file' modes with carefully configured tool restrictions.
+**SECURITY WARNING:** Always review and test permission configurations before production use. While the permission system is designed to be secure, proper configuration is essential. Use 'bypass' mode only in isolated development environments as it grants unrestricted access. For production use, the default 'file' mode provides explicit permission control, while 'inherit' mode is available for advanced scenarios.
 
 ### Example Project Types
 
@@ -208,7 +208,7 @@ The server accepts the following command-line options:
 - `--host`: Server bind address (default: `127.0.0.1`)
 - `--port`: Server port (default: `3000`)
 - `--log-level`: Log level (default: `info`)
-- `--permission-mode`: Permission mode for workers (default: `inherit`)
+- `--permission-mode`: Permission mode for workers (default: `file`)
 - `--no-respawn`: Disable automatic respawning of workers on startup
 - `--enable-websocket`: Enable WebSocket transport for bidirectional communication (default: `true`)
 - `--websocket-auth-required`: Require authentication for WebSocket connections (default: `false`)
@@ -233,7 +233,7 @@ The server supports three permission modes controlled by the `--permission-mode`
 ./vibe-ensemble-mcp --permission-mode bypass
 ```
 
-#### 2. **Inherit Mode** (`--permission-mode inherit`) - **Default**
+#### 2. **Inherit Mode** (`--permission-mode inherit`)
 - **Use Case**: Production deployments where you want to reuse existing Claude Code permissions
 - **Behavior**: Workers inherit permissions from your project's `.claude/settings.local.json` file
 - **Security Level**: 🛡️ **Project-level control** - uses the same permissions as your interactive Claude Code session
@@ -241,13 +241,12 @@ The server supports three permission modes controlled by the `--permission-mode`
 
 ```bash
 ./vibe-ensemble-mcp --permission-mode inherit
-# or simply (default)
 ./vibe-ensemble-mcp
 ```
 
 **Required File**: `.claude/settings.local.json` in your project directory
 
-#### 3. **File Mode** (`--permission-mode file`)
+#### 3. **File Mode** (`--permission-mode file`) - **Default**
 - **Use Case**: Custom worker-specific permissions different from your coordinator permissions
 - **Behavior**: Workers use permissions from `.vibe-ensemble-mcp/worker-permissions.json`
 - **Security Level**: 🔐 **Worker-specific control** - precisely control what workers can access
@@ -255,6 +254,8 @@ The server supports three permission modes controlled by the `--permission-mode`
 
 ```bash
 ./vibe-ensemble-mcp --permission-mode file
+# or simply (default)
+./vibe-ensemble-mcp
 ```
 
 **Required File**: `.vibe-ensemble-mcp/worker-permissions.json` in your project directory
@@ -369,7 +370,7 @@ cp docs/example-restrictive-permissions.json .vibe-ensemble-mcp/worker-permissio
 ### Security Best Practices
 
 1. **Start Restrictive**: Begin with minimal permissions and add tools as needed
-2. **Use Inherit Mode**: In most cases, inherit mode provides the right balance of security and functionality
+2. **Use File Mode**: The default file mode provides explicit control over worker permissions
 3. **Monitor Worker Activity**: Check logs in `.vibe-ensemble-mcp/logs/` to understand what tools workers are using
 4. **Separate Environments**: Use bypass mode only in isolated development environments
 5. **Regular Reviews**: Periodically review and update permission configurations

@@ -8,7 +8,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use std::sync::Arc;
 use tokio::sync::{mpsc, Semaphore};
-use tracing::{debug, error, info, warn};
+use tracing::{error, info, trace, warn};
 use uuid::Uuid;
 
 use super::types::JsonRpcRequest;
@@ -137,6 +137,10 @@ impl WebSocketManager {
         query: Query<WebSocketQuery>,
         state: State<AppState>,
     ) -> Response {
+        trace!("WebSocket upgrade request received");
+        trace!("Headers: {:?}", headers);
+        trace!("Query parameters: {:?}", query);
+
         let manager = self.clone();
 
         ws_upgrade
@@ -152,30 +156,67 @@ impl WebSocketManager {
         state: AppState,
     ) {
         let client_id = Uuid::new_v4().to_string();
-        info!("New WebSocket connection attempt: {}", client_id);
+        info!("New WebSocket connection attempt: client_id={}", client_id);
+        trace!("Socket split starting for client: {}", client_id);
 
         // Authenticate connection
+        trace!("Starting authentication for client: {}", client_id);
         if let Err(e) = self.authenticate_connection(&headers, &query, &state).await {
-            warn!("WebSocket authentication failed for {}: {}", client_id, e);
+            warn!(
+                "WebSocket authentication failed for client_id={}: error={}",
+                client_id, e
+            );
+            trace!("Closing socket due to authentication failure");
             return;
         }
+        info!(
+            "WebSocket authentication successful for client_id={}",
+            client_id
+        );
 
         let (mut sender, mut receiver) = socket.split();
         let (tx, mut rx) = mpsc::unbounded_channel();
+        trace!(
+            "WebSocket streams and channels created for client: {}",
+            client_id
+        );
 
         // Spawn task to handle outgoing messages
         let client_id_clone = client_id.clone();
+        trace!(
+            "Spawning outgoing message handler for client: {}",
+            client_id
+        );
         tokio::spawn(async move {
+            trace!(
+                "Outgoing message handler started for client: {}",
+                client_id_clone
+            );
             while let Some(msg) = rx.recv().await {
+                trace!("Sending message to client {}: {:?}", client_id_clone, msg);
                 if sender.send(msg).await.is_err() {
-                    debug!("Failed to send message to client {}", client_id_clone);
+                    warn!(
+                        "Failed to send message to client {}, connection broken",
+                        client_id_clone
+                    );
                     break;
                 }
+                trace!("Message sent successfully to client: {}", client_id_clone);
             }
+            trace!(
+                "Outgoing message handler ended for client: {}",
+                client_id_clone
+            );
         });
 
         // Initial capability negotiation
+        trace!("Starting capability negotiation for client: {}", client_id);
         let capabilities = self.negotiate_capabilities(&tx).await;
+        trace!(
+            "Capability negotiation completed for client {}: {:?}",
+            client_id,
+            capabilities
+        );
 
         // Register client connection
         let connection = ClientConnection {
@@ -190,36 +231,70 @@ impl WebSocketManager {
             "Client {} connected with capabilities: {:?}",
             client_id, capabilities
         );
+        trace!("Client {} registered in client registry", client_id);
 
         // Handle incoming messages
+        trace!("Starting message reception loop for client: {}", client_id);
         while let Some(msg) = receiver.next().await {
+            trace!(
+                "Received WebSocket message from client {}: {:?}",
+                client_id,
+                msg
+            );
             match msg {
                 Ok(Message::Text(text)) => {
+                    trace!(
+                        "Processing text message from client {}: {}",
+                        client_id,
+                        text
+                    );
                     if let Err(e) = self.handle_message(&client_id, &text, &state).await {
-                        error!("Error handling message from {}: {}", client_id, e);
+                        error!(
+                            "Error handling message from client_id={}: error={}",
+                            client_id, e
+                        );
+                        trace!("Message that caused error: {}", text);
                     }
                 }
-                Ok(Message::Close(_)) => {
-                    info!("Client {} disconnected", client_id);
+                Ok(Message::Close(close_frame)) => {
+                    info!(
+                        "Client {} disconnected with close frame: {:?}",
+                        client_id, close_frame
+                    );
                     break;
                 }
                 Ok(Message::Ping(data)) => {
-                    if tx.send(Message::Pong(data)).is_err() {
+                    trace!("Received ping from client {}, sending pong", client_id);
+                    if tx.send(Message::Pong(data.clone())).is_err() {
+                        warn!("Failed to send pong to client {}", client_id);
                         break;
                     }
+                    trace!("Pong sent to client {}", client_id);
+                }
+                Ok(Message::Pong(data)) => {
+                    trace!("Received pong from client {}: {:?}", client_id, data);
+                }
+                Ok(Message::Binary(data)) => {
+                    warn!(
+                        "Received unexpected binary message from client {}: {} bytes",
+                        client_id,
+                        data.len()
+                    );
                 }
                 Err(e) => {
-                    error!("WebSocket error for client {}: {}", client_id, e);
+                    error!("WebSocket error for client_id={}: error={}", client_id, e);
+                    trace!("WebSocket error details: {:?}", e);
                     break;
                 }
-                _ => {}
             }
         }
 
         // Cleanup on disconnect
+        trace!("Starting cleanup for disconnected client: {}", client_id);
         self.clients.remove(&client_id);
         self.tool_registry.remove_client_tools(&client_id);
         info!("Cleaned up client {}", client_id);
+        trace!("Client {} fully removed from all registries", client_id);
     }
 
     /// Authenticate WebSocket connection
@@ -229,33 +304,68 @@ impl WebSocketManager {
         query: &WebSocketQuery,
         state: &AppState,
     ) -> Result<()> {
+        trace!("Starting WebSocket authentication");
+        trace!(
+            "Available headers: {:?}",
+            headers.keys().collect::<Vec<_>>()
+        );
+        trace!(
+            "Query parameters: token={:?}",
+            query
+                .token
+                .as_ref()
+                .map(|t| format!("{}...", &t[..t.len().min(8)]))
+        );
+
         // Authentication is always required
 
         // Check for token in query parameters
         if let Some(token) = &query.token {
+            trace!("Found token in query parameters, validating...");
             if self.validate_token(token, state).await {
+                trace!("Query token validation successful");
                 return Ok(());
             }
+            trace!("Query token validation failed");
+        } else {
+            trace!("No token found in query parameters");
         }
 
         // Check for token in headers (Claude Code style)
         if let Some(auth_header) = headers.get("x-claude-code-ide-authorization") {
+            trace!("Found x-claude-code-ide-authorization header");
             if let Ok(token) = auth_header.to_str() {
+                trace!("Successfully parsed authorization header, validating token...");
                 if self.validate_token(token, state).await {
+                    trace!("Claude Code authorization header validation successful");
                     return Ok(());
                 }
+                trace!("Claude Code authorization header validation failed");
+            } else {
+                warn!("Failed to parse x-claude-code-ide-authorization header as string");
             }
+        } else {
+            trace!("No x-claude-code-ide-authorization header found");
         }
 
         // Check for token in x-api-key header (alternative auth method)
         if let Some(api_key_header) = headers.get("x-api-key") {
+            trace!("Found x-api-key header");
             if let Ok(token) = api_key_header.to_str() {
+                trace!("Successfully parsed x-api-key header, validating token...");
                 if self.validate_token(token, state).await {
+                    trace!("API key header validation successful");
                     return Ok(());
                 }
+                trace!("API key header validation failed");
+            } else {
+                warn!("Failed to parse x-api-key header as string");
             }
+        } else {
+            trace!("No x-api-key header found");
         }
 
+        warn!("All authentication methods failed");
         Err(AppError::BadRequest(
             "Invalid or missing authentication token".to_string(),
         ))
@@ -263,8 +373,14 @@ impl WebSocketManager {
 
     /// Validate authentication token
     async fn validate_token(&self, token: &str, state: &AppState) -> bool {
+        trace!(
+            "Starting token validation for token: {}...",
+            &token[..token.len().min(8)]
+        );
+
         // Basic token format validation
         if token.is_empty() || token.len() < 8 || token.len() > 256 {
+            trace!("Token failed format validation: length={}", token.len());
             return false;
         }
 
@@ -273,26 +389,47 @@ impl WebSocketManager {
             .chars()
             .all(|c| c.is_alphanumeric() || c == '-' || c == '_')
         {
+            trace!("Token failed character validation: contains invalid characters");
             return false;
         }
+        trace!("Token passed format validation");
 
         // Check against auth manager (primary method)
+        trace!("Checking token against auth manager");
         if state.auth_manager.validate_token(token) {
+            trace!("Token validation successful via auth manager");
             return true;
         }
+        trace!("Token validation failed via auth manager");
 
         // Legacy fallback: Check against websocket_token field in state
         if let Some(expected_token) = &state.websocket_token {
-            return self.constant_time_compare(token, expected_token);
+            trace!("Checking token against state.websocket_token");
+            let result = self.constant_time_compare(token, expected_token);
+            if result {
+                trace!("Token validation successful via state.websocket_token");
+                return true;
+            }
+            trace!("Token validation failed via state.websocket_token");
+        } else {
+            trace!("No state.websocket_token configured");
         }
 
         // Fall back to environment variable
         if let Ok(expected_token) = std::env::var("WEBSOCKET_AUTH_TOKEN") {
-            return self.constant_time_compare(token, &expected_token);
+            trace!("Checking token against WEBSOCKET_AUTH_TOKEN environment variable");
+            let result = self.constant_time_compare(token, &expected_token);
+            if result {
+                trace!("Token validation successful via environment variable");
+                return true;
+            }
+            trace!("Token validation failed via environment variable");
+        } else {
+            trace!("No WEBSOCKET_AUTH_TOKEN environment variable set");
         }
 
         // If no configured token found, reject
-        warn!("WebSocket authentication required but no token configured");
+        warn!("WebSocket authentication required but no valid token found in any source");
         false
     }
 
@@ -328,32 +465,94 @@ impl WebSocketManager {
 
     /// Handle incoming JSON-RPC message
     async fn handle_message(&self, client_id: &str, message: &str, state: &AppState) -> Result<()> {
-        debug!("Received message from {}: {}", client_id, message);
+        trace!(
+            "Processing message from client_id={}: {}",
+            client_id,
+            message
+        );
 
-        let request: JsonRpcRequest = serde_json::from_str(message)?;
+        let request: JsonRpcRequest = match serde_json::from_str::<JsonRpcRequest>(message) {
+            Ok(req) => {
+                trace!(
+                    "Successfully parsed JSON-RPC request: method={}, id={:?}",
+                    req.method,
+                    req.id
+                );
+                req
+            }
+            Err(e) => {
+                error!(
+                    "Failed to parse JSON-RPC request from client_id={}: error={}",
+                    client_id, e
+                );
+                return Err(e.into());
+            }
+        };
+
+        trace!(
+            "Routing message: method={}, client_id={}",
+            request.method,
+            client_id
+        );
 
         match request.method.as_str() {
             // WebSocket-specific methods that need special handling
-            "tools/register" => self.handle_tool_registration(client_id, &request).await,
-            "notifications/initialized" => self.handle_initialized(client_id).await,
+            "tools/register" => {
+                trace!("Handling tools/register for client_id={}", client_id);
+                self.handle_tool_registration(client_id, &request).await
+            }
+            "notifications/initialized" => {
+                trace!(
+                    "Handling notifications/initialized for client_id={}",
+                    client_id
+                );
+                self.handle_initialized(client_id).await
+            }
 
             // Check if this is a response to a server-initiated request
             _ if request.id.is_some() => {
                 if let Some(id) = &request.id {
-                    if self.pending_requests.contains_key(&id.to_string()) {
+                    let id_str = id.to_string();
+                    if self.pending_requests.contains_key(&id_str) {
+                        trace!(
+                            "Found pending request with id={}, handling as response",
+                            id_str
+                        );
                         return self.handle_response(client_id, message).await;
                     }
+                    trace!(
+                        "No pending request found for id={}, treating as regular request",
+                        id_str
+                    );
                 }
                 // Fall through to unified handler for regular requests
+                trace!(
+                    "Forwarding request to MCP server: method={}",
+                    request.method
+                );
                 let response = state.mcp_server.handle_request(state, request).await;
                 let response_value = serde_json::to_value(&response)?;
+                trace!(
+                    "Sending MCP response to client_id={}: {:?}",
+                    client_id,
+                    response_value
+                );
                 self.send_message(client_id, &response_value).await
             }
 
             // All other methods (including standard MCP) forwarded to unified handler
             _ => {
+                trace!(
+                    "Forwarding request to MCP server: method={}",
+                    request.method
+                );
                 let response = state.mcp_server.handle_request(state, request).await;
                 let response_value = serde_json::to_value(&response)?;
+                trace!(
+                    "Sending MCP response to client_id={}: {:?}",
+                    client_id,
+                    response_value
+                );
                 self.send_message(client_id, &response_value).await
             }
         }
@@ -365,8 +564,17 @@ impl WebSocketManager {
         client_id: &str,
         request: &JsonRpcRequest,
     ) -> Result<()> {
+        trace!("Processing tool registration from client_id={}", client_id);
+
         if let Some(params) = &request.params {
+            trace!("Tool registration params: {:?}", params);
             if let Ok(tool_def) = serde_json::from_value::<ClientToolDefinition>(params.clone()) {
+                trace!(
+                    "Successfully parsed tool definition: name={}, description={}",
+                    tool_def.name,
+                    tool_def.description
+                );
+
                 let mut tool = tool_def;
                 tool.client_id = client_id.to_string();
                 tool.registered_at = chrono::Utc::now();
@@ -383,8 +591,22 @@ impl WebSocketManager {
                 });
 
                 info!("Registered tool '{}' from client {}", tool.name, client_id);
+                trace!(
+                    "Sending registration success response to client_id={}",
+                    client_id
+                );
                 return self.send_message(client_id, &response).await;
+            } else {
+                error!(
+                    "Failed to parse tool definition from client_id={}: invalid format",
+                    client_id
+                );
             }
+        } else {
+            error!(
+                "Tool registration from client_id={} missing params",
+                client_id
+            );
         }
 
         let error_response = json!({
@@ -396,6 +618,10 @@ impl WebSocketManager {
             }
         });
 
+        warn!(
+            "Sending tool registration error response to client_id={}",
+            client_id
+        );
         self.send_message(client_id, &error_response).await
     }
 
@@ -430,13 +656,46 @@ impl WebSocketManager {
 
     /// Send message to client (public method for orchestration tools)
     pub async fn send_message(&self, client_id: &str, message: &Value) -> Result<()> {
+        trace!(
+            "Attempting to send message to client_id={}: {:?}",
+            client_id,
+            message
+        );
+
         if let Some(client) = self.clients.get(client_id) {
-            let text = serde_json::to_string(message)?;
+            let text = match serde_json::to_string(message) {
+                Ok(text) => {
+                    trace!(
+                        "Successfully serialized message for client_id={}: {}",
+                        client_id,
+                        text
+                    );
+                    text
+                }
+                Err(e) => {
+                    error!(
+                        "Failed to serialize message for client_id={}: error={}",
+                        client_id, e
+                    );
+                    return Err(e.into());
+                }
+            };
+
             if client.sender.send(Message::Text(text)).is_err() {
+                error!(
+                    "Failed to send message to client_id={}: channel closed",
+                    client_id
+                );
                 return Err(AppError::BadRequest(
                     "Failed to send message to client".to_string(),
                 ));
             }
+            trace!("Message sent successfully to client_id={}", client_id);
+        } else {
+            warn!(
+                "Attempted to send message to non-existent client_id={}",
+                client_id
+            );
         }
         Ok(())
     }
@@ -449,15 +708,26 @@ impl WebSocketManager {
         arguments: Value,
         timeout_secs: u64,
     ) -> Result<Value> {
+        info!(
+            "Initiating client tool call: client_id={}, tool_name={}, timeout={}s",
+            client_id, tool_name, timeout_secs
+        );
+        trace!("Tool call arguments: {:?}", arguments);
+
         // Acquire semaphore permit if concurrency limiting is enabled
         let _permit = if let Some(semaphore) = &self.concurrency_semaphore {
+            trace!("Acquiring concurrency semaphore permit");
             Some(semaphore.acquire().await.map_err(|_| {
+                error!("Concurrency limit reached for client tool calls");
                 AppError::BadRequest("Concurrency limit reached for client tool calls".to_string())
             })?)
         } else {
+            trace!("No concurrency limit configured");
             None
         };
+
         let request_id = Uuid::new_v4().to_string();
+        trace!("Generated request_id={} for tool call", request_id);
 
         let request = json!({
             "jsonrpc": "2.0",
@@ -479,16 +749,34 @@ impl WebSocketManager {
             created_at: chrono::Utc::now(),
         };
 
+        trace!("Registering pending request: request_id={}", request_id);
         self.pending_requests.insert(request_id.clone(), pending);
 
         // Send request to client
+        trace!("Sending tool call request to client: {:?}", request);
         self.send_message(client_id, &request).await?;
+        trace!("Tool call request sent successfully");
 
         // Wait for response with timeout
+        trace!("Waiting for response with timeout: {}s", timeout_secs);
         match tokio::time::timeout(std::time::Duration::from_secs(timeout_secs), rx).await {
-            Ok(Ok(result)) => result,
-            Ok(Err(_)) => Err(AppError::BadRequest("Request cancelled".to_string())),
+            Ok(Ok(result)) => {
+                trace!(
+                    "Received successful response for request_id={}: {:?}",
+                    request_id,
+                    result
+                );
+                result
+            }
+            Ok(Err(_)) => {
+                warn!("Request cancelled for request_id={}", request_id);
+                Err(AppError::BadRequest("Request cancelled".to_string()))
+            }
             Err(_) => {
+                warn!(
+                    "Request timeout for request_id={} after {}s",
+                    request_id, timeout_secs
+                );
                 self.pending_requests.remove(&request_id);
                 Err(AppError::BadRequest("Request timeout".to_string()))
             }

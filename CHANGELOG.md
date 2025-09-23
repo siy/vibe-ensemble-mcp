@@ -33,7 +33,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Inherit mode: Production using project Claude Code permissions
   - File mode: Custom worker-specific permissions
 - **Worker Isolation**: Proper permission enforcement for headless worker processes
-- **Secure Defaults**: Default to inherit mode for balanced security and functionality
+- **Secure Defaults**: Default to file mode for explicit permission control
 
 ## Notes
 

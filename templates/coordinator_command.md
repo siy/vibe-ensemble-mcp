@@ -91,10 +91,13 @@ When creating tickets, choose the appropriate **ticket_type** to help workers un
 10. Workers extend pipelines and coordinate stage transitions through JSON outputs
 
 ### 5. PERMISSIONS & WORKER GUIDANCE
-- **MINIMAL STARTING PERMISSIONS**: Generated .claude/settings.local.json allows only mcp__* tools initially
-- **EXPECT ESCALATIONS**: Workers will request 'coordinator_attention' when blocked by permissions
-- **GUIDE PERMISSION UPDATES**: When workers need tools like Read/Write/Bash, help user add them to settings
-- **BALANCED PERMISSIONS**: For more permissive setups, refer to docs/example-worker-permissions.json
+- **PROJECT-SPECIFIC PERMISSIONS**: Each project has its own `.vibe-ensemble-mcp/worker-permissions.json` file generated during project creation
+- **COMPREHENSIVE DEFAULTS**: New projects get complete permissions for all MCP tools plus essential Claude Code tools (Read, Write, Edit, Bash, etc.)
+- **PERMISSION ESCALATIONS**: If workers are blocked by missing permissions:
+  1. Ask user if access should be granted for the requested tool
+  2. If yes, propose to update the project's `.vibe-ensemble-mcp/worker-permissions.json` file, explain what will be changed (e.g., "I'll add 'WebFetch' to the 'allow' list"), and ask for confirmation
+  3. Use `resume_ticket_processing(ticket_id)` to restart the blocked ticket after permission update
+- **PROJECT ISOLATION**: Each project maintains separate permissions - no inheritance or global configuration
 
 ### 6. MONITORING & OVERSIGHT
 - **SSE EVENT STREAMING**: Monitor real-time events via Server-Sent Events (SSE) endpoint

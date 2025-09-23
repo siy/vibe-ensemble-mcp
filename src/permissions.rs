@@ -38,6 +38,19 @@ fn default_mode() -> String {
 pub struct ClaudeSettings {
     #[serde(default)]
     pub permissions: ClaudePermissions,
+    // Additional fields that might be present in worker-permissions.json
+    #[serde(
+        default,
+        skip_serializing_if = "Option::is_none",
+        rename = "enableAllProjectMcpServers"
+    )]
+    pub enable_all_project_mcp_servers: Option<bool>,
+    #[serde(
+        default,
+        skip_serializing_if = "Vec::is_empty",
+        rename = "enabledMcpjsonServers"
+    )]
+    pub enabled_mcpjson_servers: Vec<String>,
 }
 
 impl Default for ClaudePermissions {
@@ -140,10 +153,16 @@ pub fn load_inherit_permissions(project_path: &str) -> Result<ClaudePermissions>
 
 /// Load permissions from .vibe-ensemble-mcp/worker-permissions.json
 pub fn load_file_permissions(project_path: &str) -> Result<ClaudePermissions> {
+    use tracing::{debug, info, warn};
+
     let permissions_path =
         Path::new(project_path).join(".vibe-ensemble-mcp/worker-permissions.json");
 
     if !permissions_path.exists() {
+        debug!(
+            "Worker permissions file does not exist, using defaults: {}",
+            permissions_path.display()
+        );
         return Ok(ClaudePermissions::default());
     }
 
@@ -154,14 +173,63 @@ pub fn load_file_permissions(project_path: &str) -> Result<ClaudePermissions> {
         )
     })?;
 
-    let settings: ClaudeSettings = serde_json::from_str(&content).with_context(|| {
-        format!(
-            "Failed to parse worker permissions from {}",
-            permissions_path.display()
-        )
-    })?;
+    debug!(
+        "Read worker permissions file: {} ({} bytes)",
+        permissions_path.display(),
+        content.len()
+    );
 
-    Ok(settings.permissions)
+    // Try to parse as the expected structure first
+    match serde_json::from_str::<ClaudeSettings>(&content) {
+        Ok(settings) => {
+            info!(
+                "Successfully parsed worker permissions from {}: {} allowed, {} denied tools",
+                permissions_path.display(),
+                settings.permissions.allow.len(),
+                settings.permissions.deny.len()
+            );
+            debug!("Allowed tools: {:?}", settings.permissions.allow);
+            Ok(settings.permissions)
+        }
+        Err(e) => {
+            warn!(
+                "Failed to parse as ClaudeSettings, trying direct permissions parsing: {}",
+                e
+            );
+
+            // Try to parse just the permissions section directly
+            let json_value: serde_json::Value =
+                serde_json::from_str(&content).with_context(|| {
+                    format!("Failed to parse JSON from {}", permissions_path.display())
+                })?;
+
+            if let Some(permissions_obj) = json_value.get("permissions") {
+                match serde_json::from_value::<ClaudePermissions>(permissions_obj.clone()) {
+                    Ok(permissions) => {
+                        info!("Successfully extracted permissions section: {} allowed, {} denied tools",
+                              permissions.allow.len(),
+                              permissions.deny.len());
+                        debug!("Allowed tools: {:?}", permissions.allow);
+                        Ok(permissions)
+                    }
+                    Err(e2) => {
+                        warn!("Failed to parse permissions section: {}", e2);
+                        debug!("Permissions JSON value: {:?}", permissions_obj);
+                        Err(anyhow::anyhow!(
+                            "Failed to parse permissions from {}: {}",
+                            permissions_path.display(),
+                            e2
+                        ))
+                    }
+                }
+            } else {
+                Err(anyhow::anyhow!(
+                    "No 'permissions' section found in {}",
+                    permissions_path.display()
+                ))
+            }
+        }
+    }
 }
 
 /// Permission policy that clarifies intent at call sites
@@ -202,4 +270,121 @@ pub fn load_permission_policy(
             project_path,
         )?)),
     }
+}
+
+/// Create project-specific worker permissions file if it doesn't exist
+pub fn create_project_permissions(project_path: &str) -> Result<()> {
+    use tracing::{debug, info};
+
+    let vibe_dir = std::path::Path::new(project_path).join(".vibe-ensemble-mcp");
+    let permissions_file = vibe_dir.join("worker-permissions.json");
+
+    // Only create if doesn't exist (preserve existing)
+    if permissions_file.exists() {
+        debug!(
+            "Worker permissions file already exists at: {}",
+            permissions_file.display()
+        );
+        return Ok(());
+    }
+
+    // Create .vibe-ensemble-mcp directory if it doesn't exist
+    if !vibe_dir.exists() {
+        debug!(
+            "Creating .vibe-ensemble-mcp directory: {}",
+            vibe_dir.display()
+        );
+        fs::create_dir_all(&vibe_dir).with_context(|| {
+            format!(
+                "Failed to create .vibe-ensemble-mcp directory: {}",
+                vibe_dir.display()
+            )
+        })?;
+    }
+
+    // Create default permissions with comprehensive MCP tool access
+    let default_permissions = ClaudeSettings {
+        permissions: ClaudePermissions {
+            allow: vec![
+                // All vibe-ensemble-mcp tools
+                "mcp__vibe-ensemble-mcp__create_project".to_string(),
+                "mcp__vibe-ensemble-mcp__list_projects".to_string(),
+                "mcp__vibe-ensemble-mcp__get_project".to_string(),
+                "mcp__vibe-ensemble-mcp__update_project".to_string(),
+                "mcp__vibe-ensemble-mcp__delete_project".to_string(),
+                "mcp__vibe-ensemble-mcp__create_worker_type".to_string(),
+                "mcp__vibe-ensemble-mcp__list_worker_types".to_string(),
+                "mcp__vibe-ensemble-mcp__get_worker_type".to_string(),
+                "mcp__vibe-ensemble-mcp__update_worker_type".to_string(),
+                "mcp__vibe-ensemble-mcp__delete_worker_type".to_string(),
+                "mcp__vibe-ensemble-mcp__create_ticket".to_string(),
+                "mcp__vibe-ensemble-mcp__get_ticket".to_string(),
+                "mcp__vibe-ensemble-mcp__list_tickets".to_string(),
+                "mcp__vibe-ensemble-mcp__add_ticket_comment".to_string(),
+                "mcp__vibe-ensemble-mcp__close_ticket".to_string(),
+                "mcp__vibe-ensemble-mcp__resume_ticket_processing".to_string(),
+                "mcp__vibe-ensemble-mcp__add_ticket_dependency".to_string(),
+                "mcp__vibe-ensemble-mcp__remove_ticket_dependency".to_string(),
+                "mcp__vibe-ensemble-mcp__get_dependency_graph".to_string(),
+                "mcp__vibe-ensemble-mcp__list_ready_tickets".to_string(),
+                "mcp__vibe-ensemble-mcp__list_blocked_tickets".to_string(),
+                "mcp__vibe-ensemble-mcp__list_events".to_string(),
+                "mcp__vibe-ensemble-mcp__resolve_event".to_string(),
+                "mcp__vibe-ensemble-mcp__get_tickets_by_stage".to_string(),
+                "mcp__vibe-ensemble-mcp__get_permission_model".to_string(),
+                "mcp__vibe-ensemble-mcp__list_client_tools".to_string(),
+                "mcp__vibe-ensemble-mcp__call_client_tool".to_string(),
+                "mcp__vibe-ensemble-mcp__list_connected_clients".to_string(),
+                "mcp__vibe-ensemble-mcp__list_pending_requests".to_string(),
+                "mcp__vibe-ensemble-mcp__execute_workflow".to_string(),
+                "mcp__vibe-ensemble-mcp__parallel_call".to_string(),
+                "mcp__vibe-ensemble-mcp__broadcast_to_clients".to_string(),
+                "mcp__vibe-ensemble-mcp__collaborative_sync".to_string(),
+                "mcp__vibe-ensemble-mcp__poll_client_status".to_string(),
+                "mcp__vibe-ensemble-mcp__client_group_manager".to_string(),
+                "mcp__vibe-ensemble-mcp__client_health_monitor".to_string(),
+                "mcp__vibe-ensemble-mcp__validate_websocket_integration".to_string(),
+                "mcp__vibe-ensemble-mcp__test_websocket_compatibility".to_string(),
+                // Essential Claude Code tools
+                "TodoWrite".to_string(),
+                "Bash".to_string(),
+                "Read".to_string(),
+                "Write".to_string(),
+                "Edit".to_string(),
+                "MultiEdit".to_string(),
+                "Glob".to_string(),
+                "Grep".to_string(),
+            ],
+            deny: vec!["WebFetch".to_string(), "WebSearch".to_string()],
+            ask: vec![],
+            additional_directories: vec![],
+            default_mode: default_mode(),
+        },
+        enable_all_project_mcp_servers: Some(true),
+        enabled_mcpjson_servers: vec!["vibe-ensemble-mcp".to_string()],
+    };
+
+    // Serialize to pretty JSON
+    let permissions_content = serde_json::to_string_pretty(&default_permissions)
+        .with_context(|| "Failed to serialize default permissions to JSON")?;
+
+    // Write to file
+    fs::write(&permissions_file, permissions_content).with_context(|| {
+        format!(
+            "Failed to write permissions file: {}",
+            permissions_file.display()
+        )
+    })?;
+
+    info!(
+        "Created worker permissions file: {}",
+        permissions_file.display()
+    );
+    debug!(
+        "Generated permissions with {} allowed tools, {} denied tools",
+        default_permissions.permissions.allow.len(),
+        default_permissions.permissions.deny.len()
+    );
+
+    Ok(())
 }

@@ -39,6 +39,8 @@ impl ProcessManager {
                             permissions.allow.len(),
                             permissions.deny.len()
                         );
+                        debug!("Allowed tools before enhancement: {:?}", permissions.allow);
+                        debug!("Denied tools: {:?}", permissions.deny);
                         Self::add_permission_args(cmd, &permissions);
                     }
                 }
@@ -95,10 +97,11 @@ impl ProcessManager {
             for tool in &enhanced_allow_list {
                 cmd.arg(tool);
             }
-            debug!(
+            info!(
                 "Added {} allowed tools (including auto-added essentials)",
                 enhanced_allow_list.len()
             );
+            debug!("Final allowed tools list: {:?}", enhanced_allow_list);
         }
 
         // Add disallowed tools

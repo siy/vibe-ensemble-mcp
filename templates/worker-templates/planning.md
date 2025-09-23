@@ -176,28 +176,34 @@ When creating worker types, use templates from `.claude/worker-templates/` direc
 - Ensure all stages in your pipeline have corresponding worker types
 - Each worker type must receive detailed implementation guidance from planning phase
 
-## CRITICAL: PIPELINE WORKER TYPE VALIDATION
-**BEFORE FINALIZING ANY PIPELINE, YOU MUST VALIDATE EVERY STAGE:**
+## CRITICAL: TICKET CREATION AND DEPENDENCY MANAGEMENT
+**AS A PLANNING WORKER, YOU CREATE CHILD TICKETS INSTEAD OF UPDATING PIPELINES:**
 
-### MANDATORY VALIDATION PROCESS:
+### MANDATORY TICKET CREATION PROCESS:
 1. **List Existing Worker Types**: Use `list_worker_types(project_id)` to get all current worker types for the project
-2. **Validate Every Stage**: For EACH stage in your pipeline_update array:
+2. **Create Missing Worker Types**: For EACH stage in your planned workflow:
    - Check if a worker type exists for that stage name
    - If missing, use `create_worker_type()` to create it with appropriate template
-   - **NEVER** include a stage in pipeline_update without a corresponding worker type
-3. **Verification Check**: Before outputting JSON, re-verify that ALL stages have worker types
+   - **ALWAYS** ensure worker types exist before creating tickets
+3. **Create Child Tickets**: Use `create_ticket()` to create tickets for each implementation stage
+4. **Set Dependencies**: Use `add_ticket_dependency()` to establish proper execution order
+5. **Close Planning Ticket**: Use `close_ticket()` to mark planning complete
 
-### VALIDATION EXAMPLE:
+### TICKET CREATION EXAMPLE:
 ```
-Pipeline stages: ["planning", "implementation", "testing", "deployment"]
-✓ Check: "planning" worker type exists
-✓ Check: "implementation" worker type exists
-✗ Missing: "testing" worker type → CREATE with testing template
-✗ Missing: "deployment" worker type → CREATE with deployment template
-✓ Final verification: All 4 stages now have worker types
+Planning breakdown: ["backend_setup", "frontend_development", "integration_testing"]
+✓ Check: "backend_setup" worker type exists
+✗ Missing: "frontend_development" → CREATE with frontend template
+✗ Missing: "integration_testing" → CREATE with testing template
+✓ Create ticket: "Backend API Implementation" (backend_setup stage)
+✓ Create ticket: "Frontend UI Development" (frontend_development stage)
+✓ Create ticket: "End-to-End Testing" (integration_testing stage)
+✓ Add dependency: Frontend depends on Backend
+✓ Add dependency: Testing depends on Frontend
+✓ Close current planning ticket
 ```
 
-**⚠️ CRITICAL ERROR PREVENTION: Any stage in pipeline_update without a corresponding worker type will cause system failures. This validation is MANDATORY and NON-NEGOTIABLE.**
+**⚠️ CRITICAL: Planning workers must create tickets and close themselves. Do NOT update pipelines - create child tickets instead.**
 
 ## QUALITY ASSURANCE FRAMEWORK
 
@@ -230,13 +236,24 @@ Take action when:
 - Performance requirements not achieved
 
 ## JSON OUTPUT FORMAT
-Always end your work with a JSON block containing your decisions:
+Planning workers should close their ticket after creating all necessary child tickets:
 
 ```json
 {
-  "outcome": "next_stage",
-  "target_stage": "implementation",
-  "pipeline_update": ["planning", "implementation", "testing"],
+  "outcome": "coordinator_attention",
+  "target_stage": null,
+  "tickets_created": [
+    {
+      "title": "Backend API Implementation",
+      "worker_type": "implementation",
+      "estimated_tokens": "85K tokens"
+    },
+    {
+      "title": "Integration Testing Suite",
+      "worker_type": "testing",
+      "estimated_tokens": "45K tokens"
+    }
+  ],
   "task_sizing_analysis": {
     "implementation_stage": {
       "estimated_tokens": "85K tokens",
@@ -289,8 +306,8 @@ Always end your work with a JSON block containing your decisions:
     "rules_applied": "Following project coding standards and security guidelines",
     "patterns_used": "Using established authentication patterns from project"
   },
-  "comment": "Optimal 3-stage pipeline designed using task breakdown sizing methodology with comprehensive conflict avoidance. Each stage stays within 120K token budget while maximizing task coherence and preventing worker conflicts.",
-  "reason": "Task sizing analysis confirms efficient pipeline with proper context utilization, natural boundaries, and robust conflict prevention through clear scope separation"
+  "comment": "Planning complete. Created 2 child tickets with optimal task sizing and dependency relationships. All worker types created and validated.",
+  "reason": "Planning phase finished. Child tickets created with proper dependencies. No pipeline update needed - DAG-based execution will handle workflow."
 }
 ```
 
