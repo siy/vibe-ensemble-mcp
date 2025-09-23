@@ -22,20 +22,6 @@ use crate::{
 use tracing::trace;
 use uuid::Uuid;
 
-// Simplified worker output for this implementation
-#[derive(Debug, Clone)]
-pub struct WorkerOutput {
-    pub success: bool,
-    pub message: String,
-}
-
-#[derive(Debug, Clone)]
-pub enum WorkerOutcome {
-    NextStage,
-    PrevStage,
-    CoordinatorAttention,
-}
-
 /// Default buffer size for bounded channels
 const DEFAULT_CHANNEL_BUFFER_SIZE: usize = 1000;
 
@@ -443,7 +429,7 @@ impl QueueManager {
     }
 
     /// Handle advancing ticket to next stage with optional pipeline update
-    async fn advance_ticket_to_stage(
+    pub async fn advance_ticket_to_stage(
         self: &Arc<Self>,
         ticket_id: &TicketId,
         target_stage: &WorkerType,
