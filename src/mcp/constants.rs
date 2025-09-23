@@ -208,6 +208,10 @@ pub fn get_all_mcp_tool_names() -> Vec<String> {
         // Integration testing and compatibility tools
         "mcp__vibe-ensemble-mcp__validate_websocket_integration".to_string(),
         "mcp__vibe-ensemble-mcp__test_websocket_compatibility".to_string(),
+        // Template management tools
+        "mcp__vibe-ensemble-mcp__list_worker_templates".to_string(),
+        "mcp__vibe-ensemble-mcp__load_worker_template".to_string(),
+        "mcp__vibe-ensemble-mcp__ensure_worker_templates_exist".to_string(),
     ]
 }
 

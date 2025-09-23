@@ -24,6 +24,7 @@ use crate::{
     sse::{sse_handler, sse_message_handler, EventBroadcaster},
     workers::queue::QueueManager,
 };
+use dashmap::DashMap;
 
 #[derive(Clone)]
 pub struct AppState {
@@ -35,6 +36,7 @@ pub struct AppState {
     pub websocket_manager: Arc<WebSocketManager>,
     pub websocket_token: Option<String>,
     pub auth_manager: Arc<AuthTokenManager>,
+    pub coordinator_directories: Arc<dashmap::DashMap<String, String>>,
 }
 
 impl AppState {
@@ -74,6 +76,7 @@ pub async fn run_server(config: Config) -> Result<()> {
         websocket_manager,
         websocket_token: None, // Will be set after binding to port
         auth_manager: Arc::clone(&auth_manager),
+        coordinator_directories: Arc::new(DashMap::new()),
     };
 
     // Respawn workers for unfinished tasks if enabled
