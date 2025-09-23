@@ -345,6 +345,10 @@ pub fn create_project_permissions(project_path: &str) -> Result<()> {
                 "mcp__vibe-ensemble-mcp__client_health_monitor".to_string(),
                 "mcp__vibe-ensemble-mcp__validate_websocket_integration".to_string(),
                 "mcp__vibe-ensemble-mcp__test_websocket_compatibility".to_string(),
+                // Template management tools
+                "mcp__vibe-ensemble-mcp__list_worker_templates".to_string(),
+                "mcp__vibe-ensemble-mcp__load_worker_template".to_string(),
+                "mcp__vibe-ensemble-mcp__ensure_worker_templates_exist".to_string(),
                 // Essential Claude Code tools
                 "TodoWrite".to_string(),
                 "Bash".to_string(),

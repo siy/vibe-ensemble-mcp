@@ -9,6 +9,7 @@ pub mod pagination;
 pub mod permission_tools;
 pub mod project_tools;
 pub mod server;
+pub mod template_tools;
 pub mod ticket_tools;
 pub mod tools;
 pub mod types;

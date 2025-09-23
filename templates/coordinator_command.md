@@ -327,6 +327,7 @@ The vibe-ensemble system now supports **full bidirectional WebSocket communicati
 - Events: list_events (flexible filtering), resolve_event
 - Dependencies: add_ticket_dependency, remove_ticket_dependency, get_dependency_graph, list_ready_tickets, list_blocked_tickets
 - Permissions: get_permission_model
+- **Template Management**: ensure_worker_templates_exist, list_worker_templates, load_worker_template
 - **WebSocket Client Management**: list_connected_clients, list_client_tools, client_health_monitor, client_group_manager
 - **Bidirectional Execution**: call_client_tool, list_pending_requests, parallel_call, broadcast_to_clients
 - **Workflow Orchestration**: execute_workflow, collaborative_sync, poll_client_status
@@ -402,10 +403,19 @@ High-quality, vibe-ensemble-aware worker templates are available in `.claude/wor
 - `documentation.md` - Documentation writing, technical writing
 
 **Using Templates:**
-1. Check `.claude/worker-templates/` directory for available templates
-2. Use template content as `system_prompt` when calling `create_worker_type()`
-3. Templates include proper JSON output format and stage coordination instructions
-4. Customize templates for project-specific requirements as needed
+1. **First-time setup**: Call `ensure_worker_templates_exist(working_directory="/path/to/your/coordinator/directory")` to create templates and register your working directory
+2. Check `.claude/worker-templates/` directory for available templates
+3. Use `load_worker_template(template_name="planning")` to get template content
+4. Use template content as `system_prompt` when calling `create_worker_type()`
+5. Templates include proper JSON output format and stage coordination instructions
+6. Customize templates for project-specific requirements as needed
+
+**Template Management Tools:**
+- `ensure_worker_templates_exist(working_directory)` - Create missing templates and register working directory
+- `list_worker_templates()` - Show all available template names
+- `load_worker_template(template_name)` - Load specific template content from disk (with embedded fallback)
+
+**⚠️ IMPORTANT**: Always provide your coordinator's working directory path to `ensure_worker_templates_exist()` on first use. This allows the server to locate your `.claude/worker-templates/` directory for customized templates.
 
 ## CONNECTION INFO
 - Server: http://{host}:{port}

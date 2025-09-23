@@ -1,10 +1,10 @@
 # Vibe-Ensemble MCP Server
 
-A multi-agent coordination system that enables Claude Code to manage specialized AI workers for complex development tasks.
+A **highly customizable** multi-agent coordination system that enables Claude Code to manage specialized AI workers for complex development tasks.
 
-This architecture addresses context drift and focus dilution in complex projects by breaking 
-them down into specialized stages, allowing workers to focus on specific tasks. The high-level planning is left to the 
-coordinator, which serves as a single point of control.  
+This architecture addresses context drift and focus dilution in complex projects by breaking
+them down into specialized stages, allowing workers to focus on specific tasks. The high-level planning is left to the
+coordinator, which serves as a single point of control. **Worker templates are fully customizable** to adapt to your team's methodologies, coding standards, and specific requirements.  
 
 ## What It Does
 
@@ -16,6 +16,7 @@ Vibe-Ensemble allows you to break down complex projects into specialized stages,
 - **👀 Real-time Monitoring**: Track progress through tickets, comments, and live notifications
 - **🔄 Adaptive Workflows**: Workers can dynamically update execution plans as they discover new requirements
 - **💾 Persistent State**: All progress is saved, allowing you to pause and resume complex projects
+- **🎨 Live Customization**: Edit worker templates in real-time to adapt to your team's processes and coding standards
 - **🌐 Bidirectional Communication**: Full WebSocket support for real-time coordination with connected Claude Code clients
 - **🔗 Multi-Client Orchestration**: Coordinate work across multiple specialized Claude Code instances simultaneously
 
@@ -177,6 +178,7 @@ Vibe-Ensemble provides 47 MCP tools organized into ten categories:
 - `execute_workflow` - Coordinate complex multi-step workflows across clients
 - `collaborative_sync` - Synchronize state and data between coordinator and clients
 - `poll_client_status` - Get real-time status updates from specific clients
+
 
 ### Integration Testing
 - `validate_websocket_integration` - Comprehensive WebSocket functionality validation
@@ -361,27 +363,70 @@ Permission files are read fresh from disk each time a worker starts, allowing yo
 
 ### Worker Templates
 
-Vibe-Ensemble includes pre-built worker templates that define specialized AI workers for different stages of development. These templates are located in the `templates/` directory and can be customized to fit your specific needs.
+Vibe-Ensemble provides **8 high-quality, customizable worker templates** that define specialized AI workers for different stages of development. Templates are designed for **easy customization** while maintaining system compatibility.
 
-**Available Worker Templates:**
-- `templates/worker-templates/planning.md` - Strategic planning and architecture workers
-- `templates/worker-templates/design.md` - UI/UX and system design workers
-- `templates/worker-templates/implementation.md` - Development and coding workers
-- `templates/worker-templates/testing.md` - QA and testing specialists
-- `templates/worker-templates/review.md` - Code review and security analysis
-- `templates/worker-templates/deployment.md` - DevOps and deployment workers
-- `templates/worker-templates/research.md` - Investigation and analysis workers
-- `templates/worker-templates/documentation.md` - Technical writing specialists
+#### 📁 Template Locations & Runtime Behavior
 
-**Customizing Templates:**
-To customize worker behavior, edit the template files directly. Changes are automatically reflected when creating new worker types. Each template includes:
-- Specialized system prompts for the worker role
-- Task-specific guidance and methodologies
-- Output format requirements
-- Domain-specific best practices
+**Templates are distributed to coordinators** during setup and loaded **dynamically at runtime**:
 
-**System Prompts:**
-The `templates/system_prompts/` directory contains core prompts used for worker spawning and coordination. These control how workers interact with the system and can be modified for advanced customization.
+1. **Server Embedded**: Templates are embedded in the server binary as defaults
+2. **Coordinator Distribution**: `--configure-claude-code` creates templates in `.claude/worker-templates/`
+3. **Runtime Loading**: Server loads templates from coordinator's `.claude/worker-templates/` directory
+4. **Live Customization**: Edit templates on disk → changes take effect immediately
+5. **Automatic Fallback**: Missing templates automatically recreated from embedded versions
+
+
+#### 📋 Available Worker Templates
+
+- **`planning.md`** - Strategic planning, requirements analysis, pipeline design
+- **`design.md`** - UI/UX design, system architecture, technical specifications
+- **`implementation.md`** - Code development, feature implementation, integration
+- **`testing.md`** - Quality assurance, test writing, validation strategies
+- **`review.md`** - Code review, documentation review, quality checks
+- **`deployment.md`** - DevOps, infrastructure, deployment automation
+- **`research.md`** - Investigation, exploration, technology evaluation
+- **`documentation.md`** - Technical writing, API docs, user guides
+
+#### 🎨 **Customization Guidelines**
+
+**✅ Encouraged Customizations:**
+- Add project-specific context and requirements
+- Customize methodologies and approaches
+- Add domain-specific guidance and best practices
+- Modify tone and communication style
+- Include company/team-specific processes
+
+**⚠️ Important: Preserve System Integration**
+When customizing templates, **DO NOT** modify elements marked as **important for system functionality**:
+- JSON output format specifications
+- Required output fields (`outcome`, `target_stage`, `comment`, `reason`)
+- Stage coordination instructions
+- Pipeline extension mechanisms
+- Token budget guidelines
+- Worker type creation instructions
+
+**🔧 Safe Customization Pattern:**
+1. Copy the original template as backup
+2. Modify content sections while preserving system directives
+3. Test with simple tickets to ensure proper JSON output
+4. Monitor worker behavior for correct stage transitions
+
+**💡 Pro Tips:**
+- Templates are loaded fresh each time → instant customization
+- Use `load_worker_template` to preview changes before creating worker types
+- Different projects can have different template customizations
+- Share successful customizations across your organization
+
+#### 🏗️ Template Architecture
+
+Each template includes:
+- **Role Definition**: Clear worker specialization and responsibilities
+- **System Integration**: Proper JSON output format and coordination protocols
+- **Methodology Guidance**: Stage-specific approaches and best practices
+- **Quality Standards**: Output requirements and validation criteria
+- **Coordination Instructions**: Pipeline extension and worker type creation guidance
+
+Templates are designed to be **both powerful out-of-the-box and highly customizable** for specific project needs.
 
 ## What's New in v0.9.0
 
@@ -389,9 +434,9 @@ The `templates/system_prompts/` directory contains core prompts used for worker 
 - **📐 Natural Boundary Detection**: Automatic task splitting along technology, functional, and expertise boundaries
 - **⚡ Enhanced Planning Workers**: Built-in token estimation and pipeline optimization with comprehensive validation
 - **📊 Real-Time SSE Integration**: Full Server-Sent Events protocol for live progress monitoring and event streaming
-- **🔧 Improved Worker Templates**: 8 specialized worker templates with task sizing methodology integration
+- **🔧 Enhanced Worker Templates**: 8 highly customizable worker templates with live editing, runtime loading, and safe customization guidelines
 - **📋 Enhanced Coordinator Prompts**: Updated coordination with systematic task delegation and sizing guidance
-- **🛠️ Robust MCP Tools**: 25 MCP tools with enhanced project metadata and worker coordination
+- **🛠️ Robust MCP Tools**: 47 MCP tools with enhanced project metadata and worker coordination
 - **📚 Comprehensive Documentation**: Complete SSE protocol implementation and task breakdown sizing methodology
 - **🔒 Enhanced Security**: Removed manual ticket manipulation tools to prevent pipeline stalls
 

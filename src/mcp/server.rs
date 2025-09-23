@@ -5,7 +5,7 @@ use tracing::{debug, error, info, trace, warn};
 use super::{
     bidirectional_tools::*, client_tools::*, dependency_tools::*, event_tools::*,
     integration_tools::*, orchestration_tools::*, permission_tools::*, project_tools::*,
-    ticket_tools::*, tools::ToolRegistry, types::*, worker_type_tools::*, MCP_PROTOCOL_VERSION,
+    template_tools::*, ticket_tools::*, tools::ToolRegistry, types::*, worker_type_tools::*, MCP_PROTOCOL_VERSION,
 };
 use crate::{config::Config, error::Result, server::AppState};
 
@@ -50,6 +50,9 @@ impl McpServer {
 
         // Always register WebSocket tools (WebSocket is always enabled)
         Self::register_websocket_tools(&mut tools);
+
+        // Register template management tools
+        Self::register_template_tools(&mut tools);
 
         Self { tools }
     }
@@ -129,6 +132,16 @@ impl McpServer {
             // Integration testing and compatibility tools
             ValidateWebSocketIntegrationTool,
             TestWebSocketCompatibilityTool,
+        );
+    }
+
+    /// Register template management tools
+    fn register_template_tools(tools: &mut ToolRegistry) {
+        register_tools!(
+            tools,
+            ListWorkerTemplatesOol,
+            LoadWorkerTemplateTool,
+            EnsureWorkerTemplatesExistTool,
         );
     }
 
