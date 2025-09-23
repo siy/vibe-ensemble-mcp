@@ -176,10 +176,7 @@ impl ProcessManager {
 
         // Sanitize worker_id for use in filename (replace invalid characters with underscores)
         let sanitized_worker_id = worker_id
-            .replace('/', "_")
-            .replace(':', "_")
-            .replace(' ', "_")
-            .replace('\\', "_");
+            .replace(['/', ':', ' ', '\\'], "_");
 
         let config_path = format!(
             "{}/worker_{}_mcp_config.json",
