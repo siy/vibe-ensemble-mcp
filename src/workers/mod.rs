@@ -1,5 +1,10 @@
-pub mod commands;
+pub mod claims;
+pub mod completion_processor;
+pub mod consumer;
+pub mod dependencies;
 pub mod domain;
+pub mod pipeline;
 pub mod process;
 pub mod queue;
+pub mod transitions;
 pub mod types;

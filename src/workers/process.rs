@@ -1,137 +1,49 @@
-use anyhow::Result;
-use serde::{Deserialize, Serialize};
-use serde_json::json;
+use anyhow::{Context, Result};
 use std::fs;
-use std::path::Path;
 use std::process::Stdio;
 use tokio::process::Command;
-use tracing::{debug, error, info, warn};
+use tracing::{debug, info, warn};
 
-use super::queue::WorkerOutput;
+use super::completion_processor::WorkerOutput;
 use super::types::SpawnWorkerRequest;
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct ClaudePermissions {
-    #[serde(default)]
-    pub allow: Vec<String>,
-    #[serde(default)]
-    pub deny: Vec<String>,
-    #[serde(default)]
-    pub ask: Vec<String>,
-    #[serde(rename = "additionalDirectories", default)]
-    pub additional_directories: Vec<String>,
-    #[serde(rename = "defaultMode", default = "default_mode")]
-    pub default_mode: String,
-}
-
-fn default_mode() -> String {
-    "acceptEdits".to_string()
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize, Default)]
-pub struct ClaudeSettings {
-    #[serde(default)]
-    pub permissions: ClaudePermissions,
-}
-
-impl Default for ClaudePermissions {
-    fn default() -> Self {
-        Self {
-            allow: vec![],
-            deny: vec![],
-            ask: vec![],
-            additional_directories: vec![],
-            default_mode: default_mode(),
-        }
-    }
-}
+use crate::permissions::{
+    load_permission_policy, ClaudePermissions, PermissionMode, PermissionPolicy,
+};
 
 pub struct ProcessManager;
 
 impl ProcessManager {
-    /// Load permissions from .claude/settings.local.json
-    fn load_inherit_permissions(project_path: &str) -> Result<ClaudePermissions> {
-        let settings_path = Path::new(project_path).join(".claude/settings.local.json");
-        debug!(
-            "Loading inherit permissions from: {}",
-            settings_path.display()
-        );
-
-        if !settings_path.exists() {
-            warn!(
-                "Settings file not found: {}, using defaults",
-                settings_path.display()
-            );
-            return Ok(ClaudePermissions::default());
-        }
-
-        let content = fs::read_to_string(&settings_path)?;
-        let settings: ClaudeSettings = serde_json::from_str(&content)
-            .map_err(|e| anyhow::anyhow!("Failed to parse Claude settings: {}", e))?;
-
-        info!(
-            "Loaded inherit permissions with {} allowed, {} denied tools",
-            settings.permissions.allow.len(),
-            settings.permissions.deny.len()
-        );
-        Ok(settings.permissions)
-    }
-
-    /// Load permissions from <project_path>/.vibe-ensemble-mcp/worker-permissions.json
-    fn load_file_permissions(project_path: &str) -> Result<ClaudePermissions> {
-        let permissions_path =
-            Path::new(project_path).join(".vibe-ensemble-mcp/worker-permissions.json");
-        debug!(
-            "Loading file permissions from: {}",
-            permissions_path.display()
-        );
-
-        if !permissions_path.exists() {
-            warn!(
-                "Worker permissions file not found: {}, using defaults",
-                permissions_path.display()
-            );
-            return Ok(ClaudePermissions::default());
-        }
-
-        let content = fs::read_to_string(&permissions_path)?;
-        let settings: ClaudeSettings = serde_json::from_str(&content)
-            .map_err(|e| anyhow::anyhow!("Failed to parse worker permissions: {}", e))?;
-
-        info!(
-            "Loaded file permissions with {} allowed, {} denied tools",
-            settings.permissions.allow.len(),
-            settings.permissions.deny.len()
-        );
-        Ok(settings.permissions)
-    }
-
     /// Apply permissions to Claude command based on mode
     fn apply_permissions_to_command(
         cmd: &mut Command,
-        permission_mode: &str,
+        permission_mode: PermissionMode,
         project_path: &str,
     ) -> Result<()> {
-        match permission_mode {
-            "bypass" => {
+        let mode = permission_mode;
+
+        match mode {
+            PermissionMode::Bypass => {
                 debug!("Using bypass mode - adding --dangerously-skip-permissions");
                 cmd.arg("--dangerously-skip-permissions");
             }
-            "inherit" => {
-                debug!("Using inherit mode - loading from .claude/settings.local.json");
-                let permissions = Self::load_inherit_permissions(project_path)?;
-                Self::add_permission_args(cmd, &permissions);
-            }
-            "file" => {
-                debug!("Using file mode - loading from .vibe-ensemble-mcp/worker-permissions.json");
-                let permissions = Self::load_file_permissions(project_path)?;
-                Self::add_permission_args(cmd, &permissions);
-            }
-            _ => {
-                return Err(anyhow::anyhow!(
-                    "Invalid permission mode: {}",
-                    permission_mode
-                ));
+            PermissionMode::Inherit | PermissionMode::File => {
+                debug!("Using {} mode", mode.as_str());
+                let policy = load_permission_policy(mode, project_path)?;
+                match policy {
+                    PermissionPolicy::Bypass => {
+                        debug!("Permission policy is bypass for mode: {}", mode.as_str());
+                    }
+                    PermissionPolicy::Enforce(permissions) => {
+                        info!(
+                            "Loaded permissions with {} allowed, {} denied tools",
+                            permissions.allow.len(),
+                            permissions.deny.len()
+                        );
+                        debug!("Allowed tools before enhancement: {:?}", permissions.allow);
+                        debug!("Denied tools: {:?}", permissions.deny);
+                        Self::add_permission_args(cmd, &permissions);
+                    }
+                }
             }
         }
         Ok(())
@@ -139,13 +51,57 @@ impl ProcessManager {
 
     /// Add --allowedTools and --disallowedTools arguments to command
     fn add_permission_args(cmd: &mut Command, permissions: &ClaudePermissions) {
+        // For workers, we need to ensure our own MCP tools are always allowed
+        let mut enhanced_allow_list = permissions.allow.clone();
+
+        // Ensure our vibe-ensemble-mcp tools are always allowed (using explicit tool names)
+        use crate::mcp::constants::get_all_mcp_tool_names;
+        let mcp_tools = get_all_mcp_tool_names();
+
+        // Check if we already have explicit MCP tools or wildcard
+        let has_mcp_tools = enhanced_allow_list
+            .iter()
+            .any(|tool| tool.starts_with("mcp__vibe-ensemble-mcp__") || tool == "mcp__*");
+
+        if !has_mcp_tools {
+            enhanced_allow_list.extend(mcp_tools);
+            debug!(
+                "Auto-added {} explicit vibe-ensemble-mcp tools to worker permissions",
+                enhanced_allow_list.len()
+            );
+        }
+
+        // Add essential tools if not present
+        let essential_tools = [
+            "TodoWrite",
+            "Bash",
+            "Read",
+            "Write",
+            "Edit",
+            "MultiEdit",
+            "Glob",
+            "Grep",
+        ];
+        for essential_tool in essential_tools {
+            if !enhanced_allow_list
+                .iter()
+                .any(|tool| tool == essential_tool || tool == "*")
+            {
+                enhanced_allow_list.push(essential_tool.to_string());
+            }
+        }
+
         // Add allowed tools
-        if !permissions.allow.is_empty() {
+        if !enhanced_allow_list.is_empty() {
             cmd.arg("--allowedTools");
-            for tool in &permissions.allow {
+            for tool in &enhanced_allow_list {
                 cmd.arg(tool);
             }
-            debug!("Added {} allowed tools", permissions.allow.len());
+            info!(
+                "Added {} allowed tools (including auto-added essentials)",
+                enhanced_allow_list.len()
+            );
+            debug!("Final allowed tools list: {:?}", enhanced_allow_list);
         }
 
         // Add disallowed tools
@@ -166,111 +122,119 @@ impl ProcessManager {
         }
     }
 
-    /// Parse worker JSON output from a string
-    pub fn parse_output(output: &str) -> Result<WorkerOutput> {
-        debug!("Attempting to parse worker output: {}", output);
+    /// Optimized worker output parsing with fallback strategies
+    fn try_parse_worker_output(stdout: &str) -> Result<WorkerOutput> {
+        debug!("Attempting optimized worker output parsing");
 
-        // Strategy 1: Look for JSON code blocks (```json ... ```)
-        if let Some(json_start) = output.find("```json") {
-            let search_start = json_start + 7; // Skip past "```json"
-            if let Some(json_end_relative) = output[search_start..].find("```") {
-                let json_end = search_start + json_end_relative;
-                let json_block = output[search_start..json_end].trim();
-                debug!("Found JSON in code block: {}", json_block);
-                match serde_json::from_str::<WorkerOutput>(json_block) {
-                    Ok(worker_output) => return Ok(worker_output),
-                    Err(e) => debug!("Failed to parse JSON from code block: {}", e),
+        // Strategy 1: Try to parse as single JSON object (most efficient)
+        if let Ok(output) = serde_json::from_str::<WorkerOutput>(stdout.trim()) {
+            debug!("Successfully parsed as direct JSON");
+            return Ok(output);
+        }
+
+        // Strategy 2: Try Claude CLI wrapper format ({"result": "...", "type": "completion"})
+        if let Ok(claude_output) = serde_json::from_str::<serde_json::Value>(stdout.trim()) {
+            if let Some(result_str) = claude_output.get("result").and_then(|v| v.as_str()) {
+                debug!("Found Claude CLI wrapper, extracting result");
+                if let Ok(output) = Self::parse_worker_output_from_result(result_str) {
+                    return Ok(output);
                 }
             }
         }
 
-        // Strategy 2: Look for the last complete JSON object in the output
-        let mut last_valid_json = None;
-        let mut brace_count = 0;
-        let mut start_pos = None;
+        // Strategy 3: Line-by-line parsing (fallback for complex outputs)
+        for line in stdout.lines() {
+            let line = line.trim();
+            if line.is_empty() {
+                continue;
+            }
 
-        for (i, char) in output.char_indices() {
-            match char {
-                '{' => {
-                    if brace_count == 0 {
-                        start_pos = Some(i);
-                    }
-                    brace_count += 1;
-                }
-                '}' => {
-                    brace_count -= 1;
-                    if brace_count == 0 {
-                        if let Some(start) = start_pos {
-                            let json_candidate = &output[start..=i];
-                            if json_candidate.contains("\"ticket_id\"")
-                                && json_candidate.contains("\"outcome\"")
-                            {
-                                last_valid_json = Some(json_candidate);
-                            }
+            // Try direct JSON parsing first
+            if let Ok(output) = serde_json::from_str::<WorkerOutput>(line) {
+                debug!("Successfully parsed worker output from line");
+                return Ok(output);
+            }
+
+            // Try Claude CLI wrapper on this line
+            if line.contains("\"result\"") && line.contains("\"type\"") {
+                if let Ok(claude_output) = serde_json::from_str::<serde_json::Value>(line) {
+                    if let Some(result_str) = claude_output.get("result").and_then(|v| v.as_str()) {
+                        debug!("Found Claude CLI wrapper in line, extracting result");
+                        if let Ok(output) = Self::parse_worker_output_from_result(result_str) {
+                            return Ok(output);
                         }
                     }
                 }
-                _ => {}
             }
         }
 
-        if let Some(json_str) = last_valid_json {
-            debug!("Found valid JSON candidate: {}", json_str);
-            match serde_json::from_str::<WorkerOutput>(json_str) {
-                Ok(worker_output) => return Ok(worker_output),
-                Err(e) => debug!("Failed to parse JSON candidate: {}", e),
-            }
-        }
-
-        // Strategy 3: Original simple approach (fallback)
-        let json_start = output.find('{');
-        let json_end = output.rfind('}');
-
-        match (json_start, json_end) {
-            (Some(start), Some(end)) if start <= end => {
-                let json_str = &output[start..=end];
-                debug!("Fallback: parsing worker JSON: {}", json_str);
-                match serde_json::from_str::<WorkerOutput>(json_str) {
-                    Ok(worker_output) => return Ok(worker_output),
-                    Err(e) => debug!("Fallback parsing failed: {}", e),
-                }
-            }
-            _ => {}
-        }
-
-        error!("No valid JSON found in worker output: {}", output);
-        Err(anyhow::anyhow!("No valid JSON found in worker output"))
+        Err(anyhow::anyhow!(
+            "Could not parse worker output using any strategy. Workers must output valid JSON."
+        ))
     }
 
-    fn create_mcp_config(project_path: &str, worker_id: &str, server_port: u16) -> Result<String> {
+    /// Parse worker JSON output from the result string within Claude CLI JSON wrapper
+    fn parse_worker_output_from_result(result_str: &str) -> Result<WorkerOutput> {
+        debug!("Parsing worker output from result string: {}", result_str);
+
+        // Look for JSON code blocks (```json ... ```) in the result
+        if let Some(json_start) = result_str.find("```json") {
+            let search_start = json_start + 7; // Skip past "```json"
+            if let Some(json_end_relative) = result_str[search_start..].find("```") {
+                let json_end = search_start + json_end_relative;
+                let json_block = result_str[search_start..json_end].trim();
+                debug!("Found JSON in code block: {}", json_block);
+                return serde_json::from_str::<WorkerOutput>(json_block)
+                    .with_context(|| "Failed to parse WorkerOutput from JSON code block");
+            }
+        }
+
+        Err(anyhow::anyhow!(
+            "No valid JSON code block found in worker result. Workers must output JSON in ```json...``` blocks."
+        ))
+    }
+
+    fn create_mcp_config(
+        project_path: &str,
+        worker_id: &str,
+        host: &str,
+        server_port: u16,
+    ) -> Result<String> {
         debug!(
             "Creating MCP config for worker {} in project path: {}",
             worker_id, project_path
         );
 
-        let config = json!({
-            "mcpServers": {
-                "vibe-ensemble-mcp": {
-                    "type": "http",
-                    "url": format!("http://127.0.0.1:{}/mcp", server_port),
-                    "protocol_version": "2024-11-05"
-                }
-            }
-        });
+        use crate::mcp::constants::build_mcp_config;
+        let config = build_mcp_config(host, server_port);
         debug!("MCP config JSON created successfully");
 
-        let config_path = format!("{}/worker_{}_mcp_config.json", project_path, worker_id);
+        // Create .vibe-ensemble-mcp directory for worker configs
+        let config_dir = format!("{}/.vibe-ensemble-mcp", project_path);
+        fs::create_dir_all(&config_dir)
+            .with_context(|| format!("Failed to create worker config directory: {}", config_dir))?;
+        debug!("Created worker config directory: {}", config_dir);
+
+        // Sanitize worker_id for use in filename (replace invalid characters with underscores)
+        let sanitized_worker_id = worker_id.replace(['/', ':', ' ', '\\'], "_");
+
+        let config_path = format!(
+            "{}/worker_{}_mcp_config.json",
+            config_dir, sanitized_worker_id
+        );
         debug!("Target config file path: {}", config_path);
 
         debug!("Serializing config to pretty JSON...");
-        let config_json = serde_json::to_string_pretty(&config)?;
+        let config_json = serde_json::to_string_pretty(&config)
+            .with_context(|| "Failed to serialize MCP config to JSON")?;
         debug!(
             "JSON serialization successful, length: {} bytes",
             config_json.len()
         );
 
         debug!("Writing config file to: {}", config_path);
-        fs::write(&config_path, config_json)?;
+        fs::write(&config_path, config_json)
+            .with_context(|| format!("Failed to write MCP config to {}", config_path))?;
         debug!("File write successful");
 
         info!("Generated MCP config file: {}", config_path);
@@ -287,17 +251,15 @@ impl ProcessManager {
         let config_path = Self::create_mcp_config(
             &request.project_path,
             &request.worker_id,
+            &request.server_host,
             request.server_port,
         )?;
 
-        // Create system prompt that includes ticket_id
-        let system_prompt = format!(
-            "{}\n\n=== CRITICAL OUTPUT REQUIREMENT ===\nYou are working on ticket_id: {}\n\nIMPORTANT: You MUST end your response with a valid JSON block that the system can parse. This JSON determines what happens next to the ticket.\n\n🔐 PERMISSION HANDLING:\nIf you encounter permission restrictions while attempting to use tools:\n1. NEVER use \"error\" outcome - use \"coordinator_attention\" instead\n2. Include detailed information about which specific tool(s) you need access to\n3. Explain what you were trying to accomplish and why that tool is necessary\n4. The coordinator will handle communicating with the user about permission updates\n\nEXAMPLE for permission issues:\n```json\n{{\n  \"ticket_id\": \"{}\",\n  \"outcome\": \"coordinator_attention\",\n  \"target_stage\": null,\n  \"pipeline_update\": null,\n  \"comment\": \"Need permission to access required tools\",\n  \"reason\": \"Permission denied for tool 'WebSearch'. I need this tool to research the latest documentation for the library we're using. Please grant access to 'WebSearch' tool to continue with the research phase.\"\n}}\n```\n\nREQUIRED JSON FORMAT:\n```json\n{{\n  \"ticket_id\": \"{}\",\n  \"outcome\": \"next_stage\",\n  \"target_stage\": \"next_worker_type_name\",\n  \"pipeline_update\": [\"stage1\", \"stage2\", \"stage3\"],\n  \"comment\": \"Brief summary of what you accomplished\",\n  \"reason\": \"Why moving to next stage\"\n}}\n```\n\nFIELD DEFINITIONS:\n- \"outcome\": MUST be one of: \"next_stage\", \"prev_stage\", \"coordinator_attention\"\n- \"target_stage\": Name of the worker type for the next stage (required if outcome is \"next_stage\" or \"prev_stage\")\n- \"pipeline_update\": Complete array of all stages in order (INCLUDE THIS to update the execution plan)\n- \"comment\": Your work summary (will be added to ticket comments)\n- \"reason\": Explanation for the outcome (for permission issues, specify exactly which tools you need)\n\nEXAMPLES:\n1. For planning stage completing and moving to development:\n```json\n{{\n  \"ticket_id\": \"abc-123\",\n  \"outcome\": \"next_stage\",\n  \"target_stage\": \"development\",\n  \"pipeline_update\": [\"planning\", \"development\", \"testing\", \"review\"],\n  \"comment\": \"Completed project analysis and created development plan\",\n  \"reason\": \"Planning phase complete, ready for implementation\"\n}}\n```\n\n2. If you need coordinator help (general):\n```json\n{{\n  \"ticket_id\": \"abc-123\",\n  \"outcome\": \"coordinator_attention\",\n  \"target_stage\": null,\n  \"pipeline_update\": null,\n  \"comment\": \"Encountered issue that needs coordinator decision\",\n  \"reason\": \"Missing requirements or blocked by external dependency\"\n}}\n```\n\n3. If you need specific tool permissions:\n```json\n{{\n  \"ticket_id\": \"abc-123\",\n  \"outcome\": \"coordinator_attention\",\n  \"target_stage\": null,\n  \"pipeline_update\": null,\n  \"comment\": \"Permission required for essential tools\",\n  \"reason\": \"Need access to 'Bash' and 'WebSearch' tools. Bash is required to run tests and check build status. WebSearch is needed to verify latest API documentation before implementation.\"\n}}\n```\n\nREMEMBER: Your response should include your normal work/analysis, followed by the JSON block at the end.",
-            request.system_prompt,
-            request.ticket_id,
-            request.ticket_id,
-            request.ticket_id
-        );
+        // Create system prompt using template
+        let template = include_str!("../../templates/system_prompts/worker_spawn.md");
+        let system_prompt = template
+            .replace("{system_prompt}", &request.system_prompt)
+            .replace("{ticket_id}", &request.ticket_id);
 
         // Spawn Claude Code process with the system prompt
         info!(
@@ -318,10 +280,13 @@ impl ProcessManager {
             .stderr(Stdio::piped());
 
         // Apply permissions based on mode
-        info!("Applying permission mode: {}", request.permission_mode);
+        info!(
+            "Applying permission mode: {}",
+            request.permission_mode.as_str()
+        );
         Self::apply_permissions_to_command(
             &mut cmd,
-            &request.permission_mode,
+            request.permission_mode,
             &request.project_path,
         )?;
 
@@ -342,54 +307,15 @@ impl ProcessManager {
         debug!("Worker stdout: {}", stdout_str);
         debug!("Worker stderr: {}", stderr_str);
 
-        // Parse Claude CLI JSON output format
-        // Claude CLI with --output-format json wraps response in {"result": "...", ...}
-        for line in stdout_str.lines() {
-            // First try to parse as Claude CLI wrapper format
-            if line.contains("\"result\"") && line.contains("\"type\"") {
-                debug!("Attempting to parse Claude CLI wrapper JSON: {}", line);
-                if let Ok(claude_output) = serde_json::from_str::<serde_json::Value>(line) {
-                    if let Some(result_str) = claude_output.get("result").and_then(|v| v.as_str()) {
-                        debug!("Extracted result string: {}", result_str);
-                        // Parse the inner result string as WorkerOutput JSON
-                        match Self::parse_output(result_str) {
-                            Ok(parsed_output) => {
-                                info!(
-                                    "Successfully parsed worker output for ticket {} (Claude CLI format)",
-                                    request.ticket_id
-                                );
-                                // Clean up
-                                let _ = std::fs::remove_file(&config_path);
-                                return Ok(parsed_output);
-                            }
-                            Err(e) => {
-                                debug!(
-                                    "Failed to parse inner JSON from result: {} - error: {}",
-                                    result_str, e
-                                );
-                            }
-                        }
-                    }
-                }
-            }
-            // Fallback: try direct parsing for lines containing "outcome" (backwards compatibility)
-            else if line.contains("\"outcome\"") {
-                debug!("Attempting direct JSON parsing: {}", line);
-                match Self::parse_output(line) {
-                    Ok(parsed_output) => {
-                        info!(
-                            "Successfully parsed worker output for ticket {} (direct format)",
-                            request.ticket_id
-                        );
-                        // Clean up
-                        let _ = std::fs::remove_file(&config_path);
-                        return Ok(parsed_output);
-                    }
-                    Err(e) => {
-                        debug!("Failed to parse JSON from line: {} - error: {}", line, e);
-                    }
-                }
-            }
+        // Optimized parsing: try whole output first, then line-by-line fallback
+        if let Ok(parsed_output) = Self::try_parse_worker_output(&stdout_str) {
+            info!(
+                "Successfully parsed worker output for ticket {}",
+                request.ticket_id
+            );
+            // Clean up
+            let _ = std::fs::remove_file(&config_path);
+            return Ok(parsed_output);
         }
 
         // Clean up config file

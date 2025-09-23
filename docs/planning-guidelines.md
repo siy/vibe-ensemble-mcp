@@ -188,7 +188,6 @@ End your response with:
   "ticket_id": "your_ticket_id",
   "outcome": "next_stage|prev_stage|coordinator_attention",
   "target_stage": "next_stage_name",
-  "pipeline_update": ["stage1", "stage2", "stage3"],
   "comment": "Stage completion summary",
   "reason": "Rationale for progression"
 }
@@ -484,11 +483,11 @@ Take action when:
 - Monitor events for spawning failures
 
 ### Issue: Stage Transitions Failing
-**Symptoms:** Workers complete but don't advance pipeline
+**Symptoms:** Workers complete but don't advance to next stage
 **Solutions:**
 - Verify JSON output schema in worker prompts
 - Check `target_stage` values match existing worker types
-- Ensure `pipeline_update` arrays are correct
+- Ensure worker types exist for target stages
 - Review stage naming consistency
 
 ### Issue: Quality Standards Not Met

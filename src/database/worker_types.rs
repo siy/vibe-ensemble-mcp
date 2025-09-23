@@ -102,37 +102,43 @@ impl WorkerType {
             return Self::get_by_type(pool, project_id, worker_type).await;
         }
 
-        // Build update query dynamically
-        let mut set_clauses = Vec::new();
-        let mut bind_values: Vec<String> = Vec::new();
+        // Build update query using QueryBuilder for safer parameter binding
+        let mut query_builder = sqlx::QueryBuilder::new("UPDATE worker_types SET ");
+        let mut has_field = false;
 
         if let Some(ref desc) = req.short_description {
-            set_clauses.push("short_description = ?");
-            bind_values.push(desc.clone());
+            if has_field {
+                query_builder.push(", ");
+            }
+            query_builder.push("short_description = ");
+            query_builder.push_bind(desc);
+            has_field = true;
         }
         if let Some(ref prompt) = req.system_prompt {
-            set_clauses.push("system_prompt = ?");
-            bind_values.push(prompt.clone());
+            if has_field {
+                query_builder.push(", ");
+            }
+            query_builder.push("system_prompt = ");
+            query_builder.push_bind(prompt);
+            has_field = true;
         }
 
-        set_clauses.push("updated_at = datetime('now')");
-
-        let query = format!(
-            "UPDATE worker_types SET {} WHERE project_id = ? AND worker_type = ? RETURNING id, project_id, worker_type, short_description, system_prompt, created_at, updated_at",
-            set_clauses.join(", ")
-        );
-
-        let mut query_builder = sqlx::query_as::<_, WorkerType>(&query);
-
-        // Bind values in order
-        for value in &bind_values {
-            query_builder = query_builder.bind(value);
+        if has_field {
+            query_builder.push(", ");
         }
-        query_builder = query_builder.bind(project_id);
-        query_builder = query_builder.bind(worker_type);
+        query_builder.push("updated_at = datetime('now')");
 
-        let worker_type = query_builder.fetch_optional(pool).await?;
-        Ok(worker_type)
+        query_builder.push(" WHERE project_id = ");
+        query_builder.push_bind(project_id);
+        query_builder.push(" AND worker_type = ");
+        query_builder.push_bind(worker_type);
+        query_builder.push(" RETURNING id, project_id, worker_type, short_description, system_prompt, created_at, updated_at");
+
+        let worker_type_result = query_builder
+            .build_query_as::<WorkerType>()
+            .fetch_optional(pool)
+            .await?;
+        Ok(worker_type_result)
     }
 
     pub async fn delete(pool: &DbPool, project_id: &str, worker_type: &str) -> Result<bool> {

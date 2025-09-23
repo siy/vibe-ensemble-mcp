@@ -1,8 +1,13 @@
+pub mod auth;
 pub mod config;
 pub mod configure;
 pub mod database;
 pub mod error;
+pub mod events;
+pub mod lockfile;
 pub mod mcp;
+pub mod permissions;
 pub mod server;
 pub mod sse;
+pub mod validation;
 pub mod workers;

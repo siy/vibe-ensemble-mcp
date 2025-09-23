@@ -14,7 +14,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **📊 Real-Time SSE Integration**: Full Server-Sent Events protocol for live progress monitoring and event streaming
 - **🔧 Improved Worker Templates**: 8 specialized worker templates with task sizing methodology integration
 - **📋 Enhanced Coordinator Prompts**: Updated coordination with systematic task delegation and sizing guidance
-- **🛠️ Robust MCP Tools**: 19 MCP tools with enhanced project metadata and worker coordination
+- **🛠️ Robust MCP Tools**: 47 MCP tools with enhanced project metadata and worker coordination
 - **📚 Comprehensive Documentation**: Complete SSE protocol implementation and task breakdown sizing methodology
 - **🔒 Enhanced Security**: Permission system with three modes (bypass, inherit, file) for fine-grained worker access control
 
@@ -25,7 +25,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Changed
 - **Streamlined Workflow**: All ticket processing now flows through automated queue system
 - **Improved Stability**: Eliminates manual interventions that could disrupt worker coordination
-- **Tool Count**: Reduced from 22 to 19 MCP tools by removing redundant manual manipulation tools
+- **Tool Count**: Evolved to 47 MCP tools with comprehensive feature coverage including bidirectional communication
 
 ### Security
 - **Permission Modes**: Three distinct permission modes for different security requirements
@@ -33,7 +33,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Inherit mode: Production using project Claude Code permissions
   - File mode: Custom worker-specific permissions
 - **Worker Isolation**: Proper permission enforcement for headless worker processes
-- **Secure Defaults**: Default to inherit mode for balanced security and functionality
+- **Secure Defaults**: Default to file mode for explicit permission control
 
 ## Notes
 

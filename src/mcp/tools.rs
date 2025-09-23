@@ -65,7 +65,7 @@ pub fn create_success_response(message: &str) -> CallToolResponse {
             content_type: "text".to_string(),
             text: message.to_string(),
         }],
-        is_error: None,
+        is_error: Some(false),
     }
 }
 
@@ -74,6 +74,32 @@ pub fn create_error_response(error: &str) -> CallToolResponse {
         content: vec![ToolContent {
             content_type: "text".to_string(),
             text: error.to_string(),
+        }],
+        is_error: Some(true),
+    }
+}
+
+/// Create success response with JSON content
+pub fn create_json_success_response(data: Value) -> CallToolResponse {
+    CallToolResponse {
+        content: vec![ToolContent {
+            content_type: "text".to_string(),
+            text: serde_json::to_string_pretty(&data).unwrap_or_else(|_| "{}".to_string()),
+        }],
+        is_error: Some(false),
+    }
+}
+
+/// Create error response with JSON content
+pub fn create_json_error_response(error: &str) -> CallToolResponse {
+    let error_data = serde_json::json!({
+        "error": error
+    });
+    CallToolResponse {
+        content: vec![ToolContent {
+            content_type: "text".to_string(),
+            text: serde_json::to_string_pretty(&error_data)
+                .unwrap_or_else(|_| r#"{"error": "Unknown error"}"#.to_string()),
         }],
         is_error: Some(true),
     }

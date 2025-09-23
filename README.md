@@ -12,6 +12,8 @@ Vibe-Ensemble allows you to break down complex projects into specialized stages,
 - **👀 Real-time Monitoring**: Track progress through tickets, comments, and live notifications
 - **🔄 Adaptive Workflows**: Workers can dynamically update execution plans as they discover new requirements
 - **💾 Persistent State**: All progress is saved, allowing you to pause and resume complex projects
+- **🌐 Bidirectional Communication**: Full WebSocket support for real-time coordination with connected Claude Code clients
+- **🔗 Multi-Client Orchestration**: Coordinate work across multiple specialized Claude Code instances simultaneously
 
 ## Installation
 
@@ -63,9 +65,11 @@ cargo build --release
 ```
 
 This command automatically creates:
-- `.mcp.json` - MCP server configuration (HTTP + SSE transports)
+- `.mcp.json` - MCP server configuration (HTTP + SSE + WebSocket transports)
 - `.claude/settings.local.json` - Claude Code permissions
 - `.claude/commands/vibe-ensemble.md` - Coordinator initialization command
+- `.claude/websocket-token` - Authentication token for WebSocket connections
+- `.vibe-ensemble-mcp/worker-permissions.json` - Worker permissions (if using file permission mode)
 
 **Manual Setup (Alternative):**
 ```bash
@@ -94,7 +98,7 @@ Once you have Vibe-Ensemble configured and running with Claude Code, you can coo
 periodically ask Claude Code to check ticket status and event queue. Sometimes it may report issues, but not address them.
 Sending prompt like "Act as a coordinator" usually helps.
 
-**SECURITY WARNING:** Always review and test permission configurations before production use. While the permission system is designed to be secure, proper configuration is essential. Use 'bypass' mode only in isolated development environments as it grants unrestricted access. For production use, prefer 'inherit' or 'file' modes with carefully configured tool restrictions.
+**SECURITY WARNING:** Always review and test permission configurations before production use. While the permission system is designed to be secure, proper configuration is essential. Use 'bypass' mode only in isolated development environments as it grants unrestricted access. For production use, the default 'file' mode provides explicit permission control, while 'inherit' mode is available for advanced scenarios.
 
 ### Example Project Types
 
@@ -125,7 +129,7 @@ Each worker operates independently with their specialized knowledge, ensuring fo
 
 ## MCP Tools
 
-Vibe-Ensemble provides 20 MCP tools organized into five categories:
+Vibe-Ensemble provides 47 MCP tools organized into ten categories:
 
 ### Project Management
 - `create_project` - Create a new project with rules and patterns
@@ -157,7 +161,37 @@ Vibe-Ensemble provides 20 MCP tools organized into five categories:
 ### Permission Management
 - `get_permission_model` - Get information about the current permission model and configuration
 
+### Dependency Management
+- `add_ticket_dependency` - Add dependencies between tickets to control execution order
+- `remove_ticket_dependency` - Remove ticket dependencies
+- `get_dependency_graph` - Visualize ticket dependencies and execution order
+- `list_ready_tickets` - List tickets ready for execution (dependencies satisfied)
+- `list_blocked_tickets` - List tickets blocked by pending dependencies
+
+### WebSocket Client Management (Bidirectional Communication)
+- `list_connected_clients` - View all connected Claude Code instances with their capabilities
+- `list_client_tools` - Discover tools available on connected clients
+- `client_health_monitor` - Monitor connection status and client health metrics
+- `client_group_manager` - Organize clients into logical groups for targeted operations
+
+### Bidirectional Tool Execution
+- `call_client_tool` - Execute tools on specific connected Claude Code clients
+- `list_pending_requests` - Track ongoing client tool calls and their status
+- `parallel_call` - Execute the same tool across multiple clients simultaneously
+- `broadcast_to_clients` - Send notifications or commands to all connected clients
+
+### Workflow Orchestration
+- `execute_workflow` - Coordinate complex multi-step workflows across clients
+- `collaborative_sync` - Synchronize state and data between coordinator and clients
+- `poll_client_status` - Get real-time status updates from specific clients
+
+### Integration Testing
+- `validate_websocket_integration` - Comprehensive WebSocket functionality validation
+- `test_websocket_compatibility` - Test compatibility with different MCP client types
+
 > **Note on Worker Management**: Workers are automatically spawned when tickets are assigned to stages. There are no explicit worker spawn/stop tools - the queue system handles worker lifecycle automatically based on workload.
+
+> **Note on Bidirectional Communication**: WebSocket tools enable real-time coordination with connected Claude Code clients, allowing for distributed task execution and multi-client workflows. This is particularly useful for complex projects requiring specialized environments or parallel processing capabilities.
 
 ## Requirements
 
@@ -170,12 +204,16 @@ Vibe-Ensemble provides 20 MCP tools organized into five categories:
 The server accepts the following command-line options:
 
 - `--configure-claude-code`: Generate Claude Code integration files and exit
-- `--database-path`: SQLite database file path (default: `./vibe-ensemble.db`)
+- `--database-path`: SQLite database file path (default: `./.vibe-ensemble-mcp/vibe-ensemble.db`)
 - `--host`: Server bind address (default: `127.0.0.1`)
 - `--port`: Server port (default: `3000`)
 - `--log-level`: Log level (default: `info`)
-- `--permission-mode`: Permission mode for workers (default: `inherit`)
+- `--permission-mode`: Permission mode for workers (default: `file`)
 - `--no-respawn`: Disable automatic respawning of workers on startup
+- `--enable-websocket`: Enable WebSocket transport for bidirectional communication (default: `true`)
+- `--websocket-auth-required`: Require authentication for WebSocket connections (default: `false`)
+- `--client-tool-timeout-secs`: Timeout for client tool calls in seconds (default: `30`)
+- `--max-concurrent-client-requests`: Maximum concurrent client requests (default: `50`)
 
 ## Security & Permissions
 
@@ -195,7 +233,7 @@ The server supports three permission modes controlled by the `--permission-mode`
 ./vibe-ensemble-mcp --permission-mode bypass
 ```
 
-#### 2. **Inherit Mode** (`--permission-mode inherit`) - **Default**
+#### 2. **Inherit Mode** (`--permission-mode inherit`)
 - **Use Case**: Production deployments where you want to reuse existing Claude Code permissions
 - **Behavior**: Workers inherit permissions from your project's `.claude/settings.local.json` file
 - **Security Level**: 🛡️ **Project-level control** - uses the same permissions as your interactive Claude Code session
@@ -203,13 +241,12 @@ The server supports three permission modes controlled by the `--permission-mode`
 
 ```bash
 ./vibe-ensemble-mcp --permission-mode inherit
-# or simply (default)
 ./vibe-ensemble-mcp
 ```
 
 **Required File**: `.claude/settings.local.json` in your project directory
 
-#### 3. **File Mode** (`--permission-mode file`)
+#### 3. **File Mode** (`--permission-mode file`) - **Default**
 - **Use Case**: Custom worker-specific permissions different from your coordinator permissions
 - **Behavior**: Workers use permissions from `.vibe-ensemble-mcp/worker-permissions.json`
 - **Security Level**: 🔐 **Worker-specific control** - precisely control what workers can access
@@ -217,6 +254,8 @@ The server supports three permission modes controlled by the `--permission-mode`
 
 ```bash
 ./vibe-ensemble-mcp --permission-mode file
+# or simply (default)
+./vibe-ensemble-mcp
 ```
 
 **Required File**: `.vibe-ensemble-mcp/worker-permissions.json` in your project directory
@@ -331,7 +370,7 @@ cp docs/example-restrictive-permissions.json .vibe-ensemble-mcp/worker-permissio
 ### Security Best Practices
 
 1. **Start Restrictive**: Begin with minimal permissions and add tools as needed
-2. **Use Inherit Mode**: In most cases, inherit mode provides the right balance of security and functionality
+2. **Use File Mode**: The default file mode provides explicit control over worker permissions
 3. **Monitor Worker Activity**: Check logs in `.vibe-ensemble-mcp/logs/` to understand what tools workers are using
 4. **Separate Environments**: Use bypass mode only in isolated development environments
 5. **Regular Reviews**: Periodically review and update permission configurations
@@ -352,8 +391,34 @@ Permission files are read fresh from disk each time a worker starts, allowing yo
 **Security concerns**: Switch to `file` mode and create restrictive permissions tailored to your specific use case
 
 **Permission file location issues**: Ensure files are in the correct location relative to your project directory:
-- Inherit mode: `.claude/settings.local.json` 
+- Inherit mode: `.claude/settings.local.json`
 - File mode: `.vibe-ensemble-mcp/worker-permissions.json`
+
+## Customization
+
+### Worker Templates
+
+Vibe-Ensemble includes pre-built worker templates that define specialized AI workers for different stages of development. These templates are located in the `templates/` directory and can be customized to fit your specific needs.
+
+**Available Worker Templates:**
+- `templates/worker-templates/planning.md` - Strategic planning and architecture workers
+- `templates/worker-templates/design.md` - UI/UX and system design workers
+- `templates/worker-templates/implementation.md` - Development and coding workers
+- `templates/worker-templates/testing.md` - QA and testing specialists
+- `templates/worker-templates/review.md` - Code review and security analysis
+- `templates/worker-templates/deployment.md` - DevOps and deployment workers
+- `templates/worker-templates/research.md` - Investigation and analysis workers
+- `templates/worker-templates/documentation.md` - Technical writing specialists
+
+**Customizing Templates:**
+To customize worker behavior, edit the template files directly. Changes are automatically reflected when creating new worker types. Each template includes:
+- Specialized system prompts for the worker role
+- Task-specific guidance and methodologies
+- Output format requirements
+- Domain-specific best practices
+
+**System Prompts:**
+The `templates/system_prompts/` directory contains core prompts used for worker spawning and coordination. These control how workers interact with the system and can be modified for advanced customization.
 
 ## What's New in v0.9.0
 
@@ -363,28 +428,108 @@ Permission files are read fresh from disk each time a worker starts, allowing yo
 - **📊 Real-Time SSE Integration**: Full Server-Sent Events protocol for live progress monitoring and event streaming
 - **🔧 Improved Worker Templates**: 8 specialized worker templates with task sizing methodology integration
 - **📋 Enhanced Coordinator Prompts**: Updated coordination with systematic task delegation and sizing guidance
-- **🛠️ Robust MCP Tools**: 22 MCP tools with enhanced project metadata and worker coordination
+- **🛠️ Robust MCP Tools**: 25 MCP tools with enhanced project metadata and worker coordination
 - **📚 Comprehensive Documentation**: Complete SSE protocol implementation and task breakdown sizing methodology
 - **🔒 Enhanced Security**: Removed manual ticket manipulation tools to prevent pipeline stalls
+
+## Bidirectional WebSocket Communication
+
+Vibe-Ensemble v0.9.1 introduces **full bidirectional WebSocket communication** with Claude Code clients, enabling advanced multi-client coordination and real-time collaboration.
+
+### Key Capabilities
+
+**🔗 Real-time Client Coordination:**
+- Connect multiple Claude Code instances as specialized clients
+- Server can initiate tool calls on connected clients
+- Clients can register their own tools for server use
+- Bi-directional JSON-RPC 2.0 over WebSocket protocol
+
+**🚀 Advanced Workflow Patterns:**
+- **Distributed Task Execution**: Delegate specialized tasks to clients with specific capabilities
+- **Parallel Processing**: Execute tasks across multiple client environments simultaneously
+- **Multi-Environment Development**: Coordinate across different OS, tools, or configuration setups
+- **Expert Specialization**: Route tasks to clients with domain-specific expertise
+
+**🛠️ Integration Features:**
+- **Authentication**: Secure token-based authentication for WebSocket connections
+- **Health Monitoring**: Real-time monitoring of client connections and capabilities
+- **Group Management**: Organize clients into logical groups for targeted operations
+- **Workflow Orchestration**: Complex multi-step workflows spanning multiple clients
+
+### Getting Started with WebSocket
+
+1. **Configure with WebSocket Support**:
+   ```bash
+   ./vibe-ensemble-mcp --configure-claude-code --host 127.0.0.1 --port 3000
+   ```
+   This automatically generates WebSocket authentication tokens and configuration.
+
+2. **Start Server with WebSocket Enabled** (default):
+   ```bash
+   ./vibe-ensemble-mcp --port 3000
+   ```
+
+3. **Connect Claude Code Clients**:
+   - Use the generated `.mcp.json` configuration which includes WebSocket transport
+   - Clients authenticate using the generated `.claude/websocket-token`
+   - Multiple clients can connect simultaneously for distributed coordination
+
+4. **Use Bidirectional Tools**:
+   - `list_connected_clients` - See available client environments
+   - `call_client_tool` - Execute tools on specific clients
+   - `parallel_call` - Execute across multiple clients simultaneously
+   - `collaborative_sync` - Synchronize state across clients
+
+### Use Cases
+
+**Multi-Platform Development:**
+- Windows client for Windows-specific testing
+- Linux client for deployment and Docker operations
+- macOS client for iOS-related development tasks
+
+**Specialized Environments:**
+- Client with specialized security analysis tools
+- Client with access to cloud infrastructure
+- Client with specific development environment setup
+
+**Large-Scale Operations:**
+- Distributed code analysis across multiple instances
+- Parallel testing across different environments
+- Multi-region deployment coordination
 
 ## How It Works
 
 ```
     ┌─────────────────┐      ┌──────────────────┐      ┌─────────────┐
-    │   Coordinator   │─────►│ Vibe-Ensemble    │─────►│  Workers    │
+    │   Coordinator   │◄────►│ Vibe-Ensemble    │─────►│  Workers    │
     │ (Claude Code)   │      │    Server        │      │ (Headless)  │
     │                 │      │                  │      │             │
     │ • Plans tasks   │      │ • Manages state  │      │ • Execute   │
-    │ • Creates flows │      │ • Routes work    │      │ • Report    │ 
+    │ • Creates flows │      │ • Routes work    │      │ • Report    │
     │ • Monitors      │      │ • Coordinates    │      │ • Handoff   │
-    └─────────────────┘      └──────────────────┘      └─────────────┘
+    └─────────────────┘      └────────┬─────────┘      └─────────────┘
+                                      │
+                                      │ WebSocket
+                                      │ (Bidirectional)
+                                      ▼
+                             ┌─────────────────┐
+                             │ Connected Clients│
+                             │ (Claude Code)    │
+                             │                  │
+                             │ • Specialized    │
+                             │ • Distributed    │
+                             │ • Collaborative  │
+                             └─────────────────┘
 ```
 
 **Key Benefits:**
 - **No Context Drift**: Each worker focuses on one specific task
-- **Parallel Processing**: Multiple workers can run simultaneously  
+- **Parallel Processing**: Multiple workers can run simultaneously
 - **Persistent Progress**: All work is saved and can be resumed
 - **Smart Coordination**: Automatic workflow progression based on completion
+- **Bidirectional Communication**: Real-time coordination with connected Claude Code clients
+- **Distributed Execution**: Leverage specialized environments and tools across multiple clients
+- **Multi-Client Orchestration**: Coordinate complex workflows across diverse client capabilities
 
 ## Contributing
 

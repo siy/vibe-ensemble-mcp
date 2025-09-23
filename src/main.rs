@@ -2,17 +2,10 @@ use anyhow::Result;
 use clap::Parser;
 use tracing::info;
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt, EnvFilter, Layer};
-use vibe_ensemble_mcp::{config::Config, configure::configure_claude_code, server::run_server};
-
-fn validate_permission_mode(mode: &str) -> Result<String, String> {
-    match mode {
-        "bypass" | "inherit" | "file" => Ok(mode.to_string()),
-        _ => Err(format!(
-            "Invalid permission mode '{}'. Valid options: bypass, inherit, file",
-            mode
-        )),
-    }
-}
+use vibe_ensemble_mcp::{
+    config::Config, configure::configure_claude_code, permissions::PermissionMode,
+    server::run_server,
+};
 
 #[derive(Parser)]
 #[command(name = "vibe-ensemble-mcp")]
@@ -43,8 +36,20 @@ struct Args {
     no_respawn: bool,
 
     /// Permission mode for worker processes
-    #[arg(long, default_value = "inherit", value_parser = validate_permission_mode)]
-    permission_mode: String,
+    #[arg(long, default_value_t = PermissionMode::File)]
+    permission_mode: PermissionMode,
+
+    /// Timeout for client tool calls in seconds
+    #[arg(long, default_value = "30")]
+    client_tool_timeout_secs: u64,
+
+    /// Maximum concurrent client requests
+    #[arg(long, default_value = "50")]
+    max_concurrent_client_requests: usize,
+
+    /// Comma-separated list of MCP tool names whose responses can be echoed over SSE
+    #[arg(long, default_value = "get_health,list_projects,list_tickets")]
+    sse_echo_allowlist: String,
 }
 
 #[tokio::main]
@@ -53,7 +58,7 @@ async fn main() -> Result<()> {
 
     // Handle configuration mode
     if args.configure_claude_code {
-        configure_claude_code(&args.host, args.port).await?;
+        configure_claude_code(&args.host, args.port, args.permission_mode).await?;
         return Ok(());
     }
 
@@ -84,7 +89,7 @@ async fn main() -> Result<()> {
     info!("Version: {}", env!("CARGO_PKG_VERSION"));
     info!("Database: {}", args.database_path);
     info!("Server: {}:{}", args.host, args.port);
-    info!("Permission mode: {}", args.permission_mode);
+    info!("Permission mode: {}", args.permission_mode.as_str());
     info!("Respawn disabled: {}", args.no_respawn);
 
     let config = Config {
@@ -93,6 +98,14 @@ async fn main() -> Result<()> {
         port: args.port,
         no_respawn: args.no_respawn,
         permission_mode: args.permission_mode,
+        client_tool_timeout_secs: args.client_tool_timeout_secs,
+        max_concurrent_client_requests: args.max_concurrent_client_requests,
+        sse_echo_allowlist: args
+            .sse_echo_allowlist
+            .split(',')
+            .map(|s| s.trim().to_lowercase())
+            .filter(|s| !s.is_empty())
+            .collect(),
     };
 
     run_server(config).await?;

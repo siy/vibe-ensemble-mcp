@@ -1,21 +1,26 @@
+use axum::extract::WebSocketUpgrade;
 use axum::{
-    extract::State,
-    http::Method,
-    response::Json,
+    extract::{Query, State},
+    http::{HeaderMap, Method},
+    response::{Json, Response},
     routing::{get, post},
     Router,
 };
 use serde_json::{json, Value};
-use sqlx::Row;
 use std::sync::Arc;
 use tower_http::{cors::CorsLayer, limit::RequestBodyLimitLayer, trace::TraceLayer};
-use tracing::{error, info, warn};
+use tracing::{error, info};
 
 use crate::{
+    auth::AuthTokenManager,
     config::Config,
-    database::DbPool,
+    database::{recovery::TicketRecovery, DbPool},
     error::Result,
-    mcp::server::mcp_handler,
+    lockfile::LockFileManager,
+    mcp::{
+        server::{mcp_handler, McpServer},
+        websocket::{WebSocketManager, WebSocketQuery},
+    },
     sse::{sse_handler, sse_message_handler, EventBroadcaster},
     workers::queue::QueueManager,
 };
@@ -25,13 +30,18 @@ pub struct AppState {
     pub config: Config,
     pub db: DbPool,
     pub queue_manager: Arc<QueueManager>,
-    pub server_info: ServerInfo,
     pub event_broadcaster: EventBroadcaster,
+    pub mcp_server: Arc<McpServer>,
+    pub websocket_manager: Arc<WebSocketManager>,
+    pub websocket_token: Option<String>,
+    pub auth_manager: Arc<AuthTokenManager>,
 }
 
-#[derive(Clone)]
-pub struct ServerInfo {
-    pub port: u16,
+impl AppState {
+    /// Get an event emitter instance for centralized event emission
+    pub fn event_emitter(&self) -> crate::events::emitter::EventEmitter<'_> {
+        crate::events::emitter::EventEmitter::new(&self.db, &self.event_broadcaster)
+    }
 }
 
 pub async fn run_server(config: Config) -> Result<()> {
@@ -44,12 +54,26 @@ pub async fn run_server(config: Config) -> Result<()> {
     // Initialize queue manager (spawns completion event processor internally)
     let queue_manager = QueueManager::new(db.clone(), config.clone(), event_broadcaster.clone());
 
+    // Initialize single MCP server instance with config-based tool registration
+    let mcp_server = Arc::new(McpServer::new(&config));
+
+    // Initialize WebSocket manager with concurrency limits
+    let websocket_manager = Arc::new(WebSocketManager::with_concurrency_limit(
+        config.max_concurrent_client_requests,
+    ));
+
+    // Create auth token manager (we'll add the websocket token after binding to the port)
+    let auth_manager = Arc::new(AuthTokenManager::new());
+
     let state = AppState {
         config: config.clone(),
         db,
         queue_manager,
-        server_info: ServerInfo { port: config.port },
         event_broadcaster,
+        mcp_server,
+        websocket_manager,
+        websocket_token: None, // Will be set after binding to port
+        auth_manager: Arc::clone(&auth_manager),
     };
 
     // Respawn workers for unfinished tasks if enabled
@@ -65,16 +89,23 @@ pub async fn run_server(config: Config) -> Result<()> {
             axum::http::header::CACHE_CONTROL,
             axum::http::header::AUTHORIZATION,
             axum::http::header::HeaderName::from_static("x-api-key"),
+            axum::http::header::HeaderName::from_static("x-claude-code-ide-authorization"),
             axum::http::header::HeaderName::from_static("last-event-id"),
             axum::http::header::HeaderName::from_static("mcp-protocol-version"),
         ])
         .allow_origin(axum::http::header::HeaderValue::from_static("*"));
 
-    let app = Router::new()
+    let mut app = Router::new()
         .route("/health", get(health_check))
         .route("/mcp", post(mcp_handler))
         .route("/sse", get(sse_handler))
-        .route("/messages", post(sse_message_handler))
+        .route("/messages", post(sse_message_handler));
+
+    // Add WebSocket route
+    app = app.route("/ws", get(websocket_handler));
+    info!("WebSocket support enabled at /ws");
+
+    let app = app
         .layer(RequestBodyLimitLayer::new(1024 * 1024)) // 1 MiB
         .layer(TraceLayer::new_for_http())
         .layer(cors)
@@ -84,6 +115,25 @@ pub async fn run_server(config: Config) -> Result<()> {
     info!("Server listening on {}", address);
 
     let listener = tokio::net::TcpListener::bind(&address).await?;
+
+    // Now that we're successfully bound to the port, create/update the Claude IDE lock file
+    let _websocket_token = {
+        let lock_manager = LockFileManager::new(config.host.clone(), config.port);
+        match lock_manager.create_or_update_claude_lock_file() {
+            Ok(token) => {
+                info!("Created/updated Claude IDE lock file with WebSocket token");
+                auth_manager.add_token(token.clone());
+                Some(token)
+            }
+            Err(e) => {
+                error!("Failed to create Claude IDE lock file: {}", e);
+                None
+            }
+        }
+    };
+
+    // Update the state with the websocket token (this is a bit tricky since state is immutable)
+    // For now, the token is added to the auth_manager which is what matters for authentication
 
     match axum::serve(listener, app).await {
         Ok(_) => info!("Server stopped gracefully"),
@@ -120,105 +170,17 @@ async fn health_check(State(state): State<AppState>) -> Result<Json<Value>> {
 }
 
 async fn respawn_workers_for_unfinished_tasks(state: &AppState) -> Result<()> {
-    info!("Starting enhanced ticket recovery system...");
+    // Process recovery using the dedicated recovery module
+    let _stats = TicketRecovery::process_recovery(&state.db).await?;
 
-    // Step 1: Find all unprocessed tickets including claimed ones that may be stalled
-    let unprocessed_tickets = sqlx::query(
-        r#"
-        SELECT ticket_id, project_id, current_stage, state, processing_worker_id,
-               datetime('now') AS current_time, updated_at,
-               (julianday('now') - julianday(updated_at)) * 24 * 60 AS minutes_since_update
-        FROM tickets 
-        WHERE (
-            -- Case 1: Open tickets not being processed
-            (state = 'open' AND processing_worker_id IS NULL)
-            OR
-            -- Case 2: Open tickets claimed but stalled (no update for >5 minutes)
-            (state = 'open' AND processing_worker_id IS NOT NULL 
-             AND (julianday('now') - julianday(updated_at)) * 24 * 60 > 5)
-            OR  
-            -- Case 3: On-hold tickets that may be recoverable 
-            (state = 'on_hold')
-        )
-        ORDER BY project_id, current_stage, priority DESC, created_at ASC
-        "#,
-    )
-    .fetch_all(&state.db)
-    .await?;
+    // Resubmit all ready tickets to queues
+    let tickets_for_resubmission = TicketRecovery::get_tickets_for_resubmission(&state.db).await?;
 
-    if unprocessed_tickets.is_empty() {
-        info!("No unprocessed tickets found for recovery");
-        return Ok(());
-    }
-
-    let mut tickets_recovered = 0;
-    let mut claimed_tickets_released = 0;
-    let mut on_hold_tickets_recovered = 0;
-
-    // Step 2: Process each ticket based on its current state
-    for ticket_row in unprocessed_tickets {
-        let ticket_id: String = ticket_row.get("ticket_id");
-        let project_id: String = ticket_row.get("project_id");
-        let current_stage: String = ticket_row.get("current_stage");
-        let state_str: String = ticket_row.get("state");
-        let processing_worker_id: Option<String> = ticket_row.get("processing_worker_id");
-        let minutes_since_update: f64 = ticket_row.get("minutes_since_update");
-
-        // Handle different recovery scenarios
-        if state_str == "open" && processing_worker_id.is_some() {
-            // Stalled claimed ticket - release claim first
-            warn!(
-                "Releasing stalled claim for ticket {} (worker: {}, stalled for {:.1} minutes)",
-                ticket_id,
-                processing_worker_id.unwrap(),
-                minutes_since_update
-            );
-
-            // Release the claim
-            let release_result = sqlx::query(
-                r#"
-                UPDATE tickets 
-                SET processing_worker_id = NULL, updated_at = datetime('now')
-                WHERE ticket_id = ?1 AND processing_worker_id IS NOT NULL
-                "#,
-            )
-            .bind(&ticket_id)
-            .execute(&state.db)
-            .await?;
-
-            if release_result.rows_affected() > 0 {
-                claimed_tickets_released += 1;
-                info!("Released stalled claim for ticket {}", ticket_id);
-            }
-        } else if state_str == "on_hold" {
-            // On-hold ticket - attempt to bring back to open state
-            info!(
-                "Recovering on-hold ticket {} (on hold for {:.1} minutes)",
-                ticket_id, minutes_since_update
-            );
-
-            // Move from on_hold back to open
-            let recover_result = sqlx::query(
-                r#"
-                UPDATE tickets 
-                SET state = 'open', processing_worker_id = NULL, updated_at = datetime('now')
-                WHERE ticket_id = ?1 AND state = 'on_hold'
-                "#,
-            )
-            .bind(&ticket_id)
-            .execute(&state.db)
-            .await?;
-
-            if recover_result.rows_affected() > 0 {
-                on_hold_tickets_recovered += 1;
-                info!("Recovered on-hold ticket {} back to open state", ticket_id);
-            }
-        }
-
-        // Step 3: Submit all tickets (now unclaimed and open) to queues
+    let mut resubmitted_count = 0;
+    for (ticket_id, project_id, current_stage) in tickets_for_resubmission {
         if let Err(e) = state
             .queue_manager
-            .submit_task(&project_id, &current_stage, &ticket_id, &state.db)
+            .submit_task(&project_id, &current_stage, &ticket_id)
             .await
         {
             error!("Failed to submit ticket {} to queue: {}", ticket_id, e);
@@ -229,13 +191,32 @@ async fn respawn_workers_for_unfinished_tasks(state: &AppState) -> Result<()> {
             "Submitted ticket {} to queue for project={}, stage={}",
             ticket_id, project_id, current_stage
         );
-        tickets_recovered += 1;
+        resubmitted_count += 1;
     }
 
-    info!(
-        "Enhanced ticket recovery completed: {} tickets recovered, {} stalled claims released, {} on-hold tickets recovered",
-        tickets_recovered, claimed_tickets_released, on_hold_tickets_recovered
-    );
+    if resubmitted_count > 0 {
+        info!("Resubmitted {} tickets to queues", resubmitted_count);
+    }
 
     Ok(())
+}
+
+/// WebSocket handler for bidirectional MCP communication
+async fn websocket_handler(
+    ws: WebSocketUpgrade,
+    headers: HeaderMap,
+    Query(query): Query<WebSocketQuery>,
+    State(state): State<AppState>,
+) -> Response {
+    tracing::info!("WebSocket connection request received at /ws endpoint");
+    tracing::trace!("WebSocket upgrade request headers: {:?}", headers);
+    tracing::trace!("WebSocket query parameters: {:?}", query);
+
+    let response = state
+        .websocket_manager
+        .handle_connection(ws, headers, Query(query), State(state.clone()))
+        .await;
+
+    tracing::trace!("WebSocket handler returning response");
+    response
 }

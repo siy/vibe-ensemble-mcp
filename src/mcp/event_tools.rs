@@ -3,8 +3,12 @@ use serde_json::Value;
 use tracing::info;
 
 use super::{
-    tools::{extract_optional_param, extract_param, ToolHandler},
-    types::{CallToolResponse, Tool, ToolContent},
+    pagination::extract_cursor,
+    tools::{
+        create_json_success_response, create_success_response, extract_optional_param,
+        extract_param, ToolHandler,
+    },
+    types::{CallToolResponse, Tool},
 };
 use crate::{
     database::{events::Event, tickets::Ticket},
@@ -24,14 +28,31 @@ impl ToolHandler for ListEventsTool {
 
         let event_type: Option<String> = extract_optional_param(&Some(args.clone()), "event_type")?;
         let limit: i32 = extract_optional_param(&Some(args.clone()), "limit")?.unwrap_or(50);
+        let include_processed: bool =
+            extract_optional_param(&Some(args.clone()), "include_processed")?.unwrap_or(false);
+        let event_ids: Option<Vec<i64>> = extract_optional_param(&Some(args.clone()), "event_ids")?;
 
-        // Get unprocessed events from DB, then apply optional type filter and limit
-        let mut events = Event::get_unprocessed(&state.db).await?;
+        // Parse pagination parameters using helper
+        let cursor = extract_cursor(&Some(args.clone()))?;
 
-        // Most-recent-first to match "recent" semantics
-        events.sort_by(|a, b| b.created_at.cmp(&a.created_at));
+        let events = if let Some(ref ids) = event_ids {
+            // Get specific events by IDs (ignores processed filter when using specific IDs)
+            Event::get_by_ids(&state.db, ids).await?
+        } else if include_processed {
+            // Get all events (processed and unprocessed)
+            Event::get_all(&state.db, None).await?
+        } else {
+            // Get only unprocessed events (default behavior)
+            Event::get_unprocessed(&state.db).await?
+        };
 
-        let filtered_events: Vec<_> = events
+        // Most-recent-first to match "recent" semantics (unless fetching by specific IDs)
+        let mut sorted_events = events;
+        if event_ids.is_none() {
+            sorted_events.sort_by(|a, b| b.created_at.cmp(&a.created_at));
+        }
+
+        let filtered_events: Vec<_> = sorted_events
             .into_iter()
             .filter(|event| {
                 // Filter by event type if specified
@@ -44,19 +65,26 @@ impl ToolHandler for ListEventsTool {
             .take(limit as usize)
             .collect();
 
-        Ok(CallToolResponse {
-            content: vec![ToolContent {
-                content_type: "text".to_string(),
-                text: serde_json::to_string_pretty(&filtered_events)?,
-            }],
-            is_error: Some(false),
-        })
+        // Apply pagination using helper
+        let pagination_result = cursor.paginate(filtered_events);
+
+        // Create response with pagination info
+        let response_data = serde_json::json!({
+            "events": pagination_result.items,
+            "pagination": {
+                "total": pagination_result.total,
+                "has_more": pagination_result.has_more,
+                "next_cursor": pagination_result.next_cursor
+            }
+        });
+
+        Ok(create_json_success_response(response_data))
     }
 
     fn definition(&self) -> Tool {
         Tool {
             name: "list_events".to_string(),
-            description: "List recent unprocessed system events, optionally filtered by type. 'Processed' events are those already handled (e.g., resolved or programmatically marked processed).".to_string(),
+            description: "List system events with flexible filtering options. By default shows recent unprocessed events, but can show all events or specific events by ID.".to_string(),
             input_schema: serde_json::json!({
                 "type": "object",
                 "properties": {
@@ -68,6 +96,22 @@ impl ToolHandler for ListEventsTool {
                         "type": "integer",
                         "description": "Maximum number of events to return",
                         "default": 50
+                    },
+                    "include_processed": {
+                        "type": "boolean",
+                        "description": "Include processed events in results. When true, shows all events regardless of processed status.",
+                        "default": false
+                    },
+                    "event_ids": {
+                        "type": "array",
+                        "items": {
+                            "type": "integer"
+                        },
+                        "description": "Get specific events by their IDs. When provided, ignores include_processed filter and other filtering options."
+                    },
+                    "cursor": {
+                        "type": "string",
+                        "description": "Optional cursor for pagination"
                     }
                 },
                 "required": []
@@ -99,13 +143,7 @@ impl ToolHandler for ResolveEventTool {
 
         Event::resolve_event(&state.db, event_id, &resolution_summary).await?;
 
-        Ok(CallToolResponse {
-            content: vec![ToolContent {
-                content_type: "application/json".to_string(),
-                text: format!("Event {} resolved successfully. The event has been marked as processed and will no longer appear in unprocessed event listings.", event_id),
-            }],
-            is_error: Some(false),
-        })
+        Ok(create_success_response(&format!("Event {} resolved successfully. The event has been marked as processed and will no longer appear in unprocessed event listings.", event_id)))
     }
 
     fn definition(&self) -> Tool {
@@ -144,37 +182,28 @@ impl ToolHandler for GetTicketsByStageTool {
 
         let stage: String = extract_param(&Some(args.clone()), "stage")?;
 
+        // Parse pagination parameters using helper
+        let cursor = extract_cursor(&Some(args.clone()))?;
+
         info!("Getting tickets for stage: {}", stage);
 
-        // Get tickets with matching current_stage
-        let tickets = sqlx::query_as::<_, Ticket>(
-            r#"
-            SELECT ticket_id, project_id, title, execution_plan, current_stage, state, priority,
-                   processing_worker_id, created_at, updated_at, closed_at
-            FROM tickets
-            WHERE current_stage = ?1 AND state = 'open'
-            ORDER BY 
-                CASE priority 
-                    WHEN 'urgent' THEN 1
-                    WHEN 'high' THEN 2  
-                    WHEN 'medium' THEN 3
-                    WHEN 'low' THEN 4
-                    ELSE 5
-                END,
-                created_at ASC
-        "#,
-        )
-        .bind(&stage)
-        .fetch_all(&state.db)
-        .await?;
+        // Get all tickets with matching current_stage using database function
+        let all_tickets = Ticket::list_open_by_stage(&state.db, &stage).await?;
 
-        Ok(CallToolResponse {
-            content: vec![ToolContent {
-                content_type: "text".to_string(),
-                text: serde_json::to_string_pretty(&tickets)?,
-            }],
-            is_error: Some(false),
-        })
+        // Apply pagination using helper
+        let pagination_result = cursor.paginate(all_tickets);
+
+        // Create response with pagination info
+        let response_data = serde_json::json!({
+            "tickets": pagination_result.items,
+            "pagination": {
+                "total": pagination_result.total,
+                "has_more": pagination_result.has_more,
+                "next_cursor": pagination_result.next_cursor
+            }
+        });
+
+        Ok(create_json_success_response(response_data))
     }
 
     fn definition(&self) -> Tool {
@@ -188,6 +217,10 @@ impl ToolHandler for GetTicketsByStageTool {
                     "stage": {
                         "type": "string",
                         "description": "Name of the stage (e.g., 'planning', 'design', 'coding', 'testing')"
+                    },
+                    "cursor": {
+                        "type": "string",
+                        "description": "Optional cursor for pagination"
                     }
                 },
                 "required": ["stage"]

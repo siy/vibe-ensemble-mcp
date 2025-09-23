@@ -5,15 +5,15 @@ use uuid::Uuid;
 
 use super::{
     tools::{
-        create_error_response, create_success_response, extract_optional_param, extract_param,
-        ToolHandler,
+        create_json_error_response, create_json_success_response, extract_optional_param,
+        extract_param, ToolHandler,
     },
-    types::{CallToolResponse, Tool, ToolContent},
+    types::{CallToolResponse, PaginationCursor, Tool},
 };
 use crate::{
     database::{
         comments::{Comment, CreateCommentRequest},
-        tickets::{CreateTicketRequest, Ticket},
+        tickets::{CreateTicketRequest, Ticket, TicketState},
     },
     server::AppState,
 };
@@ -34,32 +34,55 @@ impl ToolHandler for CreateTicketTool {
         let title: String = extract_param(&Some(args.clone()), "title")?;
         let description: String =
             extract_optional_param(&Some(args.clone()), "description")?.unwrap_or_default();
-        let _ticket_type: String = extract_optional_param(&Some(args.clone()), "ticket_type")?
+        let ticket_type: String = extract_optional_param(&Some(args.clone()), "ticket_type")?
             .unwrap_or_else(|| "task".to_string());
-        let _priority: String = extract_optional_param(&Some(args.clone()), "priority")?
+        let priority: String = extract_optional_param(&Some(args.clone()), "priority")?
             .unwrap_or_else(|| "medium".to_string());
         let initial_stage: String = extract_optional_param(&Some(args.clone()), "initial_stage")?
             .unwrap_or_else(|| "planning".to_string());
 
-        // Validate that the initial stage worker type exists for this project (including "planning")
-        let worker_type_exists = crate::database::worker_types::WorkerType::get_by_type(
-            &state.db,
-            &project_id,
-            &initial_stage,
-        )
-        .await?;
+        // New DAG-related parameters
+        let parent_ticket_id: Option<String> =
+            extract_optional_param(&Some(args.clone()), "parent_ticket_id")?;
+        let execution_plan_input: Option<Vec<String>> =
+            extract_optional_param(&Some(args.clone()), "execution_plan")?;
+        let created_by_worker_id: Option<String> =
+            extract_optional_param(&Some(args.clone()), "created_by_worker_id")?;
 
-        if worker_type_exists.is_none() {
-            return Ok(crate::mcp::tools::create_error_response(&format!(
-                "Worker type '{}' does not exist for project '{}'. Cannot use as initial stage. Coordinator must create this worker type first.",
-                initial_stage, project_id
-            )));
+        // Validate initial_stage only if no execution_plan is supplied
+        if execution_plan_input.is_none() {
+            if let Err(e) = crate::validation::PipelineValidator::validate_initial_stage(
+                &state.db,
+                &project_id,
+                &initial_stage,
+            )
+            .await
+            {
+                return Ok(create_json_error_response(&e.to_string()));
+            }
         }
 
         info!("Creating ticket: {} in project {}", title, project_id);
 
         let ticket_id = Uuid::new_v4().to_string();
-        let execution_plan = vec![initial_stage.clone()];
+
+        // Use provided execution plan or default to single stage
+        let execution_plan = execution_plan_input.unwrap_or_else(|| vec![initial_stage.clone()]);
+        let first_stage = execution_plan.first().cloned().ok_or_else(|| {
+            crate::error::AppError::BadRequest("Execution plan is empty".to_string())
+        })?;
+
+        // Validate all stages in execution plan exist as worker types
+        if let Err(e) = crate::validation::PipelineValidator::validate_pipeline_stages(
+            &state.db,
+            &project_id,
+            &execution_plan,
+            "Ticket creation",
+        )
+        .await
+        {
+            return Ok(create_json_error_response(&e.to_string()));
+        }
 
         let req = CreateTicketRequest {
             ticket_id: ticket_id.clone(),
@@ -67,68 +90,63 @@ impl ToolHandler for CreateTicketTool {
             title: title.clone(),
             description: description.clone(),
             execution_plan,
+            parent_ticket_id,
+            ticket_type: Some(ticket_type),
+            dependency_status: None, // Will default to 'ready' in database
+            created_by_worker_id,
+            priority: Some(priority),
         };
 
-        let ticket = Ticket::create(&state.db, req).await?;
-
-        // Broadcast ticket_created event
-        let event = json!({
-            "jsonrpc": "2.0",
-            "method": "notifications/resources/updated",
-            "params": {
-                "uri": format!("vibe-ensemble://tickets/{}", ticket.ticket_id),
-                "event": {
-                    "type": "ticket_created",
-                    "ticket": {
-                        "ticket_id": ticket.ticket_id,
-                        "project_id": ticket.project_id,
-                        "title": ticket.title,
-                        "execution_plan": ticket.execution_plan,
-                        "current_stage": ticket.current_stage,
-                        "state": ticket.state,
-                        "created_at": ticket.created_at
-                    },
-                    "timestamp": chrono::Utc::now().to_rfc3339()
-                }
+        let ticket = match Ticket::create(&state.db, req).await {
+            Ok(t) => t,
+            Err(e) => {
+                return Ok(create_json_error_response(&format!(
+                    "Failed to create ticket: {}",
+                    e
+                )))
             }
-        });
+        };
 
-        if let Err(e) = state.event_broadcaster.broadcast(event.to_string()) {
-            tracing::warn!("Failed to broadcast ticket_created event: {}", e);
-        } else {
-            tracing::debug!(
-                "Successfully broadcast ticket_created event for: {}",
-                ticket.ticket_id
-            );
+        // Emit ticket_created event
+        if let Err(e) = state
+            .event_emitter()
+            .emit_ticket_created(
+                &ticket.ticket_id,
+                &ticket.project_id,
+                &ticket.title,
+                &ticket.current_stage,
+            )
+            .await
+        {
+            warn!("Failed to emit ticket_created event: {}", e);
         }
 
-        // Automatically submit the ticket to the initial stage queue
+        // Automatically submit the ticket to the first stage queue
         match state
             .queue_manager
-            .submit_task(&project_id, &initial_stage, &ticket_id, &state.db)
+            .submit_task(&project_id, &first_stage, &ticket_id)
             .await
         {
             Ok(task_id) => {
                 info!(
                     "Successfully submitted ticket {} to {}-queue as task {}",
-                    ticket_id, initial_stage, task_id
+                    ticket_id, first_stage, task_id
                 );
             }
             Err(e) => {
                 warn!(
                     "Failed to submit ticket {} to {}-queue: {}",
-                    ticket_id, initial_stage, e
+                    ticket_id, first_stage, e
                 );
             }
         }
 
-        Ok(CallToolResponse {
-            content: vec![ToolContent {
-                content_type: "text".to_string(),
-                text: format!("Created ticket {} with ID: {}", title, ticket.ticket_id),
-            }],
-            is_error: Some(false),
-        })
+        Ok(create_json_success_response(json!({
+            "message": format!("Created ticket '{}'", title),
+            "ticket_id": ticket.ticket_id,
+            "project_id": ticket.project_id,
+            "current_stage": ticket.current_stage
+        })))
     }
 
     fn definition(&self) -> Tool {
@@ -164,6 +182,21 @@ impl ToolHandler for CreateTicketTool {
                         "type": "string",
                         "description": "Initial stage for ticket processing (must be a valid worker type)",
                         "default": "planning"
+                    },
+                    "parent_ticket_id": {
+                        "type": "string",
+                        "description": "Optional parent ticket ID for creating subtasks"
+                    },
+                    "execution_plan": {
+                        "type": "array",
+                        "items": {
+                            "type": "string"
+                        },
+                        "description": "Complete execution plan (array of stage names). If not provided, defaults to single initial_stage. All stages must exist as worker types."
+                    },
+                    "created_by_worker_id": {
+                        "type": "string",
+                        "description": "ID of the worker that created this ticket (for planner-created tickets)"
                     }
                 },
                 "required": ["project_id", "title"]
@@ -189,21 +222,11 @@ impl ToolHandler for GetTicketTool {
         let ticket = Ticket::get_by_id(&state.db, &ticket_id).await?;
 
         match ticket {
-            Some(ticket) => {
-                let comments = Comment::get_by_ticket_id(&state.db, &ticket_id).await?;
-
-                Ok(CallToolResponse {
-                    content: vec![ToolContent {
-                        content_type: "text".to_string(),
-                        text: serde_json::to_string_pretty(&json!({
-                            "ticket": ticket,
-                            "comments": comments
-                        }))?,
-                    }],
-                    is_error: Some(false),
-                })
-            }
-            None => Ok(create_error_response(&format!(
+            Some(ticket_with_comments) => Ok(create_json_success_response(json!({
+                "ticket": ticket_with_comments.ticket,
+                "comments": ticket_with_comments.comments
+            }))),
+            None => Ok(create_json_error_response(&format!(
                 "Ticket {} not found",
                 ticket_id
             ))),
@@ -242,18 +265,29 @@ impl ToolHandler for ListTicketsTool {
         let project_id: Option<String> = extract_optional_param(&Some(args.clone()), "project_id")?;
         let status: Option<String> = extract_optional_param(&Some(args.clone()), "status")?;
 
-        let tickets =
+        // Parse pagination parameters
+        let cursor_str: Option<String> = extract_optional_param(&Some(args.clone()), "cursor")?;
+        let cursor = PaginationCursor::from_cursor_string(cursor_str)
+            .map_err(crate::error::AppError::BadRequest)?;
+
+        // Get all tickets first
+        let all_tickets =
             Ticket::list_by_project(&state.db, project_id.as_deref(), status.as_deref()).await?;
 
-        let filtered_tickets = tickets;
+        // Apply pagination using helper
+        let pagination_result = cursor.paginate(all_tickets);
 
-        Ok(CallToolResponse {
-            content: vec![ToolContent {
-                content_type: "text".to_string(),
-                text: serde_json::to_string_pretty(&filtered_tickets)?,
-            }],
-            is_error: Some(false),
-        })
+        // Create response with pagination info
+        let response_data = json!({
+            "tickets": pagination_result.items,
+            "pagination": {
+                "total": pagination_result.total,
+                "has_more": pagination_result.has_more,
+                "next_cursor": pagination_result.next_cursor
+            }
+        });
+
+        Ok(create_json_success_response(response_data))
     }
 
     fn definition(&self) -> Tool {
@@ -269,7 +303,12 @@ impl ToolHandler for ListTicketsTool {
                     },
                     "status": {
                         "type": "string",
-                        "description": "Optional status filter (open, in_progress, completed, closed)"
+                        "description": "Optional status filter (open, closed)",
+                        "enum": ["open", "closed"]
+                    },
+                    "cursor": {
+                        "type": "string",
+                        "description": "Optional cursor for pagination"
                     }
                 },
                 "required": []
@@ -311,44 +350,26 @@ impl ToolHandler for AddTicketCommentTool {
 
         let comment = Comment::create_from_request(&state.db, req).await?;
 
-        // Broadcast ticket_comment_added event
-        let event = json!({
-            "jsonrpc": "2.0",
-            "method": "notifications/resources/updated",
-            "params": {
-                "uri": format!("vibe-ensemble://tickets/{}", ticket_id),
-                "event": {
-                    "type": "ticket_comment_added",
-                    "comment": {
-                        "id": comment.id,
-                        "ticket_id": comment.ticket_id,
-                        "worker_type": comment.worker_type,
-                        "worker_id": comment.worker_id,
-                        "stage_number": comment.stage_number,
-                        "content": comment.content,
-                        "created_at": comment.created_at
-                    },
-                    "timestamp": chrono::Utc::now().to_rfc3339()
-                }
-            }
-        });
-
-        if let Err(e) = state.event_broadcaster.broadcast(event.to_string()) {
-            tracing::warn!("Failed to broadcast ticket_comment_added event: {}", e);
-        } else {
-            tracing::debug!(
-                "Successfully broadcast ticket_comment_added event for: {}",
-                ticket_id
-            );
+        // Emit ticket_updated event for comment added
+        if let Err(e) = state
+            .event_emitter()
+            .emit_ticket_updated(
+                &ticket_id,
+                "", // project_id will be looked up by the emitter if needed
+                "comment_added",
+                None,
+                Some(&format!("Comment added: {}", comment.id)),
+            )
+            .await
+        {
+            warn!("Failed to emit ticket_updated event: {}", e);
         }
 
-        Ok(CallToolResponse {
-            content: vec![ToolContent {
-                content_type: "text".to_string(),
-                text: format!("Added comment to ticket {}: {}", ticket_id, comment.id),
-            }],
-            is_error: Some(false),
-        })
+        Ok(create_json_success_response(json!({
+            "message": format!("Added comment to ticket {}", ticket_id),
+            "ticket_id": ticket_id,
+            "comment_id": comment.id
+        })))
     }
 
     fn definition(&self) -> Tool {
@@ -410,43 +431,22 @@ impl ToolHandler for CloseTicketTool {
 
         match result {
             Some(closed_ticket) => {
-                // Broadcast ticket_closed event
-                let event = json!({
-                    "jsonrpc": "2.0",
-                    "method": "notifications/resources/updated",
-                    "params": {
-                        "uri": format!("vibe-ensemble://tickets/{}", ticket_id),
-                        "event": {
-                            "type": "ticket_closed",
-                            "ticket_id": ticket_id,
-                            "resolution": resolution,
-                            "ticket": {
-                                "ticket_id": closed_ticket.ticket_id,
-                                "project_id": closed_ticket.project_id,
-                                "title": closed_ticket.title,
-                                "state": closed_ticket.state,
-                                "closed_at": closed_ticket.closed_at
-                            },
-                            "timestamp": chrono::Utc::now().to_rfc3339()
-                        }
-                    }
-                });
-
-                if let Err(e) = state.event_broadcaster.broadcast(event.to_string()) {
-                    tracing::warn!("Failed to broadcast ticket_closed event: {}", e);
-                } else {
-                    tracing::debug!(
-                        "Successfully broadcast ticket_closed event for: {}",
-                        ticket_id
-                    );
+                // Emit ticket_closed event
+                if let Err(e) = state
+                    .event_emitter()
+                    .emit_ticket_closed(&ticket_id, &closed_ticket.project_id, &resolution)
+                    .await
+                {
+                    warn!("Failed to emit ticket_closed event: {}", e);
                 }
 
-                Ok(create_success_response(&format!(
-                    "Closed ticket {} with resolution: {}",
-                    ticket_id, resolution
-                )))
+                Ok(create_json_success_response(json!({
+                    "message": format!("Closed ticket {} with resolution: {}", ticket_id, resolution),
+                    "ticket_id": ticket_id,
+                    "resolution": resolution
+                })))
             }
-            None => Ok(create_error_response(&format!(
+            None => Ok(create_json_error_response(&format!(
                 "Ticket {} not found",
                 ticket_id
             ))),
@@ -500,7 +500,7 @@ impl ToolHandler for ResumeTicketProcessingTool {
         let ticket_data = match ticket {
             Some(t) => t.ticket,
             None => {
-                return Ok(create_error_response(&format!(
+                return Ok(create_json_error_response(&format!(
                     "Ticket {} not found",
                     ticket_id
                 )));
@@ -510,25 +510,32 @@ impl ToolHandler for ResumeTicketProcessingTool {
         // Determine stage to use (provided or current)
         let target_stage = stage.unwrap_or(ticket_data.current_stage.clone());
 
-        // Validate that the target stage worker type exists for this project (unless it's "planning")
-        if target_stage != "planning" {
-            let worker_type_exists = crate::database::worker_types::WorkerType::get_by_type(
-                &state.db,
-                &ticket_data.project_id,
-                &target_stage,
-            )
-            .await?;
-
-            if worker_type_exists.is_none() {
-                return Ok(create_error_response(&format!(
-                    "Worker type '{}' does not exist for project '{}'. Cannot resume ticket with this stage.",
-                    target_stage, ticket_data.project_id
-                )));
-            }
+        // Validate that the target stage worker type exists for this project
+        if let Err(e) = crate::validation::PipelineValidator::validate_resume_stage(
+            &state.db,
+            &ticket_data.project_id,
+            &target_stage,
+        )
+        .await
+        {
+            return Ok(create_json_error_response(&e.to_string()));
         }
 
-        // Determine state to use (provided or "open")
-        let target_state = state_param.unwrap_or_else(|| "open".to_string());
+        // Determine state to use (provided or Open)
+        let target_state_enum = if let Some(state_str) = state_param {
+            match state_str.parse::<TicketState>() {
+                Ok(state) => state,
+                Err(_) => {
+                    return Ok(create_json_error_response(&format!(
+                        "Invalid state '{}'. Valid states are: open, closed",
+                        state_str
+                    )))
+                }
+            }
+        } else {
+            TicketState::Open
+        };
+        let target_state = target_state_enum.to_string();
 
         // Update ticket stage if different
         if target_stage != ticket_data.current_stage {
@@ -563,16 +570,11 @@ impl ToolHandler for ResumeTicketProcessingTool {
             .await?;
         }
 
-        // If state is "open", submit to queue for processing
-        if target_state == "open" {
+        // If state is Open, submit to queue for processing
+        if matches!(target_state_enum, TicketState::Open) {
             match state
                 .queue_manager
-                .submit_task(
-                    &ticket_data.project_id,
-                    &target_stage,
-                    &ticket_id,
-                    &state.db,
-                )
+                .submit_task(&ticket_data.project_id, &target_stage, &ticket_id)
                 .await
             {
                 Ok(task_id) => {
@@ -581,10 +583,13 @@ impl ToolHandler for ResumeTicketProcessingTool {
                         ticket_id, target_stage, task_id
                     );
 
-                    Ok(create_success_response(&format!(
-                        "Resumed processing for ticket {} at stage '{}' with state '{}' and submitted to queue as task {}",
-                        ticket_id, target_stage, target_state, task_id
-                    )))
+                    Ok(create_json_success_response(json!({
+                        "message": format!("Resumed processing for ticket {} at stage '{}' with state '{}' and submitted to queue as task {}", ticket_id, target_stage, target_state, task_id),
+                        "ticket_id": ticket_id,
+                        "target_stage": target_stage,
+                        "target_state": target_state,
+                        "task_id": task_id
+                    })))
                 }
                 Err(e) => {
                     warn!(
@@ -592,17 +597,23 @@ impl ToolHandler for ResumeTicketProcessingTool {
                         ticket_id, target_stage, e
                     );
 
-                    Ok(create_success_response(&format!(
-                        "Resumed ticket {} at stage '{}' with state '{}' but failed to submit to queue: {}",
-                        ticket_id, target_stage, target_state, e
-                    )))
+                    Ok(create_json_success_response(json!({
+                        "message": format!("Resumed ticket {} at stage '{}' with state '{}' but failed to submit to queue: {}", ticket_id, target_stage, target_state, e),
+                        "ticket_id": ticket_id,
+                        "target_stage": target_stage,
+                        "target_state": target_state,
+                        "queue_error": e.to_string()
+                    })))
                 }
             }
         } else {
-            Ok(create_success_response(&format!(
-                "Resumed ticket {} at stage '{}' with state '{}' (not submitted to queue due to non-open state)",
-                ticket_id, target_stage, target_state
-            )))
+            Ok(create_json_success_response(json!({
+                "message": format!("Resumed ticket {} at stage '{}' with state '{}' (not submitted to queue due to non-open state)", ticket_id, target_stage, target_state),
+                "ticket_id": ticket_id,
+                "target_stage": target_stage,
+                "target_state": target_state,
+                "submitted_to_queue": false
+            })))
         }
     }
 
@@ -624,7 +635,7 @@ impl ToolHandler for ResumeTicketProcessingTool {
                     "state": {
                         "type": "string",
                         "description": "Optional ticket state (open/closed/on_hold, defaults to 'open')",
-                        "enum": ["open", "closed", "on_hold"]
+                        "enum": TicketState::all_strings()
                     }
                 },
                 "required": ["ticket_id"]

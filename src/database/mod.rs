@@ -1,15 +1,20 @@
 pub mod comments;
+pub mod dag;
 pub mod events;
 pub mod migrations;
 pub mod projects;
+pub mod recovery;
 pub mod schema;
 pub mod tickets;
 pub mod worker_types;
 pub mod workers;
 
 use anyhow::Result;
-use sqlx::{sqlite::SqlitePool, Pool, Sqlite};
-use std::{fs, path::Path};
+use sqlx::{
+    sqlite::{SqliteConnectOptions, SqliteJournalMode, SqlitePoolOptions},
+    Pool, Sqlite,
+};
+use std::{fs, path::Path, str::FromStr, time::Duration};
 use tracing::info;
 
 pub type DbPool = Pool<Sqlite>;
@@ -62,11 +67,14 @@ pub async fn create_pool(database_url: &str) -> Result<DbPool> {
     // Ensure directory structure exists
     ensure_directory_structure(database_url)?;
 
-    let pool = SqlitePool::connect(database_url).await?;
+    let connect_opts = SqliteConnectOptions::from_str(database_url)?
+        .foreign_keys(true)
+        .journal_mode(SqliteJournalMode::Wal)
+        .busy_timeout(Duration::from_secs(5));
+    let pool = SqlitePoolOptions::new().connect_with(connect_opts).await?;
 
     info!("Running database migrations");
-    let migration_runner = migrations::MigrationRunner::new(pool.clone());
-    migration_runner.run_migrations().await?;
+    migrations::run_migrations(&pool).await?;
 
     Ok(pool)
 }
