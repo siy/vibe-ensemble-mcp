@@ -5,7 +5,8 @@ use tracing::{debug, error, info, trace, warn};
 use super::{
     bidirectional_tools::*, client_tools::*, dependency_tools::*, event_tools::*,
     integration_tools::*, orchestration_tools::*, permission_tools::*, project_tools::*,
-    template_tools::*, ticket_tools::*, tools::ToolRegistry, types::*, worker_type_tools::*, MCP_PROTOCOL_VERSION,
+    template_tools::*, ticket_tools::*, tools::ToolRegistry, types::*, worker_type_tools::*,
+    MCP_PROTOCOL_VERSION,
 };
 use crate::{config::Config, error::Result, server::AppState};
 

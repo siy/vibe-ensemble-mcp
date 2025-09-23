@@ -24,7 +24,8 @@ impl ToolHandler for ListWorkerTemplatesOol {
     fn definition(&self) -> Tool {
         Tool {
             name: "list_worker_templates".to_string(),
-            description: "List all available worker templates that can be used as system prompts".to_string(),
+            description: "List all available worker templates that can be used as system prompts"
+                .to_string(),
             input_schema: json!({
                 "type": "object",
                 "properties": {},
@@ -47,20 +48,29 @@ impl ToolHandler for LoadWorkerTemplateTool {
             .to_string();
 
         // Get stored working directory (use simple key for now)
-        let working_directory = state.coordinator_directories.get("coordinator").map(|entry| entry.value().clone());
+        let working_directory = state
+            .coordinator_directories
+            .get("coordinator")
+            .map(|entry| entry.value().clone());
 
         // Ensure templates exist on disk first
-        if let Err(e) = configure::ensure_worker_templates_exist_in_directory(working_directory.as_deref()) {
+        if let Err(e) =
+            configure::ensure_worker_templates_exist_in_directory(working_directory.as_deref())
+        {
             return Ok(create_json_error_response(&format!(
                 "Failed to ensure templates exist: {}",
                 e
             )));
         }
 
-        match configure::load_worker_template_from_directory(&template_name, working_directory.as_deref()) {
+        match configure::load_worker_template_from_directory(
+            &template_name,
+            working_directory.as_deref(),
+        ) {
             Ok(content) => {
                 let base_dir = working_directory.as_deref().unwrap_or(".");
-                let template_path = format!("{}/.claude/worker-templates/{}.md", base_dir, template_name);
+                let template_path =
+                    format!("{}/.claude/worker-templates/{}.md", base_dir, template_name);
                 let response = json!({
                     "template_name": template_name,
                     "content": content,
@@ -113,7 +123,9 @@ impl ToolHandler for EnsureWorkerTemplatesExistTool {
         if let Some(working_dir) = &working_directory {
             // For now, use a simple key. In a real implementation, you'd get the client_id from WebSocket context
             let client_key = "coordinator"; // TODO: Get actual client_id from WebSocket context
-            state.coordinator_directories.insert(client_key.to_string(), working_dir.clone());
+            state
+                .coordinator_directories
+                .insert(client_key.to_string(), working_dir.clone());
         }
 
         match configure::ensure_worker_templates_exist_in_directory(working_directory.as_deref()) {

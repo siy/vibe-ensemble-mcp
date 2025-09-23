@@ -181,7 +181,10 @@ pub fn load_worker_template(template_name: &str) -> Result<String> {
 }
 
 /// Load a worker template from disk in specified directory, with fallback to embedded version
-pub fn load_worker_template_from_directory(template_name: &str, working_directory: Option<&str>) -> Result<String> {
+pub fn load_worker_template_from_directory(
+    template_name: &str,
+    working_directory: Option<&str>,
+) -> Result<String> {
     let base_dir = working_directory.unwrap_or(".");
     let template_path = format!("{}/.claude/worker-templates/{}.md", base_dir, template_name);
 
@@ -190,7 +193,10 @@ pub fn load_worker_template_from_directory(template_name: &str, working_director
         match fs::read_to_string(&template_path) {
             Ok(content) => return Ok(content),
             Err(e) => {
-                eprintln!("Warning: Failed to read template from disk ({}), using embedded version: {}", template_path, e);
+                eprintln!(
+                    "Warning: Failed to read template from disk ({}), using embedded version: {}",
+                    template_path, e
+                );
             }
         }
     }
@@ -205,7 +211,12 @@ pub fn load_worker_template_from_directory(template_name: &str, working_director
         "deployment" => include_str!("../templates/worker-templates/deployment.md"),
         "research" => include_str!("../templates/worker-templates/research.md"),
         "documentation" => include_str!("../templates/worker-templates/documentation.md"),
-        _ => return Err(anyhow::anyhow!("Unknown worker template: {}", template_name)),
+        _ => {
+            return Err(anyhow::anyhow!(
+                "Unknown worker template: {}",
+                template_name
+            ))
+        }
     };
 
     Ok(embedded_content.to_string())
