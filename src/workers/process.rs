@@ -4,16 +4,11 @@ use std::process::Stdio;
 use tokio::process::Command;
 use tracing::{debug, info, warn};
 
+use super::completion_processor::WorkerOutput;
 use super::types::SpawnWorkerRequest;
 use crate::permissions::{
     load_permission_policy, ClaudePermissions, PermissionMode, PermissionPolicy,
 };
-
-#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
-pub struct WorkerOutput {
-    pub success: bool,
-    pub message: String,
-}
 
 pub struct ProcessManager;
 
@@ -54,13 +49,39 @@ impl ProcessManager {
 
     /// Add --allowedTools and --disallowedTools arguments to command
     fn add_permission_args(cmd: &mut Command, permissions: &ClaudePermissions) {
+        // For workers, we need to ensure our own MCP tools are always allowed
+        let mut enhanced_allow_list = permissions.allow.clone();
+
+        // Ensure our vibe-ensemble-mcp tools are always allowed
+        if !enhanced_allow_list
+            .iter()
+            .any(|tool| tool.starts_with("mcp__vibe-ensemble-mcp__") || tool == "mcp__*")
+        {
+            enhanced_allow_list.push("mcp__vibe-ensemble-mcp__*".to_string());
+            debug!("Auto-added vibe-ensemble-mcp tools to worker permissions");
+        }
+
+        // Add essential tools if not present
+        let essential_tools = ["TodoWrite", "Bash", "Read", "Write", "Edit", "Glob", "Grep"];
+        for essential_tool in essential_tools {
+            if !enhanced_allow_list
+                .iter()
+                .any(|tool| tool == essential_tool || tool == "*")
+            {
+                enhanced_allow_list.push(essential_tool.to_string());
+            }
+        }
+
         // Add allowed tools
-        if !permissions.allow.is_empty() {
+        if !enhanced_allow_list.is_empty() {
             cmd.arg("--allowedTools");
-            for tool in &permissions.allow {
+            for tool in &enhanced_allow_list {
                 cmd.arg(tool);
             }
-            debug!("Added {} allowed tools", permissions.allow.len());
+            debug!(
+                "Added {} allowed tools (including auto-added essentials)",
+                enhanced_allow_list.len()
+            );
         }
 
         // Add disallowed tools
@@ -175,8 +196,7 @@ impl ProcessManager {
         debug!("Created worker config directory: {}", config_dir);
 
         // Sanitize worker_id for use in filename (replace invalid characters with underscores)
-        let sanitized_worker_id = worker_id
-            .replace(['/', ':', ' ', '\\'], "_");
+        let sanitized_worker_id = worker_id.replace(['/', ':', ' ', '\\'], "_");
 
         let config_path = format!(
             "{}/worker_{}_mcp_config.json",

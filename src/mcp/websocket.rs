@@ -276,7 +276,12 @@ impl WebSocketManager {
             return false;
         }
 
-        // Check against server-generated token from AppState
+        // Check against auth manager (primary method)
+        if state.auth_manager.validate_token(token) {
+            return true;
+        }
+
+        // Legacy fallback: Check against websocket_token field in state
         if let Some(expected_token) = &state.websocket_token {
             return self.constant_time_compare(token, expected_token);
         }

@@ -63,7 +63,7 @@ pub async fn run_server(config: Config) -> Result<()> {
     ));
 
     // Create auth token manager (we'll add the websocket token after binding to the port)
-    let auth_manager = Arc::new(AuthTokenManager::new(3600)); // 1 hour token lifetime
+    let auth_manager = Arc::new(AuthTokenManager::new());
 
     let state = AppState {
         config: config.clone(),
@@ -79,19 +79,6 @@ pub async fn run_server(config: Config) -> Result<()> {
     // Respawn workers for unfinished tasks if enabled
     if !config.no_respawn {
         respawn_workers_for_unfinished_tasks(&state).await?;
-    }
-
-    // Start background token cleanup task
-    {
-        let auth_manager_clone = Arc::clone(&auth_manager);
-        tokio::spawn(async move {
-            let mut interval = tokio::time::interval(tokio::time::Duration::from_secs(300)); // Every 5 minutes
-            loop {
-                interval.tick().await;
-                auth_manager_clone.cleanup_expired_tokens();
-            }
-        });
-        info!("Started auth token cleanup background task");
     }
 
     let cors = CorsLayer::new()
