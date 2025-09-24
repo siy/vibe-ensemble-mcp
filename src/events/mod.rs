@@ -14,7 +14,7 @@ pub struct EventPayload {
 }
 
 /// Event types in the system
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(rename_all = "snake_case")]
 pub enum EventType {
     TicketCreated,

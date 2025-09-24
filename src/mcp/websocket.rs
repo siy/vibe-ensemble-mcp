@@ -12,7 +12,7 @@ use tracing::{error, info, trace, warn};
 use uuid::Uuid;
 
 use super::types::JsonRpcRequest;
-use crate::{error::AppError, server::AppState};
+use crate::{error::AppError, server::AppState, sse::EventBroadcaster};
 
 type Result<T> = std::result::Result<T, AppError>;
 
@@ -26,6 +26,8 @@ pub struct WebSocketManager {
     pending_requests: Arc<DashMap<String, PendingRequest>>,
     /// Semaphore to limit concurrent client tool calls
     concurrency_semaphore: Option<Arc<Semaphore>>,
+    /// Event broadcaster subscription (optional for independent operation)
+    event_broadcaster: Option<EventBroadcaster>,
 }
 
 /// Individual client connection
@@ -100,6 +102,7 @@ impl WebSocketManager {
             tool_registry: Arc::new(ClientToolRegistry::new()),
             pending_requests: Arc::new(DashMap::new()),
             concurrency_semaphore: None,
+            event_broadcaster: None,
         }
     }
 
@@ -110,7 +113,27 @@ impl WebSocketManager {
             tool_registry: Arc::new(ClientToolRegistry::new()),
             pending_requests: Arc::new(DashMap::new()),
             concurrency_semaphore: Some(Arc::new(Semaphore::new(max_concurrent))),
+            event_broadcaster: None,
         }
+    }
+
+    /// Create a WebSocket manager with concurrency limits and event broadcasting
+    pub fn with_event_broadcasting(max_concurrent: usize, event_broadcaster: EventBroadcaster) -> Self {
+        let manager = Self {
+            clients: Arc::new(DashMap::new()),
+            tool_registry: Arc::new(ClientToolRegistry::new()),
+            pending_requests: Arc::new(DashMap::new()),
+            concurrency_semaphore: Some(Arc::new(Semaphore::new(max_concurrent))),
+            event_broadcaster: Some(event_broadcaster.clone()),
+        };
+
+        // Start event broadcasting task
+        let manager_clone = manager.clone();
+        tokio::spawn(async move {
+            manager_clone.event_broadcasting_loop().await;
+        });
+
+        manager
     }
 
     /// Create a disabled WebSocket manager (when WebSocket is disabled in config)
@@ -835,6 +858,52 @@ impl WebSocketManager {
             .map(|entry| entry.key().clone())
             .collect()
     }
+
+    /// Event broadcasting loop that forwards events to all connected WebSocket clients
+    async fn event_broadcasting_loop(&self) {
+        if let Some(event_broadcaster) = &self.event_broadcaster {
+            let mut receiver = event_broadcaster.subscribe_websocket();
+
+            loop {
+                match receiver.recv().await {
+                    Ok(event_payload) => {
+                        // Convert event to JSON-RPC notification format
+                        let notification = event_payload.to_jsonrpc_notification();
+
+                        // Broadcast to all connected WebSocket clients
+                        let clients_to_remove = Arc::new(std::sync::Mutex::new(Vec::new()));
+
+                        for entry in self.clients.iter() {
+                            let client_id = entry.key().clone();
+                            let client = entry.value().clone();
+
+                            // Send event to client
+                            let message = Message::Text(notification.to_string());
+                            if client.sender.send(message).is_err() {
+                                // Client connection is broken, mark for removal
+                                clients_to_remove.lock().unwrap().push(client_id);
+                            }
+                        }
+
+                        // Remove broken client connections
+                        let to_remove = clients_to_remove.lock().unwrap();
+                        for client_id in to_remove.iter() {
+                            self.clients.remove(client_id);
+                            self.tool_registry.remove_client_tools(client_id);
+                            info!("Removed broken WebSocket client: {}", client_id);
+                        }
+                    }
+                    Err(tokio::sync::broadcast::error::RecvError::Lagged(skipped)) => {
+                        warn!("WebSocket event broadcaster lagged, skipped {} events", skipped);
+                    }
+                    Err(tokio::sync::broadcast::error::RecvError::Closed) => {
+                        info!("WebSocket event broadcaster closed, stopping event loop");
+                        break;
+                    }
+                }
+            }
+        }
+    }
 }
 
 impl Clone for WebSocketManager {
@@ -844,6 +913,7 @@ impl Clone for WebSocketManager {
             tool_registry: Arc::clone(&self.tool_registry),
             pending_requests: Arc::clone(&self.pending_requests),
             concurrency_semaphore: self.concurrency_semaphore.clone(),
+            event_broadcaster: self.event_broadcaster.clone(),
         }
     }
 }

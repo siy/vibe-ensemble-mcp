@@ -59,9 +59,10 @@ pub async fn run_server(config: Config) -> Result<()> {
     // Initialize single MCP server instance with config-based tool registration
     let mcp_server = Arc::new(McpServer::new(&config));
 
-    // Initialize WebSocket manager with concurrency limits
-    let websocket_manager = Arc::new(WebSocketManager::with_concurrency_limit(
+    // Initialize WebSocket manager with concurrency limits and event broadcasting
+    let websocket_manager = Arc::new(WebSocketManager::with_event_broadcasting(
         config.max_concurrent_client_requests,
+        event_broadcaster.clone(),
     ));
 
     // Create auth token manager (we'll add the websocket token after binding to the port)
