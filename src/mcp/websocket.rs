@@ -1,7 +1,7 @@
 use axum::extract::ws::{Message, WebSocket};
 use axum::extract::{Query, State, WebSocketUpgrade};
 use axum::http::HeaderMap;
-use axum::response::Response;
+use axum::response::{IntoResponse, Response};
 use dashmap::DashMap;
 use futures::{SinkExt, StreamExt};
 use serde::{Deserialize, Serialize};
@@ -141,9 +141,16 @@ impl WebSocketManager {
         trace!("Headers: {:?}", headers);
         trace!("Query parameters: {:?}", query);
 
+        // Validate MCP subprotocol as required by Claude Code IDE integration
+        if let Err(error) = self.validate_mcp_subprotocol(&headers).await {
+            warn!("WebSocket connection rejected: MCP subprotocol validation failed");
+            return error.into_response();
+        }
+
         let manager = self.clone();
 
         ws_upgrade
+            .protocols(["mcp"]) // Explicitly accept only the "mcp" subprotocol
             .on_upgrade(move |socket| manager.handle_socket(socket, headers, query.0, state.0))
     }
 
@@ -295,6 +302,42 @@ impl WebSocketManager {
         self.tool_registry.remove_client_tools(&client_id);
         info!("Cleaned up client {}", client_id);
         trace!("Client {} fully removed from all registries", client_id);
+    }
+
+    /// Validate MCP subprotocol as required by Claude Code IDE integration
+    async fn validate_mcp_subprotocol(&self, headers: &HeaderMap) -> Result<()> {
+        trace!("Starting MCP subprotocol validation");
+
+        // Check for Sec-WebSocket-Protocol header
+        if let Some(protocol_header) = headers.get("sec-websocket-protocol") {
+            trace!("Found Sec-WebSocket-Protocol header");
+            if let Ok(protocol_str) = protocol_header.to_str() {
+                trace!("Protocol header value: {}", protocol_str);
+
+                // Check if "mcp" is among the requested protocols
+                // The header can contain multiple protocols separated by commas
+                let protocols: Vec<&str> = protocol_str.split(',').map(|s| s.trim()).collect();
+
+                if protocols.contains(&"mcp") {
+                    trace!("MCP subprotocol found in requested protocols");
+                    return Ok(());
+                } else {
+                    warn!(
+                        "MCP subprotocol not found in requested protocols: {:?}",
+                        protocols
+                    );
+                }
+            } else {
+                warn!("Failed to parse Sec-WebSocket-Protocol header as string");
+            }
+        } else {
+            warn!("No Sec-WebSocket-Protocol header found");
+        }
+
+        // Return proper HTTP error response for protocol validation failure
+        Err(AppError::WebSocketProtocolError(
+            "WebSocket connection requires 'mcp' subprotocol".to_string(),
+        ))
     }
 
     /// Authenticate WebSocket connection
