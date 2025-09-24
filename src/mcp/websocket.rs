@@ -144,6 +144,7 @@ impl WebSocketManager {
         // Validate MCP subprotocol as required by Claude Code IDE integration
         if let Err(error) = self.validate_mcp_subprotocol(&headers).await {
             warn!("WebSocket connection rejected: MCP subprotocol validation failed");
+            info!("WebSocket connection rejected due to missing or invalid MCP subprotocol");
             return error.into_response();
         }
 
@@ -235,8 +236,10 @@ impl WebSocketManager {
 
         self.clients.insert(client_id.clone(), connection);
         info!(
-            "Client {} connected with capabilities: {:?}",
-            client_id, capabilities
+            "WebSocket client connected successfully: client_id={}, capabilities={:?}, client_info={:?}",
+            client_id,
+            capabilities,
+            capabilities.client_info
         );
         trace!("Client {} registered in client registry", client_id);
 
@@ -366,6 +369,7 @@ impl WebSocketManager {
         if let Some(token) = &query.token {
             trace!("Found token in query parameters, validating...");
             if self.validate_token(token, state).await {
+                info!("WebSocket authentication successful via query parameters");
                 trace!("Query token validation successful");
                 return Ok(());
             }
@@ -380,6 +384,7 @@ impl WebSocketManager {
             if let Ok(token) = auth_header.to_str() {
                 trace!("Successfully parsed authorization header, validating token...");
                 if self.validate_token(token, state).await {
+                    info!("WebSocket authentication successful via Claude Code IDE authorization header");
                     trace!("Claude Code authorization header validation successful");
                     return Ok(());
                 }
@@ -397,6 +402,7 @@ impl WebSocketManager {
             if let Ok(token) = api_key_header.to_str() {
                 trace!("Successfully parsed x-api-key header, validating token...");
                 if self.validate_token(token, state).await {
+                    info!("WebSocket authentication successful via API key header");
                     trace!("API key header validation successful");
                     return Ok(());
                 }
@@ -408,7 +414,8 @@ impl WebSocketManager {
             trace!("No x-api-key header found");
         }
 
-        warn!("All authentication methods failed");
+        warn!("WebSocket authentication failed: All authentication methods rejected");
+        info!("WebSocket connection rejected due to authentication failure");
         Err(AppError::BadRequest(
             "Invalid or missing authentication token".to_string(),
         ))
