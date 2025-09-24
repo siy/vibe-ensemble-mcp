@@ -428,6 +428,12 @@ Each template includes:
 
 Templates are designed to be **both powerful out-of-the-box and highly customizable** for specific project needs.
 
+## What's New in v0.9.3
+
+- **🔧 Enhanced WebSocket Protocol Compliance**: Fixed MCP subprotocol validation for proper Claude Code IDE integration
+- **🐛 Bug Fixes**: Various stability improvements and issue resolutions
+- **📚 Documentation Updates**: Improved protocol compliance documentation
+
 ## What's New in v0.9.0
 
 - **🧠 Task Breakdown Sizing Methodology**: Intelligent task breakdown with optimal context-performance optimization (~120K token budget per stage)
@@ -442,7 +448,7 @@ Templates are designed to be **both powerful out-of-the-box and highly customiza
 
 ## Bidirectional WebSocket Communication
 
-Vibe-Ensemble v0.9.1 introduces **full bidirectional WebSocket communication** with Claude Code clients, enabling advanced multi-client coordination and real-time collaboration.
+Vibe-Ensemble v0.9.1+ introduces **full bidirectional WebSocket communication** with Claude Code clients, enabling advanced multi-client coordination and real-time collaboration.
 
 ### Key Capabilities
 
