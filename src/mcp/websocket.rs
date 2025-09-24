@@ -144,7 +144,6 @@ impl WebSocketManager {
         // Validate MCP subprotocol as required by Claude Code IDE integration
         if let Err(error) = self.validate_mcp_subprotocol(&headers).await {
             warn!("WebSocket connection rejected: MCP subprotocol validation failed");
-            info!("WebSocket connection rejected due to missing or invalid MCP subprotocol");
             return error.into_response();
         }
 
@@ -370,7 +369,6 @@ impl WebSocketManager {
             trace!("Found token in query parameters, validating...");
             if self.validate_token(token, state).await {
                 info!("WebSocket authentication successful via query parameters");
-                trace!("Query token validation successful");
                 return Ok(());
             }
             trace!("Query token validation failed");
@@ -385,7 +383,6 @@ impl WebSocketManager {
                 trace!("Successfully parsed authorization header, validating token...");
                 if self.validate_token(token, state).await {
                     info!("WebSocket authentication successful via Claude Code IDE authorization header");
-                    trace!("Claude Code authorization header validation successful");
                     return Ok(());
                 }
                 trace!("Claude Code authorization header validation failed");
@@ -403,7 +400,6 @@ impl WebSocketManager {
                 trace!("Successfully parsed x-api-key header, validating token...");
                 if self.validate_token(token, state).await {
                     info!("WebSocket authentication successful via API key header");
-                    trace!("API key header validation successful");
                     return Ok(());
                 }
                 trace!("API key header validation failed");
@@ -415,7 +411,6 @@ impl WebSocketManager {
         }
 
         warn!("WebSocket authentication failed: All authentication methods rejected");
-        info!("WebSocket connection rejected due to authentication failure");
         Err(AppError::BadRequest(
             "Invalid or missing authentication token".to_string(),
         ))
