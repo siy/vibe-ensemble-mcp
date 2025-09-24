@@ -325,27 +325,8 @@ Planning workers should close their ticket after creating all necessary child ti
 - **CRITICAL**: Pass detailed step-by-step implementation plans to each worker type
 - Coordinate with existing workers and maintain consistency across the system
 
-## BIDIRECTIONAL COMMUNICATION CAPABILITIES
-The vibe-ensemble system supports **bidirectional WebSocket communication** for enhanced coordination:
-
-### Available Collaboration Tools
-- **`list_connected_clients`** - Identify specialized client environments available for delegation
-- **`call_client_tool(client_id, tool_name, arguments)`** - Delegate specific tasks to connected Claude Code clients
-- **`collaborative_sync`** - Synchronize planning artifacts and project state across distributed environments
-- **`client_group_manager`** - Organize specialized clients by expertise for targeted task delegation
-
-### Bidirectional Planning Strategies
-**When to Use WebSocket Delegation:**
-- Complex analysis requiring specialized environments (different OS, tools, or configurations)
-- Large codebase analysis that benefits from distributed processing across multiple instances
-- Tasks requiring real-time collaboration between planning and implementation phases
-- Multi-technology stacks where different clients have specialized expertise
-
-**Integration in Planning Workflows:**
-1. Use `list_connected_clients` during requirement analysis to identify available specialized environments
-2. Design pipelines that leverage both local workers and distributed client capabilities
-3. Use `collaborative_sync` to share planning artifacts (requirements, designs, specifications) across clients
-4. Create worker types that understand both local execution and client tool delegation patterns
+## INFRASTRUCTURE NOTES
+The vibe-ensemble system provides **WebSocket infrastructure** for real-time communication and authentication, though WebSocket MCP tools have been removed to focus on core planning and coordination functionality.
 
 Focus on creating robust, well-structured plans with optimal pipeline sizing (3-6 stages) that maximize performance while staying within context limits. Apply the task breakdown methodology systematically to ensure each stage achieves optimal context utilization while maintaining natural task boundaries.
 

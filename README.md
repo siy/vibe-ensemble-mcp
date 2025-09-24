@@ -162,31 +162,14 @@ Vibe-Ensemble provides 47 MCP tools organized into ten categories:
 - `list_ready_tickets` - List tickets ready for execution (dependencies satisfied)
 - `list_blocked_tickets` - List tickets blocked by pending dependencies
 
-### WebSocket Client Management (Bidirectional Communication)
-- `list_connected_clients` - View all connected Claude Code instances with their capabilities
-- `list_client_tools` - Discover tools available on connected clients
-- `client_health_monitor` - Monitor connection status and client health metrics
-- `client_group_manager` - Organize clients into logical groups for targeted operations
-
-### Bidirectional Tool Execution
-- `call_client_tool` - Execute tools on specific connected Claude Code clients
-- `list_pending_requests` - Track ongoing client tool calls and their status
-- `parallel_call` - Execute the same tool across multiple clients simultaneously
-- `broadcast_to_clients` - Send notifications or commands to all connected clients
-
-### Workflow Orchestration
-- `execute_workflow` - Coordinate complex multi-step workflows across clients
-- `collaborative_sync` - Synchronize state and data between coordinator and clients
-- `poll_client_status` - Get real-time status updates from specific clients
-
-
-### Integration Testing
-- `validate_websocket_integration` - Comprehensive WebSocket functionality validation
-- `test_websocket_compatibility` - Test compatibility with different MCP client types
+### Template Management
+- `list_worker_templates` - List available worker templates
+- `load_worker_template` - Load a specific worker template
+- `ensure_worker_templates_exist` - Ensure all worker templates are available
 
 > **Note on Worker Management**: Workers are automatically spawned when tickets are assigned to stages. There are no explicit worker spawn/stop tools - the queue system handles worker lifecycle automatically based on workload.
 
-> **Note on Bidirectional Communication**: WebSocket tools enable real-time coordination with connected Claude Code clients, allowing for distributed task execution and multi-client workflows. This is particularly useful for complex projects requiring specialized environments or parallel processing capabilities.
+> **Note on WebSocket Infrastructure**: WebSocket server infrastructure is available for real-time communication and authentication, but WebSocket MCP tools have been removed to focus on core multi-agent coordination functionality.
 
 ## Requirements
 
@@ -205,10 +188,10 @@ The server accepts the following command-line options:
 - `--log-level`: Log level (default: `info`)
 - `--permission-mode`: Permission mode for workers (default: `file`)
 - `--no-respawn`: Disable automatic respawning of workers on startup
-- `--enable-websocket`: Enable WebSocket transport for bidirectional communication (default: `true`)
-- `--websocket-auth-required`: Require authentication for WebSocket connections (default: `false`)
 - `--client-tool-timeout-secs`: Timeout for client tool calls in seconds (default: `30`)
 - `--max-concurrent-client-requests`: Maximum concurrent client requests (default: `50`)
+
+> **Note**: WebSocket transport is always enabled for infrastructure communication, but WebSocket MCP tools have been removed.
 
 ## Permission System
 

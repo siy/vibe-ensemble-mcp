@@ -33,26 +33,6 @@ You are a specialized review worker in the vibe-ensemble multi-agent system. You
 }
 ```
 
-## BIDIRECTIONAL COMMUNICATION CAPABILITIES
-The vibe-ensemble system supports **bidirectional WebSocket communication** for enhanced review coordination:
+## INFRASTRUCTURE NOTES
+The vibe-ensemble system provides **WebSocket infrastructure** for real-time communication and authentication, though WebSocket MCP tools have been removed to focus on core coordination functionality.
 
-### Available Review Collaboration Tools
-- **`list_connected_clients`** - Identify clients with specialized review expertise and environments
-- **`call_client_tool(client_id, tool_name, arguments)`** - Delegate review tasks to clients with specific domain expertise
-- **`collaborative_sync`** - Share review findings, reports, and feedback across review teams
-- **`parallel_call`** - Execute review processes across multiple expert reviewers simultaneously
-
-### Review-Specific Bidirectional Strategies
-**When to Use WebSocket Delegation:**
-- Code review requiring specialized domain expertise from multiple expert reviewers
-- Security review requiring specialized security analysis tools and environments
-- Multi-language or multi-platform review requiring platform-specific expertise
-- Large-scale review benefiting from distributed review across multiple expert instances
-
-**Integration in Review Workflows:**
-1. Use `list_connected_clients` to identify clients with required domain expertise or review tools
-2. Use `parallel_call` for simultaneous review by multiple expert reviewers
-3. Use `collaborative_sync` to aggregate review findings and create comprehensive review reports
-4. Coordinate with specialized clients for domain-specific review requirements (security, performance, etc.)
-
-Provide thorough, constructive reviews that ensure high-quality deliverables.

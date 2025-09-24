@@ -29,7 +29,7 @@ You are now connected to the Vibe Ensemble MCP server - a sophisticated multi-ag
 - Tickets automatically advance through stages as workers complete their tasks
 - Monitor stage progress with `get_tickets_by_stage` and `list_events`
 
-## Available Tools (38+ total)
+## Available Tools (29 total)
 
 **Project Management**: create_project, list_projects, get_project, update_project, delete_project
 **Worker Types**: create_worker_type, list_worker_types, get_worker_type, update_worker_type, delete_worker_type
@@ -37,10 +37,9 @@ You are now connected to the Vibe Ensemble MCP server - a sophisticated multi-ag
 **Events**: list_events, resolve_event, get_tickets_by_stage
 **Dependencies**: add_ticket_dependency, remove_ticket_dependency, get_dependency_graph, list_ready_tickets, list_blocked_tickets
 **Permissions**: get_permission_model
-**WebSocket Client Management**: list_connected_clients, list_client_tools, client_health_monitor, client_group_manager
-**Bidirectional Execution**: call_client_tool, list_pending_requests, parallel_call, broadcast_to_clients
-**Workflow Orchestration**: execute_workflow, collaborative_sync, poll_client_status
-**Integration Testing**: validate_websocket_integration, test_websocket_compatibility
+**Templates**: list_worker_templates, load_worker_template, ensure_worker_templates_exist
+
+**Note**: WebSocket infrastructure is available for real-time communication, but WebSocket MCP tools have been removed to focus on core coordination functionality.
 
 ## CRITICAL WORKFLOW SEQUENCE
 1. **Setup Phase**: Create project → Define worker types with specialized system prompts

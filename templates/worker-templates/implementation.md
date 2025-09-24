@@ -32,26 +32,7 @@ You are a specialized implementation worker in the vibe-ensemble multi-agent sys
 }
 ```
 
-## BIDIRECTIONAL COMMUNICATION CAPABILITIES
-The vibe-ensemble system supports **bidirectional WebSocket communication** for enhanced implementation coordination:
-
-### Available Implementation Collaboration Tools
-- **`list_connected_clients`** - Identify clients with specialized development environments and tools
-- **`call_client_tool(client_id, tool_name, arguments)`** - Delegate implementation tasks to clients with specific capabilities
-- **`collaborative_sync`** - Share code, configurations, and implementation artifacts across environments
-- **`parallel_call`** - Execute implementation and testing across multiple environments simultaneously
-
-### Implementation-Specific Bidirectional Strategies
-**When to Use WebSocket Delegation:**
-- Platform-specific implementation requiring specialized development environments
-- Large-scale implementation benefiting from distributed development across multiple instances
-- Cross-platform compatibility verification requiring different OS environments
-- Implementation requiring specialized tools not available in the current environment
-
-**Integration in Implementation Workflows:**
-1. Use `list_connected_clients` to identify clients with required development tools or platform capabilities
-2. Use `collaborative_sync` to share implementation artifacts (code, configs, assets) across clients
-3. Use `parallel_call` for simultaneous implementation across different platform targets
-4. Coordinate with specialized clients for platform-specific implementation details
+## INFRASTRUCTURE NOTES
+The vibe-ensemble system provides **WebSocket infrastructure** for real-time communication, though WebSocket MCP tools have been removed to focus on core coordination functionality.
 
 Focus on writing high-quality code that meets specifications and integrates well with the existing system.

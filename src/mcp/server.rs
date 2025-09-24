@@ -3,10 +3,8 @@ use serde_json::Value;
 use tracing::{debug, error, info, trace, warn};
 
 use super::{
-    bidirectional_tools::*, client_tools::*, dependency_tools::*, event_tools::*,
-    integration_tools::*, orchestration_tools::*, permission_tools::*, project_tools::*,
-    template_tools::*, ticket_tools::*, tools::ToolRegistry, types::*, worker_type_tools::*,
-    MCP_PROTOCOL_VERSION,
+    dependency_tools::*, event_tools::*, permission_tools::*, project_tools::*, template_tools::*,
+    ticket_tools::*, tools::ToolRegistry, types::*, worker_type_tools::*, MCP_PROTOCOL_VERSION,
 };
 use crate::{config::Config, error::Result, server::AppState};
 
@@ -49,8 +47,7 @@ impl McpServer {
         Self::register_event_tools(&mut tools);
         Self::register_permission_tools(&mut tools);
 
-        // Always register WebSocket tools (WebSocket is always enabled)
-        Self::register_websocket_tools(&mut tools);
+        // WebSocket infrastructure is available but MCP tools are removed
 
         // Register template management tools
         Self::register_template_tools(&mut tools);
@@ -110,30 +107,6 @@ impl McpServer {
     /// Register permission management tools
     fn register_permission_tools(tools: &mut ToolRegistry) {
         register_tools!(tools, GetPermissionModelTool,);
-    }
-
-    /// Register WebSocket and bidirectional communication tools
-    fn register_websocket_tools(tools: &mut ToolRegistry) {
-        register_tools!(
-            tools,
-            // Client tools for bidirectional communication
-            ListClientToolsTool,
-            CallClientToolTool,
-            ListConnectedClientsTool,
-            ListPendingRequestsTool,
-            // Orchestration tools for complex workflows
-            ExecuteWorkflowTool,
-            ParallelCallTool,
-            BroadcastToClientsTool,
-            // Enhanced bidirectional MCP tools
-            CollaborativeSyncTool,
-            PollClientStatusTool,
-            ClientGroupManagerTool,
-            ClientHealthMonitorTool,
-            // Integration testing and compatibility tools
-            ValidateWebSocketIntegrationTool,
-            TestWebSocketCompatibilityTool,
-        );
     }
 
     /// Register template management tools
