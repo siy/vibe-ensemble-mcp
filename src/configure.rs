@@ -73,12 +73,11 @@ pub async fn configure_claude_code(
     println!("  2. Open Claude Code in this directory");
     println!("  3. Run the 'vibe-ensemble' command to initialize as coordinator");
     println!();
-    println!("🔄 Bidirectional Communication Features:");
-    println!("  • WebSocket transport enabled for real-time collaboration");
-    println!("  • Server-initiated tool calls to clients");
-    println!("  • Workflow orchestration and parallel execution");
-    println!("  • Client tool registration and discovery");
-    println!("  • 15 new MCP tools for bidirectional coordination");
+    println!("🔄 Real-Time Communication Features:");
+    println!("  • WebSocket transport enabled for real-time event streaming");
+    println!("  • JSON-RPC notifications for instant coordination");
+    println!("  • 28 MCP tools for comprehensive project coordination");
+    println!("  • Server-Sent Events (SSE) and WebSocket event broadcasting");
 
     Ok(())
 }

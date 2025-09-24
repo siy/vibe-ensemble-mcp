@@ -40,14 +40,48 @@ impl EventBroadcaster {
 
     /// Broadcast a typed event to all connected SSE and WebSocket clients
     pub fn broadcast(&self, event: EventPayload) {
+        use tracing::{info, trace};
+
+        // Log the event being broadcast
+        info!(
+            "Broadcasting event: type={}, timestamp={}, data={}",
+            serde_json::to_string(&event.event_type).unwrap_or_else(|_| "unknown".to_string()),
+            event.timestamp,
+            serde_json::to_string(&event.data).unwrap_or_else(|_| "{}".to_string())
+        );
+
+        // Generate and log the complete JSON-RPC message that will be sent
+        let jsonrpc_message = event.to_jsonrpc_notification();
+        trace!(
+            "Complete JSON-RPC message for event broadcast: {}",
+            serde_json::to_string_pretty(&jsonrpc_message)
+                .unwrap_or_else(|_| "Failed to serialize JSON-RPC message".to_string())
+        );
+
         // Broadcast to SSE clients
-        if let Err(e) = self.sse_sender.send(event.clone()) {
+        let sse_result = self.sse_sender.send(event.clone());
+        let sse_receiver_count = self.sse_sender.receiver_count();
+
+        if let Err(e) = sse_result {
             debug!("SSE broadcast failed: {}", e);
+        } else {
+            info!(
+                "SSE broadcast successful to {} receivers",
+                sse_receiver_count
+            );
         }
 
         // Broadcast to WebSocket clients
-        if let Err(e) = self.websocket_sender.send(event) {
+        let websocket_result = self.websocket_sender.send(event);
+        let websocket_receiver_count = self.websocket_sender.receiver_count();
+
+        if let Err(e) = websocket_result {
             debug!("WebSocket broadcast failed: {}", e);
+        } else {
+            info!(
+                "WebSocket broadcast successful to {} receivers",
+                websocket_receiver_count
+            );
         }
     }
 
@@ -230,7 +264,10 @@ mod tests {
         let websocket_result = timeout(Duration::from_millis(100), websocket_receiver.recv()).await;
 
         assert!(sse_result.is_ok(), "SSE receiver should receive the event");
-        assert!(websocket_result.is_ok(), "WebSocket receiver should receive the event");
+        assert!(
+            websocket_result.is_ok(),
+            "WebSocket receiver should receive the event"
+        );
 
         let sse_event = sse_result.unwrap().unwrap();
         let websocket_event = websocket_result.unwrap().unwrap();
@@ -274,7 +311,10 @@ mod tests {
 
         // WebSocket should receive event
         let result = timeout(Duration::from_millis(100), websocket_receiver.recv()).await;
-        assert!(result.is_ok(), "WebSocket receiver should work independently");
+        assert!(
+            result.is_ok(),
+            "WebSocket receiver should work independently"
+        );
 
         let received_event = result.unwrap().unwrap();
         assert_eq!(received_event.event_type, test_event.event_type);

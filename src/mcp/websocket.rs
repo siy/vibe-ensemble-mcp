@@ -118,7 +118,10 @@ impl WebSocketManager {
     }
 
     /// Create a WebSocket manager with concurrency limits and event broadcasting
-    pub fn with_event_broadcasting(max_concurrent: usize, event_broadcaster: EventBroadcaster) -> Self {
+    pub fn with_event_broadcasting(
+        max_concurrent: usize,
+        event_broadcaster: EventBroadcaster,
+    ) -> Self {
         let manager = Self {
             clients: Arc::new(DashMap::new()),
             tool_registry: Arc::new(ClientToolRegistry::new()),
@@ -869,9 +872,26 @@ impl WebSocketManager {
                     Ok(event_payload) => {
                         // Convert event to JSON-RPC notification format
                         let notification = event_payload.to_jsonrpc_notification();
+                        let client_count = self.clients.len();
+
+                        info!(
+                            "WebSocket delivering event: type={}, clients={}",
+                            serde_json::to_string(&event_payload.event_type)
+                                .unwrap_or_else(|_| "unknown".to_string()),
+                            client_count
+                        );
+
+                        // Log the complete JSON-RPC message being sent to WebSocket clients
+                        trace!(
+                            "WebSocket JSON-RPC message: {}",
+                            serde_json::to_string_pretty(&notification).unwrap_or_else(|_| {
+                                "Failed to serialize JSON-RPC message".to_string()
+                            })
+                        );
 
                         // Broadcast to all connected WebSocket clients
                         let clients_to_remove = Arc::new(std::sync::Mutex::new(Vec::new()));
+                        let mut successful_deliveries = 0;
 
                         for entry in self.clients.iter() {
                             let client_id = entry.key().clone();
@@ -882,6 +902,8 @@ impl WebSocketManager {
                             if client.sender.send(message).is_err() {
                                 // Client connection is broken, mark for removal
                                 clients_to_remove.lock().unwrap().push(client_id);
+                            } else {
+                                successful_deliveries += 1;
                             }
                         }
 
@@ -892,9 +914,17 @@ impl WebSocketManager {
                             self.tool_registry.remove_client_tools(client_id);
                             info!("Removed broken WebSocket client: {}", client_id);
                         }
+
+                        info!(
+                            "WebSocket event delivery completed: {}/{} clients successful",
+                            successful_deliveries, client_count
+                        );
                     }
                     Err(tokio::sync::broadcast::error::RecvError::Lagged(skipped)) => {
-                        warn!("WebSocket event broadcaster lagged, skipped {} events", skipped);
+                        warn!(
+                            "WebSocket event broadcaster lagged, skipped {} events",
+                            skipped
+                        );
                     }
                     Err(tokio::sync::broadcast::error::RecvError::Closed) => {
                         info!("WebSocket event broadcaster closed, stopping event loop");

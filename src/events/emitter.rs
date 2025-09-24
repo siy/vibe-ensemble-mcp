@@ -46,7 +46,8 @@ impl<'a> EventEmitter<'a> {
         let jsonrpc_message = event.to_jsonrpc_notification();
         tracing::debug!(
             "Broadcasting ticket_created JSON-RPC: {}",
-            serde_json::to_string_pretty(&jsonrpc_message).unwrap_or_else(|_| "Failed to serialize".to_string())
+            serde_json::to_string_pretty(&jsonrpc_message)
+                .unwrap_or_else(|_| "Failed to serialize".to_string())
         );
 
         self.broadcaster.broadcast(event);
@@ -85,7 +86,8 @@ impl<'a> EventEmitter<'a> {
         let jsonrpc_message = event.to_jsonrpc_notification();
         tracing::debug!(
             "Broadcasting ticket_updated JSON-RPC: {}",
-            serde_json::to_string_pretty(&jsonrpc_message).unwrap_or_else(|_| "Failed to serialize".to_string())
+            serde_json::to_string_pretty(&jsonrpc_message)
+                .unwrap_or_else(|_| "Failed to serialize".to_string())
         );
 
         self.broadcaster.broadcast(event);
@@ -127,7 +129,8 @@ impl<'a> EventEmitter<'a> {
         let jsonrpc_message = event.to_jsonrpc_notification();
         tracing::debug!(
             "Broadcasting ticket_stage_changed JSON-RPC: {}",
-            serde_json::to_string_pretty(&jsonrpc_message).unwrap_or_else(|_| "Failed to serialize".to_string())
+            serde_json::to_string_pretty(&jsonrpc_message)
+                .unwrap_or_else(|_| "Failed to serialize".to_string())
         );
 
         self.broadcaster.broadcast(event);
@@ -164,7 +167,8 @@ impl<'a> EventEmitter<'a> {
         let jsonrpc_message = event.to_jsonrpc_notification();
         tracing::debug!(
             "Broadcasting ticket_closed JSON-RPC: {}",
-            serde_json::to_string_pretty(&jsonrpc_message).unwrap_or_else(|_| "Failed to serialize".to_string())
+            serde_json::to_string_pretty(&jsonrpc_message)
+                .unwrap_or_else(|_| "Failed to serialize".to_string())
         );
 
         self.broadcaster.broadcast(event);
@@ -196,7 +200,8 @@ impl<'a> EventEmitter<'a> {
         let jsonrpc_message = event.to_jsonrpc_notification();
         tracing::debug!(
             "Broadcasting worker_type_created JSON-RPC: {}",
-            serde_json::to_string_pretty(&jsonrpc_message).unwrap_or_else(|_| "Failed to serialize".to_string())
+            serde_json::to_string_pretty(&jsonrpc_message)
+                .unwrap_or_else(|_| "Failed to serialize".to_string())
         );
 
         self.broadcaster.broadcast(event);
@@ -229,7 +234,8 @@ impl<'a> EventEmitter<'a> {
         let jsonrpc_message = event.to_jsonrpc_notification();
         tracing::debug!(
             "Broadcasting worker_type_updated JSON-RPC: {}",
-            serde_json::to_string_pretty(&jsonrpc_message).unwrap_or_else(|_| "Failed to serialize".to_string())
+            serde_json::to_string_pretty(&jsonrpc_message)
+                .unwrap_or_else(|_| "Failed to serialize".to_string())
         );
 
         self.broadcaster.broadcast(event);
@@ -262,7 +268,8 @@ impl<'a> EventEmitter<'a> {
         let jsonrpc_message = event.to_jsonrpc_notification();
         tracing::debug!(
             "Broadcasting worker_type_deleted JSON-RPC: {}",
-            serde_json::to_string_pretty(&jsonrpc_message).unwrap_or_else(|_| "Failed to serialize".to_string())
+            serde_json::to_string_pretty(&jsonrpc_message)
+                .unwrap_or_else(|_| "Failed to serialize".to_string())
         );
 
         self.broadcaster.broadcast(event);
@@ -290,7 +297,8 @@ impl<'a> EventEmitter<'a> {
         let jsonrpc_message = event.to_jsonrpc_notification();
         tracing::debug!(
             "Broadcasting project_created JSON-RPC: {}",
-            serde_json::to_string_pretty(&jsonrpc_message).unwrap_or_else(|_| "Failed to serialize".to_string())
+            serde_json::to_string_pretty(&jsonrpc_message)
+                .unwrap_or_else(|_| "Failed to serialize".to_string())
         );
 
         self.broadcaster.broadcast(event);
@@ -329,7 +337,8 @@ impl<'a> EventEmitter<'a> {
         let jsonrpc_message = event.to_jsonrpc_notification();
         tracing::debug!(
             "Broadcasting stage_completed JSON-RPC: {}",
-            serde_json::to_string_pretty(&jsonrpc_message).unwrap_or_else(|_| "Failed to serialize".to_string())
+            serde_json::to_string_pretty(&jsonrpc_message)
+                .unwrap_or_else(|_| "Failed to serialize".to_string())
         );
 
         self.broadcaster.broadcast(event);
@@ -360,7 +369,8 @@ impl<'a> EventEmitter<'a> {
         let jsonrpc_message = event.to_jsonrpc_notification();
         tracing::debug!(
             "Broadcasting worker_stopped JSON-RPC: {}",
-            serde_json::to_string_pretty(&jsonrpc_message).unwrap_or_else(|_| "Failed to serialize".to_string())
+            serde_json::to_string_pretty(&jsonrpc_message)
+                .unwrap_or_else(|_| "Failed to serialize".to_string())
         );
 
         self.broadcaster.broadcast(event);
@@ -391,7 +401,8 @@ impl<'a> EventEmitter<'a> {
         let jsonrpc_message = event.to_jsonrpc_notification();
         tracing::debug!(
             "Broadcasting task_assigned JSON-RPC: {}",
-            serde_json::to_string_pretty(&jsonrpc_message).unwrap_or_else(|_| "Failed to serialize".to_string())
+            serde_json::to_string_pretty(&jsonrpc_message)
+                .unwrap_or_else(|_| "Failed to serialize".to_string())
         );
 
         self.broadcaster.broadcast(event);
