@@ -8,7 +8,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use std::sync::Arc;
 use tokio::sync::{mpsc, Semaphore};
-use tracing::{error, info, trace, warn};
+use tracing::{debug, error, info, trace, warn};
 use uuid::Uuid;
 
 use super::types::JsonRpcRequest;
@@ -898,7 +898,14 @@ impl WebSocketManager {
                             let client = entry.value().clone();
 
                             // Send event to client
-                            let message = Message::Text(notification.to_string());
+                            let message_text = notification.to_string();
+                            let message = Message::Text(message_text.clone());
+
+                            // Log the exact text being sent to WebSocket client
+                            debug!(
+                                "WebSocket sending to client {}: {}",
+                                client_id, message_text
+                            );
                             if client.sender.send(message).is_err() {
                                 // Client connection is broken, mark for removal
                                 clients_to_remove.lock().unwrap().push(client_id);
