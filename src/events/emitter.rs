@@ -240,14 +240,28 @@ impl<'a> EventEmitter<'a> {
         Ok(())
     }
 
-    /// Emit stage completed event (DB only - used for coordinator attention)
+    /// Emit stage completed event with both DB and SSE
     pub async fn emit_stage_completed(
         &self,
         ticket_id: &str,
         stage: &str,
         worker_id: &str,
     ) -> Result<()> {
+        // Create DB event
         Event::create_stage_completed(self.db, ticket_id, stage, worker_id).await?;
+
+        // Broadcast SSE event
+        let event = EventPayload::system_message(
+            "stage_completed",
+            &format!("Stage '{}' completed by worker {}", stage, worker_id),
+            Some(serde_json::json!({
+                "ticket_id": ticket_id,
+                "stage": stage,
+                "worker_id": worker_id
+            })),
+        );
+        self.broadcaster.broadcast(event);
+
         tracing::debug!(
             "Successfully emitted stage_completed event for: {}",
             ticket_id
@@ -255,9 +269,22 @@ impl<'a> EventEmitter<'a> {
         Ok(())
     }
 
-    /// Emit worker stopped event (DB only - used for coordinator attention)
+    /// Emit worker stopped event with both DB and SSE
     pub async fn emit_worker_stopped(&self, worker_id: &str, reason: &str) -> Result<()> {
+        // Create DB event
         Event::create_worker_stopped(self.db, worker_id, reason).await?;
+
+        // Broadcast SSE event
+        let event = EventPayload::system_message(
+            "worker_stopped",
+            &format!("Worker {} stopped: {}", worker_id, reason),
+            Some(serde_json::json!({
+                "worker_id": worker_id,
+                "reason": reason
+            })),
+        );
+        self.broadcaster.broadcast(event);
+
         tracing::debug!(
             "Successfully emitted worker_stopped event for: {}",
             worker_id
@@ -265,9 +292,22 @@ impl<'a> EventEmitter<'a> {
         Ok(())
     }
 
-    /// Emit task assigned event (DB only - used for coordinator attention)
+    /// Emit task assigned event with both DB and SSE
     pub async fn emit_task_assigned(&self, ticket_id: &str, queue_name: &str) -> Result<()> {
+        // Create DB event
         Event::create_task_assigned(self.db, ticket_id, queue_name).await?;
+
+        // Broadcast SSE event
+        let event = EventPayload::system_message(
+            "task_assigned",
+            &format!("Task {} assigned to queue {}", ticket_id, queue_name),
+            Some(serde_json::json!({
+                "ticket_id": ticket_id,
+                "queue_name": queue_name
+            })),
+        );
+        self.broadcaster.broadcast(event);
+
         tracing::debug!(
             "Successfully emitted task_assigned event for: {}",
             ticket_id
