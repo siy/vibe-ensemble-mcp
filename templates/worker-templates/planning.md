@@ -153,6 +153,172 @@ For each task, explicitly define:
 **Never Touches:**
 - [Explicitly forbidden files, directories, configurations]
 
+## STAGE OWNERSHIP AND CONFLICT PREVENTION
+
+### 🚨 CRITICAL RULE: One Stage = One Ticket Owner
+**Each stage name can only be owned by ONE ticket in the entire project execution plan**
+- **Never create separate tickets that share the same stage name**
+- **Stage names must be unique across all tickets in a project**
+- **Violation of this rule creates ticket claiming conflicts and system deadlocks**
+
+### Stage Naming Convention
+When creating execution plans, ensure stage names follow these rules:
+
+**Stage Naming Rules:**
+- **Technology Prefix**: `frontend_`, `backend_`, `api_`, `db_`, `integration_`, etc.
+- **Unique Action**: `setup`, `implementation`, `testing`, `deployment`, `review`
+- **Never Reuse**: Same stage name across multiple tickets
+
+**✅ CORRECT Examples:**
+```javascript
+// Good - Unique stage names across all tickets
+Frontend Ticket: ["frontend_setup", "frontend_implementation"]
+Backend Ticket: ["backend_setup", "backend_implementation"]
+Testing Ticket: ["integration_testing", "e2e_testing"]
+Deployment Ticket: ["deployment_staging", "deployment_production"]
+```
+
+**❌ FORBIDDEN Examples:**
+```javascript
+// Bad - Conflicting stage names across tickets
+Frontend Ticket: ["implementation", "testing"]  // Conflict!
+Backend Ticket: ["implementation", "testing"]   // Double conflict!
+Testing Ticket: ["testing"]                     // Triple conflict!
+
+// Another bad example - Same stage name reused
+Frontend Impl: ["frontend_implementation", "frontend_testing"]
+Frontend Test: ["frontend_testing"]  // CONFLICT - both claim "frontend_testing"!
+```
+
+### Dependency vs Pipeline Decision Framework
+
+**When planning implementation→testing workflows, choose ONE pattern consistently:**
+
+#### **Pattern 1: Separate Tickets + Dependencies (Recommended for Complex Testing)**
+```javascript
+// Clean separation with unique stages
+Implementation Ticket: ["frontend_implementation"] // Closes when complete
+Testing Ticket: ["frontend_testing"]               // Separate ticket, dependency-blocked
+Dependency: Implementation blocks Testing
+
+✅ Advantages: Independent testing lifecycle, complex test suites, parallel testing tracks
+✅ Use when: Testing is substantial, requires different expertise, has independent lifecycle
+```
+
+#### **Pattern 2: Single Ticket Pipeline (Recommended for Simple Testing)**
+```javascript
+// One ticket progresses through multiple stages
+Complete Ticket: ["frontend_implementation", "frontend_testing"] // One ticket responsibility
+// No dependencies needed - single ticket ownership
+
+✅ Advantages: Simpler coordination, integrated workflow, less overhead
+✅ Use when: Testing is straightforward part of implementation, same expertise domain
+```
+
+#### **Pattern 3: Parallel Independent Tracks (For True Parallelism)**
+```javascript
+// Independent development tracks
+Frontend Ticket: ["frontend_impl", "frontend_test"] // Independent lifecycle
+Backend Ticket: ["backend_impl", "backend_test"]    // Independent lifecycle
+// No cross-dependencies - truly parallel execution
+
+✅ Advantages: Maximum parallelism, independent release cycles
+✅ Use when: Components are truly independent, no integration dependencies
+```
+
+### Stage Ownership Validation Process
+
+**Before creating any tickets, validate your execution plan:**
+
+#### **Step 1: Stage Ownership Matrix**
+Create a matrix to verify no conflicts:
+```
+Stage Name            | Ticket Owner           | Worker Type Needed
+---------------------|------------------------|-------------------
+frontend_setup       | Frontend Setup Ticket | frontend_setup
+frontend_impl         | Frontend Main Ticket   | frontend_implementation
+frontend_testing      | Frontend Test Ticket   | frontend_testing
+backend_setup         | Backend Setup Ticket   | backend_setup
+backend_impl          | Backend Main Ticket    | backend_implementation
+integration_testing   | Integration Ticket     | integration_testing
+deployment_prep       | Deployment Ticket      | deployment_preparation
+```
+
+#### **Step 2: Conflict Detection Checklist**
+- [ ] All stage names are unique across the entire project
+- [ ] No two tickets share the same stage name
+- [ ] Dependencies don't create circular workflows
+- [ ] Each stage has a corresponding worker type planned
+- [ ] Implementation→testing pattern is consistent throughout
+
+#### **Step 3: Pipeline Logic Validation**
+**Avoid Circular Dependency Logic:**
+```javascript
+// ❌ FORBIDDEN: Circular logic
+Implementation Ticket: ["impl", "testing"] // Transitions TO testing
+Testing Ticket: ["testing"]                // Also claims testing
+Dependency: Implementation blocks Testing   // But Implementation becomes Testing!
+// This creates: "Implementation must finish before Testing, but Implementation becomes Testing"
+
+// ✅ CORRECT: Clean separation
+Implementation Ticket: ["implementation"]     // Closes when complete
+Testing Ticket: ["testing"]                 // Starts after implementation closes
+Dependency: Implementation blocks Testing    // Clear handoff
+```
+
+### Common Planning Anti-Patterns to Avoid
+
+#### **Anti-Pattern 1: Stage Name Conflicts**
+```javascript
+❌ DON'T DO THIS:
+Frontend Implementation: ["frontend_implementation", "frontend_testing"]
+Frontend Testing: ["frontend_testing"] // CONFLICT!
+Dependency: Implementation → Testing
+
+✅ DO THIS INSTEAD:
+Frontend Implementation: ["frontend_implementation"] // Closes when complete
+Frontend Testing: ["frontend_test_execution"]       // Unique stage name
+Dependency: Implementation → Testing
+```
+
+#### **Anti-Pattern 2: Dependency + Pipeline Contradiction**
+```javascript
+❌ DON'T DO THIS:
+Backend Dev: ["backend_dev", "backend_testing"] // Claims testing stage
+Backend Test: ["backend_testing"]               // Also claims testing stage
+Dependency: Backend Dev → Backend Test          // Contradiction!
+
+✅ DO THIS INSTEAD (Option A - Separate):
+Backend Dev: ["backend_development"]    // Unique stage
+Backend Test: ["backend_test_suite"]    // Unique stage
+Dependency: Backend Dev → Backend Test
+
+✅ DO THIS INSTEAD (Option B - Single):
+Backend Complete: ["backend_development", "backend_testing"] // Single ticket
+// No dependencies needed
+```
+
+#### **Anti-Pattern 3: Generic Stage Names**
+```javascript
+❌ DON'T DO THIS:
+Ticket A: ["setup", "implementation", "testing"]    // Generic names
+Ticket B: ["setup", "implementation", "testing"]    // Conflicts everywhere!
+
+✅ DO THIS INSTEAD:
+Frontend Ticket: ["frontend_setup", "frontend_impl", "frontend_test"]
+Backend Ticket: ["backend_setup", "backend_impl", "backend_test"]
+```
+
+### Stage Conflict Recovery Guidance
+
+**If you realize you've designed conflicting stages:**
+
+1. **Stop**: Don't create tickets yet
+2. **Redesign**: Choose one of the three patterns consistently
+3. **Rename**: Ensure all stage names are unique
+4. **Validate**: Check the ownership matrix again
+5. **Proceed**: Only then create tickets with `create_ticket()`
+
 ## PLANNING PROCESS
 1. **Requirement Analysis**: Thoroughly analyze the ticket description and context
 2. **Project Context Review**: Use `get_project()` to retrieve project rules and project patterns fields - these are MANDATORY guidelines that must be followed
@@ -160,11 +326,14 @@ For each task, explicitly define:
 4. **Natural Boundary Analysis**: Identify optimal task boundaries based on technology, function, and expertise
 5. **Scope Boundary Definition**: Apply task scope separation principles to prevent conflicts
 6. **Stage Identification**: Apply sizing methodology to determine essential stages (minimum 3, maximum 5-6 stages total)
-7. **Detailed Implementation Planning**: Create comprehensive step-by-step implementation plans for EACH stage with specific tasks, deliverables, and success criteria
-8. **Worker Type Verification**: Use `list_worker_types` to check what worker types exist
-9. **Worker Type Creation**: Create missing worker types using `create_worker_type` with appropriate templates, ensuring they understand project rules and patterns
-10. **Pipeline Optimization**: Validate task sizes and adjust boundaries to achieve optimal context utilization
-11. **Project Requirements Propagation**: Ensure project rules and patterns are communicated to all worker types created
+7. **🚨 STAGE OWNERSHIP VALIDATION**: Create stage ownership matrix and validate no conflicts using the validation process above
+8. **🚨 PATTERN SELECTION**: Choose consistent implementation→testing pattern (separate tickets vs. single pipeline vs. parallel tracks)
+9. **🚨 CONFLICT PREVENTION CHECK**: Verify all stage names are unique across entire project execution plan
+10. **Detailed Implementation Planning**: Create comprehensive step-by-step implementation plans for EACH stage with specific tasks, deliverables, and success criteria
+11. **Worker Type Verification**: Use `list_worker_types` to check what worker types exist
+12. **Worker Type Creation**: Create missing worker types using `create_worker_type` with appropriate templates, ensuring they understand project rules and patterns
+13. **Pipeline Optimization**: Validate task sizes and adjust boundaries to achieve optimal context utilization
+14. **Project Requirements Propagation**: Ensure project rules and patterns are communicated to all worker types created
 
 ## WORKER TYPE MANAGEMENT
 When creating worker types, use templates from `.claude/worker-templates/` directory:
@@ -212,6 +381,10 @@ Planning breakdown: ["backend_setup", "frontend_development", "integration_testi
 - [ ] All tasks under 120K token budget with safety buffers
 - [ ] Natural boundaries respected
 - [ ] Dependencies properly isolated
+- [ ] **🚨 Stage ownership matrix created with no conflicts**
+- [ ] **🚨 All stage names unique across entire project**
+- [ ] **🚨 Implementation→testing pattern chosen consistently**
+- [ ] **🚨 No circular dependency logic created**
 - [ ] **Scope boundaries clearly defined to prevent conflicts**
 - [ ] **Interface contracts established between tasks**
 - [ ] **File system ownership documented**
@@ -296,11 +469,19 @@ Planning workers should close their ticket after creating all necessary child ti
       "success_criteria": ["100% test coverage", "All security tests pass", "Performance benchmarks met"]
     }
   },
+  "stage_ownership_validation": {
+    "all_stage_names_unique": true,
+    "no_stage_conflicts": true,
+    "pattern_consistency": "separate_tickets_pattern",
+    "circular_logic_avoided": true,
+    "ownership_matrix_created": true
+  },
   "conflict_prevention": {
     "file_ownership_clear": true,
     "interface_contracts_defined": true,
     "resource_allocation_documented": true,
-    "dependency_direction_unidirectional": true
+    "dependency_direction_unidirectional": true,
+    "stage_naming_conventions_followed": true
   },
   "project_requirements": {
     "rules_applied": "Following project coding standards and security guidelines",
