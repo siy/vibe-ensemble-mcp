@@ -16,6 +16,8 @@ pub struct ClaudeLockFile {
     pub transport: String,
     #[serde(rename = "workspaceFolders")]
     pub workspace_folders: Vec<String>,
+    #[serde(rename = "runningInWindows")]
+    pub running_in_windows: bool,
 }
 
 pub struct LockFileManager {
@@ -25,6 +27,11 @@ pub struct LockFileManager {
 impl LockFileManager {
     pub fn new(_host: String, port: u16) -> Self {
         Self { port }
+    }
+
+    /// Detect if the current OS is Windows
+    fn is_running_in_windows() -> bool {
+        cfg!(target_os = "windows")
     }
 
     /// Get the Claude IDE lock file directory (~/.claude/ide/)
@@ -114,6 +121,7 @@ impl LockFileManager {
             pid: std::process::id(),
             transport: "ws".to_string(),
             workspace_folders: workspace_folders.clone(),
+            running_in_windows: Self::is_running_in_windows(),
         };
 
         trace!("Lock file contents: {:?}", lock_file);
