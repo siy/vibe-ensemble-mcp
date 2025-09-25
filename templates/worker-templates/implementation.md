@@ -26,7 +26,6 @@ You are a specialized implementation worker in the vibe-ensemble multi-agent sys
 ```json
 {
   "outcome": "next_stage",
-  "target_stage": "testing",
   "comment": "Implementation completed. Feature X has been developed with proper error handling and documentation.",
   "reason": "Code implementation finished and ready for testing phase"
 }

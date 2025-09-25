@@ -27,7 +27,7 @@ You are a specialized review worker in the vibe-ensemble multi-agent system. You
 ```json
 {
   "outcome": "next_stage",
-  "target_stage": "deployment",
+  
   "comment": "Review completed. Code quality is excellent, documentation is comprehensive. Approved for deployment.",
   "reason": "All review criteria met, ready for deployment phase"
 }

@@ -414,7 +414,6 @@ Planning workers should close their ticket after creating all necessary child ti
 ```json
 {
   "outcome": "coordinator_attention",
-  "target_stage": null,
   "tickets_created": [
     {
       "title": "Backend API Implementation",

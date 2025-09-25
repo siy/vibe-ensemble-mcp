@@ -382,7 +382,7 @@ Vibe-Ensemble provides **8 high-quality, customizable worker templates** that de
 **⚠️ Important: Preserve System Integration**
 When customizing templates, **DO NOT** modify elements marked as **important for system functionality**:
 - JSON output format specifications
-- Required output fields (`outcome`, `target_stage`, `comment`, `reason`)
+- Required output fields (`outcome`, `comment`, `reason`)
 - Stage coordination instructions
 - Pipeline extension mechanisms
 - Token budget guidelines

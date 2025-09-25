@@ -27,7 +27,7 @@ You are a specialized research worker in the vibe-ensemble multi-agent system. Y
 ```json
 {
   "outcome": "next_stage",
-  "target_stage": "design",
+  
   "comment": "Research completed. Evaluated 3 architecture options, recommending microservices approach with detailed pros/cons analysis.",
   "reason": "Research phase completed with clear recommendations for design phase"
 }

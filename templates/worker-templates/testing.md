@@ -26,7 +26,6 @@ You are a specialized testing worker in the vibe-ensemble multi-agent system. Yo
 ```json
 {
   "outcome": "next_stage",
-  "target_stage": "review",
   "comment": "Testing completed. All tests pass. Found and documented 2 minor issues that have been fixed.",
   "reason": "Comprehensive testing finished with all critical functionality validated"
 }

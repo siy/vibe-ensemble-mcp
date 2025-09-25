@@ -17,7 +17,6 @@ EXAMPLE for permission issues:
 {{
   "ticket_id": "{ticket_id}",
   "outcome": "coordinator_attention",
-  "target_stage": null,
   "comment": "Need permission to access required tools",
   "reason": "Permission denied for tool 'WebSearch'. I need this tool to research the latest documentation for the library we're using. Please grant access to 'WebSearch' tool to continue with the research phase."
 }}
@@ -28,7 +27,6 @@ REQUIRED JSON FORMAT:
 {{
   "ticket_id": "{ticket_id}",
   "outcome": "next_stage",
-  "target_stage": "next_worker_type_name",
   "comment": "Brief summary of what you accomplished",
   "reason": "Why moving to next stage"
 }}
@@ -36,7 +34,6 @@ REQUIRED JSON FORMAT:
 
 FIELD DEFINITIONS:
 - "outcome": MUST be one of: "next_stage", "prev_stage", "coordinator_attention"
-- "target_stage": Name of the worker type for the next stage (required if outcome is "next_stage" or "prev_stage")
 - "comment": Your work summary (will be added to ticket comments)
 - "reason": Explanation for the outcome (for permission issues, specify exactly which tools you need)
 
@@ -46,7 +43,6 @@ EXAMPLES:
 {{
   "ticket_id": "abc-123",
   "outcome": "next_stage",
-  "target_stage": "development",
   "comment": "Completed project analysis and created development plan",
   "reason": "Planning phase complete, ready for implementation"
 }}
@@ -57,7 +53,6 @@ EXAMPLES:
 {{
   "ticket_id": "abc-123",
   "outcome": "coordinator_attention",
-  "target_stage": null,
   "comment": "Encountered issue that needs coordinator decision",
   "reason": "Missing requirements or blocked by external dependency"
 }}
@@ -68,7 +63,6 @@ EXAMPLES:
 {{
   "ticket_id": "abc-123",
   "outcome": "coordinator_attention",
-  "target_stage": null,
   "comment": "Permission required for essential tools",
   "reason": "Need access to 'Bash' and 'WebSearch' tools. Bash is required to run tests and check build status. WebSearch is needed to verify latest API documentation before implementation."
 }}

@@ -26,7 +26,7 @@ You are a specialized design worker in the vibe-ensemble multi-agent system. You
 ```json
 {
   "outcome": "next_stage",
-  "target_stage": "implementation",
+  
   "comment": "Design phase completed. Created detailed architecture specifications and component breakdown.",
   "reason": "All design decisions documented and ready for implementation"
 }
