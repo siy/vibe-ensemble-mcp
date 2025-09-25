@@ -282,16 +282,14 @@ impl WebSocketManager {
             match msg {
                 Ok(Message::Text(text)) => {
                     trace!(
-                        "Processing text message from client {}: {}",
-                        client_id,
-                        text
+                        "Processing text message from client {}: (message logged in handle_message)",
+                        client_id
                     );
                     if let Err(e) = self.handle_message(&client_id, &text, &state).await {
                         error!(
-                            "Error handling message from client_id={}: error={}",
-                            client_id, e
+                            "Error handling message from client_id={}: error={}, full_message={}",
+                            client_id, e, text
                         );
-                        trace!("Message that caused error: {}", text);
                     }
                 }
                 Ok(Message::Close(close_frame)) => {
@@ -540,10 +538,10 @@ impl WebSocketManager {
 
     /// Handle incoming JSON-RPC message
     async fn handle_message(&self, client_id: &str, message: &str, state: &AppState) -> Result<()> {
-        trace!(
-            "Processing message from client_id={}: {}",
-            client_id,
-            message
+        // Log all incoming messages at INFO level with full content
+        info!(
+            "WebSocket message received from client_id={}, full_message={}",
+            client_id, message
         );
 
         let request: JsonRpcRequest = match serde_json::from_str::<JsonRpcRequest>(message) {
@@ -557,8 +555,8 @@ impl WebSocketManager {
             }
             Err(e) => {
                 error!(
-                    "Failed to parse JSON-RPC request from client_id={}: error={}",
-                    client_id, e
+                    "Failed to parse JSON-RPC request from client_id={}: error={}, full_message={}",
+                    client_id, e, message
                 );
                 return Err(e.into());
             }
