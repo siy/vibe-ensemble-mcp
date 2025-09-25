@@ -5,10 +5,10 @@ use super::tools::{create_json_error_response, create_json_success_response, Too
 use super::types::{CallToolResponse, Tool};
 use crate::{configure, error::Result, server::AppState};
 
-pub struct ListWorkerTemplatesOol;
+pub struct ListWorkerTemplatesTool;
 
 #[async_trait]
-impl ToolHandler for ListWorkerTemplatesOol {
+impl ToolHandler for ListWorkerTemplatesTool {
     async fn call(&self, _state: &AppState, _arguments: Option<Value>) -> Result<CallToolResponse> {
         let templates = configure::list_worker_templates();
 

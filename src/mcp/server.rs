@@ -113,7 +113,7 @@ impl McpServer {
     fn register_template_tools(tools: &mut ToolRegistry) {
         register_tools!(
             tools,
-            ListWorkerTemplatesOol,
+            ListWorkerTemplatesTool,
             LoadWorkerTemplateTool,
             EnsureWorkerTemplatesExistTool,
         );

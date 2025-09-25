@@ -244,13 +244,18 @@ impl WorkerConsumer {
                     "Worker completed successfully"
                 );
 
+                // Emit event for worker completion
+                let event_payload =
+                    EventPayload::worker_completed(&worker_id, &self.stage, &self.project_id);
+                self.event_broadcaster.broadcast(event_payload);
+
                 // Use the pipeline to determine the target stage
                 let transition_manager = TicketTransitionManager::new(self.db.clone());
                 let command = match output.outcome {
                     crate::workers::completion_processor::WorkerOutcome::NextStage => {
                         match transition_manager.get_next_stage(&task.ticket_id).await {
                             Ok(Some(next_stage)) => {
-                                match crate::workers::domain::WorkerType::new(next_stage) {
+                                match crate::workers::domain::WorkerType::new(next_stage.clone()) {
                                     Ok(wt) => {
                                         crate::workers::domain::WorkerCommand::AdvanceToStage {
                                             target_stage: wt,
@@ -258,7 +263,9 @@ impl WorkerConsumer {
                                     }
                                     Err(e) => {
                                         error!("Failed to create WorkerType: {}", e);
-                                        return Ok(()); // Skip this completion event
+                                        crate::workers::domain::WorkerCommand::RequestCoordinatorAttention {
+                                            reason: format!("Failed to create WorkerType for stage '{}': {}", next_stage, e),
+                                        }
                                     }
                                 }
                             }
@@ -276,14 +283,16 @@ impl WorkerConsumer {
                                     "Failed to get next stage for ticket {}: {}",
                                     task.ticket_id, e
                                 );
-                                return Ok(());
+                                crate::workers::domain::WorkerCommand::RequestCoordinatorAttention {
+                                    reason: format!("Failed to get next stage for ticket: {}", e),
+                                }
                             }
                         }
                     }
                     crate::workers::completion_processor::WorkerOutcome::PrevStage => {
                         match transition_manager.get_previous_stage(&task.ticket_id).await {
                             Ok(Some(prev_stage)) => {
-                                match crate::workers::domain::WorkerType::new(prev_stage) {
+                                match crate::workers::domain::WorkerType::new(prev_stage.clone()) {
                                     Ok(wt) => {
                                         crate::workers::domain::WorkerCommand::ReturnToStage {
                                             target_stage: wt,
@@ -292,7 +301,9 @@ impl WorkerConsumer {
                                     }
                                     Err(e) => {
                                         error!("Failed to create WorkerType: {}", e);
-                                        return Ok(()); // Skip this completion event
+                                        crate::workers::domain::WorkerCommand::RequestCoordinatorAttention {
+                                            reason: format!("Failed to create WorkerType for stage '{}': {}", prev_stage, e),
+                                        }
                                     }
                                 }
                             }
@@ -307,7 +318,12 @@ impl WorkerConsumer {
                                     "Failed to get previous stage for ticket {}: {}",
                                     task.ticket_id, e
                                 );
-                                return Ok(());
+                                crate::workers::domain::WorkerCommand::RequestCoordinatorAttention {
+                                    reason: format!(
+                                        "Failed to get previous stage for ticket: {}",
+                                        e
+                                    ),
+                                }
                             }
                         }
                     }
@@ -330,6 +346,21 @@ impl WorkerConsumer {
                         ticket_id = %task.ticket_id,
                         "Failed to send completion event"
                     );
+                    // Release the claim if we cannot forward the completion event
+                    if let Err(release_error) = ClaimManager::release_ticket_claim(
+                        &self.db,
+                        &self.event_broadcaster,
+                        &task.ticket_id,
+                    )
+                    .await
+                    {
+                        error!(
+                            ticket_id = %task.ticket_id,
+                            worker_id = %worker_id,
+                            error = %release_error,
+                            "Failed to release claim after completion send failure"
+                        );
+                    }
                 }
             }
             Err(e) => {
