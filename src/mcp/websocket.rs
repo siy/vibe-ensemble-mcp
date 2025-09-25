@@ -45,6 +45,9 @@ pub struct ClientCapabilities {
     pub bidirectional: bool,
     pub tools: Vec<String>,
     pub client_info: ClientInfo,
+    // MCP client capabilities from initialize request
+    #[serde(default)]
+    pub mcp_capabilities: Option<super::types::ClientCapabilities>,
 }
 
 /// Client information
@@ -531,6 +534,7 @@ impl WebSocketManager {
                 version: "1.0.0".to_string(),
                 environment: "unknown".to_string(),
             },
+            mcp_capabilities: None, // Will be set during initialize handshake
         }
     }
 
@@ -571,6 +575,25 @@ impl WebSocketManager {
             "tools/register" => {
                 trace!("Handling tools/register for client_id={}", client_id);
                 self.handle_tool_registration(client_id, &request).await
+            }
+            "initialize" => {
+                trace!("Handling initialize for client_id={}", client_id);
+
+                // Store client capabilities from initialize request before handling
+                if let Some(params) = &request.params {
+                    if let Ok(init_request) =
+                        serde_json::from_value::<super::types::InitializeRequest>(params.clone())
+                    {
+                        if let Some(mut client) = self.clients.get_mut(client_id) {
+                            client.capabilities.mcp_capabilities = Some(init_request.capabilities);
+                            trace!("Stored MCP capabilities for client_id={}", client_id);
+                        }
+                    }
+                }
+
+                let response = state.mcp_server.handle_request(state, request).await;
+                let response_value = serde_json::to_value(&response)?;
+                self.send_message(client_id, &response_value).await
             }
             "notifications/initialized" => {
                 trace!(
@@ -862,6 +885,257 @@ impl WebSocketManager {
             .collect()
     }
 
+    /// Send MCP notifications for an event to a specific client
+    async fn send_mcp_notifications(
+        &self,
+        client_id: &str,
+        client: &ClientConnection,
+        event_payload: &crate::events::EventPayload,
+    ) {
+        use super::types::*;
+
+        // Check if client supports the necessary MCP capabilities
+        let has_sampling = client
+            .capabilities
+            .mcp_capabilities
+            .as_ref()
+            .and_then(|caps| caps.sampling.as_ref())
+            .map(|sampling| sampling.enabled)
+            .unwrap_or(false);
+
+        let has_logging = client
+            .capabilities
+            .mcp_capabilities
+            .as_ref()
+            .and_then(|caps| caps.logging.as_ref())
+            .map(|logging| logging.enabled)
+            .unwrap_or(false);
+
+        let has_resources = client
+            .capabilities
+            .mcp_capabilities
+            .as_ref()
+            .and_then(|caps| caps.resources.as_ref())
+            .map(|resources| resources.subscribe)
+            .unwrap_or(false);
+
+        // 1. Send notifications/message for user-friendly event description
+        if has_logging {
+            let level = match &event_payload.event_type {
+                crate::events::EventType::WorkerSpawned => "info",
+                crate::events::EventType::WorkerFinished => "info",
+                crate::events::EventType::WorkerFailed => "error",
+                crate::events::EventType::TicketCreated => "info",
+                crate::events::EventType::TicketClosed => "info",
+                crate::events::EventType::TicketUpdated => "info",
+                crate::events::EventType::TicketStageChanged => "info",
+                crate::events::EventType::TicketUnblocked => "info",
+                crate::events::EventType::QueueUpdated => "info",
+                crate::events::EventType::SystemInit => "info",
+                crate::events::EventType::SystemMessage => "info",
+                crate::events::EventType::EndpointDiscovery => "info",
+            };
+
+            let user_friendly_data = self.format_user_friendly_event(event_payload);
+
+            let notification_message = JsonRpcNotification::new(
+                "notifications/message",
+                Some(
+                    serde_json::to_value(NotificationMessage {
+                        level: level.to_string(),
+                        logger: Some("vibe-ensemble".to_string()),
+                        data: user_friendly_data,
+                        _meta: Some(serde_json::json!({
+                            "event_type": format!("{:?}", event_payload.event_type),
+                            "timestamp": event_payload.timestamp
+                        })),
+                    })
+                    .unwrap_or(serde_json::Value::Null),
+                ),
+            );
+
+            let message_text = notification_message.to_string();
+            if let Err(e) = client.sender.send(Message::Text(message_text.clone())) {
+                error!(
+                    "Failed to send notifications/message to client {}: {}",
+                    client_id, e
+                );
+            } else {
+                trace!(
+                    "Sent notifications/message to client {}: {}",
+                    client_id,
+                    message_text
+                );
+            }
+        }
+
+        // 2. Send notifications/resources/updated with stable URI
+        if has_resources {
+            let resource_updated = JsonRpcNotification::new(
+                "notifications/resources/updated",
+                Some(
+                    serde_json::to_value(ResourceUpdated {
+                        uri: "ide://events".to_string(),
+                        _meta: Some(serde_json::json!({
+                            "event_type": format!("{:?}", event_payload.event_type),
+                            "timestamp": event_payload.timestamp
+                        })),
+                    })
+                    .unwrap_or(serde_json::Value::Null),
+                ),
+            );
+
+            let message_text = resource_updated.to_string();
+            if let Err(e) = client.sender.send(Message::Text(message_text.clone())) {
+                error!(
+                    "Failed to send notifications/resources/updated to client {}: {}",
+                    client_id, e
+                );
+            } else {
+                trace!(
+                    "Sent notifications/resources/updated to client {}: {}",
+                    client_id,
+                    message_text
+                );
+            }
+        }
+
+        // 3. Send sampling/createMessage for supported clients
+        if has_sampling {
+            let sampling_message = JsonRpcNotification::new(
+                "sampling/createMessage",
+                Some(serde_json::to_value(SamplingCreateMessage {
+                    messages: vec![SamplingMessage {
+                        role: "user".to_string(),
+                        content: SamplingContent {
+                            content_type: "text".to_string(),
+                            text: "New IDE events available. Call list_events now and summarize the key changes.".to_string(),
+                        },
+                    }],
+                    include_context: "thisServer".to_string(),
+                    max_tokens: 200,
+                }).unwrap_or(serde_json::Value::Null))
+            );
+
+            let message_text = sampling_message.to_string();
+            if let Err(e) = client.sender.send(Message::Text(message_text.clone())) {
+                error!(
+                    "Failed to send sampling/createMessage to client {}: {}",
+                    client_id, e
+                );
+            } else {
+                trace!(
+                    "Sent sampling/createMessage to client {}: {}",
+                    client_id,
+                    message_text
+                );
+            }
+        }
+    }
+
+    /// Format event data in a user-friendly way for notifications/message
+    fn format_user_friendly_event(
+        &self,
+        event_payload: &crate::events::EventPayload,
+    ) -> serde_json::Value {
+        use crate::events::{EventData, EventType};
+
+        match (&event_payload.event_type, &event_payload.data) {
+            (EventType::WorkerSpawned, EventData::Worker(worker_data)) => {
+                serde_json::json!({
+                    "kind": "worker_spawned",
+                    "message": format!("Spawned worker {} ({}) for project '{}'", worker_data.worker_id, worker_data.worker_type, worker_data.project_id),
+                    "project_id": worker_data.project_id,
+                    "worker_type": worker_data.worker_type,
+                    "worker_id": worker_data.worker_id
+                })
+            }
+            (EventType::WorkerFinished, EventData::Worker(worker_data)) => {
+                serde_json::json!({
+                    "kind": "worker_finished",
+                    "message": format!("Completed worker {} ({}) for project '{}'", worker_data.worker_id, worker_data.worker_type, worker_data.project_id),
+                    "project_id": worker_data.project_id,
+                    "worker_type": worker_data.worker_type,
+                    "worker_id": worker_data.worker_id
+                })
+            }
+            (EventType::WorkerFailed, EventData::Worker(worker_data)) => {
+                serde_json::json!({
+                    "kind": "worker_failed",
+                    "message": format!("Failed worker {} ({}) for project '{}'", worker_data.worker_id, worker_data.worker_type, worker_data.project_id),
+                    "project_id": worker_data.project_id,
+                    "worker_type": worker_data.worker_type,
+                    "worker_id": worker_data.worker_id
+                })
+            }
+            (EventType::TicketCreated, EventData::Ticket(ticket_data)) => {
+                serde_json::json!({
+                    "kind": "ticket_created",
+                    "message": format!("Created ticket #{} in project '{}'", ticket_data.ticket_id, ticket_data.project_id),
+                    "project_id": ticket_data.project_id,
+                    "ticket_id": ticket_data.ticket_id,
+                    "stage": ticket_data.stage
+                })
+            }
+            (EventType::TicketClosed, EventData::Ticket(ticket_data)) => {
+                serde_json::json!({
+                    "kind": "ticket_closed",
+                    "message": format!("Closed ticket #{} in project '{}'", ticket_data.ticket_id, ticket_data.project_id),
+                    "project_id": ticket_data.project_id,
+                    "ticket_id": ticket_data.ticket_id
+                })
+            }
+            (EventType::TicketStageChanged, EventData::Ticket(ticket_data)) => {
+                serde_json::json!({
+                    "kind": "ticket_stage_changed",
+                    "message": format!("Changed stage for ticket #{} in project '{}': {}", ticket_data.ticket_id, ticket_data.project_id, ticket_data.change_type),
+                    "project_id": ticket_data.project_id,
+                    "ticket_id": ticket_data.ticket_id,
+                    "stage": ticket_data.stage,
+                    "change": ticket_data.change_type
+                })
+            }
+            (EventType::TicketUnblocked, EventData::Ticket(ticket_data)) => {
+                serde_json::json!({
+                    "kind": "ticket_unblocked",
+                    "message": format!("Unblocked ticket #{} in project '{}'", ticket_data.ticket_id, ticket_data.project_id),
+                    "project_id": ticket_data.project_id,
+                    "ticket_id": ticket_data.ticket_id
+                })
+            }
+            (EventType::QueueUpdated, EventData::Queue(queue_data)) => {
+                serde_json::json!({
+                    "kind": "queue_updated",
+                    "message": format!("Queue '{}' updated: {} tasks for {} workers in project '{}'", queue_data.queue_name, queue_data.task_count, queue_data.worker_type, queue_data.project_id),
+                    "project_id": queue_data.project_id,
+                    "queue_name": queue_data.queue_name,
+                    "task_count": queue_data.task_count,
+                    "worker_type": queue_data.worker_type
+                })
+            }
+            (EventType::SystemInit, EventData::System(system_data)) => {
+                serde_json::json!({
+                    "kind": "system_init",
+                    "message": format!("{}: {}", system_data.component, system_data.message),
+                    "component": system_data.component
+                })
+            }
+            (EventType::SystemMessage, EventData::System(system_data)) => {
+                serde_json::json!({
+                    "kind": "system_message",
+                    "message": format!("{}: {}", system_data.component, system_data.message),
+                    "component": system_data.component
+                })
+            }
+            _ => {
+                serde_json::json!({
+                    "kind": "event",
+                    "message": format!("Event: {:?}", event_payload.event_type)
+                })
+            }
+        }
+    }
+
     /// Event broadcasting loop that forwards events to all connected WebSocket clients
     async fn event_broadcasting_loop(&self) {
         if let Some(event_broadcaster) = &self.event_broadcaster {
@@ -911,6 +1185,10 @@ impl WebSocketManager {
                                 clients_to_remove.lock().unwrap().push(client_id);
                             } else {
                                 successful_deliveries += 1;
+
+                                // Send additional MCP notifications for each event
+                                self.send_mcp_notifications(&client_id, &client, &event_payload)
+                                    .await;
                             }
                         }
 
