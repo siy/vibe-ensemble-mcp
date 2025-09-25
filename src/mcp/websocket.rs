@@ -1262,7 +1262,8 @@ impl WebSocketManager {
                         */
 
                         // Broadcast to all connected WebSocket clients
-                        let clients_to_remove = Arc::new(std::sync::Mutex::new(Vec::<String>::new()));
+                        let clients_to_remove =
+                            Arc::new(std::sync::Mutex::new(Vec::<String>::new()));
                         let mut successful_deliveries = 0;
 
                         for entry in self.clients.iter() {
