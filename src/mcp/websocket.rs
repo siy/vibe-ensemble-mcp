@@ -8,7 +8,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use std::sync::Arc;
 use tokio::sync::{mpsc, Semaphore};
-use tracing::{debug, error, info, trace, warn};
+use tracing::{error, info, trace, warn};
 use uuid::Uuid;
 
 use super::types::JsonRpcRequest;
@@ -1239,7 +1239,8 @@ impl WebSocketManager {
                 match receiver.recv().await {
                     Ok(event_payload) => {
                         // Convert event to JSON-RPC notification format
-                        let notification = event_payload.to_jsonrpc_notification();
+                        // TEMPORARILY DISABLED per user request - sampling/createMessage disabled
+                        // let notification = event_payload.to_jsonrpc_notification();
                         let client_count = self.clients.len();
 
                         info!(
@@ -1250,40 +1251,33 @@ impl WebSocketManager {
                         );
 
                         // Log the complete JSON-RPC message being sent to WebSocket clients
+                        // TEMPORARILY DISABLED per user request - sampling/createMessage disabled
+                        /*
                         trace!(
                             "WebSocket JSON-RPC message: {}",
                             serde_json::to_string_pretty(&notification).unwrap_or_else(|_| {
                                 "Failed to serialize JSON-RPC message".to_string()
                             })
                         );
+                        */
 
                         // Broadcast to all connected WebSocket clients
-                        let clients_to_remove = Arc::new(std::sync::Mutex::new(Vec::new()));
+                        let clients_to_remove = Arc::new(std::sync::Mutex::new(Vec::<String>::new()));
                         let mut successful_deliveries = 0;
 
                         for entry in self.clients.iter() {
                             let client_id = entry.key().clone();
                             let client = entry.value().clone();
 
-                            // Send event to client
-                            let message_text = notification.to_string();
-                            let message = Message::Text(message_text.clone());
+                            // Send event to client - TEMPORARILY DISABLED (sampling/createMessage disabled)
+                            // Only send MCP notifications now
 
-                            // Log the exact text being sent to WebSocket client
-                            debug!(
-                                "WebSocket sending to client {}: {}",
-                                client_id, message_text
-                            );
-                            if client.sender.send(message).is_err() {
-                                // Client connection is broken, mark for removal
-                                clients_to_remove.lock().unwrap().push(client_id);
-                            } else {
-                                successful_deliveries += 1;
+                            // Count as successful for MCP notifications
+                            successful_deliveries += 1;
 
-                                // Send additional MCP notifications for each event
-                                self.send_mcp_notifications(&client_id, &client, &event_payload)
-                                    .await;
-                            }
+                            // Send MCP notifications for each event
+                            self.send_mcp_notifications(&client_id, &client, &event_payload)
+                                .await;
                         }
 
                         // Remove broken client connections
