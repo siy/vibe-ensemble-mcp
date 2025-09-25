@@ -413,9 +413,12 @@ Templates are designed to be **both powerful out-of-the-box and highly customiza
 
 ## What's New in v0.9.3
 
-- **🔧 Enhanced WebSocket Protocol Compliance**: Fixed MCP subprotocol validation for proper Claude Code IDE integration
-- **🐛 Bug Fixes**: Various stability improvements and issue resolutions
-- **📚 Documentation Updates**: Improved protocol compliance documentation
+- **🔧 Target Stage Removal**: Simplified worker output format by removing target_stage field
+- **📡 MCP Diagnostics Support**: Added getDiagnostics method for IDE integration with structured event responses
+- **📝 Enhanced Logging**: Expanded debug logging for WebSocket message delivery and processing pipeline
+- **🔗 Unified Endpoint**: Single "/" endpoint for all HTTP and WebSocket connections
+- **📋 Template Tools**: Added MCP tools for worker template management (list, load, ensure existence)
+- **🐛 Bug Fixes**: Fixed ticket closing logic and pipeline transition management
 
 ## What's New in v0.9.0
 
@@ -425,7 +428,7 @@ Templates are designed to be **both powerful out-of-the-box and highly customiza
 - **📊 Real-Time SSE Integration**: Full Server-Sent Events protocol for live progress monitoring and event streaming
 - **🔧 Enhanced Worker Templates**: 8 highly customizable worker templates with live editing, runtime loading, and safe customization guidelines
 - **📋 Enhanced Coordinator Prompts**: Updated coordination with systematic task delegation and sizing guidance
-- **🛠️ Robust MCP Tools**: 47 MCP tools with enhanced project metadata and worker coordination
+- **🛠️ Robust MCP Tools**: 28 MCP tools with enhanced project metadata and worker coordination
 - **📚 Comprehensive Documentation**: Complete SSE protocol implementation and task breakdown sizing methodology
 - **🔒 Enhanced Security**: Removed manual ticket manipulation tools to prevent pipeline stalls
 

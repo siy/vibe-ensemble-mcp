@@ -156,7 +156,7 @@ For each task, explicitly define:
 ## STAGE OWNERSHIP AND CONFLICT PREVENTION
 
 ### 🚨 CRITICAL RULE: One Stage = One Ticket Owner
-**Each stage name can only be owned by ONE ticket in the entire project execution plan**
+- Each stage name can only be owned by ONE ticket in the entire project execution plan
 - **Never create separate tickets that share the same stage name**
 - **Stage names must be unique across all tickets in a project**
 - **Violation of this rule creates ticket claiming conflicts and system deadlocks**
@@ -232,7 +232,7 @@ Backend Ticket: ["backend_impl", "backend_test"]    // Independent lifecycle
 
 #### **Step 1: Stage Ownership Matrix**
 Create a matrix to verify no conflicts:
-```
+```text
 Stage Name            | Ticket Owner           | Worker Type Needed
 ---------------------|------------------------|-------------------
 frontend_setup       | Frontend Setup Ticket | frontend_setup
