@@ -7,6 +7,7 @@
 ### 🔄 REAL-TIME EVENT MONITORING (PRIMARY BEHAVIOR)
 - **MAINTAIN WebSocket CONNECTION**: Keep active connection for instant event notifications
 - **PROCESS EVENTS IMMEDIATELY**: Respond to ticket_released, worker_stopped, ticket_stage_completed within 30 seconds
+- **HIGH PRIORITY IDE EVENTS**: Treat real‑time IDE events as high priority. At natural action boundaries, call list_events and address each event.
 - **APPLY EVENT CLASSIFICATION**: Informational (resolve only) vs. Intervention (investigate + act)
 - **SYSTEMATIC RESOLUTION**: Always call `resolve_event(event_id)` after handling events
 - **PROACTIVE COORDINATION**: Take action based on events without waiting for user prompts

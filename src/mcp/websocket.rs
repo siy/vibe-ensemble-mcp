@@ -600,6 +600,11 @@ impl WebSocketManager {
                 );
                 self.handle_initialized(client_id).await
             }
+            "getDiagnostics" => {
+                trace!("Handling getDiagnostics for client_id={}", client_id);
+                self.handle_get_diagnostics(client_id, &request, state)
+                    .await
+            }
 
             // Check if this is a response to a server-initiated request
             _ if request.id.is_some() => {
@@ -720,6 +725,94 @@ impl WebSocketManager {
     /// Handle initialized notification
     async fn handle_initialized(&self, client_id: &str) -> Result<()> {
         info!("Client {} completed initialization", client_id);
+        Ok(())
+    }
+
+    /// Handle getDiagnostics request to return unprocessed events
+    async fn handle_get_diagnostics(
+        &self,
+        client_id: &str,
+        request: &super::types::JsonRpcRequest,
+        state: &AppState,
+    ) -> Result<()> {
+        trace!("Handling getDiagnostics for client {}", client_id);
+
+        // Get unprocessed events from the database
+        let unprocessed_events =
+            match crate::database::events::Event::get_unprocessed(&state.db).await {
+                Ok(events) => events,
+                Err(e) => {
+                    error!("Failed to fetch unprocessed events: {}", e);
+                    vec![]
+                }
+            };
+
+        let event_count = unprocessed_events.len();
+        let summary_text = if event_count == 0 {
+            "No unprocessed events".to_string()
+        } else {
+            format!("{} unprocessed events requiring attention", event_count)
+        };
+
+        // Convert events to structured format
+        let structured_events: Vec<serde_json::Value> = unprocessed_events
+            .into_iter()
+            .map(|event| {
+                serde_json::json!({
+                    "id": event.id,
+                    "event_type": event.event_type,
+                    "ticket_id": event.ticket_id,
+                    "worker_id": event.worker_id,
+                    "stage": event.stage,
+                    "reason": event.reason,
+                    "processed": event.processed,
+                    "created_at": event.created_at,
+                    "resolution_summary": event.resolution_summary
+                })
+            })
+            .collect();
+
+        // Create the response in the requested format
+        let response = serde_json::json!({
+            "jsonrpc": "2.0",
+            "id": request.id,
+            "result": {
+                "content": [
+                    {
+                        "type": "text",
+                        "text": summary_text
+                    }
+                ],
+                "structuredContent": {
+                    "events": structured_events
+                }
+            }
+        });
+
+        let response_text = response.to_string();
+        trace!("Sending getDiagnostics response: {}", response_text);
+
+        if let Err(e) = self
+            .clients
+            .get(client_id)
+            .ok_or_else(|| AppError::BadRequest(format!("Client {} not found", client_id)))?
+            .sender
+            .send(Message::Text(response_text))
+        {
+            error!(
+                "Failed to send getDiagnostics response to {}: {}",
+                client_id, e
+            );
+            return Err(AppError::Internal(anyhow::anyhow!(
+                "Failed to send message: {}",
+                e
+            )));
+        }
+
+        info!(
+            "Sent getDiagnostics response with {} events to client {}",
+            event_count, client_id
+        );
         Ok(())
     }
 
@@ -893,7 +986,7 @@ impl WebSocketManager {
         use super::types::*;
 
         // Check if client supports the necessary MCP capabilities
-        let has_sampling = client
+        let _has_sampling = client
             .capabilities
             .mcp_capabilities
             .as_ref()
@@ -999,6 +1092,8 @@ impl WebSocketManager {
         }
 
         // 3. Send sampling/createMessage for supported clients
+        // TEMPORARILY DISABLED per user request
+        /*
         if has_sampling {
             let sampling_message = JsonRpcNotification::new(
                 "sampling/createMessage",
@@ -1029,6 +1124,7 @@ impl WebSocketManager {
                 );
             }
         }
+        */
     }
 
     /// Format event data in a user-friendly way for notifications/message
