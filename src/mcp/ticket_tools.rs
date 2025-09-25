@@ -423,33 +423,38 @@ impl ToolHandler for CloseTicketTool {
             .unwrap_or_else(|| "completed".to_string());
 
         info!(
-            "Closing ticket {} with resolution: {}",
+            "Closing ticket {} with resolution: {} (with dependency cascade)",
             ticket_id, resolution
         );
 
-        let result = Ticket::close_ticket(&state.db, &ticket_id, &resolution).await?;
-
-        match result {
-            Some(closed_ticket) => {
-                // Emit ticket_closed event
-                if let Err(e) = state
-                    .event_emitter()
-                    .emit_ticket_closed(&ticket_id, &closed_ticket.project_id, &resolution)
-                    .await
-                {
-                    warn!("Failed to emit ticket_closed event: {}", e);
+        // Use the unified completion function to close ticket and trigger dependency cascade
+        match state
+            .queue_manager
+            .complete_ticket_with_cascade(
+                &ticket_id,
+                &resolution,
+                &format!(
+                    "Ticket closed by coordinator with resolution: {}",
+                    resolution
+                ),
+            )
+            .await
+        {
+            Ok(()) => Ok(create_json_success_response(json!({
+                "message": format!("Closed ticket {} with resolution: {} and processed dependencies", ticket_id, resolution),
+                "ticket_id": ticket_id,
+                "resolution": resolution
+            }))),
+            Err(e) => {
+                if e.to_string().contains("not found") {
+                    Ok(create_json_error_response(&format!(
+                        "Ticket {} not found",
+                        ticket_id
+                    )))
+                } else {
+                    Err(e.into())
                 }
-
-                Ok(create_json_success_response(json!({
-                    "message": format!("Closed ticket {} with resolution: {}", ticket_id, resolution),
-                    "ticket_id": ticket_id,
-                    "resolution": resolution
-                })))
             }
-            None => Ok(create_json_error_response(&format!(
-                "Ticket {} not found",
-                ticket_id
-            ))),
         }
     }
 

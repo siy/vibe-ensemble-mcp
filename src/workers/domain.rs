@@ -122,6 +122,9 @@ pub enum WorkerCommand {
     RequestCoordinatorAttention {
         reason: String,
     },
+    CompleteTicket {
+        resolution: String,
+    },
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

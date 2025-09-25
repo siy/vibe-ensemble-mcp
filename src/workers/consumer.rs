@@ -264,12 +264,11 @@ impl WorkerConsumer {
                             }
                             Ok(None) => {
                                 info!(
-                                    "No next stage found for ticket {}, assuming completion",
+                                    "No next stage found for ticket {}, completing ticket",
                                     task.ticket_id
                                 );
-                                crate::workers::domain::WorkerCommand::RequestCoordinatorAttention {
-                                    reason: "Ticket has reached the end of the pipeline"
-                                        .to_string(),
+                                crate::workers::domain::WorkerCommand::CompleteTicket {
+                                    resolution: "completed".to_string(),
                                 }
                             }
                             Err(e) => {
