@@ -251,9 +251,11 @@ impl WorkerConsumer {
                         match transition_manager.get_next_stage(&task.ticket_id).await {
                             Ok(Some(next_stage)) => {
                                 match crate::workers::domain::WorkerType::new(next_stage) {
-                                    Ok(wt) => crate::workers::domain::WorkerCommand::AdvanceToStage {
-                                        target_stage: wt,
-                                    },
+                                    Ok(wt) => {
+                                        crate::workers::domain::WorkerCommand::AdvanceToStage {
+                                            target_stage: wt,
+                                        }
+                                    }
                                     Err(e) => {
                                         error!("Failed to create WorkerType: {}", e);
                                         return Ok(()); // Skip this completion event
@@ -261,13 +263,20 @@ impl WorkerConsumer {
                                 }
                             }
                             Ok(None) => {
-                                info!("No next stage found for ticket {}, assuming completion", task.ticket_id);
+                                info!(
+                                    "No next stage found for ticket {}, assuming completion",
+                                    task.ticket_id
+                                );
                                 crate::workers::domain::WorkerCommand::RequestCoordinatorAttention {
-                                    reason: "Ticket has reached the end of the pipeline".to_string(),
+                                    reason: "Ticket has reached the end of the pipeline"
+                                        .to_string(),
                                 }
                             }
                             Err(e) => {
-                                error!("Failed to get next stage for ticket {}: {}", task.ticket_id, e);
+                                error!(
+                                    "Failed to get next stage for ticket {}: {}",
+                                    task.ticket_id, e
+                                );
                                 return Ok(());
                             }
                         }
@@ -276,10 +285,12 @@ impl WorkerConsumer {
                         match transition_manager.get_previous_stage(&task.ticket_id).await {
                             Ok(Some(prev_stage)) => {
                                 match crate::workers::domain::WorkerType::new(prev_stage) {
-                                    Ok(wt) => crate::workers::domain::WorkerCommand::ReturnToStage {
-                                        target_stage: wt,
-                                        reason: output.reason.clone(),
-                                    },
+                                    Ok(wt) => {
+                                        crate::workers::domain::WorkerCommand::ReturnToStage {
+                                            target_stage: wt,
+                                            reason: output.reason.clone(),
+                                        }
+                                    }
                                     Err(e) => {
                                         error!("Failed to create WorkerType: {}", e);
                                         return Ok(()); // Skip this completion event
@@ -293,7 +304,10 @@ impl WorkerConsumer {
                                 }
                             }
                             Err(e) => {
-                                error!("Failed to get previous stage for ticket {}: {}", task.ticket_id, e);
+                                error!(
+                                    "Failed to get previous stage for ticket {}: {}",
+                                    task.ticket_id, e
+                                );
                                 return Ok(());
                             }
                         }
