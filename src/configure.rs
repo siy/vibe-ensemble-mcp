@@ -91,7 +91,6 @@ async fn create_mcp_config(host: &str, port: u16, _websocket_token: &str) -> Res
 async fn create_claude_directory() -> Result<()> {
     fs::create_dir_all(".claude/commands")?;
     fs::create_dir_all(".claude/worker-templates")?;
-    fs::create_dir_all(".vibe-ensemble-mcp")?;
     Ok(())
 }
 
