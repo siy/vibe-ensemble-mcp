@@ -37,6 +37,7 @@ pub async fn configure_claude_code(
     create_claude_directory().await?;
     create_claude_settings().await?;
     create_vibe_ensemble_command(host, port).await?;
+    create_coordinator_commands().await?;
     create_worker_templates().await?;
 
     // Create WebSocket token file
@@ -50,6 +51,8 @@ pub async fn configure_claude_code(
     println!("  - .mcp.json (MCP server configuration)");
     println!("  - .claude/settings.local.json (Claude settings)");
     println!("  - .claude/commands/vibe-ensemble.md (Coordinator initialization)");
+    println!("  - .claude/commands/vibe-events.md (Process realtime IDE events)");
+    println!("  - .claude/commands/vibe-status.md (Project and ticket status report)");
     println!("  - .claude/worker-templates/ (8 high-quality worker templates)");
     println!("  - .claude/websocket-token (WebSocket authentication token)");
     println!("📄 Updated existing file:");
@@ -296,6 +299,18 @@ pub fn ensure_worker_templates_exist_in_directory(working_directory: Option<&str
     if created_count > 0 {
         println!("✓ Created {} missing worker templates", created_count);
     }
+
+    Ok(())
+}
+
+async fn create_coordinator_commands() -> Result<()> {
+    // Create vibe-events command
+    let events_command = include_str!("../.claude/commands/vibe-events.md");
+    fs::write(".claude/commands/vibe-events.md", events_command)?;
+
+    // Create vibe-status command
+    let status_command = include_str!("../.claude/commands/vibe-status.md");
+    fs::write(".claude/commands/vibe-status.md", status_command)?;
 
     Ok(())
 }
