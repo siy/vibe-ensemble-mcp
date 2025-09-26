@@ -352,8 +352,8 @@
             <p>Coordinate several projects simultaneously without losing context or mixing priorities.</p>
           </div>
           <div class="feature-card">
-            <h3>Real‑time monitoring</h3>
-            <p>HTTP MCP + websocket bidirectional integration with events and status updates. See what's moving, act where needed. (WIP)</p>
+            <h3>Event-driven coordination</h3>
+            <p>Structured commands for systematic event processing and comprehensive status reporting. Use `/vibe-events` and `/vibe-status` commands for proactive coordination.</p>
           </div>
           <div class="feature-card">
             <h3>Highly customizable</h3>
@@ -371,7 +371,7 @@
           </div>
           <div class="feature-card">
             <h3>Planner</h3>
-            <p>Transforms a goal into a staged plan using the sizing methodology. Validates worker types and outputs a strict JSON block with outcome, target stage, pipeline update, comment, and reason.</p>
+            <p>Transforms a goal into a staged plan using the sizing methodology. Validates worker types and outputs a strict JSON block with outcome, comment, and reason for pipeline coordination.</p>
           </div>
           <div class="feature-card">
             <h3>Server</h3>
@@ -410,22 +410,7 @@
         <h2 style="color:white; border-bottom:none;">Quick Install</h2>
         <p>Install the server, configure Claude Code, and get moving in minutes.</p>
 
-        <div class="command-tabs">
-          <button class="command-tab active" onclick="showTab('install','unix')">Linux/macOS</button>
-          <button class="command-tab" onclick="showTab('install','windows')">Windows</button>
-        </div>
-        <div id="install-unix" class="command-content active">
-          <div class="code-block">
-            <button class="copy-btn" onclick="copyToClipboard('curl -fsSL https://www.vibeensemble.dev/install.sh | sh', this)">Copy</button>
-curl -fsSL https://www.vibeensemble.dev/install.sh | sh
-          </div>
-        </div>
-        <div id="install-windows" class="command-content">
-          <div class="code-block">
-            <button class="copy-btn" onclick="copyToClipboard('iwr -useb https://www.vibeensemble.dev/install.ps1 | iex', this)">Copy</button>
-iwr -useb https://www.vibeensemble.dev/install.ps1 | iex
-          </div>
-        </div>
+        <p><strong>Download from GitHub:</strong> Get the latest release for your platform from the <a href="https://github.com/siy/vibe-ensemble-mcp/releases" style="color: var(--accent);">releases page</a>.</p>
 
         <h3 style="color:white; margin-top:1rem;">Setup Steps</h3>
         <p><strong>Step 1:</strong> Start the server (create a separate directory for the server)</p>
@@ -438,13 +423,14 @@ mkdir vibe-server && cd vibe-server && vibe-ensemble-mcp
           <button class="copy-btn" onclick="copyToClipboard('mkdir vibe-coordinator && cd vibe-coordinator && vibe-ensemble-mcp --configure-claude-code', this)">Copy</button>
 mkdir vibe-coordinator && cd vibe-coordinator && vibe-ensemble-mcp --configure-claude-code
         </div>
-        <p><strong>Step 3:</strong> Start Claude Code in the coordinator directory and run the command</p>
+        <p>This creates coordinator commands: <code>/vibe-ensemble</code>, <code>/vibe-events</code>, <code>/vibe-status</code></p>
+        <p><strong>Step 3:</strong> Start Claude Code in the coordinator directory and run commands</p>
         <div class="code-block">
           <button class="copy-btn" onclick="copyToClipboard('/vibe-ensemble', this)">Copy</button>
-/vibe-ensemble
+/vibe-ensemble  # Initialize as coordinator
+/vibe-events    # Process realtime IDE events
+/vibe-status    # Get project status reports
         </div>
-
-        <p style="margin-top:1rem;"><em>Note: Bidirectional WebSocket communication is experimental and may not always work reliably. This feature isn't documented in Claude Code, so we're doing our best to make it as convenient as possible.</em></p>
       </div>
     </div>
   </section>
@@ -465,7 +451,7 @@ mkdir vibe-coordinator && cd vibe-coordinator && vibe-ensemble-mcp --configure-c
           </div>
           <div class="feature-card">
             <h3>3. Monitor Progress</h3>
-            <p>Periodically prompt Claude Code with "address events" to handle any issues and "report project state" to see overall progress.</p>
+            <p>Use dedicated commands <code>/vibe-events</code> to process events generated during project execution and <code>/vibe-status</code> to check comprehensive project status with visual diagrams.</p>
           </div>
         </div>
       </section>
@@ -491,7 +477,7 @@ mkdir vibe-coordinator && cd vibe-coordinator && vibe-ensemble-mcp --configure-c
         <div class="feature-grid">
           <div class="feature-card">
             <h3>Planner outputs</h3>
-            <p>Complete pipeline, worker type checks, JSON outcome including target stage, optional pipeline update, and clear handoff comment and rationale.</p>
+            <p>Complete pipeline, worker type checks, JSON outcome including next stage determination, optional pipeline update, and clear handoff comment and rationale.</p>
           </div>
           <div class="feature-card">
             <h3>Coordinator responsibilities</h3>

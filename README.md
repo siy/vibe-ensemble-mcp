@@ -69,9 +69,7 @@ Once the server is running and Claude Code is configured, here's the typical wor
 
 1. **Start Claude Code**: Open Claude Code in your coordinator directory and run the `/vibe-ensemble` command to initialize as a coordinator
 2. **Create Project**: Write a prompt describing your intended project and answer the coordinator's questions about scope and requirements
-3. **Monitor Progress**: Periodically prompt Claude Code with:
-   - **"address events"** - Handle any issues or escalations
-   - **"report project state"** - Get overall progress updates
+3. **Monitor Progress**: Use commands `/vibe-events` and `/vibe-status` to process events generated during project execution and check process status.
 
 The coordinator will break down your project into tickets, spawn appropriate workers for each stage, and manage the workflow automatically.
 
