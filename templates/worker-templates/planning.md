@@ -228,6 +228,41 @@ Backend Ticket: ["backend_impl", "backend_test"]    // Independent lifecycle
 ✅ Use when: Components are truly independent, no integration dependencies
 ```
 
+### Implementation→Review Pattern (MANDATORY for Quality Gates)
+
+**When planning implementation→review workflows, use the sequential pipeline pattern:**
+
+#### **Recommended: Single Ticket Sequential Pipeline**
+```javascript
+// Single ticket progresses through implementation → review loop
+Quality Ticket: ["frontend_implementation", "frontend_review"]
+// Implementation stage transitions to review stage
+// Review stage can use `prev_stage` to return to implementation for fixes
+// Review stage uses `next_stage` to approve and continue
+
+✅ Advantages: Enables review/fix loop, maintains quality gates, integrated workflow
+✅ Use when: Quality assurance is required (recommended for all code changes)
+```
+
+#### **Implementation→Review Loop Behavior:**
+- **Implementation Stage**: Develops code and transitions to review with `next_stage`
+- **Review Stage**:
+  - If Critical/Important issues found → `prev_stage` (returns to implementation)
+  - If approved or minor issues only → `next_stage` (continues workflow)
+- **Loop Continuation**: Ticket alternates between implementation and review until approval
+
+#### **Stage Naming for Implementation→Review:**
+```javascript
+✅ CORRECT Examples:
+["backend_implementation", "backend_review"]
+["api_implementation", "api_review"]
+["frontend_implementation", "frontend_review"]
+
+❌ AVOID: Separate tickets for review (breaks the loop mechanism)
+Implementation Ticket: ["backend_implementation"]
+Review Ticket: ["backend_review"] // This won't enable the review/fix loop!
+```
+
 ### Stage Ownership Validation Process
 
 **Before creating any tickets, validate your execution plan:**
@@ -235,15 +270,15 @@ Backend Ticket: ["backend_impl", "backend_test"]    // Independent lifecycle
 #### **Step 1: Stage Ownership Matrix**
 Create a matrix to verify no conflicts:
 ```text
-Stage Name            | Ticket Owner           | Worker Type Needed
----------------------|------------------------|-------------------
-frontend_setup       | Frontend Setup Ticket | frontend_setup
-frontend_impl         | Frontend Main Ticket   | frontend_implementation
-frontend_testing      | Frontend Test Ticket   | frontend_testing
-backend_setup         | Backend Setup Ticket   | backend_setup
-backend_impl          | Backend Main Ticket    | backend_implementation
-integration_testing   | Integration Ticket     | integration_testing
-deployment_prep       | Deployment Ticket      | deployment_preparation
+Stage Name              | Ticket Owner               | Worker Type Needed
+------------------------|----------------------------|-------------------
+frontend_setup         | Frontend Setup Ticket     | frontend_setup
+frontend_implementation | Frontend Quality Ticket   | implementation
+frontend_review         | Frontend Quality Ticket   | review
+backend_implementation  | Backend Quality Ticket    | implementation
+backend_review          | Backend Quality Ticket    | review
+integration_testing     | Integration Ticket        | testing
+deployment_prep         | Deployment Ticket         | deployment
 ```
 
 #### **Step 2: Conflict Detection Checklist**
@@ -329,7 +364,7 @@ Backend Ticket: ["backend_setup", "backend_impl", "backend_test"]
 5. **Scope Boundary Definition**: Apply task scope separation principles to prevent conflicts
 6. **Stage Identification**: Apply sizing methodology to determine essential stages (minimum 3, maximum 5-6 stages total)
 7. **🚨 STAGE OWNERSHIP VALIDATION**: Create stage ownership matrix and validate no conflicts using the validation process above
-8. **🚨 PATTERN SELECTION**: Choose consistent implementation→testing pattern (separate tickets vs. single pipeline vs. parallel tracks)
+8. **🚨 PATTERN SELECTION**: Choose consistent patterns - implementation→review (single pipeline for quality gates), implementation→testing (separate tickets vs. single pipeline vs. parallel tracks)
 9. **🚨 CONFLICT PREVENTION CHECK**: Verify all stage names are unique across entire project execution plan
 10. **Detailed Implementation Planning**: Create comprehensive step-by-step implementation plans for EACH stage with specific tasks, deliverables, and success criteria
 11. **Worker Type Verification**: Use `list_worker_types` to check what worker types exist
@@ -478,21 +513,23 @@ Planning workers should close their ticket after creating all necessary child ti
     }
   },
   "detailed_stage_plans": {
-    "implementation": {
+    "backend_implementation": {
       "tasks": ["Create user authentication module", "Implement login/logout endpoints", "Add session management"],
-      "deliverables": ["auth.js module", "API endpoints", "session middleware"],
-      "success_criteria": ["All tests pass", "Security review approved", "Documentation complete"]
+      "deliverables": ["auth.js module", "API endpoints", "session middleware", "implementation report"],
+      "success_criteria": ["Code compiles without warnings", "Basic functionality verified", "Implementation report provided"],
+      "next_stage": "backend_review"
     },
-    "testing": {
-      "tasks": ["Unit tests for auth module", "Integration tests for endpoints", "Security penetration testing"],
-      "deliverables": ["Test suite", "Test reports", "Security assessment"],
-      "success_criteria": ["100% test coverage", "All security tests pass", "Performance benchmarks met"]
+    "backend_review": {
+      "tasks": ["Review implementation report", "Code quality assessment", "Security review", "Performance analysis"],
+      "deliverables": ["Review report with categorized issues", "Approval or fix requirements"],
+      "success_criteria": ["All critical/important issues resolved", "Code meets quality standards"],
+      "loop_behavior": "Uses prev_stage for fixes, next_stage for approval"
     }
   },
   "stage_ownership_validation": {
     "all_stage_names_unique": true,
     "no_stage_conflicts": true,
-    "pattern_consistency": "separate_tickets_pattern",
+    "pattern_consistency": "implementation_review_pipeline_pattern",
     "circular_logic_avoided": true,
     "ownership_matrix_created": true
   },
