@@ -305,11 +305,11 @@ pub fn ensure_worker_templates_exist_in_directory(working_directory: Option<&str
 
 async fn create_coordinator_commands() -> Result<()> {
     // Create vibe-events command
-    let events_command = include_str!("../.claude/commands/vibe-events.md");
+    let events_command = include_str!("../templates/commands/vibe-events.md");
     fs::write(".claude/commands/vibe-events.md", events_command)?;
 
     // Create vibe-status command
-    let status_command = include_str!("../.claude/commands/vibe-status.md");
+    let status_command = include_str!("../templates/commands/vibe-status.md");
     fs::write(".claude/commands/vibe-status.md", status_command)?;
 
     Ok(())
