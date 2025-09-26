@@ -384,11 +384,11 @@ Planning breakdown: ["backend_setup", "frontend_development", "integration_testi
 **If work is identified:**
 1. Create all necessary implementation tickets
 2. Set proper dependencies
-3. Close planning ticket with outcome `"next_stage"` or `"complete"`
+3. Close planning ticket with outcome `"coordinator_attention"`
 4. Comment: "Planning complete. Created X implementation tickets."
 
 **If no work is needed:**
-1. Close planning ticket with outcome `"complete"`
+1. Close planning ticket with outcome `"coordinator_attention"`
 2. Comment: "Planning complete. Analysis shows no additional work required."
 
 **If clarification is needed:**
@@ -434,7 +434,7 @@ Planning workers should close their ticket after creating all necessary child ti
 
 ```json
 {
-  "outcome": "complete",
+  "outcome": "coordinator_attention",
   "tickets_created": [
     {
       "title": "Backend API Implementation",
