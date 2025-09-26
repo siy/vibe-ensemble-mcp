@@ -381,10 +381,26 @@ impl QueueManager {
                 self.request_coordinator_attention(&event.ticket_id, reason)
                     .await?;
             }
+            WorkerCommand::CompleteTicket { resolution } => {
+                // Use the unified completion function to close ticket and trigger cascades
+                self.complete_ticket_with_cascade(
+                    event.ticket_id.as_str(),
+                    resolution,
+                    &event.comment,
+                )
+                .await?;
+            }
         }
 
-        // Handle dependency cascades after any completion event
-        self.handle_dependency_cascade(event).await?;
+        // Handle dependency cascades after completion events (except CompleteTicket which handles its own)
+        match &event.command {
+            WorkerCommand::CompleteTicket { .. } => {
+                // CompleteTicket already handled dependency cascade internally
+            }
+            _ => {
+                self.handle_dependency_cascade(event).await?;
+            }
+        }
 
         Ok(())
     }
@@ -587,6 +603,10 @@ impl QueueManager {
                     self.resubmit_parent_ticket(parent_id).await?;
                 }
             }
+            WorkerCommand::CompleteTicket { .. } => {
+                // CompleteTicket already handles dependency cascade in complete_ticket_with_cascade
+                // No additional processing needed here
+            }
             _ => {
                 // For other commands, still check dependencies
                 self.check_and_unblock_dependents(ticket_id).await?;
@@ -650,6 +670,66 @@ impl QueueManager {
             }
         }
 
+        Ok(())
+    }
+
+    /// Unified ticket completion function that handles both pipeline completion and direct closes
+    /// This ensures consistent behavior for closing tickets and triggering dependency cascades
+    pub async fn complete_ticket_with_cascade(
+        self: &Arc<Self>,
+        ticket_id: &str,
+        resolution: &str,
+        comment: &str,
+    ) -> Result<()> {
+        info!(
+            "Completing ticket {} with resolution: {}",
+            ticket_id, resolution
+        );
+
+        // Get ticket information before closing for event emission
+        let ticket_with_comments = crate::database::tickets::Ticket::get_by_id(&self.db, ticket_id)
+            .await?
+            .ok_or_else(|| anyhow::anyhow!("Ticket '{}' not found", ticket_id))?;
+        let project_id = ticket_with_comments.ticket.project_id.clone();
+
+        // Close the ticket in the database
+        crate::database::tickets::Ticket::close_ticket(&self.db, ticket_id, resolution).await?;
+
+        // Add closing comment
+        crate::database::comments::Comment::create(
+            &self.db,
+            ticket_id,
+            Some("system"),
+            Some("coordinator"),
+            None,
+            comment,
+        )
+        .await?;
+
+        // Emit ticket closed event
+        let event_payload = EventPayload::ticket_closed(ticket_id, &project_id);
+        self.event_broadcaster.broadcast(event_payload);
+
+        // Trigger dependency cascade to unblock dependent tickets
+        info!(
+            "Checking for dependent tickets to unblock after ticket {} completion",
+            ticket_id
+        );
+        self.check_and_unblock_dependents(ticket_id).await?;
+
+        // If this ticket has a parent, resubmit parent for reassessment
+        if let Some(parent_id) = &ticket_with_comments.ticket.parent_ticket_id {
+            info!(
+                "Resubmitting parent ticket {} after child {} completion",
+                parent_id, ticket_id
+            );
+            self.resubmit_parent_ticket(parent_id).await?;
+        }
+
+        info!(
+            "Successfully completed ticket {} and processed dependencies",
+            ticket_id
+        );
         Ok(())
     }
 }

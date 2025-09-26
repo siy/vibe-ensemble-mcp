@@ -3,10 +3,8 @@ use serde_json::Value;
 use tracing::{debug, error, info, trace, warn};
 
 use super::{
-    bidirectional_tools::*, client_tools::*, dependency_tools::*, event_tools::*,
-    integration_tools::*, orchestration_tools::*, permission_tools::*, project_tools::*,
-    template_tools::*, ticket_tools::*, tools::ToolRegistry, types::*, worker_type_tools::*,
-    MCP_PROTOCOL_VERSION,
+    dependency_tools::*, event_tools::*, permission_tools::*, project_tools::*, template_tools::*,
+    ticket_tools::*, tools::ToolRegistry, types::*, worker_type_tools::*, MCP_PROTOCOL_VERSION,
 };
 use crate::{config::Config, error::Result, server::AppState};
 
@@ -49,8 +47,7 @@ impl McpServer {
         Self::register_event_tools(&mut tools);
         Self::register_permission_tools(&mut tools);
 
-        // Always register WebSocket tools (WebSocket is always enabled)
-        Self::register_websocket_tools(&mut tools);
+        // WebSocket infrastructure is available but MCP tools are removed
 
         // Register template management tools
         Self::register_template_tools(&mut tools);
@@ -112,35 +109,11 @@ impl McpServer {
         register_tools!(tools, GetPermissionModelTool,);
     }
 
-    /// Register WebSocket and bidirectional communication tools
-    fn register_websocket_tools(tools: &mut ToolRegistry) {
-        register_tools!(
-            tools,
-            // Client tools for bidirectional communication
-            ListClientToolsTool,
-            CallClientToolTool,
-            ListConnectedClientsTool,
-            ListPendingRequestsTool,
-            // Orchestration tools for complex workflows
-            ExecuteWorkflowTool,
-            ParallelCallTool,
-            BroadcastToClientsTool,
-            // Enhanced bidirectional MCP tools
-            CollaborativeSyncTool,
-            PollClientStatusTool,
-            ClientGroupManagerTool,
-            ClientHealthMonitorTool,
-            // Integration testing and compatibility tools
-            ValidateWebSocketIntegrationTool,
-            TestWebSocketCompatibilityTool,
-        );
-    }
-
     /// Register template management tools
     fn register_template_tools(tools: &mut ToolRegistry) {
         register_tools!(
             tools,
-            ListWorkerTemplatesOol,
+            ListWorkerTemplatesTool,
             LoadWorkerTemplateTool,
             EnsureWorkerTemplatesExistTool,
         );
@@ -167,6 +140,8 @@ impl McpServer {
             "tools/call" => self.handle_call_tool(state, request.params).await,
             "prompts/list" => self.handle_list_prompts().await,
             "prompts/get" => self.handle_get_prompt(request.params).await,
+            "resources/list" => self.handle_list_resources().await,
+            "resources/read" => self.handle_read_resource(request.params).await,
             _ => Err(JsonRpcError {
                 code: METHOD_NOT_FOUND,
                 message: format!("Method '{}' not found", request.method),
@@ -237,6 +212,10 @@ impl McpServer {
                 prompts: PromptsCapability {
                     list_changed: false,
                 },
+                resources: Some(super::types::ResourcesCapability {
+                    subscribe: true,
+                    list_changed: false,
+                }),
             },
             server_info: ServerInfo {
                 name: "vibe-ensemble-mcp".to_string(),
@@ -508,6 +487,109 @@ impl McpServer {
         let result = serde_json::to_value(response).map_err(|e| JsonRpcError {
             code: INTERNAL_ERROR,
             message: format!("Failed to serialize prompt response: {}", e),
+            data: None,
+        })?;
+
+        Ok(result)
+    }
+
+    async fn handle_list_resources(&self) -> std::result::Result<Value, JsonRpcError> {
+        info!("Handling list_resources request");
+
+        let resources = vec![
+            Resource {
+                uri: "ide://events".to_string(),
+                name: "Vibe Ensemble Events".to_string(),
+                description: Some("Real-time events from the Vibe Ensemble MCP server, including worker status, ticket updates, and system messages".to_string()),
+                mime_type: Some("application/json".to_string()),
+            }
+        ];
+
+        let response = ListResourcesResponse {
+            resources,
+            next_cursor: None,
+        };
+
+        let result = serde_json::to_value(response).map_err(|e| JsonRpcError {
+            code: INTERNAL_ERROR,
+            message: format!("Failed to serialize resources: {}", e),
+            data: None,
+        })?;
+
+        Ok(result)
+    }
+
+    async fn handle_read_resource(
+        &self,
+        params: Option<Value>,
+    ) -> std::result::Result<Value, JsonRpcError> {
+        let request: ReadResourceRequest = match params {
+            Some(params) => serde_json::from_value(params).map_err(|e| JsonRpcError {
+                code: INVALID_PARAMS,
+                message: format!("Invalid read_resource params: {}", e),
+                data: None,
+            })?,
+            None => {
+                return Err(JsonRpcError {
+                    code: INVALID_PARAMS,
+                    message: "Missing read_resource parameters".to_string(),
+                    data: None,
+                })
+            }
+        };
+
+        info!("Reading resource: {}", request.uri);
+
+        let content = match request.uri.as_str() {
+            "ide://events" => {
+                // Return information about available events and how to access them
+                ResourceContent {
+                    content_type: "text".to_string(),
+                    text: Some(serde_json::to_string_pretty(&serde_json::json!({
+                        "description": "Real-time events from the Vibe Ensemble MCP server",
+                        "note": "This is a live resource that updates in real-time. Use the list_events tool to get current events.",
+                        "available_event_types": [
+                            "TicketCreated",
+                            "TicketUpdated",
+                            "TicketStageChanged",
+                            "TicketClosed",
+                            "TicketUnblocked",
+                            "WorkerSpawned",
+                            "WorkerFinished",
+                            "WorkerFailed",
+                            "QueueUpdated",
+                            "SystemInit",
+                            "SystemMessage",
+                            "EndpointDiscovery"
+                        ],
+                        "tools_to_use": [
+                            "list_events - Get current events with filtering and pagination"
+                        ]
+                    })).map_err(|e| JsonRpcError {
+                        code: INTERNAL_ERROR,
+                        message: format!("Failed to serialize event info: {}", e),
+                        data: None,
+                    })?),
+                    blob: None,
+                    mime_type: Some("application/json".to_string()),
+                }
+            }
+            _ => {
+                return Err(JsonRpcError {
+                    code: INVALID_PARAMS,
+                    message: format!("Unknown resource URI: {}", request.uri),
+                    data: None,
+                })
+            }
+        };
+
+        let response = ReadResourceResponse {
+            contents: vec![content],
+        };
+
+        let result = serde_json::to_value(response).map_err(|e| JsonRpcError {
+            code: INTERNAL_ERROR,
+            message: format!("Failed to serialize resource response: {}", e),
             data: None,
         })?;
 

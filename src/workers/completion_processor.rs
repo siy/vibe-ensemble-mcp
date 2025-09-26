@@ -4,7 +4,6 @@ use serde::{Deserialize, Serialize};
 pub struct WorkerOutput {
     pub ticket_id: Option<String>,
     pub outcome: WorkerOutcome,
-    pub target_stage: Option<String>,
     pub comment: String,
     pub reason: String,
 }

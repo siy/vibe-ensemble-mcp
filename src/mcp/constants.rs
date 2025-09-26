@@ -154,6 +154,28 @@ impl JsonRpcEnvelopes {
             "params": params
         })
     }
+
+    /// Create sampling/createMessage notification for Claude to process realtime events
+    pub fn sampling_create_message() -> Value {
+        json!({
+            "jsonrpc": "2.0",
+            "id": 1,
+            "method": "sampling/createMessage",
+            "params": {
+                "messages": [
+                    {
+                        "role": "user",
+                        "content": {
+                            "type": "text",
+                            "text": "Address realtime events and process them."
+                        }
+                    }
+                ],
+                "includeContext": "thisServer",
+                "maxTokens": 200
+            }
+        })
+    }
 }
 
 /// Complete list of MCP tools available on the server
@@ -191,23 +213,6 @@ pub fn get_all_mcp_tool_names() -> Vec<String> {
         "mcp__vibe-ensemble-mcp__get_tickets_by_stage".to_string(),
         // Permission management tools
         "mcp__vibe-ensemble-mcp__get_permission_model".to_string(),
-        // Client tools for bidirectional communication
-        "mcp__vibe-ensemble-mcp__list_client_tools".to_string(),
-        "mcp__vibe-ensemble-mcp__call_client_tool".to_string(),
-        "mcp__vibe-ensemble-mcp__list_connected_clients".to_string(),
-        "mcp__vibe-ensemble-mcp__list_pending_requests".to_string(),
-        // Orchestration tools for complex workflows
-        "mcp__vibe-ensemble-mcp__execute_workflow".to_string(),
-        "mcp__vibe-ensemble-mcp__parallel_call".to_string(),
-        "mcp__vibe-ensemble-mcp__broadcast_to_clients".to_string(),
-        // Enhanced bidirectional MCP tools
-        "mcp__vibe-ensemble-mcp__collaborative_sync".to_string(),
-        "mcp__vibe-ensemble-mcp__poll_client_status".to_string(),
-        "mcp__vibe-ensemble-mcp__client_group_manager".to_string(),
-        "mcp__vibe-ensemble-mcp__client_health_monitor".to_string(),
-        // Integration testing and compatibility tools
-        "mcp__vibe-ensemble-mcp__validate_websocket_integration".to_string(),
-        "mcp__vibe-ensemble-mcp__test_websocket_compatibility".to_string(),
         // Template management tools
         "mcp__vibe-ensemble-mcp__list_worker_templates".to_string(),
         "mcp__vibe-ensemble-mcp__load_worker_template".to_string(),

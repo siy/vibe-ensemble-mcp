@@ -14,7 +14,7 @@ pub struct EventPayload {
 }
 
 /// Event types in the system
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(rename_all = "snake_case")]
 pub enum EventType {
     TicketCreated,
@@ -291,11 +291,11 @@ impl EventPayload {
         }
     }
 
-    /// Convert to JSON-RPC notification format - standardized to use notifications/message
+    /// Convert to JSON-RPC notification format - uses sampling/createMessage for Claude processing
     pub fn to_jsonrpc_notification(&self) -> Value {
         use crate::mcp::JsonRpcEnvelopes;
 
-        // Use consistent notifications/message format for all events
-        JsonRpcEnvelopes::message(serde_json::to_value(self).unwrap_or_default())
+        // Use sampling/createMessage format to trigger Claude to process realtime events
+        JsonRpcEnvelopes::sampling_create_message()
     }
 }

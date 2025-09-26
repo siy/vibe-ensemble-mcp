@@ -36,13 +36,19 @@ pub struct InitializeRequest {
     pub client_info: ClientInfo,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ClientCapabilities {
     #[serde(default)]
     pub tools: ToolsCapability,
+    #[serde(default)]
+    pub sampling: Option<SamplingCapability>,
+    #[serde(default)]
+    pub logging: Option<LoggingCapability>,
+    #[serde(default)]
+    pub resources: Option<ResourcesCapability>,
 }
 
-#[derive(Debug, Serialize, Deserialize, Default)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct ToolsCapability {
     #[serde(rename = "listChanged", alias = "list_changed", default)]
     pub list_changed: bool,
@@ -67,9 +73,11 @@ pub struct InitializeResponse {
 pub struct ServerCapabilities {
     pub tools: ToolsCapability,
     pub prompts: PromptsCapability,
+    #[serde(default)]
+    pub resources: Option<ResourcesCapability>,
 }
 
-#[derive(Debug, Serialize, Deserialize, Default)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct PromptsCapability {
     #[serde(rename = "listChanged", alias = "list_changed", default)]
     pub list_changed: bool,
@@ -255,4 +263,133 @@ pub struct PaginationResult<T> {
     pub total: usize,
     pub has_more: bool,
     pub next_cursor: Option<String>,
+}
+
+// MCP Notification and Sampling Support Types
+
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct SamplingCapability {
+    #[serde(default)]
+    pub enabled: bool,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct LoggingCapability {
+    #[serde(default)]
+    pub enabled: bool,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct ResourcesCapability {
+    #[serde(default)]
+    pub subscribe: bool,
+    #[serde(default)]
+    pub list_changed: bool,
+}
+
+// MCP Notification Types
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct JsonRpcNotification {
+    pub jsonrpc: String,
+    pub method: String,
+    pub params: Option<Value>,
+}
+
+impl JsonRpcNotification {
+    pub fn new(method: &str, params: Option<Value>) -> Self {
+        Self {
+            jsonrpc: "2.0".to_string(),
+            method: method.to_string(),
+            params,
+        }
+    }
+}
+
+impl std::fmt::Display for JsonRpcNotification {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match serde_json::to_string(self) {
+            Ok(json) => write!(f, "{}", json),
+            Err(_) => write!(f, "{{}}"),
+        }
+    }
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct NotificationMessage {
+    pub level: String, // "debug" | "info" | "notice" | "warning" | "error" | "critical" | "alert" | "emergency"
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub logger: Option<String>,
+    pub data: Value,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub _meta: Option<Value>,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct ResourceUpdated {
+    pub uri: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub _meta: Option<Value>,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct SamplingCreateMessage {
+    pub messages: Vec<SamplingMessage>,
+    #[serde(rename = "includeContext")]
+    pub include_context: String, // "thisServer" | "allServers" | "none"
+    #[serde(rename = "maxTokens")]
+    pub max_tokens: u32,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct SamplingMessage {
+    pub role: String, // "user" | "assistant"
+    pub content: SamplingContent,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct SamplingContent {
+    #[serde(rename = "type")]
+    pub content_type: String, // "text"
+    pub text: String,
+}
+
+// Resource Types
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct Resource {
+    pub uri: String,
+    pub name: String,
+    pub description: Option<String>,
+    #[serde(rename = "mimeType", skip_serializing_if = "Option::is_none")]
+    pub mime_type: Option<String>,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct ListResourcesResponse {
+    pub resources: Vec<Resource>,
+    #[serde(rename = "nextCursor", skip_serializing_if = "Option::is_none")]
+    pub next_cursor: Option<String>,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct ReadResourceRequest {
+    pub uri: String,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct ReadResourceResponse {
+    pub contents: Vec<ResourceContent>,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct ResourceContent {
+    #[serde(rename = "type")]
+    pub content_type: String, // "text" | "blob"
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub text: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub blob: Option<String>, // base64 encoded
+    #[serde(rename = "mimeType", skip_serializing_if = "Option::is_none")]
+    pub mime_type: Option<String>,
 }

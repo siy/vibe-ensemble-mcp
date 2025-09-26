@@ -187,7 +187,6 @@ End your response with:
 {
   "ticket_id": "your_ticket_id",
   "outcome": "next_stage|prev_stage|coordinator_attention",
-  "target_stage": "next_stage_name",
   "comment": "Stage completion summary",
   "reason": "Rationale for progression"
 }
@@ -486,7 +485,7 @@ Take action when:
 **Symptoms:** Workers complete but don't advance to next stage
 **Solutions:**
 - Verify JSON output schema in worker prompts
-- Check `target_stage` values match existing worker types
+- Ensure pipeline stages match existing worker types
 - Ensure worker types exist for target stages
 - Review stage naming consistency
 

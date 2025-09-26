@@ -41,8 +41,8 @@ impl DependencyManager {
                    t.closed_at, t.parent_ticket_id, t.dependency_status, t.created_by_worker_id,
                    t.ticket_type, t.rules_version, t.patterns_version, t.inherited_from_parent
             FROM tickets t
-            INNER JOIN ticket_dependencies td ON t.ticket_id = td.dependent_ticket_id
-            WHERE td.dependency_ticket_id = ?1 AND t.state = 'open' AND t.dependency_status = 'blocked'
+            INNER JOIN ticket_dependencies td ON t.ticket_id = td.child_ticket_id
+            WHERE td.parent_ticket_id = ?1 AND t.state = 'open' AND t.dependency_status = 'blocked'
             "#,
         )
         .bind(ticket_id.as_str())
@@ -60,8 +60,8 @@ impl DependencyManager {
                 r#"
                 SELECT COUNT(*)
                 FROM ticket_dependencies td
-                INNER JOIN tickets dep ON td.dependency_ticket_id = dep.ticket_id
-                WHERE td.dependent_ticket_id = ?1
+                INNER JOIN tickets dep ON td.parent_ticket_id = dep.ticket_id
+                WHERE td.child_ticket_id = ?1
                 AND dep.state != 'closed'
                 "#,
             )

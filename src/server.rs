@@ -2,8 +2,8 @@ use axum::extract::WebSocketUpgrade;
 use axum::{
     extract::{Query, State},
     http::{HeaderMap, Method},
-    response::{Json, Response},
-    routing::{get, post},
+    response::{IntoResponse, Json, Response},
+    routing::{any, get, post},
     Router,
 };
 use serde_json::{json, Value};
@@ -59,9 +59,10 @@ pub async fn run_server(config: Config) -> Result<()> {
     // Initialize single MCP server instance with config-based tool registration
     let mcp_server = Arc::new(McpServer::new(&config));
 
-    // Initialize WebSocket manager with concurrency limits
-    let websocket_manager = Arc::new(WebSocketManager::with_concurrency_limit(
+    // Initialize WebSocket manager with concurrency limits and event broadcasting
+    let websocket_manager = Arc::new(WebSocketManager::with_event_broadcasting(
         config.max_concurrent_client_requests,
+        event_broadcaster.clone(),
     ));
 
     // Create auth token manager (we'll add the websocket token after binding to the port)
@@ -104,9 +105,9 @@ pub async fn run_server(config: Config) -> Result<()> {
         .route("/sse", get(sse_handler))
         .route("/messages", post(sse_message_handler));
 
-    // Add WebSocket route
-    app = app.route("/ws", get(websocket_handler));
-    info!("WebSocket support enabled at /ws");
+    // Add root route that handles both WebSocket upgrades and regular HTTP requests
+    app = app.route("/", any(root_handler));
+    info!("WebSocket support enabled at / (root path)");
 
     let app = app
         .layer(RequestBodyLimitLayer::new(1024 * 1024)) // 1 MiB
@@ -204,22 +205,50 @@ async fn respawn_workers_for_unfinished_tasks(state: &AppState) -> Result<()> {
     Ok(())
 }
 
-/// WebSocket handler for bidirectional MCP communication
-async fn websocket_handler(
-    ws: WebSocketUpgrade,
+/// Root handler that handles both WebSocket upgrades and regular HTTP requests
+async fn root_handler(
+    ws_upgrade: Option<WebSocketUpgrade>,
     headers: HeaderMap,
     Query(query): Query<WebSocketQuery>,
     State(state): State<AppState>,
 ) -> Response {
-    tracing::info!("WebSocket connection request received at /ws endpoint");
-    tracing::trace!("WebSocket upgrade request headers: {:?}", headers);
-    tracing::trace!("WebSocket query parameters: {:?}", query);
+    // Check if this is a WebSocket upgrade request
+    if let Some(upgrade_header) = headers.get("upgrade") {
+        if let Ok(upgrade_value) = upgrade_header.to_str() {
+            if upgrade_value.to_lowercase() == "websocket" {
+                if let Some(ws) = ws_upgrade {
+                    tracing::info!("WebSocket connection request received at / endpoint");
+                    tracing::trace!("WebSocket upgrade request headers: {:?}", headers);
+                    tracing::trace!("WebSocket query parameters: {:?}", query);
 
-    let response = state
-        .websocket_manager
-        .handle_connection(ws, headers, Query(query), State(state.clone()))
-        .await;
+                    let response = state
+                        .websocket_manager
+                        .handle_connection(ws, headers, Query(query), State(state.clone()))
+                        .await;
 
-    tracing::trace!("WebSocket handler returning response");
-    response
+                    tracing::trace!("WebSocket handler returning response");
+                    return response;
+                }
+            }
+        }
+    }
+
+    // Regular HTTP request - return basic server information
+    tracing::info!("HTTP request received at / endpoint");
+    Json(json!({
+        "service": "vibe-ensemble-mcp",
+        "version": env!("CARGO_PKG_VERSION"),
+        "description": "Multi-agent coordination MCP server for Claude Code",
+        "endpoints": {
+            "/": "WebSocket MCP connection (with Upgrade: websocket header)",
+            "/health": "Health check endpoint",
+            "/mcp": "HTTP MCP endpoint",
+            "/sse": "Server-Sent Events endpoint",
+            "/messages": "SSE message endpoint"
+        },
+        "websocket": {
+            "protocol": "mcp",
+            "authentication": "Required via query parameter 'token' or header 'x-claude-code-ide-authorization'"
+        }
+    })).into_response()
 }

@@ -21,6 +21,9 @@ pub enum AppError {
 
     #[error("Not found: {0}")]
     NotFound(String),
+
+    #[error("WebSocket protocol error: {0}")]
+    WebSocketProtocolError(String),
 }
 
 impl IntoResponse for AppError {
@@ -31,6 +34,9 @@ impl IntoResponse for AppError {
             AppError::Io(ref err) => (StatusCode::INTERNAL_SERVER_ERROR, err.to_string()),
             AppError::BadRequest(ref message) => (StatusCode::BAD_REQUEST, message.clone()),
             AppError::NotFound(ref message) => (StatusCode::NOT_FOUND, message.clone()),
+            AppError::WebSocketProtocolError(ref message) => {
+                (StatusCode::BAD_REQUEST, message.clone())
+            }
             AppError::Internal(ref err) => (StatusCode::INTERNAL_SERVER_ERROR, err.to_string()),
         };
 

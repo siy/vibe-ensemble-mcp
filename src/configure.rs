@@ -37,6 +37,7 @@ pub async fn configure_claude_code(
     create_claude_directory().await?;
     create_claude_settings().await?;
     create_vibe_ensemble_command(host, port).await?;
+    create_coordinator_commands().await?;
     create_worker_templates().await?;
 
     // Create WebSocket token file
@@ -50,6 +51,8 @@ pub async fn configure_claude_code(
     println!("  - .mcp.json (MCP server configuration)");
     println!("  - .claude/settings.local.json (Claude settings)");
     println!("  - .claude/commands/vibe-ensemble.md (Coordinator initialization)");
+    println!("  - .claude/commands/vibe-events.md (Process realtime IDE events)");
+    println!("  - .claude/commands/vibe-status.md (Project and ticket status report)");
     println!("  - .claude/worker-templates/ (8 high-quality worker templates)");
     println!("  - .claude/websocket-token (WebSocket authentication token)");
     println!("📄 Updated existing file:");
@@ -73,12 +76,11 @@ pub async fn configure_claude_code(
     println!("  2. Open Claude Code in this directory");
     println!("  3. Run the 'vibe-ensemble' command to initialize as coordinator");
     println!();
-    println!("🔄 Bidirectional Communication Features:");
-    println!("  • WebSocket transport enabled for real-time collaboration");
-    println!("  • Server-initiated tool calls to clients");
-    println!("  • Workflow orchestration and parallel execution");
-    println!("  • Client tool registration and discovery");
-    println!("  • 15 new MCP tools for bidirectional coordination");
+    println!("🔄 Real-Time Communication Features:");
+    println!("  • WebSocket transport enabled for real-time event streaming");
+    println!("  • JSON-RPC notifications for instant coordination");
+    println!("  • 28 MCP tools for comprehensive project coordination");
+    println!("  • Server-Sent Events (SSE) and WebSocket event broadcasting");
 
     Ok(())
 }
@@ -92,7 +94,6 @@ async fn create_mcp_config(host: &str, port: u16, _websocket_token: &str) -> Res
 async fn create_claude_directory() -> Result<()> {
     fs::create_dir_all(".claude/commands")?;
     fs::create_dir_all(".claude/worker-templates")?;
-    fs::create_dir_all(".vibe-ensemble-mcp")?;
     Ok(())
 }
 
@@ -298,6 +299,18 @@ pub fn ensure_worker_templates_exist_in_directory(working_directory: Option<&str
     if created_count > 0 {
         println!("✓ Created {} missing worker templates", created_count);
     }
+
+    Ok(())
+}
+
+async fn create_coordinator_commands() -> Result<()> {
+    // Create vibe-events command
+    let events_command = include_str!("../templates/commands/vibe-events.md");
+    fs::write(".claude/commands/vibe-events.md", events_command)?;
+
+    // Create vibe-status command
+    let status_command = include_str!("../templates/commands/vibe-status.md");
+    fs::write(".claude/commands/vibe-status.md", status_command)?;
 
     Ok(())
 }
