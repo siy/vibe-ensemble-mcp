@@ -167,8 +167,11 @@ impl WebSocketManager {
         state: State<AppState>,
     ) -> Response {
         trace!("WebSocket upgrade request received");
-        trace!("Headers: {:?}", headers);
-        trace!("Query parameters: {:?}", query);
+        trace!(
+            "Header keys: {:?}",
+            headers.keys().map(|k| k.as_str()).collect::<Vec<_>>()
+        );
+        trace!("Query token provided: {}", query.0.token.is_some());
 
         // Validate MCP subprotocol as required by Claude Code IDE integration
         if let Err(error) = self.validate_mcp_subprotocol(&headers).await {
@@ -406,7 +409,11 @@ impl WebSocketManager {
         // Check for token in headers (Claude Code style)
         if let Some(auth_header) = headers.get("x-claude-code-ide-authorization") {
             trace!("Found x-claude-code-ide-authorization header");
-            if let Ok(token) = auth_header.to_str() {
+            if let Ok(token_str) = auth_header.to_str() {
+                let mut token = token_str.trim();
+                if let Some(stripped) = token.strip_prefix("Bearer ").or_else(|| token.strip_prefix("Token ")) {
+                    token = stripped.trim();
+                }
                 trace!("Successfully parsed authorization header, validating token...");
                 if self.validate_token(token, state).await {
                     info!("WebSocket authentication successful via Claude Code IDE authorization header");
@@ -423,7 +430,11 @@ impl WebSocketManager {
         // Check for token in x-api-key header (alternative auth method)
         if let Some(api_key_header) = headers.get("x-api-key") {
             trace!("Found x-api-key header");
-            if let Ok(token) = api_key_header.to_str() {
+            if let Ok(token_str) = api_key_header.to_str() {
+                let mut token = token_str.trim();
+                if let Some(stripped) = token.strip_prefix("Bearer ").or_else(|| token.strip_prefix("Token ")) {
+                    token = stripped.trim();
+                }
                 trace!("Successfully parsed x-api-key header, validating token...");
                 if self.validate_token(token, state).await {
                     info!("WebSocket authentication successful via API key header");
@@ -445,10 +456,7 @@ impl WebSocketManager {
 
     /// Validate authentication token
     async fn validate_token(&self, token: &str, state: &AppState) -> bool {
-        trace!(
-            "Starting token validation for token: {}...",
-            &token[..token.len().min(8)]
-        );
+        trace!("Starting token validation");
 
         // Basic token format validation
         if token.is_empty() || token.len() < 8 || token.len() > 256 {
@@ -456,15 +464,7 @@ impl WebSocketManager {
             return false;
         }
 
-        // Check for valid characters (alphanumeric, hyphens, underscores)
-        if !token
-            .chars()
-            .all(|c| c.is_alphanumeric() || c == '-' || c == '_')
-        {
-            trace!("Token failed character validation: contains invalid characters");
-            return false;
-        }
-        trace!("Token passed format validation");
+        // Optional: token character validation removed to avoid rejecting legitimate formats (e.g., JWT/base64url).
 
         // Check against auth manager (primary method)
         trace!("Checking token against auth manager");
