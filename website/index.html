@@ -410,7 +410,26 @@
         <h2 style="color:white; border-bottom:none;">Quick Install</h2>
         <p>Install the server, configure Claude Code, and get moving in minutes.</p>
 
-        <p><strong>Download from GitHub:</strong> Get the latest release for your platform from the <a href="https://github.com/siy/vibe-ensemble-mcp/releases" style="color: var(--accent);">releases page</a>.</p>
+        <div class="command-tabs">
+          <button class="command-tab active" onclick="showTab('install', 'unix')">Linux/macOS</button>
+          <button class="command-tab" onclick="showTab('install', 'windows')">Windows</button>
+        </div>
+
+        <div id="install-unix" class="command-content active">
+          <div class="code-block">
+            <button class="copy-btn" onclick="copyToClipboard('curl -fsSL https://vibeensemble.dev/install.sh | sh', this)">Copy</button>
+curl -fsSL https://vibeensemble.dev/install.sh | sh
+          </div>
+        </div>
+
+        <div id="install-windows" class="command-content">
+          <div class="code-block">
+            <button class="copy-btn" onclick="copyToClipboard('iwr -useb https://vibeensemble.dev/install.ps1 | iex', this)">Copy</button>
+iwr -useb https://vibeensemble.dev/install.ps1 | iex
+          </div>
+        </div>
+
+        <p><strong>Alternative:</strong> Download from the <a href="https://github.com/siy/vibe-ensemble-mcp/releases" style="color: var(--accent);">releases page</a> for your platform.</p>
 
         <h3 style="color:white; margin-top:1rem;">Setup Steps</h3>
         <p><strong>Step 1:</strong> Start the server (create a separate directory for the server)</p>

@@ -9,7 +9,7 @@ param(
 $ErrorActionPreference = "Stop"
 
 # Configuration
-$Repo = "sergiyyevtushenko/vibe-ensemble-mcp"
+$Repo = "siy/vibe-ensemble-mcp"
 $BinaryName = "vibe-ensemble-mcp.exe"
 
 # Colors for output

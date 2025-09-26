@@ -23,6 +23,18 @@ Vibe-Ensemble allows you to break down complex projects into specialized stages,
 
 ### Quick Install (Recommended)
 
+**Linux/macOS:**
+```bash
+curl -fsSL https://vibeensemble.dev/install.sh | sh
+```
+
+**Windows:**
+```powershell
+iwr -useb https://vibeensemble.dev/install.ps1 | iex
+```
+
+### From Release
+
 Download the latest release for your platform from the [releases page](https://github.com/siy/vibe-ensemble-mcp/releases).
 
 ### From Source
