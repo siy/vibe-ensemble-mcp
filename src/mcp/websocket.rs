@@ -411,7 +411,10 @@ impl WebSocketManager {
             trace!("Found x-claude-code-ide-authorization header");
             if let Ok(token_str) = auth_header.to_str() {
                 let mut token = token_str.trim();
-                if let Some(stripped) = token.strip_prefix("Bearer ").or_else(|| token.strip_prefix("Token ")) {
+                if let Some(stripped) = token
+                    .strip_prefix("Bearer ")
+                    .or_else(|| token.strip_prefix("Token "))
+                {
                     token = stripped.trim();
                 }
                 trace!("Successfully parsed authorization header, validating token...");
@@ -432,7 +435,10 @@ impl WebSocketManager {
             trace!("Found x-api-key header");
             if let Ok(token_str) = api_key_header.to_str() {
                 let mut token = token_str.trim();
-                if let Some(stripped) = token.strip_prefix("Bearer ").or_else(|| token.strip_prefix("Token ")) {
+                if let Some(stripped) = token
+                    .strip_prefix("Bearer ")
+                    .or_else(|| token.strip_prefix("Token "))
+                {
                     token = stripped.trim();
                 }
                 trace!("Successfully parsed x-api-key header, validating token...");
