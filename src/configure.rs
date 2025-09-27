@@ -40,22 +40,13 @@ pub async fn configure_claude_code(
     create_coordinator_commands().await?;
     create_worker_templates().await?;
 
-    // Create WebSocket token file
-    create_websocket_token(&websocket_token).await?;
+    // Note: WebSocket token file is no longer needed and not generated
 
     // Note: Worker permissions are now generated per-project during project creation
     // to support project-specific permission isolation
 
     println!("✅ Claude Code integration configured successfully!");
-    println!("📁 Generated files:");
-    println!("  - .mcp.json (MCP server configuration)");
-    println!("  - .claude/settings.local.json (Claude settings)");
-    println!("  - .claude/commands/vibe-ensemble.md (Coordinator initialization)");
-    println!("  - .claude/commands/vibe-events.md (Process realtime IDE events)");
-    println!("  - .claude/commands/vibe-status.md (Project and ticket status report)");
-    println!("  - .claude/commands/vibe-poll.md (Continuous project monitoring)");
-    println!("  - .claude/worker-templates/ (8 high-quality worker templates)");
-    println!("  - .claude/websocket-token (WebSocket authentication token)");
+    println!("📁 Configuration completed with preservation of existing customizations:");
     println!("📄 Updated existing file:");
     println!(
         "  - ~/.claude/ide/{}.lock (added current workspace folder)",
@@ -68,6 +59,11 @@ pub async fn configure_claude_code(
         );
     }
 
+    println!();
+    println!("📝 Configuration Preservation:");
+    println!("  • Existing files are preserved with customizations intact");
+    println!("  • Only .mcp.json port configuration is updated when changed");
+    println!("  • Missing files are created with default templates");
     println!();
     println!("🚀 To use with Claude Code:");
     println!(
@@ -87,8 +83,48 @@ pub async fn configure_claude_code(
 }
 
 async fn create_mcp_config(host: &str, port: u16, _websocket_token: &str) -> Result<()> {
+    let config_path = ".mcp.json";
+
+    // If config exists, preserve user customizations and only update port
+    if Path::new(config_path).exists() {
+        match fs::read_to_string(config_path) {
+            Ok(existing_content) => {
+                match serde_json::from_str::<serde_json::Value>(&existing_content) {
+                    Ok(mut existing_config) => {
+                        // Update only the URL to reflect new port, preserve everything else
+                        if let Some(mcp_servers) = existing_config.get_mut("mcpServers") {
+                            if let Some(vibe_server) = mcp_servers.get_mut("vibe-ensemble-mcp") {
+                                if let Some(url) = vibe_server.get_mut("url") {
+                                    *url = serde_json::Value::String(format!(
+                                        "http://{}:{}/mcp",
+                                        host, port
+                                    ));
+                                }
+                            }
+                        }
+                        fs::write(config_path, serde_json::to_string_pretty(&existing_config)?)?;
+                        println!(
+                            "  ✓ Updated .mcp.json port configuration (preserved customizations)"
+                        );
+                        return Ok(());
+                    }
+                    Err(_) => {
+                        println!(
+                            "  ⚠ Warning: .mcp.json exists but couldn't parse, creating new one"
+                        );
+                    }
+                }
+            }
+            Err(_) => {
+                println!("  ⚠ Warning: .mcp.json exists but couldn't read, creating new one");
+            }
+        }
+    }
+
+    // Create new config if doesn't exist or couldn't parse existing
     let config = build_mcp_config(host, port);
-    fs::write(".mcp.json", serde_json::to_string_pretty(&config)?)?;
+    fs::write(config_path, serde_json::to_string_pretty(&config)?)?;
+    println!("  ✓ Created new .mcp.json configuration");
     Ok(())
 }
 
@@ -98,30 +134,43 @@ async fn create_claude_directory() -> Result<()> {
     Ok(())
 }
 
-async fn create_websocket_token(token: &str) -> Result<()> {
-    fs::write(".claude/websocket-token", token)?;
-    Ok(())
-}
+// Removed: create_websocket_token() - websocket token is no longer needed
 
 // Removed: create_file_permissions() - permissions are now generated per-project
 
 async fn create_claude_settings() -> Result<()> {
-    let settings = build_claude_permissions();
+    let settings_path = ".claude/settings.local.json";
 
-    fs::write(
-        ".claude/settings.local.json",
-        serde_json::to_string_pretty(&settings)?,
-    )?;
+    // If settings exist, preserve them
+    if Path::new(settings_path).exists() {
+        println!("  ✓ Preserved existing .claude/settings.local.json");
+        return Ok(());
+    }
+
+    // Create new settings if they don't exist
+    let settings = build_claude_permissions();
+    fs::write(settings_path, serde_json::to_string_pretty(&settings)?)?;
+    println!("  ✓ Created new .claude/settings.local.json");
     Ok(())
 }
 
 async fn create_vibe_ensemble_command(host: &str, port: u16) -> Result<()> {
+    let command_path = ".claude/commands/vibe-ensemble.md";
+
+    // If command exists, preserve it
+    if Path::new(command_path).exists() {
+        println!("  ✓ Preserved existing vibe-ensemble.md command");
+        return Ok(());
+    }
+
+    // Create new command if it doesn't exist
     let template_content = include_str!("../templates/coordinator_command.md");
     let command_content = template_content
         .replace("{host}", host)
         .replace("{port}", &port.to_string());
 
-    fs::write(".claude/commands/vibe-ensemble.md", command_content)?;
+    fs::write(command_path, command_content)?;
+    println!("  ✓ Created new vibe-ensemble.md command");
     Ok(())
 }
 
@@ -305,17 +354,30 @@ pub fn ensure_worker_templates_exist_in_directory(working_directory: Option<&str
 }
 
 async fn create_coordinator_commands() -> Result<()> {
-    // Create vibe-events command
-    let events_command = include_str!("../templates/commands/vibe-events.md");
-    fs::write(".claude/commands/vibe-events.md", events_command)?;
+    let commands = vec![
+        (
+            "vibe-events.md",
+            include_str!("../templates/commands/vibe-events.md"),
+        ),
+        (
+            "vibe-status.md",
+            include_str!("../templates/commands/vibe-status.md"),
+        ),
+        (
+            "vibe-poll.md",
+            include_str!("../templates/commands/vibe-poll.md"),
+        ),
+    ];
 
-    // Create vibe-status command
-    let status_command = include_str!("../templates/commands/vibe-status.md");
-    fs::write(".claude/commands/vibe-status.md", status_command)?;
-
-    // Create vibe-poll command
-    let poll_command = include_str!("../templates/commands/vibe-poll.md");
-    fs::write(".claude/commands/vibe-poll.md", poll_command)?;
+    for (filename, content) in commands {
+        let command_path = format!(".claude/commands/{}", filename);
+        if Path::new(&command_path).exists() {
+            println!("  ✓ Preserved existing {} command", filename);
+        } else {
+            fs::write(&command_path, content)?;
+            println!("  ✓ Created new {} command", filename);
+        }
+    }
 
     Ok(())
 }
