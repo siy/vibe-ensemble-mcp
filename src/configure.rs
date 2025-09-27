@@ -53,6 +53,7 @@ pub async fn configure_claude_code(
     println!("  - .claude/commands/vibe-ensemble.md (Coordinator initialization)");
     println!("  - .claude/commands/vibe-events.md (Process realtime IDE events)");
     println!("  - .claude/commands/vibe-status.md (Project and ticket status report)");
+    println!("  - .claude/commands/vibe-poll.md (Continuous project monitoring)");
     println!("  - .claude/worker-templates/ (8 high-quality worker templates)");
     println!("  - .claude/websocket-token (WebSocket authentication token)");
     println!("📄 Updated existing file:");
@@ -311,6 +312,10 @@ async fn create_coordinator_commands() -> Result<()> {
     // Create vibe-status command
     let status_command = include_str!("../templates/commands/vibe-status.md");
     fs::write(".claude/commands/vibe-status.md", status_command)?;
+
+    // Create vibe-poll command
+    let poll_command = include_str!("../templates/commands/vibe-poll.md");
+    fs::write(".claude/commands/vibe-poll.md", poll_command)?;
 
     Ok(())
 }
