@@ -1019,8 +1019,8 @@ impl WebSocketManager {
         // 1. Send notifications/message for user-friendly event description
         if has_logging {
             let level = match &event_payload.event_type {
-                crate::events::EventType::WorkerSpawned => "info",
-                crate::events::EventType::WorkerFinished => "info",
+                crate::events::EventType::WorkerStarted => "info",
+                crate::events::EventType::WorkerCompleted => "info",
                 crate::events::EventType::WorkerFailed => "error",
                 crate::events::EventType::TicketCreated => "info",
                 crate::events::EventType::TicketClosed => "info",
@@ -1028,6 +1028,13 @@ impl WebSocketManager {
                 crate::events::EventType::TicketStageChanged => "info",
                 crate::events::EventType::TicketUnblocked => "info",
                 crate::events::EventType::QueueUpdated => "info",
+                crate::events::EventType::WorkerStopped => "info",
+                crate::events::EventType::WorkerTypeCreated => "info",
+                crate::events::EventType::WorkerTypeUpdated => "info",
+                crate::events::EventType::WorkerTypeDeleted => "info",
+                crate::events::EventType::ProjectCreated => "info",
+                crate::events::EventType::StageCompleted => "info",
+                crate::events::EventType::TaskAssigned => "info",
                 crate::events::EventType::SystemInit => "info",
                 crate::events::EventType::SystemMessage => "info",
                 crate::events::EventType::EndpointDiscovery => "info",
@@ -1141,7 +1148,7 @@ impl WebSocketManager {
         use crate::events::{EventData, EventType};
 
         match (&event_payload.event_type, &event_payload.data) {
-            (EventType::WorkerSpawned, EventData::Worker(worker_data)) => {
+            (EventType::WorkerStarted, EventData::Worker(worker_data)) => {
                 serde_json::json!({
                     "kind": "worker_spawned",
                     "message": format!("Spawned worker {} ({}) for project '{}'", worker_data.worker_id, worker_data.worker_type, worker_data.project_id),
@@ -1150,7 +1157,7 @@ impl WebSocketManager {
                     "worker_id": worker_data.worker_id
                 })
             }
-            (EventType::WorkerFinished, EventData::Worker(worker_data)) => {
+            (EventType::WorkerCompleted, EventData::Worker(worker_data)) => {
                 serde_json::json!({
                     "kind": "worker_finished",
                     "message": format!("Completed worker {} ({}) for project '{}'", worker_data.worker_id, worker_data.worker_type, worker_data.project_id),

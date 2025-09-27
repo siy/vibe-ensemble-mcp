@@ -3,6 +3,7 @@ use serde::{Deserialize, Serialize};
 use sqlx::FromRow;
 
 use super::DbPool;
+use crate::events::EventType;
 
 #[derive(Debug, Clone, Serialize, Deserialize, FromRow)]
 pub struct Event {
@@ -20,7 +21,7 @@ pub struct Event {
 impl Event {
     pub async fn create(
         pool: &DbPool,
-        event_type: &str,
+        event_type: EventType,
         ticket_id: Option<&str>,
         worker_id: Option<&str>,
         stage: Option<&str>,
@@ -33,7 +34,7 @@ impl Event {
             RETURNING id, event_type, ticket_id, worker_id, stage, reason, created_at, processed, resolution_summary
         "#,
         )
-        .bind(event_type)
+        .bind(event_type.to_string())
         .bind(ticket_id)
         .bind(worker_id)
         .bind(stage)
@@ -50,20 +51,15 @@ impl Event {
         stage: &str,
         worker_id: &str,
     ) -> Result<Event> {
-        let event = sqlx::query_as::<_, Event>(
-            r#"
-            INSERT INTO events (event_type, ticket_id, worker_id, stage)
-            VALUES ('ticket_stage_completed', ?1, ?2, ?3)
-            RETURNING id, event_type, ticket_id, worker_id, stage, reason, created_at, processed, resolution_summary
-        "#,
+        Self::create(
+            pool,
+            EventType::StageCompleted,
+            Some(ticket_id),
+            Some(worker_id),
+            Some(stage),
+            None,
         )
-        .bind(ticket_id)
-        .bind(worker_id)
-        .bind(stage)
-        .fetch_one(pool)
-        .await?;
-
-        Ok(event)
+        .await
     }
 
     pub async fn create_worker_stopped(
@@ -71,19 +67,15 @@ impl Event {
         worker_id: &str,
         reason: &str,
     ) -> Result<Event> {
-        let event = sqlx::query_as::<_, Event>(
-            r#"
-            INSERT INTO events (event_type, worker_id, reason)
-            VALUES ('worker_stopped', ?1, ?2)
-            RETURNING id, event_type, ticket_id, worker_id, stage, reason, created_at, processed, resolution_summary
-        "#,
+        Self::create(
+            pool,
+            EventType::WorkerStopped,
+            None,
+            Some(worker_id),
+            None,
+            Some(reason),
         )
-        .bind(worker_id)
-        .bind(reason)
-        .fetch_one(pool)
-        .await?;
-
-        Ok(event)
+        .await
     }
 
     pub async fn create_task_assigned(
@@ -91,19 +83,15 @@ impl Event {
         ticket_id: &str,
         queue_name: &str,
     ) -> Result<Event> {
-        let event = sqlx::query_as::<_, Event>(
-            r#"
-            INSERT INTO events (event_type, ticket_id, reason)
-            VALUES ('task_assigned', ?1, ?2)
-            RETURNING id, event_type, ticket_id, worker_id, stage, reason, created_at, processed, resolution_summary
-        "#,
+        Self::create(
+            pool,
+            EventType::TaskAssigned,
+            Some(ticket_id),
+            None,
+            None,
+            Some(queue_name),
         )
-        .bind(ticket_id)
-        .bind(queue_name)
-        .fetch_one(pool)
-        .await?;
-
-        Ok(event)
+        .await
     }
 
     pub async fn get_recent(pool: &DbPool, limit: i32) -> Result<Vec<Event>> {
@@ -111,7 +99,7 @@ impl Event {
             r#"
             SELECT id, event_type, ticket_id, worker_id, stage, reason, created_at, processed, resolution_summary
             FROM events
-            ORDER BY created_at DESC
+            ORDER BY id DESC
             LIMIT ?1
         "#,
         )
@@ -128,7 +116,7 @@ impl Event {
             SELECT id, event_type, ticket_id, worker_id, stage, reason, created_at, processed, resolution_summary
             FROM events
             WHERE processed = 0
-            ORDER BY created_at ASC
+            ORDER BY id ASC
         "#,
         )
         .fetch_all(pool)
@@ -144,7 +132,7 @@ impl Event {
                     SELECT id, event_type, ticket_id, worker_id, stage, reason, created_at, processed, resolution_summary
                     FROM events
                     WHERE processed = ?1
-                    ORDER BY created_at DESC
+                    ORDER BY id ASC
                 "#)
                 .bind(processed)
                 .fetch_all(pool)
@@ -154,7 +142,7 @@ impl Event {
                 sqlx::query_as::<_, Event>(r#"
                     SELECT id, event_type, ticket_id, worker_id, stage, reason, created_at, processed, resolution_summary
                     FROM events
-                    ORDER BY created_at DESC
+                    ORDER BY id ASC
                 "#)
                 .fetch_all(pool)
                 .await?
@@ -181,7 +169,7 @@ impl Event {
             SELECT id, event_type, ticket_id, worker_id, stage, reason, created_at, processed, resolution_summary
             FROM events
             WHERE id IN ({})
-            ORDER BY created_at DESC
+            ORDER BY id ASC
         "#,
             placeholders
         );

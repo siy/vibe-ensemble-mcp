@@ -22,13 +22,46 @@ pub enum EventType {
     TicketStageChanged,
     TicketClosed,
     TicketUnblocked,
-    WorkerSpawned,
-    WorkerFinished,
+    WorkerStarted,
+    WorkerCompleted,
     WorkerFailed,
+    WorkerStopped,
+    WorkerTypeCreated,
+    WorkerTypeUpdated,
+    WorkerTypeDeleted,
+    ProjectCreated,
+    StageCompleted,
+    TaskAssigned,
     QueueUpdated,
     SystemInit,
     SystemMessage,
     EndpointDiscovery,
+}
+
+impl std::fmt::Display for EventType {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            EventType::TicketCreated => write!(f, "ticket_created"),
+            EventType::TicketUpdated => write!(f, "ticket_updated"),
+            EventType::TicketStageChanged => write!(f, "ticket_stage_updated"),
+            EventType::TicketClosed => write!(f, "ticket_closed"),
+            EventType::TicketUnblocked => write!(f, "ticket_unblocked"),
+            EventType::WorkerStarted => write!(f, "worker_started"),
+            EventType::WorkerCompleted => write!(f, "worker_completed"),
+            EventType::WorkerFailed => write!(f, "worker_failed"),
+            EventType::WorkerStopped => write!(f, "worker_stopped"),
+            EventType::WorkerTypeCreated => write!(f, "worker_type_created"),
+            EventType::WorkerTypeUpdated => write!(f, "worker_type_updated"),
+            EventType::WorkerTypeDeleted => write!(f, "worker_type_deleted"),
+            EventType::ProjectCreated => write!(f, "project_created"),
+            EventType::StageCompleted => write!(f, "stage_completed"),
+            EventType::TaskAssigned => write!(f, "task_assigned"),
+            EventType::QueueUpdated => write!(f, "queue_updated"),
+            EventType::SystemInit => write!(f, "system_init"),
+            EventType::SystemMessage => write!(f, "system_message"),
+            EventType::EndpointDiscovery => write!(f, "endpoint_discovery"),
+        }
+    }
 }
 
 /// Event data - strongly typed per event type
@@ -177,7 +210,7 @@ impl EventPayload {
     /// Create a worker spawned event
     pub fn worker_spawned(worker_id: &str, worker_type: &str, project_id: &str) -> Self {
         Self {
-            event_type: EventType::WorkerSpawned,
+            event_type: EventType::WorkerStarted,
             timestamp: Utc::now(),
             data: EventData::Worker(WorkerEventData {
                 worker_id: worker_id.to_string(),
@@ -191,7 +224,7 @@ impl EventPayload {
     /// Create a worker started event
     pub fn worker_started(worker_id: &str, worker_type: &str, project_id: &str) -> Self {
         Self {
-            event_type: EventType::WorkerSpawned,
+            event_type: EventType::WorkerStarted,
             timestamp: Utc::now(),
             data: EventData::Worker(WorkerEventData {
                 worker_id: worker_id.to_string(),
@@ -205,7 +238,7 @@ impl EventPayload {
     /// Create a worker completed event
     pub fn worker_completed(worker_id: &str, worker_type: &str, project_id: &str) -> Self {
         Self {
-            event_type: EventType::WorkerFinished,
+            event_type: EventType::WorkerCompleted,
             timestamp: Utc::now(),
             data: EventData::Worker(WorkerEventData {
                 worker_id: worker_id.to_string(),
@@ -286,6 +319,125 @@ impl EventPayload {
                 metadata: Some(serde_json::json!({
                     "http": http_url,
                     "sse": sse_url
+                })),
+            }),
+        }
+    }
+
+    /// Create a worker stopped event
+    pub fn worker_stopped(worker_id: &str, reason: &str) -> Self {
+        Self {
+            event_type: EventType::WorkerStopped,
+            timestamp: Utc::now(),
+            data: EventData::Worker(WorkerEventData {
+                worker_id: worker_id.to_string(),
+                worker_type: "unknown".to_string(),
+                project_id: "unknown".to_string(),
+                status: reason.to_string(),
+            }),
+        }
+    }
+
+    /// Create a worker type created event
+    pub fn worker_type_created(project_id: &str, worker_type: &str) -> Self {
+        Self {
+            event_type: EventType::WorkerTypeCreated,
+            timestamp: Utc::now(),
+            data: EventData::System(SystemEventData {
+                component: "worker_type".to_string(),
+                message: format!(
+                    "Worker type '{}' created in project '{}'",
+                    worker_type, project_id
+                ),
+                metadata: Some(serde_json::json!({
+                    "project_id": project_id,
+                    "worker_type": worker_type
+                })),
+            }),
+        }
+    }
+
+    /// Create a worker type updated event
+    pub fn worker_type_updated(project_id: &str, worker_type: &str) -> Self {
+        Self {
+            event_type: EventType::WorkerTypeUpdated,
+            timestamp: Utc::now(),
+            data: EventData::System(SystemEventData {
+                component: "worker_type".to_string(),
+                message: format!(
+                    "Worker type '{}' updated in project '{}'",
+                    worker_type, project_id
+                ),
+                metadata: Some(serde_json::json!({
+                    "project_id": project_id,
+                    "worker_type": worker_type
+                })),
+            }),
+        }
+    }
+
+    /// Create a worker type deleted event
+    pub fn worker_type_deleted(project_id: &str, worker_type: &str) -> Self {
+        Self {
+            event_type: EventType::WorkerTypeDeleted,
+            timestamp: Utc::now(),
+            data: EventData::System(SystemEventData {
+                component: "worker_type".to_string(),
+                message: format!(
+                    "Worker type '{}' deleted from project '{}'",
+                    worker_type, project_id
+                ),
+                metadata: Some(serde_json::json!({
+                    "project_id": project_id,
+                    "worker_type": worker_type
+                })),
+            }),
+        }
+    }
+
+    /// Create a project created event
+    pub fn project_created(project_id: &str) -> Self {
+        Self {
+            event_type: EventType::ProjectCreated,
+            timestamp: Utc::now(),
+            data: EventData::System(SystemEventData {
+                component: "project".to_string(),
+                message: format!("Project '{}' created", project_id),
+                metadata: Some(serde_json::json!({
+                    "project_id": project_id
+                })),
+            }),
+        }
+    }
+
+    /// Create a stage completed event
+    pub fn stage_completed(ticket_id: &str, stage: &str, worker_id: &str) -> Self {
+        Self {
+            event_type: EventType::StageCompleted,
+            timestamp: Utc::now(),
+            data: EventData::System(SystemEventData {
+                component: "stage".to_string(),
+                message: format!("Stage '{}' completed for ticket '{}'", stage, ticket_id),
+                metadata: Some(serde_json::json!({
+                    "ticket_id": ticket_id,
+                    "stage": stage,
+                    "worker_id": worker_id
+                })),
+            }),
+        }
+    }
+
+    /// Create a task assigned event
+    pub fn task_assigned(ticket_id: &str, queue_name: &str) -> Self {
+        Self {
+            event_type: EventType::TaskAssigned,
+            timestamp: Utc::now(),
+            data: EventData::System(SystemEventData {
+                component: "queue".to_string(),
+                message: format!("Task assigned to queue '{}'", queue_name),
+                metadata: Some(serde_json::json!({
+                    "ticket_id": ticket_id,
+                    "queue_name": queue_name
                 })),
             }),
         }
