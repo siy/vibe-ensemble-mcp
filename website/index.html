@@ -189,26 +189,41 @@
 
     .command-tabs {
       display: flex;
-      gap: 0.5rem;
-      margin-bottom: 1.5rem;
+      gap: 0;
+      margin-bottom: 0;
+      border-bottom: 1px solid rgba(255,255,255,0.1);
     }
 
     .command-tab {
-      background: rgba(255,255,255,0.1);
-      color: white;
+      background: rgba(255,255,255,0.05);
+      color: rgba(255,255,255,0.7);
       padding: 0.75rem 1.5rem;
-      border: 0;
+      border: 1px solid rgba(255,255,255,0.1);
+      border-bottom: none;
       cursor: pointer;
       font-weight: 500;
-      border-radius: 8px;
+      border-radius: 8px 8px 0 0;
       transition: all 0.2s ease;
       backdrop-filter: blur(10px);
+      position: relative;
+      margin-right: 2px;
     }
 
-    .command-tab.active,
-    .command-tab:hover {
-      background: var(--primary);
-      transform: translateY(-1px);
+    .command-tab:last-child {
+      margin-right: 0;
+    }
+
+    .command-tab.active {
+      background: #1a1a1a;
+      color: #e6e6e6;
+      border-color: rgba(255,255,255,0.1);
+      border-bottom: 1px solid #1a1a1a;
+      z-index: 1;
+    }
+
+    .command-tab:hover:not(.active) {
+      background: rgba(255,255,255,0.1);
+      color: white;
     }
 
     .command-content { display: none; }
@@ -225,6 +240,12 @@
       font-size: 0.9rem;
       position: relative;
       border: 1px solid rgba(255,255,255,0.1);
+    }
+
+    .command-content .code-block {
+      border-radius: 0 8px 8px 8px;
+      margin: 0 0 1rem 0;
+      border-top: none;
     }
 
     .copy-btn {
@@ -490,14 +511,14 @@
 
         <div id="install-unix" class="command-content active">
           <div class="code-block">
-            <button class="copy-btn" onclick="copyToClipboard('curl -fsSL https://vibeensemble.dev/install.sh | sh', this)">Copy</button>
+            <button class="copy-btn" onclick="copyToClipboard('curl -fsSL https://vibeensemble.dev/install.sh | sh', this)">📋</button>
 curl -fsSL https://vibeensemble.dev/install.sh | sh
           </div>
         </div>
 
         <div id="install-windows" class="command-content">
           <div class="code-block">
-            <button class="copy-btn" onclick="copyToClipboard('iwr -useb https://vibeensemble.dev/install.ps1 | iex', this)">Copy</button>
+            <button class="copy-btn" onclick="copyToClipboard('iwr -useb https://vibeensemble.dev/install.ps1 | iex', this)">📋</button>
 iwr -useb https://vibeensemble.dev/install.ps1 | iex
           </div>
         </div>
@@ -507,21 +528,31 @@ iwr -useb https://vibeensemble.dev/install.ps1 | iex
         <h3 style="color:white; margin-top:1rem;">Setup Steps</h3>
         <p><strong>Step 1:</strong> Start the server (create a separate directory for the server)</p>
         <div class="code-block">
-          <button class="copy-btn" onclick="copyToClipboard('mkdir vibe-server && cd vibe-server && vibe-ensemble-mcp', this)">Copy</button>
+          <button class="copy-btn" onclick="copyToClipboard('mkdir vibe-server && cd vibe-server && vibe-ensemble-mcp', this)">📋</button>
 mkdir vibe-server && cd vibe-server && vibe-ensemble-mcp
         </div>
         <p><strong>Step 2:</strong> Configure Claude Code (in a separate coordinator directory)</p>
         <div class="code-block">
-          <button class="copy-btn" onclick="copyToClipboard('mkdir vibe-coordinator && cd vibe-coordinator && vibe-ensemble-mcp --configure-claude-code', this)">Copy</button>
+          <button class="copy-btn" onclick="copyToClipboard('mkdir vibe-coordinator && cd vibe-coordinator && vibe-ensemble-mcp --configure-claude-code', this)">📋</button>
 mkdir vibe-coordinator && cd vibe-coordinator && vibe-ensemble-mcp --configure-claude-code
         </div>
-        <p>This creates coordinator commands: <code>/vibe-ensemble</code>, <code>/vibe-events</code>, <code>/vibe-status</code></p>
+        <p>This creates coordinator commands: <code>/vibe-ensemble</code>, <code>/vibe-events</code>, <code>/vibe-status</code>, <code>/vibe-poll</code></p>
         <p><strong>Step 3:</strong> Start Claude Code in the coordinator directory and run commands</p>
         <div class="code-block">
-          <button class="copy-btn" onclick="copyToClipboard('/vibe-ensemble', this)">Copy</button>
+          <button class="copy-btn" onclick="copyToClipboard('/vibe-ensemble', this)">📋</button>
 /vibe-ensemble  # Initialize as coordinator
-/vibe-events    # Process realtime IDE events
+        </div>
+        <div class="code-block">
+          <button class="copy-btn" onclick="copyToClipboard('/vibe-events', this)">📋</button>
+/vibe-events    # Process realtime events
+        </div>
+        <div class="code-block">
+          <button class="copy-btn" onclick="copyToClipboard('/vibe-status', this)">📋</button>
 /vibe-status    # Get project status reports
+        </div>
+        <div class="code-block">
+          <button class="copy-btn" onclick="copyToClipboard('/vibe-poll', this)">📋</button>
+/vibe-poll      # Continuous monitoring until completion
         </div>
       </div>
     </div>
