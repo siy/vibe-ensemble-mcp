@@ -81,13 +81,12 @@ Once the server is running and Claude Code is configured, here's the typical wor
 
 1. **Start Claude Code**: Open Claude Code in your coordinator directory and run the `/vibe-ensemble` command to initialize as a coordinator
 2. **Create Project**: Write a prompt describing your intended project and answer the coordinator's questions about scope and requirements
-3. **Monitor Progress**: Use commands `/vibe-events` and `/vibe-status` to process events generated during project execution and check process status.
+3. **Monitor Progress**: Use commands `/vibe-events`, `/vibe-poll` and `/vibe-status` to process events generated during project execution and check process status.
 
 The coordinator will break down your project into tickets, spawn appropriate workers for each stage, and manage the workflow automatically.
 
-**WARNING:** Vibe-Ensemble is still a work in progress. Some features may not be fully implemented or may have bugs. So, 
-periodically ask Claude Code to check ticket status and event queue. Sometimes it may report issues, but not address them.
-Sending prompt like "Act as a coordinator" usually helps.
+**WARNING:** Vibe-Ensemble is still a work in progress. Some features may not be fully implemented or may have bugs. Sometimes coordinator may report issues, but not address them.
+Prompting it with something like "Act as a coordinator" usually helps.
 
 **SECURITY WARNING:** Always review and test permission configurations before production use. While the permission system is designed to be secure, proper configuration is essential. Use 'bypass' mode only in isolated development environments as it grants unrestricted access. For production use, the default 'file' mode provides explicit permission control.
 
@@ -111,8 +110,7 @@ Each worker operates independently with their specialized knowledge, ensuring fo
 
 - **🚀 Zero Configuration**: Auto-setup with `--configure-claude-code`
 - **🔄 Automatic Handoffs**: Workers complete stages and trigger next steps
-- **📊 Event Tracking**: Progress tracking via Server-Sent Events (real-time updates WIP)
-- **🎨 Custom Workers**: Define workers for any domain (coding, design, analysis, etc.)
+- **🎨 Custom Workers**: Worker templates are completely externalized, you can tune them to your needs and standards
 - **💬 Detailed Reporting**: Every stage produces comprehensive progress reports
 - **⚡ Robust Processing**: Handles failures gracefully with retry mechanisms
 - **📋 Project Rules & Patterns**: Define coding standards and project conventions that workers automatically follow
@@ -166,13 +164,11 @@ Vibe-Ensemble provides 28 MCP tools organized into seven categories:
 
 > **Note on Worker Management**: Workers are automatically spawned when tickets are assigned to stages. There are no explicit worker spawn/stop tools - the queue system handles worker lifecycle automatically based on workload.
 
-> **Note on WebSocket Infrastructure**: WebSocket server infrastructure is available for real-time communication and authentication, but WebSocket MCP tools have been removed to focus on core multi-agent coordination functionality.
-
 ## Requirements
 
 - Rust 1.70+ (for building from source)
 - SQLite (embedded, no separate installation needed)
-- Claude Code (for worker processes)
+- Claude Code (for coordinator and worker processes)
 
 ## Configuration
 
@@ -187,8 +183,6 @@ The server accepts the following command-line options:
 - `--no-respawn`: Disable automatic respawning of workers on startup
 - `--client-tool-timeout-secs`: Timeout for client tool calls in seconds (default: `30`)
 - `--max-concurrent-client-requests`: Maximum concurrent client requests (default: `50`)
-
-> **Note**: WebSocket transport is always enabled for infrastructure communication, but WebSocket MCP tools have been removed.
 
 ## Permission System
 
@@ -209,7 +203,6 @@ vibe-ensemble-mcp --permission-mode file
 # or simply (default)
 vibe-ensemble-mcp
 ```
-
 
 #### 2. **Bypass Mode** (`--permission-mode bypass`)
 - **Use Case**: Development, testing, or when you need unrestricted access
@@ -269,6 +262,7 @@ All permission modes use the same JSON structure that Claude Code uses internall
 
 ### Setting Up Permissions
 
+> **Note**: Complete permission examples are available in the source code at [docs/](https://github.com/siy/vibe-ensemble-mcp/tree/main/docs) directory. The `cp` commands below require access to the source repository.
 
 #### For File Mode (Advanced)
 
