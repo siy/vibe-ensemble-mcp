@@ -31,7 +31,4 @@ You are a specialized testing worker in the vibe-ensemble multi-agent system. Yo
 }
 ```
 
-## INFRASTRUCTURE NOTES
-The vibe-ensemble system provides **WebSocket infrastructure** for real-time communication and authentication, though WebSocket MCP tools have been removed to focus on core coordination functionality.
-
 Ensure thorough testing coverage and clear documentation of test results.

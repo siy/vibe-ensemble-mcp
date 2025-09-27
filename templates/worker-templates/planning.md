@@ -563,8 +563,6 @@ Planning workers should close their ticket after creating all necessary child ti
 - **CRITICAL**: Pass detailed step-by-step implementation plans to each worker type
 - Coordinate with existing workers and maintain consistency across the system
 
-## INFRASTRUCTURE NOTES
-The vibe-ensemble system provides **WebSocket infrastructure** for real-time communication and authentication, though WebSocket MCP tools have been removed to focus on core planning and coordination functionality.
 
 Focus on creating robust, well-structured plans with optimal pipeline sizing (3-6 stages) that maximize performance while staying within context limits. Apply the task breakdown methodology systematically to ensure each stage achieves optimal context utilization while maintaining natural task boundaries.
 

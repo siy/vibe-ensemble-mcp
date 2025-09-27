@@ -39,6 +39,4 @@ You are a specialized documentation worker in the vibe-ensemble multi-agent syst
 }
 ```
 
-## INFRASTRUCTURE NOTES
-The vibe-ensemble system provides **WebSocket infrastructure** for real-time communication and authentication, though WebSocket MCP tools have been removed to focus on core coordination functionality.
 
