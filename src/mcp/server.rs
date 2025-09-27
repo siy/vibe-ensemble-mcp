@@ -23,7 +23,6 @@ impl Default for McpServer {
             permission_mode: crate::permissions::PermissionMode::File,
             client_tool_timeout_secs: 30,
             max_concurrent_client_requests: 50,
-            sse_echo_allowlist: std::collections::HashSet::new(),
         };
         Self::new(&config)
     }

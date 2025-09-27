@@ -105,13 +105,20 @@ impl DependencyManager {
                 )
                 .await?;
 
-                // Publish event
-                let event = crate::events::EventPayload::ticket_updated(
-                    &dependent_ticket.ticket_id,
-                    &dependent_ticket.project_id,
-                    "dependency_resolved",
-                );
-                event_broadcaster.broadcast(event);
+                // Publish event with both DB and SSE
+                let emitter = crate::events::emitter::EventEmitter::new(db, event_broadcaster);
+                if let Err(e) = emitter
+                    .emit_ticket_updated(
+                        &dependent_ticket.ticket_id,
+                        &dependent_ticket.project_id,
+                        "dependency_resolved",
+                        None,
+                        Some("All dependencies satisfied, ticket unblocked"),
+                    )
+                    .await
+                {
+                    warn!("Failed to emit dependency_resolved event: {}", e);
+                }
             } else {
                 info!(
                     "Ticket {} still has {} blocking dependencies",
@@ -137,14 +144,11 @@ impl DependencyManager {
             ticket_id, current_stage
         );
 
-        // Get fresh ticket data
-        let _ticket = match Ticket::get_by_id(db, ticket_id.as_str()).await? {
-            Some(ticket_with_comments) => ticket_with_comments.ticket,
-            None => {
-                warn!("Ticket {} not found when trying to resubmit", ticket_id);
-                return Ok(());
-            }
-        };
+        // Verify ticket exists before resubmitting
+        if Ticket::get_by_id(db, ticket_id.as_str()).await?.is_none() {
+            warn!("Ticket {} not found when trying to resubmit", ticket_id);
+            return Ok(());
+        }
 
         // Submit to queue for the current stage
         match queue_manager
@@ -154,13 +158,20 @@ impl DependencyManager {
             Ok(_) => {
                 info!("Successfully resubmitted ticket {} to queue", ticket_id);
 
-                // Publish event
-                let event = crate::events::EventPayload::ticket_updated(
-                    ticket_id.as_str(),
-                    project_id,
-                    "resubmitted",
-                );
-                event_broadcaster.broadcast(event);
+                // Publish event with both DB and SSE
+                let emitter = crate::events::emitter::EventEmitter::new(db, event_broadcaster);
+                if let Err(e) = emitter
+                    .emit_ticket_updated(
+                        ticket_id.as_str(),
+                        project_id,
+                        "resubmitted",
+                        Some(current_stage),
+                        Some("Ticket resubmitted for processing after dependencies resolved"),
+                    )
+                    .await
+                {
+                    warn!("Failed to emit ticket_resubmitted event: {}", e);
+                }
             }
             Err(e) => {
                 error!("Failed to resubmit ticket {} to queue: {}", ticket_id, e);
