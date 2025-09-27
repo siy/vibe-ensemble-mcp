@@ -192,56 +192,60 @@ Frontend Impl: ["frontend_implementation", "frontend_testing"]
 Frontend Test: ["frontend_testing"]  // CONFLICT - both claim "frontend_testing"!
 ```
 
-### Dependency vs Pipeline Decision Framework
+### Implementation Workflow Decision Framework
 
-**When planning implementation→testing workflows, choose ONE pattern consistently:**
+**🚨 CRITICAL PRIORITY: Implementation→Review is the DEFAULT workflow pattern**
 
-#### **Pattern 1: Separate Tickets + Dependencies (Recommended for Complex Testing)**
+#### **Pattern 1: Implementation→Review Pipeline (DEFAULT - Required for All Non-Simple Tasks)**
 ```javascript
-// Clean separation with unique stages
-Implementation Ticket: ["frontend_implementation"] // Closes when complete
-Testing Ticket: ["frontend_testing"]               // Separate ticket, dependency-blocked
-Dependency: Implementation blocks Testing
+// Single ticket progresses through implementation → review loop (PREFERRED)
+Quality Ticket: ["frontend_implementation", "frontend_review"]
+// Implementation stage transitions to review stage
+// Review stage can use `prev_stage` to return to implementation for fixes
+// Review stage uses `next_stage` to approve and continue
 
-✅ Advantages: Independent testing lifecycle, complex test suites, parallel testing tracks
-✅ Use when: Testing is substantial, requires different expertise, has independent lifecycle
+✅ Advantages: Quality gates, review/fix loop, maintains code standards, integrated workflow
+✅ Use when: DEFAULT for all tasks except simple utilities/configs (95% of cases)
+⚠️ MANDATORY for: All code changes, API implementations, business logic, UI components
 ```
 
-#### **Pattern 2: Single Ticket Pipeline (Recommended for Simple Testing)**
+#### **Pattern 2: Implementation→Testing Pipeline (ONLY for Simple Tasks)**
 ```javascript
-// One ticket progresses through multiple stages
-Complete Ticket: ["frontend_implementation", "frontend_testing"] // One ticket responsibility
-// No dependencies needed - single ticket ownership
+// Single ticket progresses directly to testing (LIMITED USE)
+Simple Ticket: ["utility_implementation", "utility_testing"]
+// Use ONLY when review adds no value
 
-✅ Advantages: Simpler coordination, integrated workflow, less overhead
-✅ Use when: Testing is straightforward part of implementation, same expertise domain
+⚠️ LIMITED USE: Only for trivial utilities, simple configs, documentation-only changes
+✅ Use when: Task is simple enough that review would add no meaningful value
+❌ AVOID for: Any substantial code, APIs, business logic, UI, or complex functionality
 ```
 
-#### **Pattern 3: Parallel Independent Tracks (For True Parallelism)**
+#### **Pattern 3: Implementation→Review→Testing Pipeline (Comprehensive Quality)**
 ```javascript
-// Independent development tracks
-Frontend Ticket: ["frontend_impl", "frontend_test"] // Independent lifecycle
-Backend Ticket: ["backend_impl", "backend_test"]    // Independent lifecycle
-// No cross-dependencies - truly parallel execution
+// Full quality pipeline for complex/critical implementations
+Critical Ticket: ["backend_implementation", "backend_review", "backend_testing"]
+// Implementation → Review (with fix loop) → Testing (validation)
 
-✅ Advantages: Maximum parallelism, independent release cycles
-✅ Use when: Components are truly independent, no integration dependencies
+✅ Advantages: Maximum quality assurance, comprehensive validation
+✅ Use when: Critical systems, complex business logic, security-sensitive code
+✅ Recommended for: Core APIs, authentication, payment processing, data handling
 ```
 
-### Implementation→Review Pattern (MANDATORY for Quality Gates)
+### Implementation→Review Pattern Details (DEFAULT WORKFLOW)
 
-**When planning implementation→review workflows, use the sequential pipeline pattern:**
+**Implementation→Review is the standard workflow for all meaningful development tasks:**
 
-#### **Recommended: Single Ticket Sequential Pipeline**
+#### **Standard Single Ticket Sequential Pipeline**
 ```javascript
-// Single ticket progresses through implementation → review loop
+// Single ticket progresses through implementation → review loop (STANDARD PATTERN)
 Quality Ticket: ["frontend_implementation", "frontend_review"]
 // Implementation stage transitions to review stage
 // Review stage can use `prev_stage` to return to implementation for fixes
 // Review stage uses `next_stage` to approve and continue
 
 ✅ Advantages: Enables review/fix loop, maintains quality gates, integrated workflow
-✅ Use when: Quality assurance is required (recommended for all code changes)
+✅ Use when: DEFAULT - All development tasks except trivial utilities
+🚨 MANDATORY for: Code changes, APIs, business logic, UI components, configurations
 ```
 
 #### **Implementation→Review Loop Behavior:**
@@ -286,7 +290,7 @@ deployment_prep         | Deployment Ticket         | deployment
 - [ ] No two tickets share the same stage name
 - [ ] Dependencies don't create circular workflows
 - [ ] Each stage has a corresponding worker type planned
-- [ ] Implementation→testing pattern is consistent throughout
+- [ ] Implementation→review pattern used as default (implementation→testing only for simple tasks)
 
 #### **Step 3: Pipeline Logic Validation**
 **Avoid Circular Dependency Logic:**
@@ -308,42 +312,61 @@ Dependency: Implementation blocks Testing    // Clear handoff
 #### **Anti-Pattern 1: Stage Name Conflicts**
 ```javascript
 ❌ DON'T DO THIS:
-Frontend Implementation: ["frontend_implementation", "frontend_testing"]
-Frontend Testing: ["frontend_testing"] // CONFLICT!
-Dependency: Implementation → Testing
+Frontend Implementation: ["frontend_implementation", "frontend_review"]
+Frontend Review: ["frontend_review"] // CONFLICT!
+Dependency: Implementation → Review
 
-✅ DO THIS INSTEAD:
+✅ DO THIS INSTEAD (Preferred - Default Pattern):
+Frontend Quality: ["frontend_implementation", "frontend_review"] // Single ticket with review loop
+// No dependencies needed - implementation flows to review
+
+✅ DO THIS INSTEAD (Alternative - Separate Tickets):
 Frontend Implementation: ["frontend_implementation"] // Closes when complete
-Frontend Testing: ["frontend_test_execution"]       // Unique stage name
-Dependency: Implementation → Testing
+Frontend Review: ["frontend_review_process"]         // Unique stage name
+Dependency: Implementation → Review
 ```
 
 #### **Anti-Pattern 2: Dependency + Pipeline Contradiction**
 ```javascript
 ❌ DON'T DO THIS:
-Backend Dev: ["backend_dev", "backend_testing"] // Claims testing stage
-Backend Test: ["backend_testing"]               // Also claims testing stage
-Dependency: Backend Dev → Backend Test          // Contradiction!
+Backend Dev: ["backend_dev", "backend_review"] // Claims review stage
+Backend Review: ["backend_review"]             // Also claims review stage
+Dependency: Backend Dev → Backend Review       // Contradiction!
 
-✅ DO THIS INSTEAD (Option A - Separate):
-Backend Dev: ["backend_development"]    // Unique stage
-Backend Test: ["backend_test_suite"]    // Unique stage
-Dependency: Backend Dev → Backend Test
+✅ DO THIS INSTEAD (Preferred - Default Pattern):
+Backend Quality: ["backend_implementation", "backend_review"] // Single ticket with review loop
+// No dependencies needed - enables implementation/review iteration
 
-✅ DO THIS INSTEAD (Option B - Single):
-Backend Complete: ["backend_development", "backend_testing"] // Single ticket
-// No dependencies needed
+✅ DO THIS INSTEAD (Alternative - Separate):
+Backend Dev: ["backend_development"]      // Unique stage
+Backend Review: ["backend_review_check"]  // Unique stage
+Dependency: Backend Dev → Backend Review
 ```
 
 #### **Anti-Pattern 3: Generic Stage Names**
 ```javascript
 ❌ DON'T DO THIS:
-Ticket A: ["setup", "implementation", "testing"]    // Generic names
-Ticket B: ["setup", "implementation", "testing"]    // Conflicts everywhere!
+Ticket A: ["setup", "implementation", "review"]    // Generic names
+Ticket B: ["setup", "implementation", "review"]    // Conflicts everywhere!
 
-✅ DO THIS INSTEAD:
-Frontend Ticket: ["frontend_setup", "frontend_impl", "frontend_test"]
-Backend Ticket: ["backend_setup", "backend_impl", "backend_test"]
+✅ DO THIS INSTEAD (Using Default Implementation→Review Pattern):
+Frontend Ticket: ["frontend_setup", "frontend_implementation", "frontend_review"]
+Backend Ticket: ["backend_setup", "backend_implementation", "backend_review"]
+```
+
+#### **Anti-Pattern 4: Skipping Review for Complex Tasks**
+```javascript
+❌ DON'T DO THIS:
+API Development: ["api_implementation", "api_testing"] // Missing review!
+Business Logic: ["logic_implementation", "logic_testing"] // No quality gate!
+
+✅ DO THIS INSTEAD (Mandatory Review):
+API Development: ["api_implementation", "api_review", "api_testing"] // Quality gate included
+Business Logic: ["logic_implementation", "logic_review"] // Review ensures quality
+
+⚠️ ONLY SKIP REVIEW FOR:
+Simple Utility: ["util_implementation", "util_testing"] // Trivial utility functions only
+Documentation: ["docs_writing", "docs_testing"] // Documentation-only changes
 ```
 
 ### Stage Conflict Recovery Guidance
@@ -439,7 +462,8 @@ Planning breakdown: ["backend_setup", "frontend_development", "integration_testi
 - [ ] Dependencies properly isolated
 - [ ] **🚨 Stage ownership matrix created with no conflicts**
 - [ ] **🚨 All stage names unique across entire project**
-- [ ] **🚨 Implementation→testing pattern chosen consistently**
+- [ ] **🚨 Implementation→review pattern used as default (implementation→testing only for simple tasks)**
+- [ ] **🚨 Review is mandatory for all non-trivial tasks (APIs, business logic, UI, configurations)**
 - [ ] **🚨 No circular dependency logic created**
 - [ ] **Scope boundaries clearly defined to prevent conflicts**
 - [ ] **Interface contracts established between tasks**
@@ -463,6 +487,45 @@ Take action when:
 - Stage transitions fail repeatedly
 - Quality deliverables don't meet standards
 - Performance requirements not achieved
+
+## 🚨 MANDATORY REVIEW REQUIREMENTS
+
+### Review is REQUIRED for All Non-Simple Tasks
+
+**MANDATORY REVIEW (Must include implementation→review pattern):**
+- **All Code Changes**: APIs, business logic, data handling, algorithms
+- **UI Components**: User interface elements, styling, interactions
+- **Configuration Changes**: Application configs, environment settings, deployment configs
+- **Database Changes**: Schema modifications, migrations, data access patterns
+- **Security-Related Code**: Authentication, authorization, encryption, validation
+- **Integration Code**: External APIs, third-party services, internal service calls
+- **Performance-Critical Code**: Optimization targets, resource-intensive operations
+
+**REVIEW OPTIONAL (Can use implementation→testing for simple cases):**
+- **Trivial Utilities**: Simple helper functions with no business logic
+- **Documentation Only**: Pure documentation changes with no code impact
+- **Basic Configuration**: Simple environment variable additions
+- **Test Data**: Mock data, test fixtures (unless complex business logic involved)
+
+**🚨 CRITICAL RULE: When in doubt, include review. Err on the side of quality assurance.**
+
+### Implementation→Review Decision Matrix
+
+| Task Complexity | Business Impact | Security Risk | Review Required |
+|------------------|-----------------|---------------|-----------------|
+| High | Any | Any | ✅ MANDATORY |
+| Medium | High/Medium | Any | ✅ MANDATORY |
+| Medium | Low | High/Medium | ✅ MANDATORY |
+| Low | Any | High/Medium | ✅ MANDATORY |
+| Low | Low | Low | ⚠️ OPTIONAL |
+
+**Examples of Low/Low/Low (Review Optional):**
+- Adding a simple console.log statement
+- Creating basic test mock data
+- Adding a simple utility function like `capitalize(string)`
+- Pure documentation updates
+
+**All other cases require review.**
 
 ## JSON OUTPUT FORMAT
 Planning workers should close their ticket after creating all necessary child tickets:
