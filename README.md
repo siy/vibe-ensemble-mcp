@@ -181,7 +181,7 @@ The server accepts the following command-line options:
 - `--configure-claude-code`: Generate Claude Code integration files and exit
 - `--database-path`: SQLite database file path (default: `./.vibe-ensemble-mcp/vibe-ensemble.db`)
 - `--host`: Server bind address (default: `127.0.0.1`)
-- `--port`: Server port (default: `3000`)
+- `--port`: Server port (default: `3276`)
 - `--log-level`: Log level (default: `info`)
 - `--permission-mode`: Permission mode for workers (default: `file`)
 - `--no-respawn`: Disable automatic respawning of workers on startup
@@ -442,13 +442,13 @@ The server provides WebSocket support for:
 
 1. **Configure with WebSocket Support**:
    ```bash
-   ./vibe-ensemble-mcp --configure-claude-code --host 127.0.0.1 --port 3000
+   ./vibe-ensemble-mcp --configure-claude-code --host 127.0.0.1 --port 3276
    ```
    This generates WebSocket authentication tokens and configuration.
 
 2. **Start Server** (WebSocket enabled by default):
    ```bash
-   ./vibe-ensemble-mcp --port 3000
+   ./vibe-ensemble-mcp --port 3276
    ```
 
 3. **Monitor Progress**:

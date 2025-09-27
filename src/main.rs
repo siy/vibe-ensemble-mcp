@@ -24,7 +24,7 @@ struct Args {
     host: String,
 
     /// Server port
-    #[arg(long, default_value = "3000")]
+    #[arg(long, default_value = "3276")]
     port: u16,
 
     /// Log level

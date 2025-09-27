@@ -30,7 +30,7 @@ We welcome contributions to the Vibe Ensemble MCP Server! This document provides
 
 4. Start the development server:
    ```bash
-   cargo run -- --port 3000 --log-level debug
+   cargo run -- --port 3276 --log-level debug
    ```
 
 ## Code Style

@@ -40,44 +40,13 @@ pub async fn configure_claude_code(
     create_coordinator_commands().await?;
     create_worker_templates().await?;
 
-    // Note: WebSocket token file is no longer needed and not generated
-
-    // Note: Worker permissions are now generated per-project during project creation
-    // to support project-specific permission isolation
-
-    println!("✅ Claude Code integration configured successfully!");
-    println!("📁 Configuration completed with preservation of existing customizations:");
-    println!("📄 Updated existing file:");
-    println!(
-        "  - ~/.claude/ide/{}.lock (added current workspace folder)",
-        port
-    );
+    println!("Claude Code integration configured successfully!");
 
     if permission_mode == PermissionMode::File {
         println!(
             "📝 Note: Worker permissions will be generated automatically when creating projects"
         );
     }
-
-    println!();
-    println!("📝 Configuration Preservation:");
-    println!("  • Existing files are preserved with customizations intact");
-    println!("  • Only .mcp.json port configuration is updated when changed");
-    println!("  • Missing files are created with default templates");
-    println!();
-    println!("🚀 To use with Claude Code:");
-    println!(
-        "  1. Start the vibe-ensemble server: vibe-ensemble-mcp --host {} --port {} --permission-mode {}",
-        host, port, permission_mode.as_str()
-    );
-    println!("  2. Open Claude Code in this directory");
-    println!("  3. Run the 'vibe-ensemble' command to initialize as coordinator");
-    println!();
-    println!("🔄 Real-Time Communication Features:");
-    println!("  • WebSocket transport enabled for real-time event streaming");
-    println!("  • JSON-RPC notifications for instant coordination");
-    println!("  • 28 MCP tools for comprehensive project coordination");
-    println!("  • Server-Sent Events (SSE) and WebSocket event broadcasting");
 
     Ok(())
 }

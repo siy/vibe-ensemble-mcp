@@ -195,7 +195,7 @@ main() {
     echo ""
     print_success "Installation complete!"
     print_status "You can now run: ${BINARY_NAME} --help"
-    print_status "To start the server: ${BINARY_NAME} --port 3000"
+    print_status "To start the server: ${BINARY_NAME} --port 3276"
     echo ""
     print_status "Documentation: https://github.com/${REPO}"
     echo ""
