@@ -381,16 +381,16 @@ impl<'a> EventEmitter<'a> {
     ) -> Result<()> {
         // Create DB event
         let message = format!(
-            "Worker {} started for project {}",
-            worker_id, project_id
+            "Worker {} ({}) started for project {}",
+            worker_id, worker_type, project_id
         );
         Event::create(
             self.db,
             EventType::WorkerStarted,
             None,
             Some(worker_id),
-            Some(worker_type),
-            Some(message.as_str()),
+            None, // stage is not applicable for worker events
+            Some(&message),
         )
         .await?;
 
@@ -423,16 +423,16 @@ impl<'a> EventEmitter<'a> {
     ) -> Result<()> {
         // Create DB event
         let message = format!(
-            "Worker {} completed for project {}",
-            worker_id, project_id
+            "Worker {} ({}) completed for project {}",
+            worker_id, worker_type, project_id
         );
         Event::create(
             self.db,
             EventType::WorkerCompleted,
             None,
             Some(worker_id),
-            Some(worker_type),
-            Some(message.as_str()),
+            None, // stage is not applicable for worker events
+            Some(&message),
         )
         .await?;
 
@@ -465,24 +465,20 @@ impl<'a> EventEmitter<'a> {
         reason: Option<&str>,
     ) -> Result<()> {
         // Create DB event
-        let failure_reason: Option<String>;
-        let reason_ref = match reason {
-            Some(r) => Some(r),
-            None => {
-                failure_reason = Some(format!(
-                    "Worker {} failed for project {}",
-                    worker_id, project_id
-                ));
-                failure_reason.as_deref()
-            }
+        let message = match reason {
+            Some(r) => r.to_string(),
+            None => format!(
+                "Worker {} ({}) failed for project {}",
+                worker_id, worker_type, project_id
+            ),
         };
         Event::create(
             self.db,
             EventType::WorkerFailed,
             None,
             Some(worker_id),
-            Some(worker_type),
-            reason_ref,
+            None, // stage is not applicable for worker events
+            Some(&message),
         )
         .await?;
 
