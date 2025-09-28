@@ -4,6 +4,12 @@ on:
   push:
     tags:
       - 'v*'
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Tag to build release for'
+        required: true
+        type: string
 
 jobs:
   release:
@@ -26,6 +32,8 @@ jobs:
 
     steps:
     - uses: actions/checkout@v4
+      with:
+        ref: ${{ github.event.inputs.tag || github.ref }}
     - uses: dtolnay/rust-toolchain@stable
       with:
         targets: ${{ matrix.target }}
