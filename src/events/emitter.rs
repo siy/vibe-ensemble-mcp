@@ -323,12 +323,12 @@ impl<'a> EventEmitter<'a> {
     }
 
     /// Emit worker stopped event with both DB and SSE
-    pub async fn emit_worker_stopped(&self, worker_id: &str, reason: &str) -> Result<()> {
+    pub async fn emit_worker_stopped(&self, worker_id: &str, worker_type: &str, project_id: &str, reason: &str) -> Result<()> {
         // Create DB event
         Event::create_worker_stopped(self.db, worker_id, reason).await?;
 
         // Broadcast SSE event
-        let event = EventPayload::worker_stopped(worker_id, reason);
+        let event = EventPayload::worker_stopped(worker_id, worker_type, project_id, reason);
 
         // Log the complete JSON-RPC message at debug level
         let jsonrpc_message = event.to_jsonrpc_notification();

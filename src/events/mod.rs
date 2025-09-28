@@ -325,15 +325,20 @@ impl EventPayload {
     }
 
     /// Create a worker stopped event
-    pub fn worker_stopped(worker_id: &str, reason: &str) -> Self {
+    pub fn worker_stopped(
+        worker_id: &str,
+        worker_type: &str,
+        project_id: &str,
+        _reason: &str,
+    ) -> Self {
         Self {
             event_type: EventType::WorkerStopped,
             timestamp: Utc::now(),
             data: EventData::Worker(WorkerEventData {
                 worker_id: worker_id.to_string(),
-                worker_type: "unknown".to_string(),
-                project_id: "unknown".to_string(),
-                status: reason.to_string(),
+                worker_type: worker_type.to_string(),
+                project_id: project_id.to_string(),
+                status: "stopped".to_string(),
             }),
         }
     }
