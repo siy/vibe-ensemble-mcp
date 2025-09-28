@@ -51,7 +51,9 @@ pub struct SpawnWorkerRequest {
     pub ticket_id: String,
     pub project_path: String,
     pub system_prompt: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub project_rules: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub project_patterns: Option<String>,
     pub server_host: String,
     pub server_port: u16,

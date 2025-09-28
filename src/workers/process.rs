@@ -265,8 +265,9 @@ impl ProcessManager {
         if let Some(ref rules) = request.project_rules {
             if !rules.trim().is_empty() {
                 full_prompt.push_str("\n\n=== PROJECT RULES ===\n");
-                full_prompt.push_str("CRITICAL: You MUST follow these project rules:\n\n");
+                full_prompt.push_str("CRITICAL: You MUST follow these project rules:\n\n```md\n");
                 full_prompt.push_str(rules);
+                full_prompt.push_str("\n```\n");
             }
         }
 
@@ -274,8 +275,9 @@ impl ProcessManager {
         if let Some(ref patterns) = request.project_patterns {
             if !patterns.trim().is_empty() {
                 full_prompt.push_str("\n\n=== PROJECT PATTERNS ===\n");
-                full_prompt.push_str("Follow these project patterns and conventions:\n\n");
+                full_prompt.push_str("Follow these project patterns and conventions:\n\n```md\n");
                 full_prompt.push_str(patterns);
+                full_prompt.push_str("\n```\n");
             }
         }
 
