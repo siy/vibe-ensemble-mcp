@@ -1,6 +1,7 @@
 use async_trait::async_trait;
 use serde_json::{json, Value};
 use std::fs;
+use std::process::Command;
 use tracing::{debug, info, warn};
 
 use super::pagination::extract_cursor;
@@ -15,6 +16,101 @@ use crate::{
     permissions::create_project_permissions,
     server::AppState,
 };
+
+/// Initialize git repository and validate branch status
+fn initialize_git_repository(project_path: &str) -> Result<String> {
+    let path = std::path::Path::new(project_path);
+
+    // Check if already a git repository
+    let git_dir = path.join(".git");
+    if git_dir.exists() {
+        debug!("Git repository already exists at: {}", project_path);
+
+        // Check current branch
+        let output = Command::new("git")
+            .current_dir(project_path)
+            .args(["rev-parse", "--abbrev-ref", "HEAD"])
+            .output()
+            .map_err(|e| crate::error::AppError::BadRequest(format!("Failed to check git branch: {}", e)))?;
+
+        if !output.status.success() {
+            return Err(crate::error::AppError::BadRequest(
+                "Failed to determine current git branch".to_string()
+            ));
+        }
+
+        let current_branch = String::from_utf8_lossy(&output.stdout).trim().to_string();
+        debug!("Current git branch: {}", current_branch);
+
+        // Validate branch is main or develop
+        if current_branch != "main" && current_branch != "develop" {
+            return Err(crate::error::AppError::BadRequest(format!(
+                "Project is on branch '{}' but should be on 'main' or 'develop'. \
+                Please coordinate with user to determine correct base branch before proceeding.",
+                current_branch
+            )));
+        }
+
+        return Ok(format!("Using existing git repository on branch '{}'", current_branch));
+    }
+
+    // Initialize new git repository
+    info!("Initializing git repository at: {}", project_path);
+
+    let init_output = Command::new("git")
+        .current_dir(project_path)
+        .args(["init"])
+        .output()
+        .map_err(|e| crate::error::AppError::BadRequest(format!("Failed to initialize git repository: {}", e)))?;
+
+    if !init_output.status.success() {
+        return Err(crate::error::AppError::BadRequest(
+            "Failed to initialize git repository".to_string()
+        ));
+    }
+
+    // Create initial .gitignore
+    let gitignore_content = r#"# Common ignore patterns
+.DS_Store
+.vscode/
+.idea/
+*.log
+*.tmp
+.env
+.env.local
+
+# vibe-ensemble-mcp specific
+.vibe-ensemble-mcp/
+"#;
+
+    let gitignore_path = path.join(".gitignore");
+    if let Err(e) = fs::write(&gitignore_path, gitignore_content) {
+        warn!("Failed to create .gitignore: {}", e);
+    }
+
+    // Stage and commit initial files
+    let add_output = Command::new("git")
+        .current_dir(project_path)
+        .args(["add", "."])
+        .output()
+        .map_err(|e| crate::error::AppError::BadRequest(format!("Failed to stage initial files: {}", e)))?;
+
+    if !add_output.status.success() {
+        warn!("Failed to stage initial files for git commit");
+    }
+
+    let commit_output = Command::new("git")
+        .current_dir(project_path)
+        .args(["commit", "-m", "chore: initialize project with vibe-ensemble-mcp"])
+        .output()
+        .map_err(|e| crate::error::AppError::BadRequest(format!("Failed to create initial commit: {}", e)))?;
+
+    if !commit_output.status.success() {
+        warn!("Failed to create initial git commit");
+    }
+
+    Ok("Initialized new git repository with initial commit".to_string())
+}
 
 pub struct CreateProjectTool;
 
@@ -49,6 +145,20 @@ impl ToolHandler for CreateProjectTool {
             // Don't fail the whole project creation for this - it's not critical
         }
 
+        // Initialize git repository
+        let git_status = match initialize_git_repository(&path) {
+            Ok(status) => {
+                info!("Git initialization: {}", status);
+                status
+            }
+            Err(e) => {
+                return Ok(create_json_error_response(&format!(
+                    "Git repository initialization failed: {}",
+                    e
+                )));
+            }
+        };
+
         let request = CreateProjectRequest {
             repository_name: repository_name.clone(),
             path,
@@ -63,7 +173,8 @@ impl ToolHandler for CreateProjectTool {
                     "repository_name": project.repository_name,
                     "path": project.path,
                     "description": project.short_description,
-                    "created_at": project.created_at
+                    "created_at": project.created_at,
+                    "git_status": git_status
                 });
 
                 // Emit project_created event
