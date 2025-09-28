@@ -380,16 +380,17 @@ impl<'a> EventEmitter<'a> {
         project_id: &str,
     ) -> Result<()> {
         // Create DB event
+        let message = format!(
+            "Worker {} started for project {}",
+            worker_id, project_id
+        );
         Event::create(
             self.db,
             EventType::WorkerStarted,
             None,
             Some(worker_id),
             Some(worker_type),
-            Some(&format!(
-                "Worker {} started for project {}",
-                worker_id, project_id
-            )),
+            Some(message.as_str()),
         )
         .await?;
 
@@ -421,16 +422,17 @@ impl<'a> EventEmitter<'a> {
         project_id: &str,
     ) -> Result<()> {
         // Create DB event
+        let message = format!(
+            "Worker {} completed for project {}",
+            worker_id, project_id
+        );
         Event::create(
             self.db,
             EventType::WorkerCompleted,
             None,
             Some(worker_id),
             Some(worker_type),
-            Some(&format!(
-                "Worker {} completed for project {}",
-                worker_id, project_id
-            )),
+            Some(message.as_str()),
         )
         .await?;
 
@@ -463,16 +465,24 @@ impl<'a> EventEmitter<'a> {
         reason: Option<&str>,
     ) -> Result<()> {
         // Create DB event
+        let failure_reason: Option<String>;
+        let reason_ref = match reason {
+            Some(r) => Some(r),
+            None => {
+                failure_reason = Some(format!(
+                    "Worker {} failed for project {}",
+                    worker_id, project_id
+                ));
+                failure_reason.as_deref()
+            }
+        };
         Event::create(
             self.db,
             EventType::WorkerFailed,
             None,
             Some(worker_id),
             Some(worker_type),
-            reason.or(Some(&format!(
-                "Worker {} failed for project {}",
-                worker_id, project_id
-            ))),
+            reason_ref,
         )
         .await?;
 

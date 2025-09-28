@@ -46,8 +46,8 @@ impl ToolHandler for ListEventsTool {
             Event::get_unprocessed(&state.db).await?
         };
 
-        // Events are already ordered by ID (chronological) from database
-        let sorted_events = events;
+        let mut sorted_events = events;
+        sorted_events.sort_by_key(|event| event.id);
 
         let filtered_events: Vec<_> = sorted_events
             .into_iter()

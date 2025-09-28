@@ -43,7 +43,7 @@ impl std::fmt::Display for EventType {
         match self {
             EventType::TicketCreated => write!(f, "ticket_created"),
             EventType::TicketUpdated => write!(f, "ticket_updated"),
-            EventType::TicketStageChanged => write!(f, "ticket_stage_updated"),
+            EventType::TicketStageChanged => write!(f, "ticket_stage_changed"),
             EventType::TicketClosed => write!(f, "ticket_closed"),
             EventType::TicketUnblocked => write!(f, "ticket_unblocked"),
             EventType::WorkerStarted => write!(f, "worker_started"),
