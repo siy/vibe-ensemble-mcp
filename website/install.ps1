@@ -215,7 +215,7 @@ function Main {
     Write-Host ""
     Write-Success "Installation complete!"
     Write-Status "You can now run: $BinaryName --help"
-    Write-Status "To start the server: $BinaryName --port 3000"
+    Write-Status "To start the server: $BinaryName --port 3276"
     Write-Host ""
     Write-Status "Documentation: https://github.com/$Repo"
     Write-Host ""

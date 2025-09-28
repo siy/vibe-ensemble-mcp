@@ -4,7 +4,7 @@ use serde_json::Value;
 
 use crate::{
     database::{events::Event, DbPool},
-    events::EventPayload,
+    events::{EventPayload, EventType},
     sse::EventBroadcaster,
 };
 
@@ -30,7 +30,7 @@ impl<'a> EventEmitter<'a> {
         // Create DB event
         Event::create(
             self.db,
-            "ticket_created",
+            EventType::TicketCreated,
             Some(ticket_id),
             None,
             Some(current_stage),
@@ -71,7 +71,7 @@ impl<'a> EventEmitter<'a> {
         // Create DB event
         Event::create(
             self.db,
-            "ticket_updated",
+            EventType::TicketUpdated,
             Some(ticket_id),
             None,
             stage,
@@ -111,7 +111,7 @@ impl<'a> EventEmitter<'a> {
         // Create DB event
         Event::create(
             self.db,
-            "ticket_stage_updated",
+            EventType::TicketStageChanged,
             Some(ticket_id),
             worker_id,
             Some(new_stage),
@@ -152,7 +152,7 @@ impl<'a> EventEmitter<'a> {
         // Create DB event
         Event::create(
             self.db,
-            "ticket_closed",
+            EventType::TicketClosed,
             Some(ticket_id),
             None,
             None,
@@ -185,16 +185,10 @@ impl<'a> EventEmitter<'a> {
         &self,
         project_id: &str,
         worker_type: &str,
-        worker_type_data: &Value,
+        _worker_type_data: &Value,
     ) -> Result<()> {
         // Broadcast SSE event
-        let event = EventPayload::system_message(
-            "worker_types",
-            "worker_type_created",
-            Some(serde_json::json!({
-                "worker_type": worker_type_data
-            })),
-        );
+        let event = EventPayload::worker_type_created(project_id, worker_type);
 
         // Log the complete JSON-RPC message at debug level
         let jsonrpc_message = event.to_jsonrpc_notification();
@@ -219,16 +213,10 @@ impl<'a> EventEmitter<'a> {
         &self,
         project_id: &str,
         worker_type: &str,
-        worker_type_data: &Value,
+        _worker_type_data: &Value,
     ) -> Result<()> {
         // Broadcast SSE event
-        let event = EventPayload::system_message(
-            "worker_types",
-            "worker_type_updated",
-            Some(serde_json::json!({
-                "worker_type": worker_type_data
-            })),
-        );
+        let event = EventPayload::worker_type_updated(project_id, worker_type);
 
         // Log the complete JSON-RPC message at debug level
         let jsonrpc_message = event.to_jsonrpc_notification();
@@ -255,14 +243,7 @@ impl<'a> EventEmitter<'a> {
         worker_type: &str,
     ) -> Result<()> {
         // Broadcast SSE event
-        let event = EventPayload::system_message(
-            "worker_types",
-            "worker_type_deleted",
-            Some(serde_json::json!({
-                "project_id": project_id,
-                "worker_type": worker_type
-            })),
-        );
+        let event = EventPayload::worker_type_deleted(project_id, worker_type);
 
         // Log the complete JSON-RPC message at debug level
         let jsonrpc_message = event.to_jsonrpc_notification();
@@ -285,12 +266,11 @@ impl<'a> EventEmitter<'a> {
     /// Emit project created event (SSE only)
     pub async fn emit_project_created(&self, project_data: &Value) -> Result<()> {
         // Broadcast SSE event
-        let event = EventPayload::system_message(
-            "projects",
-            "project_created",
-            Some(serde_json::json!({
-                "project": project_data
-            })),
+        let event = EventPayload::project_created(
+            project_data
+                .get("id")
+                .and_then(|v| v.as_str())
+                .unwrap_or("unknown"),
         );
 
         // Log the complete JSON-RPC message at debug level
@@ -323,15 +303,7 @@ impl<'a> EventEmitter<'a> {
         Event::create_stage_completed(self.db, ticket_id, stage, worker_id).await?;
 
         // Broadcast SSE event
-        let event = EventPayload::system_message(
-            "stage_completed",
-            &format!("Stage '{}' completed by worker {}", stage, worker_id),
-            Some(serde_json::json!({
-                "ticket_id": ticket_id,
-                "stage": stage,
-                "worker_id": worker_id
-            })),
-        );
+        let event = EventPayload::stage_completed(ticket_id, stage, worker_id);
 
         // Log the complete JSON-RPC message at debug level
         let jsonrpc_message = event.to_jsonrpc_notification();
@@ -351,19 +323,18 @@ impl<'a> EventEmitter<'a> {
     }
 
     /// Emit worker stopped event with both DB and SSE
-    pub async fn emit_worker_stopped(&self, worker_id: &str, reason: &str) -> Result<()> {
+    pub async fn emit_worker_stopped(
+        &self,
+        worker_id: &str,
+        worker_type: &str,
+        project_id: &str,
+        reason: &str,
+    ) -> Result<()> {
         // Create DB event
         Event::create_worker_stopped(self.db, worker_id, reason).await?;
 
         // Broadcast SSE event
-        let event = EventPayload::system_message(
-            "worker_stopped",
-            &format!("Worker {} stopped: {}", worker_id, reason),
-            Some(serde_json::json!({
-                "worker_id": worker_id,
-                "reason": reason
-            })),
-        );
+        let event = EventPayload::worker_stopped(worker_id, worker_type, project_id, reason);
 
         // Log the complete JSON-RPC message at debug level
         let jsonrpc_message = event.to_jsonrpc_notification();
@@ -388,14 +359,7 @@ impl<'a> EventEmitter<'a> {
         Event::create_task_assigned(self.db, ticket_id, queue_name).await?;
 
         // Broadcast SSE event
-        let event = EventPayload::system_message(
-            "task_assigned",
-            &format!("Task {} assigned to queue {}", ticket_id, queue_name),
-            Some(serde_json::json!({
-                "ticket_id": ticket_id,
-                "queue_name": queue_name
-            })),
-        );
+        let event = EventPayload::task_assigned(ticket_id, queue_name);
 
         // Log the complete JSON-RPC message at debug level
         let jsonrpc_message = event.to_jsonrpc_notification();
@@ -410,6 +374,136 @@ impl<'a> EventEmitter<'a> {
         tracing::debug!(
             "Successfully emitted task_assigned event for: {}",
             ticket_id
+        );
+        Ok(())
+    }
+
+    /// Emit worker started event with both DB and SSE
+    pub async fn emit_worker_started(
+        &self,
+        worker_id: &str,
+        worker_type: &str,
+        project_id: &str,
+    ) -> Result<()> {
+        // Create DB event
+        let message = format!(
+            "Worker {} ({}) started for project {}",
+            worker_id, worker_type, project_id
+        );
+        Event::create(
+            self.db,
+            EventType::WorkerStarted,
+            None,
+            Some(worker_id),
+            None, // stage is not applicable for worker events
+            Some(&message),
+        )
+        .await?;
+
+        // Broadcast SSE event
+        let event = EventPayload::worker_started(worker_id, worker_type, project_id);
+
+        // Log the complete JSON-RPC message at debug level
+        let jsonrpc_message = event.to_jsonrpc_notification();
+        tracing::debug!(
+            "Broadcasting worker_started JSON-RPC: {}",
+            serde_json::to_string_pretty(&jsonrpc_message)
+                .unwrap_or_else(|_| "Failed to serialize".to_string())
+        );
+
+        self.broadcaster.broadcast(event);
+
+        tracing::debug!(
+            "Successfully emitted worker_started event for: {}",
+            worker_id
+        );
+        Ok(())
+    }
+
+    /// Emit worker completed event with both DB and SSE
+    pub async fn emit_worker_completed(
+        &self,
+        worker_id: &str,
+        worker_type: &str,
+        project_id: &str,
+    ) -> Result<()> {
+        // Create DB event
+        let message = format!(
+            "Worker {} ({}) completed for project {}",
+            worker_id, worker_type, project_id
+        );
+        Event::create(
+            self.db,
+            EventType::WorkerCompleted,
+            None,
+            Some(worker_id),
+            None, // stage is not applicable for worker events
+            Some(&message),
+        )
+        .await?;
+
+        // Broadcast SSE event
+        let event = EventPayload::worker_completed(worker_id, worker_type, project_id);
+
+        // Log the complete JSON-RPC message at debug level
+        let jsonrpc_message = event.to_jsonrpc_notification();
+        tracing::debug!(
+            "Broadcasting worker_completed JSON-RPC: {}",
+            serde_json::to_string_pretty(&jsonrpc_message)
+                .unwrap_or_else(|_| "Failed to serialize".to_string())
+        );
+
+        self.broadcaster.broadcast(event);
+
+        tracing::debug!(
+            "Successfully emitted worker_completed event for: {}",
+            worker_id
+        );
+        Ok(())
+    }
+
+    /// Emit worker failed event with both DB and SSE
+    pub async fn emit_worker_failed(
+        &self,
+        worker_id: &str,
+        worker_type: &str,
+        project_id: &str,
+        reason: Option<&str>,
+    ) -> Result<()> {
+        // Create DB event
+        let message = match reason {
+            Some(r) => r.to_string(),
+            None => format!(
+                "Worker {} ({}) failed for project {}",
+                worker_id, worker_type, project_id
+            ),
+        };
+        Event::create(
+            self.db,
+            EventType::WorkerFailed,
+            None,
+            Some(worker_id),
+            None, // stage is not applicable for worker events
+            Some(&message),
+        )
+        .await?;
+
+        // Broadcast SSE event
+        let event = EventPayload::worker_failed(worker_id, worker_type, project_id);
+
+        // Log the complete JSON-RPC message at debug level
+        let jsonrpc_message = event.to_jsonrpc_notification();
+        tracing::debug!(
+            "Broadcasting worker_failed JSON-RPC: {}",
+            serde_json::to_string_pretty(&jsonrpc_message)
+                .unwrap_or_else(|_| "Failed to serialize".to_string())
+        );
+
+        self.broadcaster.broadcast(event);
+
+        tracing::debug!(
+            "Successfully emitted worker_failed event for: {}",
+            worker_id
         );
         Ok(())
     }

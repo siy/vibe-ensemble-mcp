@@ -1,6 +1,5 @@
 use crate::{
     database::{tickets::Ticket, DbPool},
-    sse::EventBroadcaster,
     workers::domain::TicketId,
 };
 use anyhow::Result;
@@ -32,11 +31,7 @@ impl ClaimManager {
     }
 
     /// Release a ticket claim if it's currently claimed
-    pub async fn release_ticket_if_claimed(
-        db: &DbPool,
-        event_broadcaster: &EventBroadcaster,
-        ticket_id: &TicketId,
-    ) -> Result<()> {
+    pub async fn release_ticket_if_claimed(db: &DbPool, ticket_id: &TicketId) -> Result<()> {
         // First check if ticket is claimed
         let is_claimed = sqlx::query_scalar::<_, bool>(
             "SELECT processing_worker_id IS NOT NULL FROM tickets WHERE ticket_id = ?1",
@@ -56,10 +51,7 @@ impl ClaimManager {
             .execute(db)
             .await?;
 
-            // Publish event
-            let event =
-                crate::events::EventPayload::ticket_updated(ticket_id.as_str(), "", "released");
-            event_broadcaster.broadcast(event);
+            // Ticket claim released (no event needed - redundant)
 
             info!("Successfully released claim on ticket: {}", ticket_id);
         } else {
@@ -70,11 +62,7 @@ impl ClaimManager {
     }
 
     /// Release a specific ticket claim by ticket ID
-    pub async fn release_ticket_claim(
-        db: &DbPool,
-        event_broadcaster: &EventBroadcaster,
-        ticket_id: &str,
-    ) -> Result<()> {
+    pub async fn release_ticket_claim(db: &DbPool, ticket_id: &str) -> Result<()> {
         info!("Releasing claim for ticket: {}", ticket_id);
 
         let rows_affected = sqlx::query(
@@ -88,9 +76,7 @@ impl ClaimManager {
         if rows_affected > 0 {
             info!("Successfully released claim for ticket: {}", ticket_id);
 
-            // Publish event
-            let event = crate::events::EventPayload::ticket_updated(ticket_id, "", "released");
-            event_broadcaster.broadcast(event);
+            // Ticket claim released (no event needed - redundant)
         } else {
             info!("No active claim found for ticket: {}", ticket_id);
         }
@@ -98,11 +84,43 @@ impl ClaimManager {
         Ok(())
     }
 
-    /// Emergency release of all claimed tickets (used during shutdown or errors)
-    pub async fn emergency_release_claimed_tickets(
+    /// Release a specific ticket claim by ticket ID and worker ID (scoped release)
+    pub async fn release_ticket_claim_for_worker(
         db: &DbPool,
-        event_broadcaster: &EventBroadcaster,
+        ticket_id: &str,
+        worker_id: &str,
     ) -> Result<()> {
+        info!(
+            "Releasing claim for ticket: {} by worker: {}",
+            ticket_id, worker_id
+        );
+
+        let rows_affected = sqlx::query(
+            "UPDATE tickets SET processing_worker_id = NULL, updated_at = datetime('now') WHERE ticket_id = ?1 AND processing_worker_id = ?2"
+        )
+        .bind(ticket_id)
+        .bind(worker_id)
+        .execute(db)
+        .await?
+        .rows_affected();
+
+        if rows_affected > 0 {
+            info!(
+                "Successfully released claim on ticket: {} by worker: {}",
+                ticket_id, worker_id
+            );
+        } else {
+            info!(
+                "No matching claim found for ticket: {} by worker: {}",
+                ticket_id, worker_id
+            );
+        }
+
+        Ok(())
+    }
+
+    /// Emergency release of all claimed tickets (used during shutdown or errors)
+    pub async fn emergency_release_claimed_tickets(db: &DbPool) -> Result<()> {
         warn!("Emergency release of all claimed tickets");
 
         let claimed_tickets = sqlx::query_scalar::<_, String>(
@@ -119,7 +137,7 @@ impl ClaimManager {
         info!("Releasing {} claimed tickets", claimed_tickets.len());
 
         for ticket_id in &claimed_tickets {
-            if let Err(e) = Self::release_ticket_claim(db, event_broadcaster, ticket_id).await {
+            if let Err(e) = Self::release_ticket_claim(db, ticket_id).await {
                 error!("Failed to release claim for ticket {}: {}", ticket_id, e);
             }
         }
@@ -140,12 +158,7 @@ impl ClaimManager {
         }
 
         // Publish emergency release event
-        let event = crate::events::EventPayload::system_message(
-            "claim_manager",
-            &format!("Emergency released {} ticket claims", claimed_tickets.len()),
-            None,
-        );
-        event_broadcaster.broadcast(event);
+        // Emergency claim release completed (no event needed - redundant)
 
         Ok(())
     }

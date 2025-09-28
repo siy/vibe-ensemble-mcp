@@ -81,38 +81,203 @@ Once the server is running and Claude Code is configured, here's the typical wor
 
 1. **Start Claude Code**: Open Claude Code in your coordinator directory and run the `/vibe-ensemble` command to initialize as a coordinator
 2. **Create Project**: Write a prompt describing your intended project and answer the coordinator's questions about scope and requirements
-3. **Monitor Progress**: Use commands `/vibe-events` and `/vibe-status` to process events generated during project execution and check process status.
+3. **Monitor Progress**: Use commands `/vibe-events`, `/vibe-poll` and `/vibe-status` to process events generated during project execution and check process status.
 
 The coordinator will break down your project into tickets, spawn appropriate workers for each stage, and manage the workflow automatically.
 
-**WARNING:** Vibe-Ensemble is still a work in progress. Some features may not be fully implemented or may have bugs. So, 
-periodically ask Claude Code to check ticket status and event queue. Sometimes it may report issues, but not address them.
-Sending prompt like "Act as a coordinator" usually helps.
+**WARNING:** Vibe-Ensemble is still a work in progress. Some features may not be fully implemented or may have bugs. Sometimes coordinator may report issues, but not address them.
+Prompting it with something like "Act as a coordinator" usually helps.
 
 **SECURITY WARNING:** Always review and test permission configurations before production use. While the permission system is designed to be secure, proper configuration is essential. Use 'bypass' mode only in isolated development environments as it grants unrestricted access. For production use, the default 'file' mode provides explicit permission control.
 
-### Example Project Types
+## How Vibe-Ensemble Works
 
-**Web Application Development:**
-- Workers: Architect, Frontend Developer, Backend Developer, Security Reviewer
-- Stages: Architecture Design → Implementation → Security Review → Testing
+### The Big Picture
 
-**Documentation and DevOps:**
-- Workers: Technical Writer, DevOps Engineer, QA Tester
-- Stages: Documentation → CI/CD Setup → Deployment Testing
+When you describe a project to Vibe-Ensemble, here's what happens behind the scenes:
 
-**Debugging and Performance:**
-- Workers: Investigator, Performance Specialist, Code Reviewer
-- Stages: Issue Analysis → Optimization → Validation
+1. **You describe your project** → Coordinator breaks it into major pieces (epics/stories)
+2. **Planning worker creates detailed tickets** → Each with a step-by-step pipeline
+3. **Workers automatically execute the pipeline** → Moving tickets from stage to stage
+4. **Progress is tracked and reported** → Every step is documented with comments
 
-Each worker operates independently with their specialized knowledge, ensuring focused expertise at every stage while maintaining coordination across the entire workflow.
+Think of it like an assembly line where each worker is a specialist who does their part and passes the work to the next specialist.
+
+### The Ticket System
+
+#### **What is a Ticket?**
+A ticket represents a specific piece of work that needs to be done. Examples:
+- "Create user login page"
+- "Set up database schema"
+- "Write API documentation"
+- "Deploy application to production"
+
+#### **What is a Pipeline?**
+Each ticket has a pipeline - a series of stages it goes through from start to finish:
+
+```
+Ticket: "User Login Page"
+Pipeline: Planning → Design → Implementation → Review → Testing → Complete
+```
+
+Each stage is handled by a different type of worker with specific expertise.
+
+### The Workflow Process
+
+#### **Step 1: Project Breakdown**
+When you describe your project, the **Coordinator** works with a **Planning Worker** to:
+- Break your project into major components (epics)
+- Create specific work items (stories/tickets) for each component
+- Design the pipeline each ticket will follow
+
+**Example:**
+```
+Your request: "Build a todo app with user accounts"
+
+Coordinator creates:
+├── Epic: User Authentication
+│   ├── Ticket: "User registration system"
+│   └── Ticket: "Login/logout functionality"
+├── Epic: Todo Management
+│   ├── Ticket: "Todo CRUD operations"
+│   └── Ticket: "Todo list UI"
+└── Epic: Deployment
+    └── Ticket: "Production deployment setup"
+```
+
+#### **Step 2: Pipeline Design**
+The **Planning Worker** designs a custom pipeline for each ticket based on its complexity:
+
+**Simple Ticket Pipeline:**
+```
+Planning → Implementation → Review → Complete
+```
+
+**Complex Ticket Pipeline:**
+```
+Planning → Design → Implementation → Review → Testing → Documentation → Complete
+```
+
+**Critical System Pipeline:**
+```
+Planning → Research → Design → Implementation → Security Review → Testing → Deployment → Complete
+```
+
+#### **Step 3: Automatic Execution**
+Once tickets and pipelines are created, Vibe-Ensemble automatically:
+
+1. **Spawns the right worker** for each stage (planning worker, implementation worker, etc.)
+2. **Moves tickets through their pipeline** as each stage completes
+3. **Handles handoffs** between different types of workers
+4. **Tracks all progress** with detailed comments
+
+### How Workers Collaborate
+
+#### **Worker Types and Responsibilities**
+
+**Planning Worker:**
+- Analyzes requirements and breaks down complex tasks
+- Creates detailed implementation plans
+- Designs the pipeline for each ticket
+
+**Implementation Worker:**
+- Writes the actual code
+- Follows the specifications from planning
+- Documents what was implemented
+
+**Review Worker:**
+- Checks code quality and adherence to standards
+- Identifies issues that need fixing
+- Can send tickets back to implementation if problems are found
+
+**Testing Worker:**
+- Creates and runs tests
+- Validates that everything works correctly
+- Reports any bugs found
+
+#### **The Comment Trail**
+Every worker leaves detailed comments on tickets, creating a complete history:
+
+```
+Ticket: "User Login Page"
+
+[Planning Worker]: "Analyzed requirements. Will implement using React components
+with form validation and JWT authentication. Estimated 4 hours of work."
+
+[Implementation Worker]: "Created LoginForm component with email/password fields.
+Added validation for email format. Integrated with authentication API.
+Code is ready for review."
+
+[Review Worker]: "Code looks good overall. Minor suggestion: add loading state
+during login. No blocking issues. Approved for testing."
+
+[Testing Worker]: "All tests passing. Verified login works with valid credentials,
+shows errors for invalid ones, and handles network failures gracefully. Ready for deployment."
+```
+
+### Dependencies and Coordination
+
+#### **When Tickets Need Each Other**
+Sometimes one ticket can't start until another is finished:
+
+```
+Ticket A: "Database Schema Setup" → Must finish first
+Ticket B: "User API Endpoints" → Waits for Ticket A
+Ticket C: "Frontend Login Form" → Waits for Ticket B
+```
+
+Vibe-Ensemble automatically:
+- **Holds tickets** that are waiting for dependencies
+- **Releases tickets** when their dependencies are complete
+- **Runs independent tickets in parallel** to save time
+
+#### **Quality Gates**
+Workers can send tickets backward in the pipeline when issues are found:
+
+```
+Implementation → Review → ❌ Issues Found → Back to Implementation
+Implementation → Review → ✅ Approved → Testing
+```
+
+This ensures quality while allowing for iterative improvement.
+
+### What You See as the User
+
+#### **Real-Time Monitoring**
+You can track progress using coordinator commands:
+- **`/vibe-status`** - See overall project health and ticket progress
+- **`/vibe-events`** - Handle any issues or worker requests for guidance
+- **`/vibe-poll`** - Continuously monitor until all work is complete
+
+#### **Transparent Process**
+You can see:
+- Which tickets are in which stages
+- What each worker accomplished
+- Any blockers or issues that need attention
+- Estimated completion times
+
+#### **Minimal Intervention Required**
+Most of the time, the system runs automatically. You only need to:
+- Provide initial project requirements
+- Answer clarifying questions from workers
+- Approve major decisions when requested
+- Monitor progress and address any escalated issues
+
+### The Power of Specialization
+
+Each worker type is optimized for their specific role:
+- **Planning workers** excel at breaking down complex requirements
+- **Implementation workers** focus on writing quality code efficiently
+- **Review workers** catch issues and maintain standards
+- **Testing workers** ensure everything works reliably
+
+This specialization means each piece of work gets expert attention while maintaining coordination across the entire project.
 
 ## Key Features
 
 - **🚀 Zero Configuration**: Auto-setup with `--configure-claude-code`
 - **🔄 Automatic Handoffs**: Workers complete stages and trigger next steps
-- **📊 Event Tracking**: Progress tracking via Server-Sent Events (real-time updates WIP)
-- **🎨 Custom Workers**: Define workers for any domain (coding, design, analysis, etc.)
+- **🎨 Custom Workers**: Worker templates are completely externalized, you can tune them to your needs and standards
 - **💬 Detailed Reporting**: Every stage produces comprehensive progress reports
 - **⚡ Robust Processing**: Handles failures gracefully with retry mechanisms
 - **📋 Project Rules & Patterns**: Define coding standards and project conventions that workers automatically follow
@@ -166,13 +331,11 @@ Vibe-Ensemble provides 28 MCP tools organized into seven categories:
 
 > **Note on Worker Management**: Workers are automatically spawned when tickets are assigned to stages. There are no explicit worker spawn/stop tools - the queue system handles worker lifecycle automatically based on workload.
 
-> **Note on WebSocket Infrastructure**: WebSocket server infrastructure is available for real-time communication and authentication, but WebSocket MCP tools have been removed to focus on core multi-agent coordination functionality.
-
 ## Requirements
 
 - Rust 1.70+ (for building from source)
 - SQLite (embedded, no separate installation needed)
-- Claude Code (for worker processes)
+- Claude Code (for coordinator and worker processes)
 
 ## Configuration
 
@@ -181,14 +344,12 @@ The server accepts the following command-line options:
 - `--configure-claude-code`: Generate Claude Code integration files and exit
 - `--database-path`: SQLite database file path (default: `./.vibe-ensemble-mcp/vibe-ensemble.db`)
 - `--host`: Server bind address (default: `127.0.0.1`)
-- `--port`: Server port (default: `3000`)
+- `--port`: Server port (default: `3276`)
 - `--log-level`: Log level (default: `info`)
 - `--permission-mode`: Permission mode for workers (default: `file`)
 - `--no-respawn`: Disable automatic respawning of workers on startup
 - `--client-tool-timeout-secs`: Timeout for client tool calls in seconds (default: `30`)
 - `--max-concurrent-client-requests`: Maximum concurrent client requests (default: `50`)
-
-> **Note**: WebSocket transport is always enabled for infrastructure communication, but WebSocket MCP tools have been removed.
 
 ## Permission System
 
@@ -209,7 +370,6 @@ vibe-ensemble-mcp --permission-mode file
 # or simply (default)
 vibe-ensemble-mcp
 ```
-
 
 #### 2. **Bypass Mode** (`--permission-mode bypass`)
 - **Use Case**: Development, testing, or when you need unrestricted access
@@ -269,6 +429,7 @@ All permission modes use the same JSON structure that Claude Code uses internall
 
 ### Setting Up Permissions
 
+> **Note**: Complete permission examples are available in the source code at [docs/](https://github.com/siy/vibe-ensemble-mcp/tree/main/docs) directory. The `cp` commands below require access to the source repository.
 
 #### For File Mode (Advanced)
 
@@ -442,13 +603,13 @@ The server provides WebSocket support for:
 
 1. **Configure with WebSocket Support**:
    ```bash
-   ./vibe-ensemble-mcp --configure-claude-code --host 127.0.0.1 --port 3000
+   ./vibe-ensemble-mcp --configure-claude-code --host 127.0.0.1 --port 3276
    ```
    This generates WebSocket authentication tokens and configuration.
 
 2. **Start Server** (WebSocket enabled by default):
    ```bash
-   ./vibe-ensemble-mcp --port 3000
+   ./vibe-ensemble-mcp --port 3276
    ```
 
 3. **Monitor Progress**:

@@ -24,7 +24,7 @@ struct Args {
     host: String,
 
     /// Server port
-    #[arg(long, default_value = "3000")]
+    #[arg(long, default_value = "3276")]
     port: u16,
 
     /// Log level
@@ -46,10 +46,6 @@ struct Args {
     /// Maximum concurrent client requests
     #[arg(long, default_value = "50")]
     max_concurrent_client_requests: usize,
-
-    /// Comma-separated list of MCP tool names whose responses can be echoed over SSE
-    #[arg(long, default_value = "get_health,list_projects,list_tickets")]
-    sse_echo_allowlist: String,
 }
 
 #[tokio::main]
@@ -100,12 +96,6 @@ async fn main() -> Result<()> {
         permission_mode: args.permission_mode,
         client_tool_timeout_secs: args.client_tool_timeout_secs,
         max_concurrent_client_requests: args.max_concurrent_client_requests,
-        sse_echo_allowlist: args
-            .sse_echo_allowlist
-            .split(',')
-            .map(|s| s.trim().to_lowercase())
-            .filter(|s| !s.is_empty())
-            .collect(),
     };
 
     run_server(config).await?;

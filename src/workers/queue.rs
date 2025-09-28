@@ -15,7 +15,6 @@ use crate::{
         tickets::{DependencyStatus, TicketState},
         DbPool,
     },
-    events::EventPayload,
     sse::EventBroadcaster,
     workers::domain::{TicketId, WorkerCommand, WorkerCompletionEvent, WorkerType},
 };
@@ -148,9 +147,7 @@ impl QueueManager {
             ticket_id, worker_id
         );
 
-        // Notify about ticket being claimed for processing
-        let event = EventPayload::ticket_updated(ticket_id, project_id, "claimed");
-        self.event_broadcaster.broadcast(event);
+        // Ticket claimed for processing (no event needed - redundant)
 
         let task = TaskItem {
             task_id: task_id.clone(),
@@ -165,24 +162,14 @@ impl QueueManager {
         {
             Ok(s) => s,
             Err(e) => {
-                let _ = ClaimManager::release_ticket_if_claimed(
-                    &self.db,
-                    &self.event_broadcaster,
-                    &ticket_id_domain,
-                )
-                .await;
+                let _ = ClaimManager::release_ticket_if_claimed(&self.db, &ticket_id_domain).await;
                 return Err(e);
             }
         };
 
         // Send task to queue
         if sender.send(task).await.is_err() {
-            let _ = ClaimManager::release_ticket_if_claimed(
-                &self.db,
-                &self.event_broadcaster,
-                &ticket_id_domain,
-            )
-            .await;
+            let _ = ClaimManager::release_ticket_if_claimed(&self.db, &ticket_id_domain).await;
             return Err(anyhow::anyhow!("Queue {} is closed", queue_name));
         }
 
@@ -191,12 +178,7 @@ impl QueueManager {
             task_id, queue_name
         );
 
-        // Notify about task submission
-        let queue_event = EventPayload::queue_updated(&queue_name, project_id, worker_type, 1);
-        self.event_broadcaster.broadcast(queue_event);
-
-        let ticket_event = EventPayload::ticket_updated(ticket_id, project_id, "queued");
-        self.event_broadcaster.broadcast(ticket_event);
+        // Task submitted to queue (no events needed - redundant)
 
         Ok(task_id)
     }
@@ -232,16 +214,11 @@ impl QueueManager {
         let queue_name_for_error = queue_name_clone.clone();
         let completion_sender = self.completion_sender.clone();
         let db_clone = self.db.clone();
-        let _server_host = self.config.host.clone();
-        let _server_port = self.config.port;
-        let _permission_mode = self.config.permission_mode;
-
         let config_clone = self.config.clone();
         let event_broadcaster_clone = self.event_broadcaster.clone();
 
         tokio::spawn(async move {
             let db_for_cleanup = db_clone.clone();
-            let event_broadcaster_for_cleanup = event_broadcaster_clone.clone();
 
             let consumer = Arc::new(WorkerConsumer::new(
                 project_id_clone,
@@ -256,11 +233,8 @@ impl QueueManager {
                 error!("Consumer failed for queue {}: {}", queue_name_for_error, e);
 
                 // Emergency release of claimed tickets when consumer fails
-                if let Err(release_error) = ClaimManager::emergency_release_claimed_tickets(
-                    &db_for_cleanup,
-                    &event_broadcaster_for_cleanup,
-                )
-                .await
+                if let Err(release_error) =
+                    ClaimManager::emergency_release_claimed_tickets(&db_for_cleanup).await
                 {
                     error!(
                         "Failed to emergency release tickets after consumer failure: {}",
@@ -272,9 +246,7 @@ impl QueueManager {
 
         debug!("[QueueManager] Started consumer for queue: {}", queue_name);
 
-        // Notify about new queue creation
-        let event = EventPayload::queue_updated(queue_name, project_id, worker_type, 0);
-        self.event_broadcaster.broadcast(event);
+        // Queue created (no event needed - redundant)
 
         Ok(sender)
     }
@@ -570,7 +542,7 @@ impl QueueManager {
     }
 
     async fn release_ticket_if_claimed(self: &Arc<Self>, ticket_id: &TicketId) -> Result<()> {
-        ClaimManager::release_ticket_if_claimed(&self.db, &self.event_broadcaster, ticket_id).await
+        ClaimManager::release_ticket_if_claimed(&self.db, ticket_id).await
     }
 
     /// Handle dependency cascades when tickets complete or advance stages
@@ -706,9 +678,14 @@ impl QueueManager {
         )
         .await?;
 
-        // Emit ticket closed event
-        let event_payload = EventPayload::ticket_closed(ticket_id, &project_id);
-        self.event_broadcaster.broadcast(event_payload);
+        // Emit ticket closed event with both DB and SSE
+        let emitter = crate::events::emitter::EventEmitter::new(&self.db, &self.event_broadcaster);
+        if let Err(e) = emitter
+            .emit_ticket_closed(ticket_id, &project_id, resolution)
+            .await
+        {
+            warn!("Failed to emit ticket_closed event: {}", e);
+        }
 
         // Trigger dependency cascade to unblock dependent tickets
         info!(

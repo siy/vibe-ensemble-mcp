@@ -46,11 +46,8 @@ impl ToolHandler for ListEventsTool {
             Event::get_unprocessed(&state.db).await?
         };
 
-        // Most-recent-first to match "recent" semantics (unless fetching by specific IDs)
         let mut sorted_events = events;
-        if event_ids.is_none() {
-            sorted_events.sort_by(|a, b| b.created_at.cmp(&a.created_at));
-        }
+        sorted_events.sort_by_key(|event| event.id);
 
         let filtered_events: Vec<_> = sorted_events
             .into_iter()

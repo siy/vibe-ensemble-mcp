@@ -189,26 +189,41 @@
 
     .command-tabs {
       display: flex;
-      gap: 0.5rem;
-      margin-bottom: 1.5rem;
+      gap: 0;
+      margin-bottom: 0;
+      border-bottom: 1px solid rgba(255,255,255,0.1);
     }
 
     .command-tab {
-      background: rgba(255,255,255,0.1);
-      color: white;
+      background: rgba(255,255,255,0.05);
+      color: rgba(255,255,255,0.7);
       padding: 0.75rem 1.5rem;
-      border: 0;
+      border: 1px solid rgba(255,255,255,0.1);
+      border-bottom: none;
       cursor: pointer;
       font-weight: 500;
-      border-radius: 8px;
+      border-radius: 8px 8px 0 0;
       transition: all 0.2s ease;
       backdrop-filter: blur(10px);
+      position: relative;
+      margin-right: 2px;
     }
 
-    .command-tab.active,
-    .command-tab:hover {
-      background: var(--primary);
-      transform: translateY(-1px);
+    .command-tab:last-child {
+      margin-right: 0;
+    }
+
+    .command-tab.active {
+      background: #1a1a1a;
+      color: #e6e6e6;
+      border-color: rgba(255,255,255,0.1);
+      border-bottom: 1px solid #1a1a1a;
+      z-index: 1;
+    }
+
+    .command-tab:hover:not(.active) {
+      background: rgba(255,255,255,0.1);
+      color: white;
     }
 
     .command-content { display: none; }
@@ -225,6 +240,12 @@
       font-size: 0.9rem;
       position: relative;
       border: 1px solid rgba(255,255,255,0.1);
+    }
+
+    .command-content .code-block {
+      border-radius: 0 8px 8px 8px;
+      margin: 0 0 1rem 0;
+      border-top: none;
     }
 
     .copy-btn {
@@ -363,21 +384,94 @@
       </section>
 
       <section class="section">
-        <h2>How it works</h2>
-        <div class="feature-grid">
-          <div class="feature-card">
-            <h3>Coordinator</h3>
-            <p>Claude Code acts as a coordinator. It manages projects, defines worker types, creates tickets, reviews events, and resumes stalled work. It does not implement tasks itself.</p>
-          </div>
-          <div class="feature-card">
-            <h3>Planner</h3>
-            <p>Transforms a goal into a staged plan using the sizing methodology. Validates worker types and outputs a strict JSON block with outcome, comment, and reason for pipeline coordination.</p>
-          </div>
-          <div class="feature-card">
-            <h3>Server</h3>
-            <p>The Rust MCP server manages SQLite state, queues, process execution, and MCP/SSE integrations. Stage completion automatically enqueues the next stage.</p>
-          </div>
-        </div>
+        <h2>How Vibe-Ensemble Works</h2>
+        <p>
+          At its core, Vibe-Ensemble operates on a ticket system that breaks down complex projects into manageable, interconnected tasks. Here's how it works:
+        </p>
+
+        <h3>The Ticket System</h3>
+        <p>
+          Every piece of work is represented as a <strong>ticket</strong> that moves through predefined stages. Tickets can be anything from "implement user authentication" to "optimize database queries" or "write API documentation." Each ticket knows:
+        </p>
+        <ul style="color: var(--text-light); margin-bottom: 1.25rem; padding-left: 1.5rem;">
+          <li>What stage it's currently in (planning, design, implementation, testing, review, etc.)</li>
+          <li>Which other tickets it depends on</li>
+          <li>Which tickets are waiting for it to complete</li>
+          <li>Its complete history of what's been done</li>
+        </ul>
+
+        <h3>Ticket Pipelines</h3>
+        <p>
+          Each ticket follows a <strong>pipeline</strong> - a sequence of stages it must pass through to be completed. Different types of work get different pipelines. For example:
+        </p>
+        <ul style="color: var(--text-light); margin-bottom: 1.25rem; padding-left: 1.5rem;">
+          <li><strong>Feature tickets:</strong> planning → design → implementation → review → deployment</li>
+          <li><strong>Bug fix tickets:</strong> planning → implementation → testing → review</li>
+          <li><strong>Research tickets:</strong> planning → research → documentation → review</li>
+        </ul>
+        <p>
+          The beauty is that once a worker completes their stage, the system automatically moves the ticket to the next stage and assigns it to the appropriate specialist worker.
+        </p>
+
+        <h3>High-Level Coordination</h3>
+        <p>
+          When you bring a project to Vibe-Ensemble, you work with a <strong>coordinator</strong> (which is Claude Code in coordinator mode) that:
+        </p>
+        <ul style="color: var(--text-light); margin-bottom: 1.25rem; padding-left: 1.5rem;">
+          <li>Understands your project goals and requirements</li>
+          <li>Breaks the project into logical epics and stories</li>
+          <li>Works with a planning specialist to create a detailed ticket breakdown</li>
+          <li>Sets up dependencies between tickets (e.g., "the API must be implemented before the frontend can connect to it")</li>
+          <li>Monitors progress and handles any issues that arise</li>
+        </ul>
+
+        <h3>Specialized Workers in Action</h3>
+        <p>
+          Here's where the magic happens. The <strong>planning worker</strong> takes each epic or story and creates a complete ticket tree with proper dependencies and pipeline assignments. For example, if you want to "add user profiles to the app," the planner might create:
+        </p>
+        <ul style="color: var(--text-light); margin-bottom: 1.25rem; padding-left: 1.5rem;">
+          <li>A design ticket for the user interface mockups</li>
+          <li>An implementation ticket for the backend API (depends on design)</li>
+          <li>An implementation ticket for the frontend components (depends on API)</li>
+          <li>A testing ticket for the complete feature (depends on both implementations)</li>
+          <li>A documentation ticket for the new endpoints</li>
+        </ul>
+
+        <h3>Automatic Workflow</h3>
+        <p>
+          Once tickets are created, <strong>Vibe-Ensemble runs automatically</strong>. Specialized worker processes (each running their own Claude Code instance) pick up tickets in their area of expertise:
+        </p>
+        <ul style="color: var(--text-light); margin-bottom: 1.25rem; padding-left: 1.5rem;">
+          <li>The <strong>design worker</strong> creates UI mockups and technical specifications</li>
+          <li>The <strong>implementation worker</strong> writes the actual code, following the design specs</li>
+          <li>The <strong>review worker</strong> examines the code for quality, security, and adherence to standards</li>
+          <li>The <strong>testing worker</strong> creates and runs comprehensive tests</li>
+        </ul>
+        <p>
+          Each worker <strong>leaves detailed comments</strong> about what they did, what decisions they made, and what the next worker should know. This creates a rich audit trail and ensures knowledge isn't lost between stages.
+        </p>
+
+        <h3>Smart Dependencies</h3>
+        <p>
+          The system automatically respects dependencies. If ticket B depends on ticket A, ticket B won't start until ticket A is completely finished. This prevents workers from stepping on each other's toes and ensures logical ordering of work.
+        </p>
+        <p>
+          Even better, when multiple tickets become ready at the same time, multiple workers can operate in parallel, dramatically speeding up development while maintaining quality.
+        </p>
+
+        <h3>Your Role as Coordinator</h3>
+        <p>
+          You stay in control as the coordinator. You can:
+        </p>
+        <ul style="color: var(--text-light); margin-bottom: 1.25rem; padding-left: 1.5rem;">
+          <li>Monitor progress in real-time through event feeds and status reports</li>
+          <li>Step in to resolve any issues or questions workers encounter</li>
+          <li>Adjust priorities or requirements as the project evolves</li>
+          <li>Review and approve completed work before final deployment</li>
+        </ul>
+        <p>
+          The result is that complex projects that might take weeks of back-and-forth can be completed in hours or days, with consistent quality and comprehensive documentation of every decision made along the way.
+        </p>
       </section>
 
       <section class="section">
@@ -417,14 +511,14 @@
 
         <div id="install-unix" class="command-content active">
           <div class="code-block">
-            <button class="copy-btn" onclick="copyToClipboard('curl -fsSL https://vibeensemble.dev/install.sh | sh', this)">Copy</button>
+            <button class="copy-btn" onclick="copyToClipboard('curl -fsSL https://vibeensemble.dev/install.sh | sh', this)">📋</button>
 curl -fsSL https://vibeensemble.dev/install.sh | sh
           </div>
         </div>
 
         <div id="install-windows" class="command-content">
           <div class="code-block">
-            <button class="copy-btn" onclick="copyToClipboard('iwr -useb https://vibeensemble.dev/install.ps1 | iex', this)">Copy</button>
+            <button class="copy-btn" onclick="copyToClipboard('iwr -useb https://vibeensemble.dev/install.ps1 | iex', this)">📋</button>
 iwr -useb https://vibeensemble.dev/install.ps1 | iex
           </div>
         </div>
@@ -434,21 +528,31 @@ iwr -useb https://vibeensemble.dev/install.ps1 | iex
         <h3 style="color:white; margin-top:1rem;">Setup Steps</h3>
         <p><strong>Step 1:</strong> Start the server (create a separate directory for the server)</p>
         <div class="code-block">
-          <button class="copy-btn" onclick="copyToClipboard('mkdir vibe-server && cd vibe-server && vibe-ensemble-mcp', this)">Copy</button>
+          <button class="copy-btn" onclick="copyToClipboard('mkdir vibe-server && cd vibe-server && vibe-ensemble-mcp', this)">📋</button>
 mkdir vibe-server && cd vibe-server && vibe-ensemble-mcp
         </div>
         <p><strong>Step 2:</strong> Configure Claude Code (in a separate coordinator directory)</p>
         <div class="code-block">
-          <button class="copy-btn" onclick="copyToClipboard('mkdir vibe-coordinator && cd vibe-coordinator && vibe-ensemble-mcp --configure-claude-code', this)">Copy</button>
+          <button class="copy-btn" onclick="copyToClipboard('mkdir vibe-coordinator && cd vibe-coordinator && vibe-ensemble-mcp --configure-claude-code', this)">📋</button>
 mkdir vibe-coordinator && cd vibe-coordinator && vibe-ensemble-mcp --configure-claude-code
         </div>
-        <p>This creates coordinator commands: <code>/vibe-ensemble</code>, <code>/vibe-events</code>, <code>/vibe-status</code></p>
+        <p>This creates coordinator commands: <code>/vibe-ensemble</code>, <code>/vibe-events</code>, <code>/vibe-status</code>, <code>/vibe-poll</code></p>
         <p><strong>Step 3:</strong> Start Claude Code in the coordinator directory and run commands</p>
         <div class="code-block">
-          <button class="copy-btn" onclick="copyToClipboard('/vibe-ensemble', this)">Copy</button>
+          <button class="copy-btn" onclick="copyToClipboard('/vibe-ensemble', this)">📋</button>
 /vibe-ensemble  # Initialize as coordinator
-/vibe-events    # Process realtime IDE events
+        </div>
+        <div class="code-block">
+          <button class="copy-btn" onclick="copyToClipboard('/vibe-events', this)">📋</button>
+/vibe-events    # Process realtime events
+        </div>
+        <div class="code-block">
+          <button class="copy-btn" onclick="copyToClipboard('/vibe-status', this)">📋</button>
 /vibe-status    # Get project status reports
+        </div>
+        <div class="code-block">
+          <button class="copy-btn" onclick="copyToClipboard('/vibe-poll', this)">📋</button>
+/vibe-poll      # Continuous monitoring until completion
         </div>
       </div>
     </div>
