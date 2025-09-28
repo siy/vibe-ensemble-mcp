@@ -255,10 +255,32 @@ impl ProcessManager {
             request.server_port,
         )?;
 
-        // Create system prompt using template
+        // Create comprehensive system prompt with project rules and patterns
         let template = include_str!("../../templates/system_prompts/worker_spawn.md");
+
+        // Build the full prompt with worker template, project rules, and patterns
+        let mut full_prompt = request.system_prompt.clone();
+
+        // Add project rules if available
+        if let Some(ref rules) = request.project_rules {
+            if !rules.trim().is_empty() {
+                full_prompt.push_str("\n\n=== PROJECT RULES ===\n");
+                full_prompt.push_str("CRITICAL: You MUST follow these project rules:\n\n");
+                full_prompt.push_str(rules);
+            }
+        }
+
+        // Add project patterns if available
+        if let Some(ref patterns) = request.project_patterns {
+            if !patterns.trim().is_empty() {
+                full_prompt.push_str("\n\n=== PROJECT PATTERNS ===\n");
+                full_prompt.push_str("Follow these project patterns and conventions:\n\n");
+                full_prompt.push_str(patterns);
+            }
+        }
+
         let system_prompt = template
-            .replace("{system_prompt}", &request.system_prompt)
+            .replace("{system_prompt}", &full_prompt)
             .replace("{ticket_id}", &request.ticket_id);
 
         // Spawn Claude Code process with the system prompt

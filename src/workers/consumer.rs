@@ -105,7 +105,62 @@ impl WorkerConsumer {
             "Claimed ticket for processing"
         );
 
-        // Get project details to obtain the correct project path
+        // Get ticket with project details (including rules and patterns)
+        let ticket_with_project = match crate::database::tickets::Ticket::get_with_project_info(
+            &self.db,
+            &task.ticket_id,
+        )
+        .await
+        {
+            Ok(Some(ticket_info)) => ticket_info,
+            Ok(None) => {
+                error!(
+                    ticket_id = %task.ticket_id,
+                    "Ticket not found"
+                );
+                // Release the claim on ticket lookup failure
+                if let Err(release_error) = ClaimManager::release_ticket_claim_for_worker(
+                    &self.db,
+                    &task.ticket_id,
+                    &worker_id,
+                )
+                .await
+                {
+                    error!(
+                        ticket_id = %task.ticket_id,
+                        worker_id = %worker_id,
+                        error = %release_error,
+                        "Failed to release claim after ticket lookup failure"
+                    );
+                }
+                return Ok(());
+            }
+            Err(e) => {
+                error!(
+                    ticket_id = %task.ticket_id,
+                    error = %e,
+                    "Failed to fetch ticket with project details"
+                );
+                // Release the claim on database error
+                if let Err(release_error) = ClaimManager::release_ticket_claim_for_worker(
+                    &self.db,
+                    &task.ticket_id,
+                    &worker_id,
+                )
+                .await
+                {
+                    error!(
+                        ticket_id = %task.ticket_id,
+                        worker_id = %worker_id,
+                        error = %release_error,
+                        "Failed to release claim after database error"
+                    );
+                }
+                return Ok(());
+            }
+        };
+
+        // Get project details from the ticket info
         let project =
             match crate::database::projects::Project::get_by_id(&self.db, &self.project_id).await {
                 Ok(Some(project)) => project,
@@ -227,6 +282,8 @@ impl WorkerConsumer {
             ticket_id: task.ticket_id.clone(),
             project_path: project.path,
             system_prompt: worker_type_data.system_prompt,
+            project_rules: ticket_with_project.project_rules,
+            project_patterns: ticket_with_project.project_patterns,
             server_host: self.config.host.clone(),
             server_port: self.config.port,
             permission_mode: self.config.permission_mode,

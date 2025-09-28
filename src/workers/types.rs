@@ -51,6 +51,8 @@ pub struct SpawnWorkerRequest {
     pub ticket_id: String,
     pub project_path: String,
     pub system_prompt: String,
+    pub project_rules: Option<String>,
+    pub project_patterns: Option<String>,
     pub server_host: String,
     pub server_port: u16,
     pub permission_mode: PermissionMode,
