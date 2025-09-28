@@ -96,9 +96,12 @@ jobs:
     - name: Download all artifacts
       uses: actions/download-artifact@v4
 
-    - name: Create release
+    - name: Upload to existing release
       uses: ncipollo/release-action@v1
       with:
         artifacts: "*-assets/*"
         token: ${{ secrets.GITHUB_TOKEN }}
-        generateReleaseNotes: true
+        allowUpdates: true
+        updateOnlyUnreleased: false
+        omitBodyDuringUpdate: true
+        omitNameDuringUpdate: true
