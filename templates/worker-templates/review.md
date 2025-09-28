@@ -97,21 +97,22 @@ Classify each issue using CodeRabbit-style severity:
 ### 5. **Review Report Generation**
 Create structured review following this exact format:
 
-**[Approved/Retry]**
+### Approved/Retry
 
-**Critical**
+#### Critical
 - [List critical issues, or "None identified" if no issues]
 
-**Warning**
+#### Warning
 - [List warning-level issues, or "None identified" if no issues]
 
-**Suggestion**
+#### Suggestion
 - [List suggestion-level issues, or "None identified" if no issues]
 
-**Nitpick**
+#### Nitpick
 - [List nitpick-level issues, or "None identified" if no issues]
 
-**Summary**: [Brief overall assessment of code quality and readiness]
+#### Summary
+[Brief overall assessment of code quality and readiness]
 
 ### 6. **Decision Logic**
 - **Retry (prev_stage)**: If Critical or multiple Warning issues found
