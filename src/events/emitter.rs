@@ -323,7 +323,13 @@ impl<'a> EventEmitter<'a> {
     }
 
     /// Emit worker stopped event with both DB and SSE
-    pub async fn emit_worker_stopped(&self, worker_id: &str, worker_type: &str, project_id: &str, reason: &str) -> Result<()> {
+    pub async fn emit_worker_stopped(
+        &self,
+        worker_id: &str,
+        worker_type: &str,
+        project_id: &str,
+        reason: &str,
+    ) -> Result<()> {
         // Create DB event
         Event::create_worker_stopped(self.db, worker_id, reason).await?;
 

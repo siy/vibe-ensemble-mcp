@@ -105,7 +105,6 @@ impl WorkerConsumer {
             "Claimed ticket for processing"
         );
 
-
         // Get project details to obtain the correct project path
         let project =
             match crate::database::projects::Project::get_by_id(&self.db, &self.project_id).await {
@@ -117,8 +116,12 @@ impl WorkerConsumer {
                         "Project not found"
                     );
                     // Release the claim on project lookup failure
-                    if let Err(release_error) =
-                        ClaimManager::release_ticket_claim_for_worker(&self.db, &task.ticket_id, &worker_id).await
+                    if let Err(release_error) = ClaimManager::release_ticket_claim_for_worker(
+                        &self.db,
+                        &task.ticket_id,
+                        &worker_id,
+                    )
+                    .await
                     {
                         error!(
                             ticket_id = %task.ticket_id,
@@ -137,8 +140,12 @@ impl WorkerConsumer {
                         "Failed to fetch project details"
                     );
                     // Release the claim on database error
-                    if let Err(release_error) =
-                        ClaimManager::release_ticket_claim_for_worker(&self.db, &task.ticket_id, &worker_id).await
+                    if let Err(release_error) = ClaimManager::release_ticket_claim_for_worker(
+                        &self.db,
+                        &task.ticket_id,
+                        &worker_id,
+                    )
+                    .await
                     {
                         error!(
                             ticket_id = %task.ticket_id,
@@ -168,8 +175,12 @@ impl WorkerConsumer {
                     "Worker type not found"
                 );
                 // Release the claim on worker type lookup failure
-                if let Err(release_error) =
-                    ClaimManager::release_ticket_claim_for_worker(&self.db, &task.ticket_id, &worker_id).await
+                if let Err(release_error) = ClaimManager::release_ticket_claim_for_worker(
+                    &self.db,
+                    &task.ticket_id,
+                    &worker_id,
+                )
+                .await
                 {
                     error!(
                         ticket_id = %task.ticket_id,
@@ -189,8 +200,12 @@ impl WorkerConsumer {
                     "Failed to fetch worker type details"
                 );
                 // Release the claim on database error
-                if let Err(release_error) =
-                    ClaimManager::release_ticket_claim_for_worker(&self.db, &task.ticket_id, &worker_id).await
+                if let Err(release_error) = ClaimManager::release_ticket_claim_for_worker(
+                    &self.db,
+                    &task.ticket_id,
+                    &worker_id,
+                )
+                .await
                 {
                     error!(
                         ticket_id = %task.ticket_id,
@@ -233,7 +248,6 @@ impl WorkerConsumer {
                     ticket_id = %task.ticket_id,
                     "Worker completed successfully"
                 );
-
 
                 // Use the pipeline to determine the target stage
                 let transition_manager = TicketTransitionManager::new(self.db.clone());
@@ -333,8 +347,12 @@ impl WorkerConsumer {
                         "Failed to send completion event"
                     );
                     // Release the claim if we cannot forward the completion event
-                    if let Err(release_error) =
-                        ClaimManager::release_ticket_claim_for_worker(&self.db, &task.ticket_id, &worker_id).await
+                    if let Err(release_error) = ClaimManager::release_ticket_claim_for_worker(
+                        &self.db,
+                        &task.ticket_id,
+                        &worker_id,
+                    )
+                    .await
                     {
                         error!(
                             ticket_id = %task.ticket_id,
@@ -345,8 +363,10 @@ impl WorkerConsumer {
                     }
                 } else {
                     // Emit event for worker completion only after successful send
-                    let emitter =
-                        crate::events::emitter::EventEmitter::new(&self.db, &self.event_broadcaster);
+                    let emitter = crate::events::emitter::EventEmitter::new(
+                        &self.db,
+                        &self.event_broadcaster,
+                    );
                     if let Err(e) = emitter
                         .emit_worker_completed(&worker_id, &self.stage, &self.project_id)
                         .await
@@ -364,8 +384,12 @@ impl WorkerConsumer {
                 );
 
                 // Release the claim on failure
-                if let Err(release_error) =
-                    ClaimManager::release_ticket_claim_for_worker(&self.db, &task.ticket_id, &worker_id).await
+                if let Err(release_error) = ClaimManager::release_ticket_claim_for_worker(
+                    &self.db,
+                    &task.ticket_id,
+                    &worker_id,
+                )
+                .await
                 {
                     error!(
                         ticket_id = %task.ticket_id,

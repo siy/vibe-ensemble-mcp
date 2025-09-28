@@ -31,11 +31,13 @@ fn initialize_git_repository(project_path: &str) -> Result<String> {
             .current_dir(project_path)
             .args(["rev-parse", "--abbrev-ref", "HEAD"])
             .output()
-            .map_err(|e| crate::error::AppError::BadRequest(format!("Failed to check git branch: {}", e)))?;
+            .map_err(|e| {
+                crate::error::AppError::BadRequest(format!("Failed to check git branch: {}", e))
+            })?;
 
         if !output.status.success() {
             return Err(crate::error::AppError::BadRequest(
-                "Failed to determine current git branch".to_string()
+                "Failed to determine current git branch".to_string(),
             ));
         }
 
@@ -51,7 +53,10 @@ fn initialize_git_repository(project_path: &str) -> Result<String> {
             )));
         }
 
-        return Ok(format!("Using existing git repository on branch '{}'", current_branch));
+        return Ok(format!(
+            "Using existing git repository on branch '{}'",
+            current_branch
+        ));
     }
 
     // Initialize new git repository
@@ -61,11 +66,16 @@ fn initialize_git_repository(project_path: &str) -> Result<String> {
         .current_dir(project_path)
         .args(["init"])
         .output()
-        .map_err(|e| crate::error::AppError::BadRequest(format!("Failed to initialize git repository: {}", e)))?;
+        .map_err(|e| {
+            crate::error::AppError::BadRequest(format!(
+                "Failed to initialize git repository: {}",
+                e
+            ))
+        })?;
 
     if !init_output.status.success() {
         return Err(crate::error::AppError::BadRequest(
-            "Failed to initialize git repository".to_string()
+            "Failed to initialize git repository".to_string(),
         ));
     }
 
@@ -93,7 +103,9 @@ fn initialize_git_repository(project_path: &str) -> Result<String> {
         .current_dir(project_path)
         .args(["add", "."])
         .output()
-        .map_err(|e| crate::error::AppError::BadRequest(format!("Failed to stage initial files: {}", e)))?;
+        .map_err(|e| {
+            crate::error::AppError::BadRequest(format!("Failed to stage initial files: {}", e))
+        })?;
 
     if !add_output.status.success() {
         warn!("Failed to stage initial files for git commit");
@@ -101,9 +113,15 @@ fn initialize_git_repository(project_path: &str) -> Result<String> {
 
     let commit_output = Command::new("git")
         .current_dir(project_path)
-        .args(["commit", "-m", "chore: initialize project with vibe-ensemble-mcp"])
+        .args([
+            "commit",
+            "-m",
+            "chore: initialize project with vibe-ensemble-mcp",
+        ])
         .output()
-        .map_err(|e| crate::error::AppError::BadRequest(format!("Failed to create initial commit: {}", e)))?;
+        .map_err(|e| {
+            crate::error::AppError::BadRequest(format!("Failed to create initial commit: {}", e))
+        })?;
 
     if !commit_output.status.success() {
         warn!("Failed to create initial git commit");

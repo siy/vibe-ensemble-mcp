@@ -85,8 +85,15 @@ impl ClaimManager {
     }
 
     /// Release a specific ticket claim by ticket ID and worker ID (scoped release)
-    pub async fn release_ticket_claim_for_worker(db: &DbPool, ticket_id: &str, worker_id: &str) -> Result<()> {
-        info!("Releasing claim for ticket: {} by worker: {}", ticket_id, worker_id);
+    pub async fn release_ticket_claim_for_worker(
+        db: &DbPool,
+        ticket_id: &str,
+        worker_id: &str,
+    ) -> Result<()> {
+        info!(
+            "Releasing claim for ticket: {} by worker: {}",
+            ticket_id, worker_id
+        );
 
         let rows_affected = sqlx::query(
             "UPDATE tickets SET processing_worker_id = NULL, updated_at = datetime('now') WHERE ticket_id = ?1 AND processing_worker_id = ?2"
@@ -98,9 +105,15 @@ impl ClaimManager {
         .rows_affected();
 
         if rows_affected > 0 {
-            info!("Successfully released claim on ticket: {} by worker: {}", ticket_id, worker_id);
+            info!(
+                "Successfully released claim on ticket: {} by worker: {}",
+                ticket_id, worker_id
+            );
         } else {
-            info!("No matching claim found for ticket: {} by worker: {}", ticket_id, worker_id);
+            info!(
+                "No matching claim found for ticket: {} by worker: {}",
+                ticket_id, worker_id
+            );
         }
 
         Ok(())
