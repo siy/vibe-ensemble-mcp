@@ -448,11 +448,12 @@ impl EventPayload {
         }
     }
 
-    /// Convert to JSON-RPC notification format - uses sampling/createMessage for Claude processing
+    /// Convert to JSON-RPC notification format for SSE events and logging
     pub fn to_jsonrpc_notification(&self) -> Value {
         use crate::mcp::JsonRpcEnvelopes;
 
-        // Use sampling/createMessage format to trigger Claude to process realtime events
-        JsonRpcEnvelopes::sampling_create_message()
+        // Return a simple JSON representation of the event for SSE and logging
+        let event_value = serde_json::to_value(self).unwrap_or(serde_json::Value::Null);
+        JsonRpcEnvelopes::notification("notifications/events", event_value)
     }
 }
