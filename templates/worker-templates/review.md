@@ -18,8 +18,15 @@ Read the last comment from implementation to understand:
 - Specific areas requiring attention
 - Performance considerations and trade-offs
 
+**MANDATORY PRE-ANALYSIS CHECKLIST**:
+- [ ] Read and understood the implementation report
+- [ ] Identified all modified/new files requiring review
+- [ ] Determined appropriate language-specific analysis patterns
+- [ ] Noted any project-specific rules or patterns to enforce
+- [ ] Prepared to examine all five analysis categories systematically
+
 ### 2. **Multi-Category Code Analysis**
-Perform systematic analysis across all categories:
+**MANDATORY COMPREHENSIVE ANALYSIS**: You MUST analyze ALL categories below. Each category requires thorough examination - never skip or provide superficial analysis.
 
 #### **🔒 Security Analysis**
 - Input validation and sanitization
@@ -95,24 +102,39 @@ Classify each issue using CodeRabbit-style severity:
 - **🧹 Nitpick**: Style issues, minor improvements, formatting
 
 ### 5. **Review Report Generation**
+**MANDATORY**: You MUST provide a complete report covering ALL categories. Never skip sections or provide abbreviated responses.
+
 Create structured review following this exact format:
 
 ### Approved/Retry
 
 #### Critical
-- [List critical issues, or "None identified" if no issues]
+**REQUIRED**: Analyze ALL critical aspects listed above. Either:
+- List specific critical issues found with file:line references and clear explanations
+- State "No critical issues identified after comprehensive analysis of: [list what you analyzed - security vulnerabilities, compilation, critical bugs, etc.]"
 
 #### Warning
-- [List warning-level issues, or "None identified" if no issues]
+**REQUIRED**: Analyze ALL warning-level aspects. Either:
+- List specific warning-level issues found with file:line references and actionable recommendations
+- State "No warning issues identified after analysis of: [list what you analyzed - performance, potential bugs, anti-patterns, etc.]"
 
 #### Suggestion
-- [List suggestion-level issues, or "None identified" if no issues]
+**REQUIRED**: Analyze ALL architectural and improvement opportunities. Either:
+- List specific suggestions for improvements with reasoning and benefits
+- State "No major suggestions identified after analysis of: [list what you analyzed - architecture, refactoring opportunities, design patterns, etc.]"
 
 #### Nitpick
-- [List nitpick-level issues, or "None identified" if no issues]
+**REQUIRED**: Analyze ALL style and minor improvement aspects. Either:
+- List specific style/formatting issues or minor improvements
+- State "No nitpick issues identified after analysis of: [list what you analyzed - formatting, naming, minor style issues, etc.]"
 
 #### Summary
-[Brief overall assessment of code quality and readiness]
+**MANDATORY COMPREHENSIVE SUMMARY**: Provide detailed assessment including:
+- Overall code quality rating (Excellent/Good/Fair/Poor) with justification
+- Key strengths identified in the implementation
+- Most important areas for improvement (if any)
+- Confidence level in the code's readiness for next stage
+- Specific praise for well-implemented patterns or solutions
 
 ### 6. **Decision Logic**
 - **Retry (prev_stage)**: If Critical or multiple Warning issues found
@@ -157,30 +179,41 @@ Create structured review following this exact format:
 
 ## JSON OUTPUT FORMAT
 
-For successful review:
+For successful review (EXAMPLE OF COMPREHENSIVE REPORTING):
 ```json
 {
   "outcome": "next_stage",
-  "comment": "[Structured review report following exact format above]",
-  "reason": "Code review completed. [Brief summary of findings and decision rationale]"
+  "comment": "### Approved\n\n#### Critical\nNo critical issues identified after comprehensive analysis of: security vulnerabilities (input validation, authentication, data exposure), compilation errors, and critical bugs. All security patterns follow best practices.\n\n#### Warning\nNo warning issues identified after analysis of: algorithm complexity (all O(n) or better), memory management (proper cleanup), database queries (optimized), and anti-patterns. Performance characteristics are acceptable.\n\n#### Suggestion\n- Consider adding Result<> type annotations in parse_config() for better error handling (line 45)\n- Extract validation logic into separate module for better separation of concerns\n\n#### Nitpick\n- Variable naming: 'temp_val' could be more descriptive as 'parsed_value' (line 67)\n- Missing documentation comment for public function process_data() (line 23)\n\n#### Summary\nOverall code quality: Good. Implementation follows Rust best practices with proper error handling and memory safety. Architecture is clean with appropriate separation of concerns. Code is ready for next stage with minor suggestions for future improvement. Strong use of type system and idiomatic patterns.",
+  "reason": "Code review completed. Found well-structured implementation with no blocking issues, minor suggestions noted for future enhancement."
 }
 ```
 
-For review requiring changes:
+For review requiring changes (EXAMPLE OF COMPREHENSIVE REPORTING):
 ```json
 {
   "outcome": "prev_stage",
-  "comment": "[Structured review report following exact format above]",
-  "reason": "Found [X] critical and [Y] warning issues requiring implementation attention before proceeding."
+  "comment": "[Full detailed report following the same comprehensive format as above, but with critical/warning issues listed]",
+  "reason": "Found 2 critical security issues and 3 warning-level performance concerns requiring implementation attention before proceeding."
 }
 ```
 
-## IMPORTANT NOTES
+## CRITICAL REQUIREMENTS
 
-1. **Always follow the exact review report format** - this ensures consistency across all reviews
-2. **Be thorough but practical** - focus on issues that matter for code quality and maintainability
-3. **Provide actionable feedback** - each issue should be specific enough to guide fixes
-4. **Consider project context** - align with project rules and patterns when available
-5. **Balance automation with quality** - maintain high standards while enabling workflow progression
+### **MANDATORY FULL REPORTING**
+1. **NEVER provide abbreviated reports** - "None identified" without detailed analysis is unacceptable
+2. **ALWAYS demonstrate what you analyzed** - show evidence of comprehensive examination
+3. **REQUIRED format compliance** - follow the exact review report structure without deviation
+4. **MANDATORY category coverage** - all four categories (Critical/Warning/Suggestion/Nitpick) must be thoroughly addressed
 
-Focus on delivering comprehensive, professional-grade code review that catches real issues while maintaining development velocity.
+### **QUALITY STANDARDS**
+5. **Specific, actionable feedback** - each issue must include file:line references and clear remediation steps
+6. **Evidence-based analysis** - cite specific code patterns, metrics, or violations found
+7. **Context-aware recommendations** - align with project rules, patterns, and architectural decisions
+8. **Professional-grade thoroughness** - match or exceed CodeRabbit quality standards
+
+### **ACCOUNTABILITY MEASURES**
+- **Incomplete reports will be rejected** - reports lacking comprehensive analysis will trigger re-review
+- **Evidence requirement** - must show what aspects were examined in each category
+- **Decision justification** - approval/retry decisions must be clearly supported by findings
+
+**CRITICAL**: Your review quality directly impacts code quality and team productivity. Provide the thorough, professional analysis that developers depend on.
