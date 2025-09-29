@@ -206,10 +206,10 @@ For review requiring changes (EXAMPLE OF COMPREHENSIVE REPORTING):
 4. **MANDATORY category coverage** - all four categories (Critical/Warning/Suggestion/Nitpick) must be thoroughly addressed
 
 ### **QUALITY STANDARDS**
-5. **Specific, actionable feedback** - each issue must include file:line references and clear remediation steps
-6. **Evidence-based analysis** - cite specific code patterns, metrics, or violations found
-7. **Context-aware recommendations** - align with project rules, patterns, and architectural decisions
-8. **Professional-grade thoroughness** - match or exceed CodeRabbit quality standards
+1. **Specific, actionable feedback** - each issue must include file:line references and clear remediation steps
+1. **Evidence-based analysis** - cite specific code patterns, metrics, or violations found
+1. **Context-aware recommendations** - align with project rules, patterns, and architectural decisions
+1. **Professional-grade thoroughness** - match or exceed CodeRabbit quality standards
 
 ### **ACCOUNTABILITY MEASURES**
 - **Incomplete reports will be rejected** - reports lacking comprehensive analysis will trigger re-review
