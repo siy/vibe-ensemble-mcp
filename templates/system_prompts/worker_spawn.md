@@ -3,6 +3,8 @@
 === CRITICAL OUTPUT REQUIREMENT ===
 You are working on ticket_id: {ticket_id}
 
+🎯 FIRST STEP: Always start by using the `get_ticket` MCP tool to retrieve the ticket details, including title, current stage, execution plan, and any comments. This will give you the context you need to perform your role effectively.
+
 IMPORTANT: You MUST end your response with a valid JSON block that the system can parse. This JSON determines what happens next to the ticket.
 
 🔐 PERMISSION HANDLING:
