@@ -255,20 +255,54 @@ impl ProcessManager {
             request.server_port,
         )?;
 
-        // Create system prompt using template
+        // Create comprehensive system prompt with project rules and patterns
         let template = include_str!("../../templates/system_prompts/worker_spawn.md");
-        let system_prompt = template
-            .replace("{system_prompt}", &request.system_prompt)
-            .replace("{ticket_id}", &request.ticket_id);
 
-        // Spawn Claude Code process with the system prompt
+        // Build the full prompt with worker template, project rules, and patterns
+        let mut full_prompt = request.system_prompt.clone();
+
+        // Add project rules if available
+        if let Some(ref rules) = request.project_rules {
+            if !rules.trim().is_empty() {
+                full_prompt.push_str("\n\n=== PROJECT RULES ===\n");
+                full_prompt.push_str("CRITICAL: You MUST follow these project rules:\n\n```md\n");
+                full_prompt.push_str(rules);
+                full_prompt.push_str("\n```\n");
+            }
+        }
+
+        // Add project patterns if available
+        if let Some(ref patterns) = request.project_patterns {
+            if !patterns.trim().is_empty() {
+                full_prompt.push_str("\n\n=== PROJECT PATTERNS ===\n");
+                full_prompt.push_str("Follow these project patterns and conventions:\n\n```md\n");
+                full_prompt.push_str(patterns);
+                full_prompt.push_str("\n```\n");
+            }
+        }
+
+        let system_prompt = template
+            .replace("{ticket_id}", &request.ticket_id)
+            .replace("{system_prompt}", &full_prompt);
+
+        // Create temporary prompt file to avoid ARG_MAX issues with large prompts
+        let sanitized_worker_id = request.worker_id.replace(['/', ':', ' ', '\\'], "_");
+        let prompt_path = format!(
+            "{}/.vibe-ensemble-mcp/worker_{}_prompt.txt",
+            request.project_path, sanitized_worker_id
+        );
+
+        fs::write(&prompt_path, &system_prompt)
+            .with_context(|| format!("Failed to write prompt file to {}", prompt_path))?;
+
+        // Spawn Claude Code process with the system prompt file
         info!(
             "Spawning Claude Code with working directory: {}",
             request.project_path
         );
         let mut cmd = Command::new("claude");
-        cmd.arg("-p")
-            .arg(&system_prompt)
+        cmd.arg("--system-prompt-file")
+            .arg(&prompt_path)
             .arg("--debug")
             //.arg("--verbose")
             .arg("--mcp-config")
@@ -291,7 +325,14 @@ impl ProcessManager {
         )?;
 
         debug!("Executing command: {:?}", cmd);
-        let child = cmd.spawn()?;
+        let child = match cmd.spawn() {
+            Ok(c) => c,
+            Err(e) => {
+                let _ = std::fs::remove_file(&config_path);
+                let _ = std::fs::remove_file(&prompt_path);
+                return Err(e.into());
+            }
+        };
         let pid = child.id().unwrap_or(0);
         info!("Worker process spawned with PID: {}", pid);
 
@@ -315,11 +356,13 @@ impl ProcessManager {
             );
             // Clean up
             let _ = std::fs::remove_file(&config_path);
+            let _ = std::fs::remove_file(&prompt_path);
             return Ok(parsed_output);
         }
 
-        // Clean up config file
+        // Clean up config and prompt files
         let _ = std::fs::remove_file(&config_path);
+        let _ = std::fs::remove_file(&prompt_path);
 
         // If we get here, the worker didn't produce valid output
         // This should be handled by the caller via WorkerOutput::CoordinatorAttention
