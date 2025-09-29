@@ -5,6 +5,41 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.9.5] - 2025-09-29
+
+### Fixed
+- **🔧 Project Rules Injection**: Fixed project rules injection in worker prompts for consistent application of project standards
+- **🎯 Manual Workflow Dispatch**: Added tag reference for manual workflow dispatch and improved CI release process
+- **📦 Release Process**: Fixed CI to allow uploading binaries to existing releases
+
+### Changed
+- **🚀 Enhanced CI/CD**: Improved release workflow with manual dispatch capability for better release management
+
+## [0.9.4] - 2025-09-29
+
+### Fixed
+- **🌐 Website Updates**: Fixed website and README.md content improvements
+- **📚 Documentation**: Enhanced documentation clarity and accuracy
+
+## [0.9.3] - 2025-09-29
+
+### Added
+- **🧩 Enhanced Worker Templates**: Improved worker template system with better customization support
+- **🌐 Modern Website**: Added modern website infrastructure
+
+### Fixed
+- **📋 Template Management**: Improved worker template handling and loading mechanisms
+- **🔧 Installation Process**: Fixed installation script and improved documentation quality
+
+## [0.9.2] - 2025-09-29
+
+### Added
+- **🎨 Enhanced Worker Templates**: Comprehensive improvements to worker template system
+- **🌐 Modern Website Infrastructure**: Added modern website for better project presentation
+
+### Changed
+- **📚 Documentation**: Improved documentation structure and content quality
+
 ## [0.9.0] - 2025-01-17
 
 ### Added
