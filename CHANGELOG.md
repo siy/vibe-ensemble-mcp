@@ -5,6 +5,35 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.9.6] - 2025-09-30
+
+### Added
+- **🔄 Automatic Update Tracking**: Periodic update checks every 4 hours (configurable) with GitHub API integration
+- **⬆️ One-Command Upgrade**: `vibe-ensemble-mcp --upgrade` for seamless updates via install script
+- **📡 Update Events**: New event types (`UpdateCheckStarted`, `UpdateAvailable`, `UpdateCheckFailed`) integrated into event system
+- **🛡️ Enhanced Validation**: Comprehensive input validation for worker spawning (ticket IDs, paths, prompts)
+- **📋 Ticket On-Hold State**: Automatic placement of tickets on-hold when validation failures occur
+
+### Fixed
+- **🐛 Worker Spawn Race Condition**: Fixed double-claim issue preventing workers from starting (removed redundant claim in consumer)
+- **📛 Project Name Display**: Fixed project_created event to use repository_name instead of non-existent id field
+- **🔒 Scopeguard Safety**: Installed cleanup guard before fallible operations to prevent stuck claims
+- **⚡ Async Cleanup**: Replaced Handle::block_on with tokio::spawn to avoid runtime deadlock
+- **📝 Review Template**: Enhanced review worker template with comprehensive analysis requirements (59→243 lines)
+- **🔕 Notification Cleanup**: Removed obsolete sampling/createMessage notifications
+- **🔧 Worker Prompt**: Restored -p parameter for proper worker prompt input
+- **✅ Path Validation**: Added project path validation at creation time
+
+### Changed
+- **📊 SSE Capacity**: Increased real-time notification capacity for better monitoring
+- **🏥 Health Monitoring**: Added SSE/WebSocket connection health checks
+- **🎯 Claim Feedback**: More explicit feedback when tickets cannot be claimed or are already claimed
+- **⏱️ Configurable Timeout**: Worker execution timeout now configurable via WORKER_TIMEOUT_SECS
+- **🔐 Safer DB Queries**: Improved database query handling and error recovery
+
+### Dependencies
+- Added `reqwest` for HTTP client functionality (GitHub API calls)
+
 ## [0.9.5] - 2025-09-29
 
 ### Fixed
