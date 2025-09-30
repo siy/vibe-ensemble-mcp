@@ -85,6 +85,18 @@ pub async fn run_server(config: Config) -> Result<()> {
         respawn_workers_for_unfinished_tasks(&state).await?;
     }
 
+    // Start update checking service if enabled
+    if !config.disable_update_checks {
+        info!(
+            "Starting update check service (interval: {} hours)",
+            config.update_check_interval_hours
+        );
+        let update_service = crate::updates::UpdateService::new(config.update_check_interval_hours);
+        let _update_task =
+            update_service.start_periodic_checks(state.db.clone(), state.event_broadcaster.clone());
+        // Note: We don't need to keep the JoinHandle as the task will run until server shutdown
+    }
+
     let cors = CorsLayer::new()
         .allow_methods([Method::GET, Method::POST, Method::OPTIONS])
         .allow_headers([

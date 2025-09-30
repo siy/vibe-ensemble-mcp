@@ -36,6 +36,9 @@ pub enum EventType {
     SystemInit,
     SystemMessage,
     EndpointDiscovery,
+    UpdateCheckStarted,
+    UpdateAvailable,
+    UpdateCheckFailed,
 }
 
 impl std::fmt::Display for EventType {
@@ -60,6 +63,9 @@ impl std::fmt::Display for EventType {
             EventType::SystemInit => write!(f, "system_init"),
             EventType::SystemMessage => write!(f, "system_message"),
             EventType::EndpointDiscovery => write!(f, "endpoint_discovery"),
+            EventType::UpdateCheckStarted => write!(f, "update_check_started"),
+            EventType::UpdateAvailable => write!(f, "update_available"),
+            EventType::UpdateCheckFailed => write!(f, "update_check_failed"),
         }
     }
 }
@@ -448,11 +454,64 @@ impl EventPayload {
         }
     }
 
-    /// Convert to JSON-RPC notification format - uses sampling/createMessage for Claude processing
+    /// Create an update check started event
+    pub fn update_check_started(current_version: &str) -> Self {
+        Self {
+            event_type: EventType::UpdateCheckStarted,
+            timestamp: Utc::now(),
+            data: EventData::System(SystemEventData {
+                component: "update_service".to_string(),
+                message: "Checking for updates".to_string(),
+                metadata: Some(serde_json::json!({
+                    "current_version": current_version
+                })),
+            }),
+        }
+    }
+
+    /// Create an update available event
+    pub fn update_available(
+        current_version: &str,
+        latest_version: &str,
+        release_url: &str,
+    ) -> Self {
+        Self {
+            event_type: EventType::UpdateAvailable,
+            timestamp: Utc::now(),
+            data: EventData::System(SystemEventData {
+                component: "update_service".to_string(),
+                message: format!("Update available: v{}", latest_version),
+                metadata: Some(serde_json::json!({
+                    "current_version": current_version,
+                    "latest_version": latest_version,
+                    "release_url": release_url
+                })),
+            }),
+        }
+    }
+
+    /// Create an update check failed event
+    pub fn update_check_failed(current_version: &str, error_message: &str) -> Self {
+        Self {
+            event_type: EventType::UpdateCheckFailed,
+            timestamp: Utc::now(),
+            data: EventData::System(SystemEventData {
+                component: "update_service".to_string(),
+                message: format!("Update check failed: {}", error_message),
+                metadata: Some(serde_json::json!({
+                    "current_version": current_version,
+                    "error": error_message
+                })),
+            }),
+        }
+    }
+
+    /// Convert to JSON-RPC notification format for SSE events and logging
     pub fn to_jsonrpc_notification(&self) -> Value {
         use crate::mcp::JsonRpcEnvelopes;
 
-        // Use sampling/createMessage format to trigger Claude to process realtime events
-        JsonRpcEnvelopes::sampling_create_message()
+        // Return a simple JSON representation of the event for SSE and logging
+        let event_value = serde_json::to_value(self).unwrap_or(serde_json::Value::Null);
+        JsonRpcEnvelopes::notification("notifications/events", event_value)
     }
 }

@@ -9,5 +9,6 @@ pub mod mcp;
 pub mod permissions;
 pub mod server;
 pub mod sse;
+pub mod updates;
 pub mod validation;
 pub mod workers;

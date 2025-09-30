@@ -992,13 +992,6 @@ impl WebSocketManager {
         use super::types::*;
 
         // Check if client supports the necessary MCP capabilities
-        let _has_sampling = client
-            .capabilities
-            .mcp_capabilities
-            .as_ref()
-            .and_then(|caps| caps.sampling.as_ref())
-            .map(|sampling| sampling.enabled)
-            .unwrap_or(false);
 
         let has_logging = client
             .capabilities
@@ -1038,6 +1031,9 @@ impl WebSocketManager {
                 crate::events::EventType::SystemInit => "info",
                 crate::events::EventType::SystemMessage => "info",
                 crate::events::EventType::EndpointDiscovery => "info",
+                crate::events::EventType::UpdateCheckStarted => "info",
+                crate::events::EventType::UpdateAvailable => "info",
+                crate::events::EventType::UpdateCheckFailed => "warning",
             };
 
             let user_friendly_data = self.format_user_friendly_event(event_payload);
@@ -1103,41 +1099,6 @@ impl WebSocketManager {
                 );
             }
         }
-
-        // 3. Send sampling/createMessage for supported clients
-        // TEMPORARILY DISABLED per user request
-        /*
-        if has_sampling {
-            let sampling_message = JsonRpcNotification::new(
-                "sampling/createMessage",
-                Some(serde_json::to_value(SamplingCreateMessage {
-                    messages: vec![SamplingMessage {
-                        role: "user".to_string(),
-                        content: SamplingContent {
-                            content_type: "text".to_string(),
-                            text: "New IDE events available. Call list_events now and summarize the key changes.".to_string(),
-                        },
-                    }],
-                    include_context: "thisServer".to_string(),
-                    max_tokens: 200,
-                }).unwrap_or(serde_json::Value::Null))
-            );
-
-            let message_text = sampling_message.to_string();
-            if let Err(e) = client.sender.send(Message::Text(message_text.clone())) {
-                error!(
-                    "Failed to send sampling/createMessage to client {}: {}",
-                    client_id, e
-                );
-            } else {
-                trace!(
-                    "Sent sampling/createMessage to client {}: {}",
-                    client_id,
-                    message_text
-                );
-            }
-        }
-        */
     }
 
     /// Format event data in a user-friendly way for notifications/message
@@ -1251,9 +1212,6 @@ impl WebSocketManager {
             loop {
                 match receiver.recv().await {
                     Ok(event_payload) => {
-                        // Convert event to JSON-RPC notification format
-                        // TEMPORARILY DISABLED per user request - sampling/createMessage disabled
-                        // let notification = event_payload.to_jsonrpc_notification();
                         let client_count = self.clients.len();
 
                         info!(
@@ -1262,17 +1220,6 @@ impl WebSocketManager {
                                 .unwrap_or_else(|_| "unknown".to_string()),
                             client_count
                         );
-
-                        // Log the complete JSON-RPC message being sent to WebSocket clients
-                        // TEMPORARILY DISABLED per user request - sampling/createMessage disabled
-                        /*
-                        trace!(
-                            "WebSocket JSON-RPC message: {}",
-                            serde_json::to_string_pretty(&notification).unwrap_or_else(|_| {
-                                "Failed to serialize JSON-RPC message".to_string()
-                            })
-                        );
-                        */
 
                         // Broadcast to all connected WebSocket clients
                         let clients_to_remove =
@@ -1283,8 +1230,7 @@ impl WebSocketManager {
                             let client_id = entry.key().clone();
                             let client = entry.value().clone();
 
-                            // Send event to client - TEMPORARILY DISABLED (sampling/createMessage disabled)
-                            // Only send MCP notifications now
+                            // Send MCP notifications to client
 
                             // Count as successful for MCP notifications
                             successful_deliveries += 1;

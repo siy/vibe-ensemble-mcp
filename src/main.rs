@@ -46,11 +46,28 @@ struct Args {
     /// Maximum concurrent client requests
     #[arg(long, default_value = "50")]
     max_concurrent_client_requests: usize,
+
+    /// Update check interval in hours
+    #[arg(long, default_value = "4")]
+    update_check_interval_hours: u64,
+
+    /// Disable automatic update checks
+    #[arg(long)]
+    disable_update_checks: bool,
+
+    /// Upgrade to the latest version
+    #[arg(long)]
+    upgrade: bool,
 }
 
 #[tokio::main]
 async fn main() -> Result<()> {
     let args = Args::parse();
+
+    // Handle upgrade mode
+    if args.upgrade {
+        return handle_upgrade();
+    }
 
     // Handle configuration mode
     if args.configure_claude_code {
@@ -96,9 +113,59 @@ async fn main() -> Result<()> {
         permission_mode: args.permission_mode,
         client_tool_timeout_secs: args.client_tool_timeout_secs,
         max_concurrent_client_requests: args.max_concurrent_client_requests,
+        update_check_interval_hours: args.update_check_interval_hours,
+        disable_update_checks: args.disable_update_checks,
     };
 
     run_server(config).await?;
 
     Ok(())
+}
+
+fn handle_upgrade() -> Result<()> {
+    println!("Starting upgrade process...");
+
+    let os = std::env::consts::OS;
+    let result = match os {
+        "macos" | "linux" => {
+            // Use sh to execute the curl command
+            std::process::Command::new("sh")
+                .arg("-c")
+                .arg("curl -fsSL https://vibeensemble.dev/install.sh | sh")
+                .status()
+        }
+        "windows" => {
+            // Use PowerShell to execute the download and install
+            std::process::Command::new("powershell")
+                .arg("-Command")
+                .arg("iwr -useb https://vibeensemble.dev/install.ps1 | iex")
+                .status()
+        }
+        _ => {
+            eprintln!("Unsupported operating system: {}", os);
+            eprintln!("Please manually download the latest release from:");
+            eprintln!("https://github.com/siy/vibe-ensemble-mcp/releases");
+            std::process::exit(1);
+        }
+    };
+
+    match result {
+        Ok(status) if status.success() => {
+            println!("\n✓ Upgrade completed successfully!");
+            println!("Please restart the server to use the new version.");
+            Ok(())
+        }
+        Ok(status) => {
+            eprintln!("\n✗ Upgrade failed with exit code: {:?}", status.code());
+            eprintln!("Please try manually downloading from:");
+            eprintln!("https://github.com/siy/vibe-ensemble-mcp/releases");
+            std::process::exit(1);
+        }
+        Err(e) => {
+            eprintln!("\n✗ Failed to execute upgrade command: {}", e);
+            eprintln!("Please try manually downloading from:");
+            eprintln!("https://github.com/siy/vibe-ensemble-mcp/releases");
+            std::process::exit(1);
+        }
+    }
 }

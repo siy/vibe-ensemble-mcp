@@ -154,28 +154,6 @@ impl JsonRpcEnvelopes {
             "params": params
         })
     }
-
-    /// Create sampling/createMessage notification for Claude to process realtime events
-    pub fn sampling_create_message() -> Value {
-        json!({
-            "jsonrpc": "2.0",
-            "id": 1,
-            "method": "sampling/createMessage",
-            "params": {
-                "messages": [
-                    {
-                        "role": "user",
-                        "content": {
-                            "type": "text",
-                            "text": "Address realtime events and process them."
-                        }
-                    }
-                ],
-                "includeContext": "thisServer",
-                "maxTokens": 200
-            }
-        })
-    }
 }
 
 /// Complete list of MCP tools available on the server

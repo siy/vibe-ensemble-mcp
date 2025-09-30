@@ -76,33 +76,56 @@ impl WorkerConsumer {
             "Processing task"
         );
 
-        // Attempt to claim the ticket for processing
+        // Note: Ticket is already claimed by QueueManager::submit_task() before being added to queue
+        // We trust that the ticket is properly claimed and ready for processing
+
+        // Create worker_id from raw ticket_id first (before validation) so guard can use it
+        let worker_id = format!("{}:{}:{}", self.project_id, self.stage, &task.ticket_id);
+
+        // Install cleanup guard BEFORE any fallible operations to avoid stuck claims
+        let db_clone = self.db.clone();
+        let ticket_id_clone = task.ticket_id.clone();
+        let worker_id_clone = worker_id.clone();
+        let claim_released = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false));
+        let claim_released_guard = claim_released.clone();
+
+        let _guard = scopeguard::guard((), move |_| {
+            if !claim_released_guard.load(std::sync::atomic::Ordering::SeqCst) {
+                warn!(
+                    ticket_id = %ticket_id_clone,
+                    worker_id = %worker_id_clone,
+                    "Releasing claim due to error path (scopeguard cleanup)"
+                );
+                // Spawn async cleanup task instead of blocking the runtime
+                tokio::spawn(async move {
+                    if let Err(e) = ClaimManager::release_ticket_claim_for_worker(
+                        &db_clone,
+                        &ticket_id_clone,
+                        &worker_id_clone,
+                    )
+                    .await
+                    {
+                        error!(
+                            ticket_id = %ticket_id_clone,
+                            worker_id = %worker_id_clone,
+                            error = %e,
+                            "CRITICAL: Failed to release claim in scopeguard cleanup"
+                        );
+                    }
+                });
+            }
+        });
+
+        // Now validate ticket_id after guard is installed
         let ticket_id = crate::workers::domain::TicketId::new(task.ticket_id.clone())
             .map_err(|e| anyhow::anyhow!("Invalid ticket ID: {}", e))?;
-        let worker_id = format!("{}:{}:{}", self.project_id, self.stage, ticket_id.as_str());
-        let claim_result =
-            ClaimManager::claim_for_processing(&self.db, &ticket_id, &worker_id).await;
-
-        match claim_result {
-            Ok(()) => {}
-            Err(e) => {
-                warn!(
-                    ticket_id = %task.ticket_id,
-                    project_id = %self.project_id,
-                    stage = %self.stage,
-                    error = %e,
-                    "Failed to claim ticket for processing"
-                );
-                return Ok(()); // Not an error, ticket may be claimed by another process
-            }
-        }
 
         info!(
             ticket_id = %task.ticket_id,
             worker_id = %worker_id,
             project_id = %self.project_id,
             stage = %self.stage,
-            "Claimed ticket for processing"
+            "Processing ticket (pre-claimed by queue manager)"
         );
 
         // Get ticket with project details (including rules and patterns)
@@ -118,22 +141,7 @@ impl WorkerConsumer {
                     ticket_id = %task.ticket_id,
                     "Ticket not found"
                 );
-                // Release the claim on ticket lookup failure
-                if let Err(release_error) = ClaimManager::release_ticket_claim_for_worker(
-                    &self.db,
-                    &task.ticket_id,
-                    &worker_id,
-                )
-                .await
-                {
-                    error!(
-                        ticket_id = %task.ticket_id,
-                        worker_id = %worker_id,
-                        error = %release_error,
-                        "Failed to release claim after ticket lookup failure"
-                    );
-                }
-                return Ok(());
+                return Ok(()); // scopeguard will handle cleanup
             }
             Err(e) => {
                 error!(
@@ -141,22 +149,7 @@ impl WorkerConsumer {
                     error = %e,
                     "Failed to fetch ticket with project details"
                 );
-                // Release the claim on database error
-                if let Err(release_error) = ClaimManager::release_ticket_claim_for_worker(
-                    &self.db,
-                    &task.ticket_id,
-                    &worker_id,
-                )
-                .await
-                {
-                    error!(
-                        ticket_id = %task.ticket_id,
-                        worker_id = %worker_id,
-                        error = %release_error,
-                        "Failed to release claim after database error"
-                    );
-                }
-                return Ok(());
+                return Ok(()); // scopeguard will handle cleanup
             }
         };
 
@@ -170,22 +163,7 @@ impl WorkerConsumer {
                         ticket_id = %task.ticket_id,
                         "Project not found"
                     );
-                    // Release the claim on project lookup failure
-                    if let Err(release_error) = ClaimManager::release_ticket_claim_for_worker(
-                        &self.db,
-                        &task.ticket_id,
-                        &worker_id,
-                    )
-                    .await
-                    {
-                        error!(
-                            ticket_id = %task.ticket_id,
-                            worker_id = %worker_id,
-                            error = %release_error,
-                            "Failed to release claim after project lookup failure"
-                        );
-                    }
-                    return Ok(());
+                    return Ok(()); // scopeguard will handle cleanup
                 }
                 Err(e) => {
                     error!(
@@ -194,22 +172,7 @@ impl WorkerConsumer {
                         error = %e,
                         "Failed to fetch project details"
                     );
-                    // Release the claim on database error
-                    if let Err(release_error) = ClaimManager::release_ticket_claim_for_worker(
-                        &self.db,
-                        &task.ticket_id,
-                        &worker_id,
-                    )
-                    .await
-                    {
-                        error!(
-                            ticket_id = %task.ticket_id,
-                            worker_id = %worker_id,
-                            error = %release_error,
-                            "Failed to release claim after database error"
-                        );
-                    }
-                    return Ok(());
+                    return Ok(()); // scopeguard will handle cleanup
                 }
             };
 
@@ -229,22 +192,7 @@ impl WorkerConsumer {
                     ticket_id = %task.ticket_id,
                     "Worker type not found"
                 );
-                // Release the claim on worker type lookup failure
-                if let Err(release_error) = ClaimManager::release_ticket_claim_for_worker(
-                    &self.db,
-                    &task.ticket_id,
-                    &worker_id,
-                )
-                .await
-                {
-                    error!(
-                        ticket_id = %task.ticket_id,
-                        worker_id = %worker_id,
-                        error = %release_error,
-                        "Failed to release claim after worker type lookup failure"
-                    );
-                }
-                return Ok(());
+                return Ok(()); // scopeguard will handle cleanup
             }
             Err(e) => {
                 error!(
@@ -254,22 +202,7 @@ impl WorkerConsumer {
                     error = %e,
                     "Failed to fetch worker type details"
                 );
-                // Release the claim on database error
-                if let Err(release_error) = ClaimManager::release_ticket_claim_for_worker(
-                    &self.db,
-                    &task.ticket_id,
-                    &worker_id,
-                )
-                .await
-                {
-                    error!(
-                        ticket_id = %task.ticket_id,
-                        worker_id = %worker_id,
-                        error = %release_error,
-                        "Failed to release claim after database error"
-                    );
-                }
-                return Ok(());
+                return Ok(()); // scopeguard will handle cleanup
             }
         };
 
@@ -403,33 +336,20 @@ impl WorkerConsumer {
                         ticket_id = %task.ticket_id,
                         "Failed to send completion event"
                     );
-                    // Release the claim if we cannot forward the completion event
-                    if let Err(release_error) = ClaimManager::release_ticket_claim_for_worker(
-                        &self.db,
-                        &task.ticket_id,
-                        &worker_id,
-                    )
+                    return Ok(()); // scopeguard will handle cleanup
+                }
+
+                // Mark claim as released since completion event processor will handle it
+                claim_released.store(true, std::sync::atomic::Ordering::SeqCst);
+
+                // Emit event for worker completion only after successful send
+                let emitter =
+                    crate::events::emitter::EventEmitter::new(&self.db, &self.event_broadcaster);
+                if let Err(e) = emitter
+                    .emit_worker_completed(&worker_id, &self.stage, &self.project_id)
                     .await
-                    {
-                        error!(
-                            ticket_id = %task.ticket_id,
-                            worker_id = %worker_id,
-                            error = %release_error,
-                            "Failed to release claim after completion send failure"
-                        );
-                    }
-                } else {
-                    // Emit event for worker completion only after successful send
-                    let emitter = crate::events::emitter::EventEmitter::new(
-                        &self.db,
-                        &self.event_broadcaster,
-                    );
-                    if let Err(e) = emitter
-                        .emit_worker_completed(&worker_id, &self.stage, &self.project_id)
-                        .await
-                    {
-                        warn!("Failed to emit worker_completed event: {}", e);
-                    }
+                {
+                    warn!("Failed to emit worker_completed event: {}", e);
                 }
             }
             Err(e) => {
@@ -440,19 +360,44 @@ impl WorkerConsumer {
                     "Worker process failed"
                 );
 
-                // Release the claim on failure
-                if let Err(release_error) = ClaimManager::release_ticket_claim_for_worker(
-                    &self.db,
-                    &task.ticket_id,
-                    &worker_id,
-                )
-                .await
-                {
-                    error!(
+                // Determine if this is a validation failure or other error
+                let error_msg = e.to_string();
+                let is_validation_error = error_msg.contains("Invalid project path")
+                    || error_msg.contains("does not exist")
+                    || error_msg.contains("Invalid ticket ID")
+                    || error_msg.contains("Invalid worker ID")
+                    || error_msg.contains("Invalid system prompt");
+
+                if is_validation_error {
+                    // Place ticket on-hold with clear instructions for operator
+                    info!(
                         ticket_id = %task.ticket_id,
-                        worker_id = %worker_id,
-                        error = %release_error,
-                        "Failed to release claim after worker failure"
+                        "Placing ticket on-hold due to validation failure"
+                    );
+
+                    let on_hold_reason = format!(
+                        "Worker spawn validation failed: {}. Please verify project configuration and use resume_ticket_processing() to retry.",
+                        e
+                    );
+
+                    if let Err(hold_err) = crate::database::tickets::Ticket::place_on_hold(
+                        &self.db,
+                        &task.ticket_id,
+                        &on_hold_reason,
+                    )
+                    .await
+                    {
+                        error!(
+                            ticket_id = %task.ticket_id,
+                            error = %hold_err,
+                            "Failed to place ticket on-hold after validation failure"
+                        );
+                    }
+                } else {
+                    // For non-validation errors, just release claim (scopeguard handles this)
+                    warn!(
+                        ticket_id = %task.ticket_id,
+                        "Worker spawn failed with non-validation error, claim will be released"
                     );
                 }
 
