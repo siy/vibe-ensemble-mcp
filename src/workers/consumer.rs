@@ -394,7 +394,46 @@ impl WorkerConsumer {
                     "Worker process failed"
                 );
 
-                // scopeguard will handle claim release automatically
+                // Determine if this is a validation failure or other error
+                let error_msg = e.to_string();
+                let is_validation_error = error_msg.contains("Invalid project path")
+                    || error_msg.contains("does not exist")
+                    || error_msg.contains("Invalid ticket ID")
+                    || error_msg.contains("Invalid worker ID")
+                    || error_msg.contains("Invalid system prompt");
+
+                if is_validation_error {
+                    // Place ticket on-hold with clear instructions for operator
+                    info!(
+                        ticket_id = %task.ticket_id,
+                        "Placing ticket on-hold due to validation failure"
+                    );
+
+                    let on_hold_reason = format!(
+                        "Worker spawn validation failed: {}. Please verify project configuration and use resume_ticket_processing() to retry.",
+                        e
+                    );
+
+                    if let Err(hold_err) = crate::database::tickets::Ticket::place_on_hold(
+                        &self.db,
+                        &task.ticket_id,
+                        &on_hold_reason,
+                    )
+                    .await
+                    {
+                        error!(
+                            ticket_id = %task.ticket_id,
+                            error = %hold_err,
+                            "Failed to place ticket on-hold after validation failure"
+                        );
+                    }
+                } else {
+                    // For non-validation errors, just release claim (scopeguard handles this)
+                    warn!(
+                        ticket_id = %task.ticket_id,
+                        "Worker spawn failed with non-validation error, claim will be released"
+                    );
+                }
 
                 // Emit event for worker failure with both DB and SSE
                 let emitter =

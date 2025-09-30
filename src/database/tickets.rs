@@ -410,6 +410,38 @@ impl Ticket {
         Ok(ticket)
     }
 
+    pub async fn place_on_hold(pool: &DbPool, ticket_id: &str, reason: &str) -> Result<()> {
+        let mut tx = pool.begin().await?;
+
+        // Update ticket state to on_hold and release processing worker
+        sqlx::query(
+            r#"
+            UPDATE tickets
+            SET state = ?1, processing_worker_id = NULL, updated_at = datetime('now')
+            WHERE ticket_id = ?2
+            "#,
+        )
+        .bind(TicketState::OnHold.as_sql_value())
+        .bind(ticket_id)
+        .execute(&mut *tx)
+        .await?;
+
+        // Add comment explaining why ticket is on hold
+        sqlx::query(
+            r#"
+            INSERT INTO comments (ticket_id, worker_type, worker_id, stage_number, content)
+            VALUES (?1, 'system', 'system', 999, ?2)
+            "#,
+        )
+        .bind(ticket_id)
+        .bind(reason)
+        .execute(&mut *tx)
+        .await?;
+
+        tx.commit().await?;
+        Ok(())
+    }
+
     pub fn get_execution_plan(&self) -> Result<Vec<String>> {
         Ok(serde_json::from_str(&self.execution_plan)?)
     }

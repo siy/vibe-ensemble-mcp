@@ -156,6 +156,18 @@ impl ToolHandler for CreateProjectTool {
             debug!("Project directory already exists: {}", path);
         }
 
+        // Validate the project path after creation/verification
+        debug!("Validating project path: {}", path);
+        if let Err(e) =
+            crate::workers::validation::WorkerInputValidator::validate_project_path(&path)
+        {
+            return Ok(create_json_error_response(&format!(
+                "Project path validation failed: {}. Path must be an absolute path to an existing directory.",
+                e
+            )));
+        }
+        info!("✓ Project path validation passed");
+
         // Create project-specific worker permissions file if it doesn't exist
         debug!("Creating project-specific worker permissions for: {}", path);
         if let Err(e) = create_project_permissions(&path) {
