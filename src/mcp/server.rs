@@ -23,6 +23,8 @@ impl Default for McpServer {
             permission_mode: crate::permissions::PermissionMode::File,
             client_tool_timeout_secs: 30,
             max_concurrent_client_requests: 50,
+            update_check_interval_hours: 4,
+            disable_update_checks: false,
         };
         Self::new(&config)
     }

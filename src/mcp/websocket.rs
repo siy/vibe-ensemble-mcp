@@ -1031,6 +1031,9 @@ impl WebSocketManager {
                 crate::events::EventType::SystemInit => "info",
                 crate::events::EventType::SystemMessage => "info",
                 crate::events::EventType::EndpointDiscovery => "info",
+                crate::events::EventType::UpdateCheckStarted => "info",
+                crate::events::EventType::UpdateAvailable => "info",
+                crate::events::EventType::UpdateCheckFailed => "warning",
             };
 
             let user_friendly_data = self.format_user_friendly_event(event_payload);

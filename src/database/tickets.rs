@@ -293,49 +293,47 @@ impl Ticket {
         project_id: Option<&str>,
         status_filter: Option<&str>,
     ) -> Result<Vec<Ticket>> {
-        let mut query = String::from(
-            r#"
-            SELECT ticket_id, project_id, title, execution_plan, current_stage, state, priority,
-                   processing_worker_id, created_at, updated_at, closed_at,
-                   parent_ticket_id, dependency_status, created_by_worker_id, ticket_type,
-                   rules_version, patterns_version, inherited_from_parent
-            FROM tickets
-        "#,
-        );
+        use sqlx::QueryBuilder;
 
-        let mut conditions = Vec::new();
-
-        if project_id.is_some() {
-            conditions.push("project_id = ?1".to_string());
-        }
-
-        if status_filter.is_some() {
-            let condition = if status_filter == Some("open") {
-                "closed_at IS NULL".to_string()
-            } else if status_filter == Some("closed") {
-                "closed_at IS NOT NULL".to_string()
-            } else {
-                // Invalid status filter, ignore
-                String::new()
-            };
-            if !condition.is_empty() {
-                conditions.push(condition);
+        // Validate status_filter with explicit check
+        if let Some(status) = status_filter {
+            if status != "open" && status != "closed" {
+                return Err(anyhow::anyhow!("Invalid status filter: {}", status));
             }
         }
 
-        if !conditions.is_empty() {
-            query.push_str(" WHERE ");
-            query.push_str(&conditions.join(" AND "));
-        }
-        query.push_str(" ORDER BY created_at DESC");
-
-        let mut query_builder = sqlx::query_as::<_, Ticket>(&query);
+        // Use QueryBuilder for safe parameterized queries
+        let mut query_builder = QueryBuilder::new(
+            "SELECT ticket_id, project_id, title, execution_plan, current_stage, state, priority,
+                    processing_worker_id, created_at, updated_at, closed_at,
+                    parent_ticket_id, dependency_status, created_by_worker_id, ticket_type,
+                    rules_version, patterns_version, inherited_from_parent
+             FROM tickets WHERE 1=1",
+        );
 
         if let Some(pid) = project_id {
-            query_builder = query_builder.bind(pid);
+            query_builder.push(" AND project_id = ");
+            query_builder.push_bind(pid);
         }
 
-        let tickets = query_builder.fetch_all(pool).await?;
+        if let Some(status) = status_filter {
+            match status {
+                "open" => {
+                    query_builder.push(" AND closed_at IS NULL");
+                }
+                "closed" => {
+                    query_builder.push(" AND closed_at IS NOT NULL");
+                }
+                _ => unreachable!("status already validated"),
+            }
+        }
+
+        query_builder.push(" ORDER BY created_at DESC");
+
+        let tickets = query_builder
+            .build_query_as::<Ticket>()
+            .fetch_all(pool)
+            .await?;
         Ok(tickets)
     }
 

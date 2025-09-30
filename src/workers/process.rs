@@ -1,11 +1,14 @@
 use anyhow::{Context, Result};
 use std::fs;
 use std::process::Stdio;
+use std::time::Duration;
 use tokio::process::Command;
-use tracing::{debug, info, warn};
+use tokio::time::timeout;
+use tracing::{debug, error, info, warn};
 
 use super::completion_processor::WorkerOutput;
 use super::types::SpawnWorkerRequest;
+use super::validation::WorkerInputValidator;
 use crate::permissions::{
     load_permission_policy, ClaudePermissions, PermissionMode, PermissionPolicy,
 };
@@ -247,9 +250,40 @@ impl ProcessManager {
             request.worker_id, request.ticket_id, request.project_id, request.worker_type
         );
 
-        // Create MCP config file
+        // Validate inputs before proceeding
+        info!("Validating worker spawn request inputs");
+
+        WorkerInputValidator::validate_ticket_id(&request.ticket_id)
+            .context("Invalid ticket ID")?;
+
+        WorkerInputValidator::validate_worker_id(&request.worker_id)
+            .context("Invalid worker ID")?;
+
+        let validated_path = WorkerInputValidator::validate_project_path(&request.project_path)
+            .context("Invalid project path")?;
+
+        WorkerInputValidator::validate_prompt_content(
+            "system_prompt",
+            &request.system_prompt,
+            100_000, // 100KB max
+        )
+        .context("Invalid system prompt")?;
+
+        if let Some(ref rules) = request.project_rules {
+            WorkerInputValidator::validate_prompt_content("project_rules", rules, 50_000)
+                .context("Invalid project rules")?;
+        }
+
+        if let Some(ref patterns) = request.project_patterns {
+            WorkerInputValidator::validate_prompt_content("project_patterns", patterns, 50_000)
+                .context("Invalid project patterns")?;
+        }
+
+        info!("Input validation passed");
+
+        // Create MCP config file using validated path
         let config_path = Self::create_mcp_config(
-            &request.project_path,
+            validated_path.to_str().unwrap(),
             &request.worker_id,
             &request.server_host,
             request.server_port,
@@ -294,7 +328,7 @@ impl ProcessManager {
         // Spawn Claude Code process with the system prompt
         info!(
             "Spawning Claude Code with working directory: {}",
-            request.project_path
+            validated_path.display()
         );
         let mut cmd = Command::new("claude");
         cmd.arg("-p")
@@ -306,7 +340,7 @@ impl ProcessManager {
             .arg(&config_path)
             .arg("--output-format")
             .arg("json")
-            .current_dir(&request.project_path)
+            .current_dir(&validated_path)
             .stdout(Stdio::piped())
             .stderr(Stdio::piped());
 
@@ -318,7 +352,7 @@ impl ProcessManager {
         Self::apply_permissions_to_command(
             &mut cmd,
             request.permission_mode,
-            &request.project_path,
+            validated_path.to_str().unwrap(),
         )?;
 
         debug!("Executing command: {:?}", cmd);
@@ -332,10 +366,73 @@ impl ProcessManager {
         let pid = child.id().unwrap_or(0);
         info!("Worker process spawned with PID: {}", pid);
 
-        // Wait for the process to complete and capture output
-        let output = child.wait_with_output().await?;
+        // Add timeout to worker execution (default: 10 minutes)
+        let worker_timeout = Duration::from_secs(
+            std::env::var("WORKER_TIMEOUT_SECS")
+                .ok()
+                .and_then(|s| s.parse().ok())
+                .unwrap_or(600), // Default: 600 seconds (10 minutes)
+        );
 
-        info!("Worker process completed with status: {}", output.status);
+        info!(
+            "Waiting for worker to complete (timeout: {} seconds)",
+            worker_timeout.as_secs()
+        );
+
+        // Wait for the process to complete and capture output with timeout
+        let start_time = std::time::Instant::now();
+        let output_result = timeout(worker_timeout, child.wait_with_output()).await;
+
+        let output = match output_result {
+            Ok(Ok(output)) => {
+                let duration = start_time.elapsed();
+                info!(
+                    "Worker process completed with status: {} (duration: {:.2}s)",
+                    output.status,
+                    duration.as_secs_f64()
+                );
+
+                if duration.as_secs() > 300 {
+                    warn!(
+                        "Worker took unusually long to complete: {:.2}s (ticket: {})",
+                        duration.as_secs_f64(),
+                        request.ticket_id
+                    );
+                }
+
+                output
+            }
+            Ok(Err(e)) => {
+                error!(
+                    "Worker process failed after {:.2}s: {}",
+                    start_time.elapsed().as_secs_f64(),
+                    e
+                );
+                let _ = std::fs::remove_file(&config_path);
+                return Err(e.into());
+            }
+            Err(_) => {
+                // Timeout occurred - note that child has been consumed by wait_with_output
+                error!(
+                    "Worker process timed out after {} seconds (PID: {}, ticket: {})",
+                    worker_timeout.as_secs(),
+                    pid,
+                    request.ticket_id
+                );
+
+                warn!(
+                    "Worker process (PID: {}) timed out. The process may still be running and should be terminated manually if necessary.",
+                    pid
+                );
+
+                let _ = std::fs::remove_file(&config_path);
+
+                return Err(anyhow::anyhow!(
+                    "Worker process timed out after {} seconds",
+                    worker_timeout.as_secs()
+                ));
+            }
+        };
 
         // Parse stdout for WorkerOutput JSON
         let stdout_str = String::from_utf8_lossy(&output.stdout);

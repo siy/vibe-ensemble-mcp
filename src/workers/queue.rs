@@ -140,12 +140,33 @@ impl QueueManager {
         // Claim the ticket before submitting to queue
         let worker_id = format!("consumer-{}-{}", worker_type, &task_id[..8]);
         let ticket_id_domain = TicketId::new(ticket_id.to_string())?;
-        ClaimManager::claim_for_processing(&self.db, &ticket_id_domain, &worker_id).await?;
 
-        info!(
-            "[QueueManager] Claimed ticket {} with worker {}",
-            ticket_id, worker_id
-        );
+        match ClaimManager::claim_for_processing(&self.db, &ticket_id_domain, &worker_id).await? {
+            crate::workers::claims::ClaimResult::Success => {
+                info!(
+                    "[QueueManager] Claimed ticket {} with worker {}",
+                    ticket_id, worker_id
+                );
+            }
+            crate::workers::claims::ClaimResult::AlreadyClaimed(other_worker) => {
+                return Err(anyhow::anyhow!(
+                    "Ticket {} is already claimed by worker {}",
+                    ticket_id,
+                    other_worker
+                ));
+            }
+            crate::workers::claims::ClaimResult::NotClaimable {
+                state,
+                dependency_status,
+            } => {
+                return Err(anyhow::anyhow!(
+                    "Ticket {} is not claimable (state='{}', dependency_status='{}')",
+                    ticket_id,
+                    state,
+                    dependency_status
+                ));
+            }
+        }
 
         // Ticket claimed for processing (no event needed - redundant)
 

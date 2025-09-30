@@ -11,7 +11,8 @@ use futures::Stream;
 use serde_json::Value;
 use std::{sync::Arc, time::Duration};
 use tokio::sync::broadcast;
-use tracing::debug;
+use tokio::time::interval;
+use tracing::{debug, info, warn};
 
 use crate::{events::EventPayload, mcp::types::JsonRpcRequest, server::AppState};
 
@@ -29,13 +30,63 @@ impl Default for EventBroadcaster {
 }
 
 impl EventBroadcaster {
+    // Increased channel capacity from 512 to 2048
+    const BROADCAST_CHANNEL_SIZE: usize = 2048;
+    const HEALTH_CHECK_INTERVAL_SECS: u64 = 30;
+
     pub fn new() -> Self {
-        let (sse_sender, _) = broadcast::channel::<EventPayload>(512);
-        let (websocket_sender, _) = broadcast::channel::<EventPayload>(512);
-        Self {
+        let (sse_sender, _) = broadcast::channel::<EventPayload>(Self::BROADCAST_CHANNEL_SIZE);
+        let (websocket_sender, _) =
+            broadcast::channel::<EventPayload>(Self::BROADCAST_CHANNEL_SIZE);
+
+        let broadcaster = Self {
             sse_sender: Arc::new(sse_sender),
             websocket_sender: Arc::new(websocket_sender),
-        }
+        };
+
+        // Spawn health monitoring task
+        broadcaster.spawn_health_monitor();
+
+        broadcaster
+    }
+
+    /// Spawn a background task to monitor broadcaster health
+    fn spawn_health_monitor(&self) {
+        let sse_sender = Arc::clone(&self.sse_sender);
+        let websocket_sender = Arc::clone(&self.websocket_sender);
+
+        tokio::spawn(async move {
+            let mut interval = interval(Duration::from_secs(Self::HEALTH_CHECK_INTERVAL_SECS));
+            loop {
+                interval.tick().await;
+
+                let sse_receivers = sse_sender.receiver_count();
+                let websocket_receivers = websocket_sender.receiver_count();
+
+                info!(
+                    "EventBroadcaster health: SSE receivers={}, WebSocket receivers={}",
+                    sse_receivers, websocket_receivers
+                );
+
+                // Warn if approaching capacity
+                if sse_receivers > Self::BROADCAST_CHANNEL_SIZE / 2 {
+                    warn!(
+                        "High SSE receiver count: {}/{} ({}%)",
+                        sse_receivers,
+                        Self::BROADCAST_CHANNEL_SIZE,
+                        (sse_receivers * 100) / Self::BROADCAST_CHANNEL_SIZE
+                    );
+                }
+                if websocket_receivers > Self::BROADCAST_CHANNEL_SIZE / 2 {
+                    warn!(
+                        "High WebSocket receiver count: {}/{} ({}%)",
+                        websocket_receivers,
+                        Self::BROADCAST_CHANNEL_SIZE,
+                        (websocket_receivers * 100) / Self::BROADCAST_CHANNEL_SIZE
+                    );
+                }
+            }
+        });
     }
 
     /// Broadcast a typed event to all connected SSE and WebSocket clients

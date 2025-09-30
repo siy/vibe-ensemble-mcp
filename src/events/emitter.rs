@@ -507,4 +507,105 @@ impl<'a> EventEmitter<'a> {
         );
         Ok(())
     }
+
+    /// Emit update check started event (SSE only)
+    pub async fn emit_update_check_started(&self, current_version: &str) -> Result<()> {
+        // Broadcast SSE event
+        let event = EventPayload::update_check_started(current_version);
+
+        // Log the complete JSON-RPC message at debug level
+        let jsonrpc_message = event.to_jsonrpc_notification();
+        tracing::debug!(
+            "Broadcasting update_check_started JSON-RPC: {}",
+            serde_json::to_string_pretty(&jsonrpc_message)
+                .unwrap_or_else(|_| "Failed to serialize".to_string())
+        );
+
+        self.broadcaster.broadcast(event);
+
+        tracing::debug!(
+            "Successfully emitted update_check_started event for version: {}",
+            current_version
+        );
+        Ok(())
+    }
+
+    /// Emit update available event with both DB and SSE
+    pub async fn emit_update_available(
+        &self,
+        current_version: &str,
+        latest_version: &str,
+        release_url: &str,
+    ) -> Result<()> {
+        // Create DB event
+        Event::create(
+            self.db,
+            EventType::UpdateAvailable,
+            None,
+            None,
+            None,
+            Some(&format!(
+                "Update available: {} -> {}",
+                current_version, latest_version
+            )),
+        )
+        .await?;
+
+        // Broadcast SSE event
+        let event = EventPayload::update_available(current_version, latest_version, release_url);
+
+        // Log the complete JSON-RPC message at debug level
+        let jsonrpc_message = event.to_jsonrpc_notification();
+        tracing::debug!(
+            "Broadcasting update_available JSON-RPC: {}",
+            serde_json::to_string_pretty(&jsonrpc_message)
+                .unwrap_or_else(|_| "Failed to serialize".to_string())
+        );
+
+        self.broadcaster.broadcast(event);
+
+        tracing::debug!(
+            "Successfully emitted update_available event: {} -> {}",
+            current_version,
+            latest_version
+        );
+        Ok(())
+    }
+
+    /// Emit update check failed event with both DB and SSE
+    pub async fn emit_update_check_failed(
+        &self,
+        current_version: &str,
+        error_message: &str,
+    ) -> Result<()> {
+        // Create DB event
+        Event::create(
+            self.db,
+            EventType::UpdateCheckFailed,
+            None,
+            None,
+            None,
+            Some(error_message),
+        )
+        .await?;
+
+        // Broadcast SSE event
+        let event = EventPayload::update_check_failed(current_version, error_message);
+
+        // Log the complete JSON-RPC message at debug level
+        let jsonrpc_message = event.to_jsonrpc_notification();
+        tracing::debug!(
+            "Broadcasting update_check_failed JSON-RPC: {}",
+            serde_json::to_string_pretty(&jsonrpc_message)
+                .unwrap_or_else(|_| "Failed to serialize".to_string())
+        );
+
+        self.broadcaster.broadcast(event);
+
+        tracing::debug!(
+            "Successfully emitted update_check_failed event for version: {}",
+            current_version
+        );
+        Ok(())
+    }
 }

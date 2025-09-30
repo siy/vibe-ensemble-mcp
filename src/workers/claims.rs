@@ -1,9 +1,20 @@
-use crate::{
-    database::{tickets::Ticket, DbPool},
-    workers::domain::TicketId,
-};
+use crate::{database::DbPool, workers::domain::TicketId};
 use anyhow::Result;
 use tracing::{error, info, warn};
+
+/// Result type for ticket claim operations
+#[derive(Debug)]
+pub enum ClaimResult {
+    /// Ticket successfully claimed
+    Success,
+    /// Ticket already claimed by another worker
+    AlreadyClaimed(String),
+    /// Ticket cannot be claimed due to its current state
+    NotClaimable {
+        state: String,
+        dependency_status: String,
+    },
+}
 
 /// Claim management functionality for queue operations
 pub struct ClaimManager;
@@ -19,15 +30,76 @@ impl ClaimManager {
     pub fn new() -> Self {
         Self
     }
-    /// Claim a ticket for processing (wrapper around database function)
+    /// Claim a ticket for processing with detailed result information
     pub async fn claim_for_processing(
         db: &DbPool,
         ticket_id: &TicketId,
         worker_id: &str,
-    ) -> Result<()> {
-        Ticket::claim_for_processing(db, ticket_id.as_str(), worker_id)
-            .await
-            .map(|_| ())
+    ) -> Result<ClaimResult> {
+        // Use a transaction for atomic claim verification
+        let mut tx = db.begin().await?;
+
+        // Attempt atomic UPDATE
+        let result = sqlx::query(
+            r#"
+            UPDATE tickets
+            SET processing_worker_id = ?1, updated_at = datetime('now')
+            WHERE ticket_id = ?2
+              AND processing_worker_id IS NULL
+              AND state = 'open'
+              AND dependency_status = 'ready'
+        "#,
+        )
+        .bind(worker_id)
+        .bind(ticket_id.as_str())
+        .execute(&mut *tx)
+        .await?;
+
+        let rows_affected = result.rows_affected();
+
+        if rows_affected == 0 {
+            // Fetch current state to provide detailed error
+            let ticket_state = sqlx::query_as::<_, (String, Option<String>, String)>(
+                "SELECT state, processing_worker_id, dependency_status FROM tickets WHERE ticket_id = ?1"
+            )
+            .bind(ticket_id.as_str())
+            .fetch_optional(&mut *tx)
+            .await?;
+
+            tx.rollback().await?;
+
+            return match ticket_state {
+                Some((state, Some(current_worker), _)) if state == "open" => {
+                    warn!(
+                        "Ticket {} already claimed by worker: {}",
+                        ticket_id.as_str(),
+                        current_worker
+                    );
+                    Ok(ClaimResult::AlreadyClaimed(current_worker))
+                }
+                Some((state, _, dep_status)) => {
+                    info!(
+                        "Ticket {} not claimable: state={}, dependency_status={}",
+                        ticket_id.as_str(),
+                        state,
+                        dep_status
+                    );
+                    Ok(ClaimResult::NotClaimable {
+                        state,
+                        dependency_status: dep_status,
+                    })
+                }
+                None => Err(anyhow::anyhow!("Ticket {} not found", ticket_id.as_str())),
+            };
+        }
+
+        tx.commit().await?;
+        info!(
+            "Successfully claimed ticket {} for worker {}",
+            ticket_id.as_str(),
+            worker_id
+        );
+        Ok(ClaimResult::Success)
     }
 
     /// Release a ticket claim if it's currently claimed
