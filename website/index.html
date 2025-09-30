@@ -380,6 +380,10 @@
             <h3>Highly customizable</h3>
             <p>Customize worker templates, permission models, and project-specific settings. Live template editing with instant effect for team-specific workflows.</p>
           </div>
+          <div class="feature-card">
+            <h3>Automatic updates</h3>
+            <p>Built-in update checking every 4 hours (configurable) with one-command upgrade system. Stay current effortlessly with <code>--upgrade</code> flag.</p>
+          </div>
         </div>
       </section>
 
@@ -524,6 +528,13 @@ iwr -useb https://vibeensemble.dev/install.ps1 | iex
         </div>
 
         <p><strong>Alternative:</strong> Download from the <a href="https://github.com/siy/vibe-ensemble-mcp/releases" style="color: var(--accent);">releases page</a> for your platform.</p>
+
+        <h3 style="color:white; margin-top:1rem;">Upgrade to Latest Version</h3>
+        <div class="code-block">
+          <button class="copy-btn" onclick="copyToClipboard('vibe-ensemble-mcp --upgrade', this)">📋</button>
+vibe-ensemble-mcp --upgrade
+        </div>
+        <p>This automatically downloads and runs the latest install script.</p>
 
         <h3 style="color:white; margin-top:1rem;">Setup Steps</h3>
         <p><strong>Step 1:</strong> Start the server (create a separate directory for the server)</p>

@@ -17,6 +17,7 @@ Vibe-Ensemble allows you to break down complex projects into specialized stages,
 - **🔄 Stage-Based Workflows**: Workers follow structured execution plans through defined stages
 - **💾 Persistent State**: All progress is saved, allowing you to pause and resume complex projects
 - **🎨 Live Customization**: Edit worker templates in real-time to adapt to your team's processes and coding standards
+- **🔄 Automatic Updates**: Built-in update checking and one-command upgrade system (`--upgrade`)
 - **🌐 WebSocket Infrastructure**: WebSocket server available for future real-time communication features
 
 ## Installation
@@ -32,6 +33,15 @@ curl -fsSL https://vibeensemble.dev/install.sh | sh
 ```powershell
 iwr -useb https://vibeensemble.dev/install.ps1 | iex
 ```
+
+### Upgrade to Latest Version
+
+**One-Command Upgrade:**
+```bash
+vibe-ensemble-mcp --upgrade
+```
+
+This will automatically download and run the latest install script.
 
 ### From Release
 

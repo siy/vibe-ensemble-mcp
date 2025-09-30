@@ -95,13 +95,19 @@ Advanced git workflow management capabilities that extend beyond basic commit tr
 - Extended event system capabilities
 - Remote repository access and credentials management
 
-## Automatic Update Tracking (Phase 1)
+## ~~Automatic Update Tracking (Phase 1)~~
 
-**Status**: Planned for immediate implementation
+**Status**: ✅ **IMPLEMENTED** in v0.9.6
 **Prerequisites**: None (builds on existing event system)
 
 ### Overview
 Built-in periodic update checking system that generates dedicated events for software update tracking. Provides operational intelligence about available updates without user interaction, leveraging the existing event infrastructure for comprehensive tracking and monitoring.
+
+**Implementation Details**: See [CHANGELOG.md](../CHANGELOG.md#096---2025-09-30) for complete implementation details. Key features:
+- Periodic checks every 4 hours (configurable via `--update-check-interval-hours`)
+- One-command upgrade via `vibe-ensemble-mcp --upgrade`
+- Event integration with `UpdateCheckStarted`, `UpdateAvailable`, `UpdateCheckFailed`
+- Optional disable via `--disable-update-checks`
 
 ### Core Functionality
 
