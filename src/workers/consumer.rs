@@ -78,19 +78,11 @@ impl WorkerConsumer {
 
         // Note: Ticket is already claimed by QueueManager::submit_task() before being added to queue
         // We trust that the ticket is properly claimed and ready for processing
-        let ticket_id = crate::workers::domain::TicketId::new(task.ticket_id.clone())
-            .map_err(|e| anyhow::anyhow!("Invalid ticket ID: {}", e))?;
-        let worker_id = format!("{}:{}:{}", self.project_id, self.stage, ticket_id.as_str());
 
-        info!(
-            ticket_id = %task.ticket_id,
-            worker_id = %worker_id,
-            project_id = %self.project_id,
-            stage = %self.stage,
-            "Processing ticket (pre-claimed by queue manager)"
-        );
+        // Create worker_id from raw ticket_id first (before validation) so guard can use it
+        let worker_id = format!("{}:{}:{}", self.project_id, self.stage, &task.ticket_id);
 
-        // Use scopeguard to ensure claim is ALWAYS released on error paths
+        // Install cleanup guard BEFORE any fallible operations to avoid stuck claims
         let db_clone = self.db.clone();
         let ticket_id_clone = task.ticket_id.clone();
         let worker_id_clone = worker_id.clone();
@@ -104,28 +96,37 @@ impl WorkerConsumer {
                     worker_id = %worker_id_clone,
                     "Releasing claim due to error path (scopeguard cleanup)"
                 );
-                // Use blocking task to run async cleanup in defer
-                let rt = tokio::runtime::Handle::try_current();
-                if let Ok(handle) = rt {
-                    handle.block_on(async {
-                        if let Err(e) = ClaimManager::release_ticket_claim_for_worker(
-                            &db_clone,
-                            &ticket_id_clone,
-                            &worker_id_clone,
-                        )
-                        .await
-                        {
-                            error!(
-                                ticket_id = %ticket_id_clone,
-                                worker_id = %worker_id_clone,
-                                error = %e,
-                                "CRITICAL: Failed to release claim in scopeguard cleanup"
-                            );
-                        }
-                    });
-                }
+                // Spawn async cleanup task instead of blocking the runtime
+                tokio::spawn(async move {
+                    if let Err(e) = ClaimManager::release_ticket_claim_for_worker(
+                        &db_clone,
+                        &ticket_id_clone,
+                        &worker_id_clone,
+                    )
+                    .await
+                    {
+                        error!(
+                            ticket_id = %ticket_id_clone,
+                            worker_id = %worker_id_clone,
+                            error = %e,
+                            "CRITICAL: Failed to release claim in scopeguard cleanup"
+                        );
+                    }
+                });
             }
         });
+
+        // Now validate ticket_id after guard is installed
+        let ticket_id = crate::workers::domain::TicketId::new(task.ticket_id.clone())
+            .map_err(|e| anyhow::anyhow!("Invalid ticket ID: {}", e))?;
+
+        info!(
+            ticket_id = %task.ticket_id,
+            worker_id = %worker_id,
+            project_id = %self.project_id,
+            stage = %self.stage,
+            "Processing ticket (pre-claimed by queue manager)"
+        );
 
         // Get ticket with project details (including rules and patterns)
         let ticket_with_project = match crate::database::tickets::Ticket::get_with_project_info(
