@@ -76,53 +76,18 @@ impl WorkerConsumer {
             "Processing task"
         );
 
-        // Attempt to claim the ticket for processing
+        // Note: Ticket is already claimed by QueueManager::submit_task() before being added to queue
+        // We trust that the ticket is properly claimed and ready for processing
         let ticket_id = crate::workers::domain::TicketId::new(task.ticket_id.clone())
             .map_err(|e| anyhow::anyhow!("Invalid ticket ID: {}", e))?;
         let worker_id = format!("{}:{}:{}", self.project_id, self.stage, ticket_id.as_str());
-        let claim_result =
-            ClaimManager::claim_for_processing(&self.db, &ticket_id, &worker_id).await;
-
-        match claim_result {
-            Ok(crate::workers::claims::ClaimResult::Success) => {}
-            Ok(crate::workers::claims::ClaimResult::AlreadyClaimed(other_worker)) => {
-                warn!(
-                    ticket_id = %task.ticket_id,
-                    claimed_by = %other_worker,
-                    "Ticket already claimed by another worker"
-                );
-                return Ok(());
-            }
-            Ok(crate::workers::claims::ClaimResult::NotClaimable {
-                state,
-                dependency_status,
-            }) => {
-                warn!(
-                    ticket_id = %task.ticket_id,
-                    state = %state,
-                    dependency_status = %dependency_status,
-                    "Ticket not claimable"
-                );
-                return Ok(());
-            }
-            Err(e) => {
-                warn!(
-                    ticket_id = %task.ticket_id,
-                    project_id = %self.project_id,
-                    stage = %self.stage,
-                    error = %e,
-                    "Failed to claim ticket for processing"
-                );
-                return Ok(()); // Not an error, ticket may be claimed by another process
-            }
-        }
 
         info!(
             ticket_id = %task.ticket_id,
             worker_id = %worker_id,
             project_id = %self.project_id,
             stage = %self.stage,
-            "Claimed ticket for processing"
+            "Processing ticket (pre-claimed by queue manager)"
         );
 
         // Use scopeguard to ensure claim is ALWAYS released on error paths

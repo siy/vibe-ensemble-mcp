@@ -268,7 +268,7 @@ impl<'a> EventEmitter<'a> {
         // Broadcast SSE event
         let event = EventPayload::project_created(
             project_data
-                .get("id")
+                .get("repository_name")
                 .and_then(|v| v.as_str())
                 .unwrap_or("unknown"),
         );
