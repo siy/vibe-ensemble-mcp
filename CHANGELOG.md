@@ -5,6 +5,28 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.9.7] - 2025-10-01
+
+### Added
+- **🎫 Human-Friendly Ticket IDs**: New format `PROJECT_PREFIX-SUBSYSTEM-NUMBER` (e.g., TVR-FE-001) for better readability
+- **📋 Declarative Planning Workflow**: Planning workers output ticket specifications instead of calling MCP tools
+- **⚛️ Atomic Ticket Creation**: Transaction-based ticket creation with dependency management for reliability
+- **🏷️ Project Prefix Generation**: Auto-generated from repository name (e.g., "todo-vue-rust" → "TVR")
+- **🔍 Subsystem Inference**: Automatic subsystem detection from stage names (frontend_impl → FE, backend_api → BE)
+- **🎯 PlanningComplete Outcome**: New workflow outcome specifically for planning completion
+- **🔧 CompletePlanning Command**: New worker command for handling planning completion with worker type creation
+- **📦 Database Migration 006**: Added project_prefix field to projects table
+
+### Changed
+- **📝 Planning Template**: Updated to declarative approach with TicketSpecification and WorkerTypeSpecification
+- **🔄 Worker Lifecycle**: Enhanced planning workflow with automatic ticket ID generation and subsystem assignment
+- **💾 Ticket ID Generation**: New ticket_id.rs module with prefix generation, subsystem inference, and sequence management
+- **🗃️ Project Schema**: Extended Project struct with project_prefix field for ticket ID generation
+
+### Fixed
+- **🔒 Transaction Support**: Added transaction-aware versions of ticket ID generation functions
+- **🔗 Arc Reference Handling**: Fixed method signature for auto_enqueue_ticket to properly use Arc<Self>
+
 ## [0.9.6] - 2025-09-30
 
 ### Added
