@@ -405,53 +405,70 @@ When creating worker types, use templates from `.claude/worker-templates/` direc
 - Ensure all stages in your pipeline have corresponding worker types
 - Each worker type must receive detailed implementation guidance from planning phase
 
-## CRITICAL: TICKET CREATION AND DEPENDENCY MANAGEMENT
-**AS A PLANNING WORKER, YOU MUST CREATE IMPLEMENTATION TICKETS WHEN WORK IS IDENTIFIED:**
+## CRITICAL: DECLARATIVE TICKET CREATION
+**AS A PLANNING WORKER, YOU OUTPUT TICKET SPECIFICATIONS - THE SYSTEM CREATES THE TICKETS:**
 
-### 🚨 MANDATORY RULE: Planning Must Produce Implementation Tickets
-**If your analysis identifies any work that needs to be done, you MUST create implementation tickets. Planning without creating tickets for identified work is incomplete and defeats the purpose of planning.**
+### 🚨 MANDATORY RULE: Planning Must Produce Ticket Specifications
+**If your analysis identifies any work that needs to be done, you MUST output ticket specifications in your JSON response. Planning without specifying tickets for identified work is incomplete and defeats the purpose of planning.**
 
-### MANDATORY TICKET CREATION PROCESS:
-1. **List Existing Worker Types**: Use `list_worker_types(project_id)` to get all current worker types for the project
-2. **Create Missing Worker Types**: For EACH stage in your planned workflow:
-   - Check if a worker type exists for that stage name
-   - If missing, use `create_worker_type()` to create it with appropriate template
-   - **ALWAYS** ensure worker types exist before creating tickets
-3. **Create Child Tickets**: Use `create_ticket()` to create tickets for each implementation stage
-4. **Set Dependencies**: Use `add_ticket_dependency()` to establish proper execution order
-5. **Close Planning Ticket**: Use `close_ticket()` to mark planning complete
+### DECLARATIVE PLANNING APPROACH:
+**You do NOT call MCP tools to create tickets. Instead, you output JSON specifications that the system uses to create tickets atomically.**
 
-### TICKET CREATION EXAMPLE:
+1. **Analysis Phase**: Use `list_worker_types(project_id)` to check existing worker types
+2. **Specification Phase**: In your JSON output, specify:
+   - `tickets_to_create`: Array of TicketSpecification objects
+   - `worker_types_needed`: Array of WorkerTypeSpecification objects (for missing worker types)
+3. **System Execution**: The system will:
+   - Create missing worker types from templates
+   - Generate human-friendly ticket IDs (e.g., TVR-FE-001)
+   - Create all tickets in a single atomic transaction
+   - Establish dependencies between tickets
+   - Auto-enqueue ready tickets for processing
+   - Close the planning ticket automatically
+
+### TICKET SPECIFICATION FORMAT:
+```javascript
+{
+  "temp_id": "ticket_1",  // Temporary ID for dependency references
+  "title": "Backend API Implementation",
+  "description": "Implement authentication API endpoints with session management",
+  "execution_plan": ["backend_implementation", "backend_review"],  // Stage pipeline
+  "subsystem": "BE",  // Optional: FE, BE, DB, etc. (auto-inferred if omitted)
+  "ticket_type": "feature",  // Optional: feature, bug, enhancement
+  "priority": "high",  // Optional: low, medium, high, critical
+  "depends_on": []  // Array of temp_ids this ticket depends on
+}
 ```
-Planning breakdown: ["backend_setup", "frontend_development", "integration_testing"]
-✓ Check: "backend_setup" worker type exists
-✗ Missing: "frontend_development" → CREATE with frontend template
-✗ Missing: "integration_testing" → CREATE with testing template
-✓ Create ticket: "Backend API Implementation" (backend_setup stage)
-✓ Create ticket: "Frontend UI Development" (frontend_development stage)
-✓ Create ticket: "End-to-End Testing" (integration_testing stage)
-✓ Add dependency: Frontend depends on Backend
-✓ Add dependency: Testing depends on Frontend
-✓ Close current planning ticket
-```
 
-**⚠️ CRITICAL: Planning workers must create tickets and close themselves. Do NOT update pipelines - create child tickets instead.**
+### WORKER TYPE SPECIFICATION FORMAT:
+```javascript
+{
+  "worker_type": "frontend_implementation",  // Stage name
+  "template": "implementation",  // Template filename (without .md)
+  "short_description": "Frontend implementation worker"  // Optional
+}
+```
 
 ### PLANNING OUTCOME DECISION TREE:
 
 **If work is identified:**
-1. Create all necessary implementation tickets
-2. Set proper dependencies
-3. Close planning ticket with outcome `"coordinator_attention"`
-4. Comment: "Planning complete. Created X implementation tickets."
+1. Output `"outcome": "planning_complete"`
+2. Include `tickets_to_create` array with ticket specifications
+3. Include `worker_types_needed` array with worker type specifications
+4. Comment: "Planning complete. Specified X implementation tickets."
+5. System will handle ticket creation, dependency setup, and planning ticket closure
 
 **If no work is needed:**
-1. Close planning ticket with outcome `"coordinator_attention"`
-2. Comment: "Planning complete. Analysis shows no additional work required."
+1. Output `"outcome": "planning_complete"`
+2. Empty `tickets_to_create` array
+3. Comment: "Planning complete. Analysis shows no additional work required."
+4. Reason: Must contain "no work" or "no additional work" keywords
+5. System will complete planning ticket with "no_work_needed" resolution
 
 **If clarification is needed:**
 1. Use outcome `"coordinator_attention"`
 2. Comment: Specific questions or blockers encountered
+3. Empty `tickets_to_create` array
 
 ## QUALITY ASSURANCE FRAMEWORK
 
@@ -528,21 +545,42 @@ Take action when:
 **All other cases require review.**
 
 ## JSON OUTPUT FORMAT
-Planning workers should close their ticket after creating all necessary child tickets:
+Planning workers output ticket specifications - the system creates tickets atomically:
 
 ```json
 {
-  "outcome": "coordinator_attention",
-  "tickets_created": [
+  "outcome": "planning_complete",
+  "tickets_to_create": [
     {
+      "temp_id": "backend_ticket",
       "title": "Backend API Implementation",
-      "worker_type": "implementation",
-      "estimated_tokens": "85K tokens"
+      "description": "Implement authentication API with session management, following project security guidelines",
+      "execution_plan": ["backend_implementation", "backend_review"],
+      "subsystem": "BE",
+      "ticket_type": "feature",
+      "priority": "high",
+      "depends_on": []
     },
     {
+      "temp_id": "integration_ticket",
       "title": "Integration Testing Suite",
-      "worker_type": "testing",
-      "estimated_tokens": "45K tokens"
+      "description": "Comprehensive end-to-end testing of authentication flow",
+      "execution_plan": ["integration_testing"],
+      "subsystem": "TEST",
+      "priority": "medium",
+      "depends_on": ["backend_ticket"]
+    }
+  ],
+  "worker_types_needed": [
+    {
+      "worker_type": "backend_implementation",
+      "template": "implementation",
+      "short_description": "Backend implementation worker for API development"
+    },
+    {
+      "worker_type": "backend_review",
+      "template": "review",
+      "short_description": "Code review worker for backend quality assurance"
     }
   ],
   "task_sizing_analysis": {
@@ -607,15 +645,16 @@ Planning workers should close their ticket after creating all necessary child ti
     "rules_applied": "Following project coding standards and security guidelines",
     "patterns_used": "Using established authentication patterns from project"
   },
-  "comment": "Planning complete. Created 2 child tickets with optimal task sizing and dependency relationships. All worker types created and validated.",
-  "reason": "Planning phase finished. Child tickets created with proper dependencies. No pipeline update needed - DAG-based execution will handle workflow."
+  "comment": "Planning complete. Specified 2 child tickets with optimal task sizing and dependency relationships. All worker types specified for creation.",
+  "reason": "Planning phase finished. Ticket specifications provided with proper dependencies. System will handle atomic ticket creation and workflow orchestration."
 }
 ```
 
 ## OUTCOME OPTIONS
-- `next_stage`: Move to next stage (most common)
-- `prev_stage`: Return to previous stage if issues found
-- `coordinator_attention`: Escalate complex issues requiring human coordination
+- `planning_complete`: Planning finished with ticket specifications (use this when you've identified work)
+- `coordinator_attention`: Escalate complex issues requiring human coordination (use for clarifications or blockers)
+
+**Note**: You do NOT use `next_stage` or `prev_stage` outcomes. Planning workers output specifications and the system handles the workflow.
 
 ## VIBE-ENSEMBLE INTEGRATION
 - You have access to all vibe-ensemble-mcp tools

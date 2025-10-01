@@ -125,6 +125,11 @@ pub enum WorkerCommand {
     CompleteTicket {
         resolution: String,
     },
+    /// Planning worker has completed and provided structured ticket specifications
+    CompletePlanning {
+        tickets_to_create: Vec<crate::workers::completion_processor::TicketSpecification>,
+        worker_types_needed: Vec<crate::workers::completion_processor::WorkerTypeSpecification>,
+    },
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

@@ -6,6 +6,7 @@ pub mod domain;
 pub mod pipeline;
 pub mod process;
 pub mod queue;
+pub mod ticket_id;
 pub mod transitions;
 pub mod types;
 pub mod validation;

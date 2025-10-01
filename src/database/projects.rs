@@ -8,6 +8,7 @@ use super::DbPool;
 #[derive(Debug, Clone, Serialize, Deserialize, FromRow)]
 pub struct Project {
     pub repository_name: String,
+    pub project_prefix: String,
     pub path: String,
     pub short_description: Option<String>,
     pub created_at: String,
@@ -39,14 +40,18 @@ pub struct UpdateProjectRequest {
 
 impl Project {
     pub async fn create(pool: &DbPool, req: CreateProjectRequest) -> Result<Project> {
+        // Generate project prefix from repository name
+        let project_prefix = crate::workers::ticket_id::generate_project_prefix(&req.repository_name);
+
         let project = sqlx::query_as::<_, Project>(
             r#"
-            INSERT INTO projects (repository_name, path, short_description, rules, patterns, rules_version, patterns_version)
-            VALUES (?1, ?2, ?3, ?4, ?5, 1, 1)
-            RETURNING repository_name, path, short_description, created_at, updated_at, rules, patterns, rules_version, patterns_version
+            INSERT INTO projects (repository_name, project_prefix, path, short_description, rules, patterns, rules_version, patterns_version)
+            VALUES (?1, ?2, ?3, ?4, ?5, ?6, 1, 1)
+            RETURNING repository_name, project_prefix, path, short_description, created_at, updated_at, rules, patterns, rules_version, patterns_version
         "#,
         )
         .bind(&req.repository_name)
+        .bind(&project_prefix)
         .bind(&req.path)
         .bind(&req.short_description)
         .bind(&req.rules)
@@ -60,7 +65,7 @@ impl Project {
     pub async fn get_by_name(pool: &DbPool, repository_name: &str) -> Result<Option<Project>> {
         let project = sqlx::query_as::<_, Project>(
             r#"
-            SELECT repository_name, path, short_description, rules, patterns, created_at, updated_at, rules_version, patterns_version
+            SELECT repository_name, project_prefix, path, short_description, rules, patterns, created_at, updated_at, rules_version, patterns_version
             FROM projects
             WHERE repository_name = ?1
         "#,
@@ -80,7 +85,7 @@ impl Project {
     pub async fn list_all(pool: &DbPool) -> Result<Vec<Project>> {
         let projects = sqlx::query_as::<_, Project>(
             r#"
-            SELECT repository_name, path, short_description, rules, patterns, created_at, updated_at, rules_version, patterns_version
+            SELECT repository_name, project_prefix, path, short_description, rules, patterns, created_at, updated_at, rules_version, patterns_version
             FROM projects
             ORDER BY created_at DESC
         "#,

@@ -383,12 +383,25 @@ impl QueueManager {
                 )
                 .await?;
             }
+            WorkerCommand::CompletePlanning {
+                tickets_to_create,
+                worker_types_needed,
+            } => {
+                // Execute planning completion: create worker types, create tickets, close planning ticket
+                self.execute_planning_completion(
+                    &event.ticket_id,
+                    tickets_to_create,
+                    worker_types_needed,
+                    &event.comment,
+                )
+                .await?;
+            }
         }
 
-        // Handle dependency cascades after completion events (except CompleteTicket which handles its own)
+        // Handle dependency cascades after completion events (except CompleteTicket and CompletePlanning which handle their own)
         match &event.command {
-            WorkerCommand::CompleteTicket { .. } => {
-                // CompleteTicket already handled dependency cascade internally
+            WorkerCommand::CompleteTicket { .. } | WorkerCommand::CompletePlanning { .. } => {
+                // These commands already handle dependency cascade internally
             }
             _ => {
                 self.handle_dependency_cascade(event).await?;
@@ -728,6 +741,283 @@ impl QueueManager {
             "Successfully completed ticket {} and processed dependencies",
             ticket_id
         );
+        Ok(())
+    }
+
+    /// Execute planning completion: create worker types, create child tickets, close planning ticket
+    async fn execute_planning_completion(
+        self: &Arc<Self>,
+        planning_ticket_id: &TicketId,
+        tickets_to_create: &[crate::workers::completion_processor::TicketSpecification],
+        worker_types_needed: &[crate::workers::completion_processor::WorkerTypeSpecification],
+        _planning_comment: &str,
+    ) -> Result<()> {
+        info!(
+            "Executing planning completion for ticket {} with {} tickets to create",
+            planning_ticket_id.as_str(),
+            tickets_to_create.len()
+        );
+
+        // Get planning ticket to determine project
+        let planning_ticket = crate::database::tickets::Ticket::get_by_id(&self.db, planning_ticket_id.as_str())
+            .await?
+            .ok_or_else(|| anyhow::anyhow!("Planning ticket '{}' not found", planning_ticket_id.as_str()))?;
+
+        let project_id = &planning_ticket.ticket.project_id;
+
+        // Get project to access project_prefix
+        let project = crate::database::projects::Project::get_by_id(&self.db, project_id)
+            .await?
+            .ok_or_else(|| anyhow::anyhow!("Project '{}' not found", project_id))?;
+
+        // Step 1: Create worker types if needed
+        for worker_type_spec in worker_types_needed {
+            self.create_worker_type_if_missing(project_id, worker_type_spec)
+                .await?;
+        }
+
+        // Step 2: Create all child tickets in a transaction
+        let created_ticket_ids = self
+            .create_child_tickets_transactional(
+                &project.project_prefix,
+                planning_ticket_id.as_str(),
+                project_id,
+                tickets_to_create,
+            )
+            .await?;
+
+        info!(
+            "Successfully created {} child tickets for planning ticket {}",
+            created_ticket_ids.len(),
+            planning_ticket_id.as_str()
+        );
+
+        // Step 3: Close planning ticket
+        crate::database::tickets::Ticket::close_ticket(
+            &self.db,
+            planning_ticket_id.as_str(),
+            "planning_complete",
+        )
+        .await?;
+
+        info!(
+            "Closed planning ticket {}",
+            planning_ticket_id.as_str()
+        );
+
+        // Step 4: Auto-enqueue ready child tickets (those without dependencies)
+        self.enqueue_ready_child_tickets(&created_ticket_ids).await?;
+
+        info!(
+            "Planning completion successful for ticket {}",
+            planning_ticket_id.as_str()
+        );
+
+        Ok(())
+    }
+
+    /// Create a worker type if it doesn't already exist
+    async fn create_worker_type_if_missing(
+        &self,
+        project_id: &str,
+        worker_type_spec: &crate::workers::completion_processor::WorkerTypeSpecification,
+    ) -> Result<()> {
+        // Check if worker type already exists
+        let existing = crate::database::worker_types::WorkerType::get_by_type(
+            &self.db,
+            project_id,
+            &worker_type_spec.worker_type,
+        )
+        .await?;
+
+        if existing.is_some() {
+            info!(
+                "Worker type '{}' already exists for project '{}'",
+                worker_type_spec.worker_type, project_id
+            );
+            return Ok(());
+        }
+
+        // Load template content
+        let template_path = format!("templates/worker-templates/{}.md", worker_type_spec.template);
+        let template_content = tokio::fs::read_to_string(&template_path)
+            .await
+            .map_err(|e| anyhow::anyhow!("Failed to read worker template '{}': {}", template_path, e))?;
+
+        // Create worker type
+        let request = crate::database::worker_types::CreateWorkerTypeRequest {
+            project_id: project_id.to_string(),
+            worker_type: worker_type_spec.worker_type.clone(),
+            short_description: worker_type_spec.short_description.clone(),
+            system_prompt: template_content,
+        };
+
+        crate::database::worker_types::WorkerType::create(&self.db, request).await?;
+
+        info!(
+            "Created worker type '{}' for project '{}'",
+            worker_type_spec.worker_type, project_id
+        );
+
+        Ok(())
+    }
+
+    /// Create child tickets in a transaction (atomic operation)
+    async fn create_child_tickets_transactional(
+        &self,
+        project_prefix: &str,
+        parent_ticket_id: &str,
+        project_id: &str,
+        tickets_to_create: &[crate::workers::completion_processor::TicketSpecification],
+    ) -> Result<Vec<String>> {
+        use std::collections::HashMap;
+
+        // Map temp_id -> actual ticket_id
+        let mut temp_id_map: HashMap<String, String> = HashMap::new();
+        let mut created_ticket_ids = Vec::new();
+
+        // Start a transaction
+        let mut tx = self.db.begin().await?;
+
+        // Create all tickets
+        for ticket_spec in tickets_to_create {
+            // Determine subsystem
+            let subsystem = if let Some(ref subsys) = ticket_spec.subsystem {
+                subsys.clone()
+            } else {
+                crate::workers::ticket_id::infer_subsystem_from_stages(&ticket_spec.execution_plan)
+            };
+
+            // Generate human-friendly ticket ID
+            let ticket_id = crate::workers::ticket_id::generate_ticket_id_tx(
+                &mut *tx,
+                project_prefix,
+                &subsystem,
+            )
+            .await?;
+
+            // Convert execution plan to JSON
+            let execution_plan_json = serde_json::to_string(&ticket_spec.execution_plan)?;
+
+            // Insert ticket
+            sqlx::query(
+                r#"
+                INSERT INTO tickets (
+                    ticket_id, project_id, parent_ticket_id, title, description,
+                    execution_plan, current_stage, state, priority, dependency_status
+                )
+                VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, 'open', ?8, 'ready')
+                "#,
+            )
+            .bind(&ticket_id)
+            .bind(project_id)
+            .bind(parent_ticket_id)
+            .bind(&ticket_spec.title)
+            .bind(&ticket_spec.description)
+            .bind(&execution_plan_json)
+            .bind(&ticket_spec.execution_plan[0]) // First stage is current_stage
+            .bind(ticket_spec.priority.as_deref().unwrap_or("medium"))
+            .execute(&mut *tx)
+            .await?;
+
+            // Map temp_id to actual ticket_id
+            temp_id_map.insert(ticket_spec.temp_id.clone(), ticket_id.clone());
+            created_ticket_ids.push(ticket_id.clone());
+
+            info!(
+                "Created child ticket '{}' ({}) for parent '{}'",
+                ticket_id, ticket_spec.title, parent_ticket_id
+            );
+        }
+
+        // Create dependencies
+        for ticket_spec in tickets_to_create {
+            if !ticket_spec.depends_on.is_empty() {
+                let ticket_id = temp_id_map
+                    .get(&ticket_spec.temp_id)
+                    .ok_or_else(|| anyhow::anyhow!("Ticket temp_id '{}' not found in map", ticket_spec.temp_id))?;
+
+                for dep_temp_id in &ticket_spec.depends_on {
+                    let dependency_id = temp_id_map
+                        .get(dep_temp_id)
+                        .ok_or_else(|| anyhow::anyhow!("Dependency temp_id '{}' not found in map", dep_temp_id))?;
+
+                    // Add dependency
+                    sqlx::query(
+                        r#"
+                        INSERT INTO ticket_dependencies (ticket_id, depends_on_ticket_id)
+                        VALUES (?1, ?2)
+                        "#,
+                    )
+                    .bind(ticket_id)
+                    .bind(dependency_id)
+                    .execute(&mut *tx)
+                    .await?;
+
+                    // Update dependency_status to 'blocked' for dependent ticket
+                    sqlx::query(
+                        r#"
+                        UPDATE tickets
+                        SET dependency_status = 'blocked'
+                        WHERE ticket_id = ?1
+                        "#,
+                    )
+                    .bind(ticket_id)
+                    .execute(&mut *tx)
+                    .await?;
+
+                    info!(
+                        "Added dependency: ticket '{}' depends on '{}'",
+                        ticket_id, dependency_id
+                    );
+                }
+            }
+        }
+
+        // Commit transaction
+        tx.commit().await?;
+
+        info!(
+            "Successfully created {} tickets with dependencies in transaction",
+            created_ticket_ids.len()
+        );
+
+        Ok(created_ticket_ids)
+    }
+
+    /// Enqueue child tickets that are ready (no dependencies or all dependencies met)
+    async fn enqueue_ready_child_tickets(self: &Arc<Self>, ticket_ids: &[String]) -> Result<()> {
+        for ticket_id in ticket_ids {
+            // Get ticket details
+            let ticket_with_comments =
+                crate::database::tickets::Ticket::get_by_id(&self.db, ticket_id).await?;
+
+            if let Some(ticket_with_comments) = ticket_with_comments {
+                let ticket = &ticket_with_comments.ticket;
+
+                // Only enqueue if ticket is ready (not blocked by dependencies)
+                if ticket.dependency_status == "ready" && ticket.is_open() {
+                    info!(
+                        "Auto-enqueuing ready child ticket '{}' for stage '{}'",
+                        ticket_id, ticket.current_stage
+                    );
+
+                    if let Err(e) = self.auto_enqueue_ticket(ticket_id, &ticket.current_stage).await
+                    {
+                        warn!(
+                            "Failed to auto-enqueue child ticket '{}': {}",
+                            ticket_id, e
+                        );
+                    }
+                } else {
+                    info!(
+                        "Child ticket '{}' is not ready for enqueuing (status: {})",
+                        ticket_id, ticket.dependency_status
+                    );
+                }
+            }
+        }
+
         Ok(())
     }
 }
