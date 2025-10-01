@@ -23,15 +23,27 @@ pub fn infer_subsystem_from_stages(execution_plan: &[String]) -> String {
     for stage in execution_plan {
         let stage_lower = stage.to_lowercase();
 
-        if stage_lower.contains("frontend") || stage_lower.contains("ui") || stage_lower.contains("client") {
+        if stage_lower.contains("frontend")
+            || stage_lower.contains("ui")
+            || stage_lower.contains("client")
+        {
             return "FE".to_string();
-        } else if stage_lower.contains("backend") || stage_lower.contains("api") || stage_lower.contains("server") {
+        } else if stage_lower.contains("backend")
+            || stage_lower.contains("api")
+            || stage_lower.contains("server")
+        {
             return "BE".to_string();
-        } else if stage_lower.contains("database") || stage_lower.contains("db") || stage_lower.contains("schema") {
+        } else if stage_lower.contains("database")
+            || stage_lower.contains("db")
+            || stage_lower.contains("schema")
+        {
             return "DB".to_string();
         } else if stage_lower.contains("test") {
             return "TEST".to_string();
-        } else if stage_lower.contains("deploy") || stage_lower.contains("ops") || stage_lower.contains("infra") {
+        } else if stage_lower.contains("deploy")
+            || stage_lower.contains("ops")
+            || stage_lower.contains("infra")
+        {
             return "OPS".to_string();
         } else if stage_lower.contains("doc") {
             return "DOC".to_string();

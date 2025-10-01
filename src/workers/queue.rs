@@ -759,9 +759,15 @@ impl QueueManager {
         );
 
         // Get planning ticket to determine project
-        let planning_ticket = crate::database::tickets::Ticket::get_by_id(&self.db, planning_ticket_id.as_str())
-            .await?
-            .ok_or_else(|| anyhow::anyhow!("Planning ticket '{}' not found", planning_ticket_id.as_str()))?;
+        let planning_ticket =
+            crate::database::tickets::Ticket::get_by_id(&self.db, planning_ticket_id.as_str())
+                .await?
+                .ok_or_else(|| {
+                    anyhow::anyhow!(
+                        "Planning ticket '{}' not found",
+                        planning_ticket_id.as_str()
+                    )
+                })?;
 
         let project_id = &planning_ticket.ticket.project_id;
 
@@ -800,13 +806,11 @@ impl QueueManager {
         )
         .await?;
 
-        info!(
-            "Closed planning ticket {}",
-            planning_ticket_id.as_str()
-        );
+        info!("Closed planning ticket {}", planning_ticket_id.as_str());
 
         // Step 4: Auto-enqueue ready child tickets (those without dependencies)
-        self.enqueue_ready_child_tickets(&created_ticket_ids).await?;
+        self.enqueue_ready_child_tickets(&created_ticket_ids)
+            .await?;
 
         info!(
             "Planning completion successful for ticket {}",
@@ -839,10 +843,15 @@ impl QueueManager {
         }
 
         // Load template content
-        let template_path = format!("templates/worker-templates/{}.md", worker_type_spec.template);
+        let template_path = format!(
+            "templates/worker-templates/{}.md",
+            worker_type_spec.template
+        );
         let template_content = tokio::fs::read_to_string(&template_path)
             .await
-            .map_err(|e| anyhow::anyhow!("Failed to read worker template '{}': {}", template_path, e))?;
+            .map_err(|e| {
+                anyhow::anyhow!("Failed to read worker template '{}': {}", template_path, e)
+            })?;
 
         // Create worker type
         let request = crate::database::worker_types::CreateWorkerTypeRequest {
@@ -890,7 +899,7 @@ impl QueueManager {
 
             // Generate human-friendly ticket ID
             let ticket_id = crate::workers::ticket_id::generate_ticket_id_tx(
-                &mut *tx,
+                &mut tx,
                 project_prefix,
                 &subsystem,
             )
@@ -933,14 +942,14 @@ impl QueueManager {
         // Create dependencies
         for ticket_spec in tickets_to_create {
             if !ticket_spec.depends_on.is_empty() {
-                let ticket_id = temp_id_map
-                    .get(&ticket_spec.temp_id)
-                    .ok_or_else(|| anyhow::anyhow!("Ticket temp_id '{}' not found in map", ticket_spec.temp_id))?;
+                let ticket_id = temp_id_map.get(&ticket_spec.temp_id).ok_or_else(|| {
+                    anyhow::anyhow!("Ticket temp_id '{}' not found in map", ticket_spec.temp_id)
+                })?;
 
                 for dep_temp_id in &ticket_spec.depends_on {
-                    let dependency_id = temp_id_map
-                        .get(dep_temp_id)
-                        .ok_or_else(|| anyhow::anyhow!("Dependency temp_id '{}' not found in map", dep_temp_id))?;
+                    let dependency_id = temp_id_map.get(dep_temp_id).ok_or_else(|| {
+                        anyhow::anyhow!("Dependency temp_id '{}' not found in map", dep_temp_id)
+                    })?;
 
                     // Add dependency
                     sqlx::query(
@@ -1002,12 +1011,11 @@ impl QueueManager {
                         ticket_id, ticket.current_stage
                     );
 
-                    if let Err(e) = self.auto_enqueue_ticket(ticket_id, &ticket.current_stage).await
+                    if let Err(e) = self
+                        .auto_enqueue_ticket(ticket_id, &ticket.current_stage)
+                        .await
                     {
-                        warn!(
-                            "Failed to auto-enqueue child ticket '{}': {}",
-                            ticket_id, e
-                        );
+                        warn!("Failed to auto-enqueue child ticket '{}': {}", ticket_id, e);
                     }
                 } else {
                     info!(

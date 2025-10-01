@@ -1,7 +1,6 @@
 use async_trait::async_trait;
 use serde_json::{json, Value};
 use tracing::{info, warn};
-use uuid::Uuid;
 
 use super::{
     tools::{
@@ -64,8 +63,6 @@ impl ToolHandler for CreateTicketTool {
 
         info!("Creating ticket: {} in project {}", title, project_id);
 
-        let ticket_id = Uuid::new_v4().to_string();
-
         // Use provided execution plan or default to single stage
         let execution_plan = execution_plan_input.unwrap_or_else(|| vec![initial_stage.clone()]);
         let first_stage = execution_plan.first().cloned().ok_or_else(|| {
@@ -83,6 +80,44 @@ impl ToolHandler for CreateTicketTool {
         {
             return Ok(create_json_error_response(&e.to_string()));
         }
+
+        // Get project to access project_prefix for human-friendly ticket ID
+        let project =
+            match crate::database::projects::Project::get_by_name(&state.db, &project_id).await {
+                Ok(Some(p)) => p,
+                Ok(None) => {
+                    return Ok(create_json_error_response(&format!(
+                        "Project '{}' not found",
+                        project_id
+                    )))
+                }
+                Err(e) => {
+                    return Ok(create_json_error_response(&format!(
+                        "Failed to get project: {}",
+                        e
+                    )))
+                }
+            };
+
+        // Determine subsystem from execution plan for ticket ID generation
+        let subsystem = crate::workers::ticket_id::infer_subsystem_from_stages(&execution_plan);
+
+        // Generate human-friendly ticket ID
+        let ticket_id = match crate::workers::ticket_id::generate_ticket_id(
+            &state.db,
+            &project.project_prefix,
+            &subsystem,
+        )
+        .await
+        {
+            Ok(id) => id,
+            Err(e) => {
+                return Ok(create_json_error_response(&format!(
+                    "Failed to generate ticket ID: {}",
+                    e
+                )))
+            }
+        };
 
         let req = CreateTicketRequest {
             ticket_id: ticket_id.clone(),

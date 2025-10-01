@@ -41,7 +41,8 @@ pub struct UpdateProjectRequest {
 impl Project {
     pub async fn create(pool: &DbPool, req: CreateProjectRequest) -> Result<Project> {
         // Generate project prefix from repository name
-        let project_prefix = crate::workers::ticket_id::generate_project_prefix(&req.repository_name);
+        let project_prefix =
+            crate::workers::ticket_id::generate_project_prefix(&req.repository_name);
 
         let project = sqlx::query_as::<_, Project>(
             r#"
