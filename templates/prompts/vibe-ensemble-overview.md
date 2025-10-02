@@ -29,7 +29,7 @@ You are now connected to the Vibe Ensemble MCP server - a sophisticated multi-ag
 - Tickets automatically advance through stages as workers complete their tasks
 - Monitor stage progress with `get_tickets_by_stage` and `list_events`
 
-## Available Tools (29 total)
+## Available Tools (28 total)
 
 **Project Management**: create_project, list_projects, get_project, update_project, delete_project
 **Worker Types**: create_worker_type, list_worker_types, get_worker_type, update_worker_type, delete_worker_type
