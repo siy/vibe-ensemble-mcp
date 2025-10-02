@@ -62,9 +62,23 @@ pub async fn get_next_ticket_number(
     project_id: &str,
     subsystem: &str,
 ) -> Result<u32> {
+    // Query explanation:
+    // 1. Find tickets matching pattern: PROJECT-SUBSYSTEM-NNN
+    // 2. Extract the number part after the second hyphen
+    // 3. Find the maximum number and add 1
     let query = sqlx::query_scalar::<_, i64>(
         r#"
-        SELECT COALESCE(MAX(CAST(SUBSTR(ticket_id, INSTR(ticket_id, '-', INSTR(ticket_id, '-') + 1) + 1) AS INTEGER)), 0) + 1
+        SELECT COALESCE(
+            MAX(
+                CAST(
+                    SUBSTR(
+                        ticket_id,
+                        LENGTH(ticket_id) - INSTR(REVERSE(ticket_id), '-') + 2
+                    ) AS INTEGER
+                )
+            ),
+            0
+        ) + 1
         FROM tickets
         WHERE project_id = ?1 AND ticket_id LIKE ?2
         "#,
@@ -82,9 +96,23 @@ pub async fn get_next_ticket_number_tx(
     project_id: &str,
     subsystem: &str,
 ) -> Result<u32> {
+    // Query explanation:
+    // 1. Find tickets matching pattern: PROJECT-SUBSYSTEM-NNN
+    // 2. Extract the number part after the second hyphen
+    // 3. Find the maximum number and add 1
     let query = sqlx::query_scalar::<_, i64>(
         r#"
-        SELECT COALESCE(MAX(CAST(SUBSTR(ticket_id, INSTR(ticket_id, '-', INSTR(ticket_id, '-') + 1) + 1) AS INTEGER)), 0) + 1
+        SELECT COALESCE(
+            MAX(
+                CAST(
+                    SUBSTR(
+                        ticket_id,
+                        LENGTH(ticket_id) - INSTR(REVERSE(ticket_id), '-') + 2
+                    ) AS INTEGER
+                )
+            ),
+            0
+        ) + 1
         FROM tickets
         WHERE project_id = ?1 AND ticket_id LIKE ?2
         "#,
