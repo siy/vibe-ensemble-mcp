@@ -1,5 +1,7 @@
 # How Claude Code IDE Extensions Actually Work
 
+> **⚠️ IMPORTANT NOTE**: This document describes the WebSocket protocol used by Claude Code IDE extensions for bidirectional communication between the IDE and Claude. This is **NOT** documentation for the vibe-ensemble-mcp server's WebSocket infrastructure. For information about vibe-ensemble-mcp's capabilities, see [README.md](README.md).
+
 This document explains the protocol and architecture behind Claude Code's IDE integrations, based on reverse-engineering the VS Code extension. Use this guide to build your own integrations or understand how the official ones work.
 
 ## TL;DR

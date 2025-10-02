@@ -37,7 +37,13 @@ impl ClaimManager {
         worker_id: &str,
     ) -> Result<ClaimResult> {
         // Use a transaction for atomic claim verification
-        let mut tx = db.begin().await?;
+        let mut tx = db.begin().await.inspect_err(|e| {
+            error!(
+                "Failed to begin transaction for claiming ticket {}: {}",
+                ticket_id.as_str(),
+                e
+            )
+        })?;
 
         // Attempt atomic UPDATE
         let result = sqlx::query(
@@ -53,7 +59,15 @@ impl ClaimManager {
         .bind(worker_id)
         .bind(ticket_id.as_str())
         .execute(&mut *tx)
-        .await?;
+        .await
+        .inspect_err(|e| {
+            error!(
+                "Failed to execute claim update for ticket {} by worker {}: {}",
+                ticket_id.as_str(),
+                worker_id,
+                e
+            )
+        })?;
 
         let rows_affected = result.rows_affected();
 
@@ -64,9 +78,16 @@ impl ClaimManager {
             )
             .bind(ticket_id.as_str())
             .fetch_optional(&mut *tx)
-            .await?;
+            .await
+            .inspect_err(|e| warn!("Failed to fetch ticket state for {}: {}", ticket_id.as_str(), e))?;
 
-            tx.rollback().await?;
+            tx.rollback().await.inspect_err(|e| {
+                error!(
+                    "Failed to rollback transaction for ticket {}: {}",
+                    ticket_id.as_str(),
+                    e
+                )
+            })?;
 
             return match ticket_state {
                 Some((state, Some(current_worker), _)) if state == "open" => {
@@ -93,7 +114,14 @@ impl ClaimManager {
             };
         }
 
-        tx.commit().await?;
+        tx.commit().await.inspect_err(|e| {
+            error!(
+                "Failed to commit claim transaction for ticket {} by worker {}: {}",
+                ticket_id.as_str(),
+                worker_id,
+                e
+            )
+        })?;
         info!(
             "Successfully claimed ticket {} for worker {}",
             ticket_id.as_str(),
@@ -110,7 +138,14 @@ impl ClaimManager {
         )
         .bind(ticket_id.as_str())
         .fetch_optional(db)
-        .await?
+        .await
+        .inspect_err(|e| {
+            warn!(
+                "Failed to check if ticket {} is claimed: {}",
+                ticket_id.as_str(),
+                e
+            )
+        })?
         .unwrap_or(false);
 
         if is_claimed {
@@ -121,7 +156,8 @@ impl ClaimManager {
             )
             .bind(ticket_id.as_str())
             .execute(db)
-            .await?;
+            .await
+            .inspect_err(|e| error!("Failed to release claim on ticket {}: {}", ticket_id.as_str(), e))?;
 
             // Ticket claim released (no event needed - redundant)
 
@@ -142,7 +178,8 @@ impl ClaimManager {
         )
         .bind(ticket_id)
         .execute(db)
-        .await?
+        .await
+        .inspect_err(|e| error!("Failed to release claim for ticket {}: {}", ticket_id, e))?
         .rows_affected();
 
         if rows_affected > 0 {
@@ -173,7 +210,8 @@ impl ClaimManager {
         .bind(ticket_id)
         .bind(worker_id)
         .execute(db)
-        .await?
+        .await
+        .inspect_err(|e| error!("Failed to release claim for ticket {} by worker {}: {}", ticket_id, worker_id, e))?
         .rows_affected();
 
         if rows_affected > 0 {
@@ -199,7 +237,13 @@ impl ClaimManager {
             "SELECT ticket_id FROM tickets WHERE processing_worker_id IS NOT NULL",
         )
         .fetch_all(db)
-        .await?;
+        .await
+        .inspect_err(|e| {
+            error!(
+                "Failed to fetch claimed tickets for emergency release: {}",
+                e
+            )
+        })?;
 
         if claimed_tickets.is_empty() {
             info!("No claimed tickets to release");
@@ -219,7 +263,8 @@ impl ClaimManager {
             "UPDATE tickets SET processing_worker_id = NULL, updated_at = datetime('now') WHERE processing_worker_id IS NOT NULL"
         )
         .execute(db)
-        .await?
+        .await
+        .inspect_err(|e| error!("Failed to execute batch emergency release of claims: {}", e))?
         .rows_affected();
 
         if rows_affected > 0 {

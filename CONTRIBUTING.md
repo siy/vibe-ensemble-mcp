@@ -44,7 +44,7 @@ We welcome contributions to the Vibe Ensemble MCP Server! This document provides
 
 ### Database Schema
 
-- All database changes must include migrations in `src/database/schema.rs`
+- All database changes must include migration files in `migrations/` directory
 - Test database operations thoroughly
 - Use parameterized queries to prevent SQL injection
 

@@ -1,6 +1,7 @@
 use anyhow::Result;
 use serde::{Deserialize, Serialize};
 use sqlx::FromRow;
+use tracing::{error, warn};
 
 use super::DbPool;
 
@@ -41,7 +42,8 @@ impl WorkerType {
         .bind(&req.short_description)
         .bind(&req.system_prompt)
         .fetch_one(pool)
-        .await?;
+        .await
+        .inspect_err(|e| error!("Failed to create worker type '{}' for project '{}': {:?}", req.worker_type, req.project_id, e))?;
 
         Ok(worker_type)
     }
@@ -59,7 +61,8 @@ impl WorkerType {
         .bind(project_id)
         .bind(worker_type)
         .fetch_optional(pool)
-        .await?;
+        .await
+        .inspect_err(|e| warn!("Failed to fetch worker type '{}' for project '{}': {:?}", worker_type, project_id, e))?;
 
         Ok(worker_type)
     }
@@ -77,7 +80,8 @@ impl WorkerType {
             "#)
             .bind(project_id)
             .fetch_all(pool)
-            .await?
+            .await
+            .inspect_err(|e| warn!("Failed to list worker types for project '{}': {:?}", project_id, e))?
         } else {
             sqlx::query_as::<_, WorkerType>(r#"
                 SELECT id, project_id, worker_type, short_description, system_prompt, created_at, updated_at
@@ -85,7 +89,8 @@ impl WorkerType {
                 ORDER BY project_id ASC, created_at DESC
             "#)
             .fetch_all(pool)
-            .await?
+            .await
+            .inspect_err(|e| warn!("Failed to list all worker types: {:?}", e))?
         };
 
         Ok(worker_types)
@@ -137,7 +142,13 @@ impl WorkerType {
         let worker_type_result = query_builder
             .build_query_as::<WorkerType>()
             .fetch_optional(pool)
-            .await?;
+            .await
+            .inspect_err(|e| {
+                error!(
+                    "Failed to update worker type '{}' for project '{}': {:?}",
+                    worker_type, project_id, e
+                )
+            })?;
         Ok(worker_type_result)
     }
 
@@ -147,7 +158,13 @@ impl WorkerType {
                 .bind(project_id)
                 .bind(worker_type)
                 .execute(pool)
-                .await?;
+                .await
+                .inspect_err(|e| {
+                    error!(
+                        "Failed to delete worker type '{}' for project '{}': {:?}",
+                        worker_type, project_id, e
+                    )
+                })?;
 
         Ok(result.rows_affected() > 0)
     }

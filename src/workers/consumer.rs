@@ -80,7 +80,12 @@ impl WorkerConsumer {
         // We trust that the ticket is properly claimed and ready for processing
 
         // Create worker_id from raw ticket_id first (before validation) so guard can use it
-        let worker_id = format!("{}:{}:{}", self.project_id, self.stage, &task.ticket_id);
+        // Sanitize project_id by replacing invalid characters (e.g., '/' in repository names)
+        let sanitized_project_id = self.project_id.replace('/', "-");
+        let worker_id = format!(
+            "{}:{}:{}",
+            sanitized_project_id, self.stage, &task.ticket_id
+        );
 
         // Install cleanup guard BEFORE any fallible operations to avoid stuck claims
         let db_clone = self.db.clone();
@@ -320,6 +325,47 @@ impl WorkerConsumer {
                     crate::workers::completion_processor::WorkerOutcome::CoordinatorAttention => {
                         crate::workers::domain::WorkerCommand::RequestCoordinatorAttention {
                             reason: output.reason,
+                        }
+                    }
+                    crate::workers::completion_processor::WorkerOutcome::PlanningComplete => {
+                        // Validate planning output
+                        if output.tickets_to_create.is_empty() {
+                            // Empty tickets with valid reason is acceptable (e.g., "no work needed")
+                            if output.reason.to_lowercase().contains("no work")
+                                || output.reason.to_lowercase().contains("no additional work")
+                            {
+                                info!(
+                                    ticket_id = %task.ticket_id,
+                                    "Planning complete with no work needed"
+                                );
+                                crate::workers::domain::WorkerCommand::CompleteTicket {
+                                    resolution: "no_work_needed".to_string(),
+                                }
+                            } else {
+                                warn!(
+                                    ticket_id = %task.ticket_id,
+                                    "Planning completed without tickets and without valid explanation"
+                                );
+                                crate::workers::domain::WorkerCommand::RequestCoordinatorAttention {
+                                    reason: format!(
+                                        "Planning completed but no tickets created and no explanation provided. Reason given: {}",
+                                        output.reason
+                                    ),
+                                }
+                            }
+                        } else {
+                            // Valid planning with tickets to create
+                            info!(
+                                ticket_id = %task.ticket_id,
+                                ticket_count = output.tickets_to_create.len(),
+                                worker_type_count = output.worker_types_needed.len(),
+                                "Planning complete with {} tickets to create",
+                                output.tickets_to_create.len()
+                            );
+                            crate::workers::domain::WorkerCommand::CompletePlanning {
+                                tickets_to_create: output.tickets_to_create,
+                                worker_types_needed: output.worker_types_needed,
+                            }
                         }
                     }
                 };

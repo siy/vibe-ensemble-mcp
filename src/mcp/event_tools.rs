@@ -36,7 +36,7 @@ impl ToolHandler for ListEventsTool {
         let cursor = extract_cursor(&Some(args.clone()))?;
 
         let events = if let Some(ref ids) = event_ids {
-            // Get specific events by IDs (ignores processed filter when using specific IDs)
+            // Get specific events by IDs (ignores event_type filter when using specific IDs)
             Event::get_by_ids(&state.db, ids).await?
         } else if include_processed {
             // Get all events (processed and unprocessed)
@@ -52,6 +52,10 @@ impl ToolHandler for ListEventsTool {
         let filtered_events: Vec<_> = sorted_events
             .into_iter()
             .filter(|event| {
+                // Skip event_type filter when specific event IDs were requested
+                if event_ids.is_some() {
+                    return true;
+                }
                 // Filter by event type if specified
                 if let Some(ref type_filter) = event_type {
                     &event.event_type == type_filter

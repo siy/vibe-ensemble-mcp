@@ -1,6 +1,7 @@
 use anyhow::Result;
 use serde::{Deserialize, Serialize};
 use sqlx::FromRow;
+use tracing::{error, warn};
 
 use super::DbPool;
 
@@ -32,7 +33,8 @@ impl Worker {
         .bind(&worker.started_at)
         .bind(&worker.last_activity)
         .fetch_one(pool)
-        .await?;
+        .await
+        .inspect_err(|e| error!("Failed to create worker '{}': {:?}", worker.worker_id, e))?;
 
         Ok(worker)
     }
@@ -48,7 +50,8 @@ impl Worker {
         )
         .bind(worker_id)
         .fetch_optional(pool)
-        .await?;
+        .await
+        .inspect_err(|e| warn!("Failed to fetch worker '{}': {:?}", worker_id, e))?;
 
         Ok(worker)
     }
@@ -66,18 +69,25 @@ impl Worker {
             )
             .bind(project_id)
             .fetch_all(pool)
-            .await?
+            .await
+            .inspect_err(|e| {
+                warn!(
+                    "Failed to list workers for project '{}': {:?}",
+                    project_id, e
+                )
+            })?
         } else {
             sqlx::query_as::<_, Worker>(
                 r#"
-                SELECT worker_id, project_id, worker_type, status, 
+                SELECT worker_id, project_id, worker_type, status,
                        CAST(pid AS INTEGER) as pid, queue_name, started_at, last_activity
                 FROM workers
                 ORDER BY project_id ASC, started_at DESC
             "#,
             )
             .fetch_all(pool)
-            .await?
+            .await
+            .inspect_err(|e| warn!("Failed to list all workers: {:?}", e))?
         };
 
         Ok(workers)
@@ -95,7 +105,8 @@ impl Worker {
         )
         .bind(worker_type)
         .fetch_all(pool)
-        .await?;
+        .await
+        .inspect_err(|e| warn!("Failed to list workers of type '{}': {:?}", worker_type, e))?;
 
         Ok(workers)
     }
@@ -108,7 +119,7 @@ impl Worker {
     ) -> Result<bool> {
         let result = sqlx::query(
             r#"
-            UPDATE workers 
+            UPDATE workers
             SET status = ?1, pid = ?2, last_activity = datetime('now')
             WHERE worker_id = ?3
         "#,
@@ -117,7 +128,13 @@ impl Worker {
         .bind(pid.map(|p| p as i64))
         .bind(worker_id)
         .execute(pool)
-        .await?;
+        .await
+        .inspect_err(|e| {
+            error!(
+                "Failed to update status for worker '{}' to '{}': {:?}",
+                worker_id, status, e
+            )
+        })?;
 
         Ok(result.rows_affected() > 0)
     }
@@ -132,7 +149,13 @@ impl Worker {
         )
         .bind(worker_id)
         .execute(pool)
-        .await?;
+        .await
+        .inspect_err(|e| {
+            warn!(
+                "Failed to update last activity for worker '{}': {:?}",
+                worker_id, e
+            )
+        })?;
 
         Ok(result.rows_affected() > 0)
     }
@@ -141,7 +164,8 @@ impl Worker {
         let result = sqlx::query("DELETE FROM workers WHERE worker_id = ?1")
             .bind(worker_id)
             .execute(pool)
-            .await?;
+            .await
+            .inspect_err(|e| error!("Failed to delete worker '{}': {:?}", worker_id, e))?;
 
         Ok(result.rows_affected() > 0)
     }
@@ -157,7 +181,8 @@ impl Worker {
         )
         .bind(queue_name)
         .fetch_all(pool)
-        .await?;
+        .await
+        .inspect_err(|e| warn!("Failed to fetch workers for queue '{}': {:?}", queue_name, e))?;
 
         // Check if any of the workers are actually running
         for worker in workers {

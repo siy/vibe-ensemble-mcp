@@ -325,9 +325,15 @@ impl ToolHandler for GetProjectTool {
         let repository_name: String = extract_param(&arguments, "repository_name")?;
 
         match Project::get_by_name(&state.db, &repository_name).await {
-            Ok(Some(project)) => Ok(create_json_success_response(serde_json::to_value(
-                &project,
-            )?)),
+            Ok(Some(project)) => Ok(create_json_success_response(
+                serde_json::to_value(&project).map_err(|e| {
+                    warn!(
+                        "Failed to serialize project '{}' to JSON: {}",
+                        repository_name, e
+                    );
+                    e
+                })?,
+            )),
             Ok(None) => Ok(create_json_error_response(&format!(
                 "Project '{}' not found",
                 repository_name
@@ -376,9 +382,15 @@ impl ToolHandler for UpdateProjectTool {
         };
 
         match Project::update(&state.db, &repository_name, request).await {
-            Ok(Some(project)) => Ok(create_json_success_response(serde_json::to_value(
-                &project,
-            )?)),
+            Ok(Some(project)) => Ok(create_json_success_response(
+                serde_json::to_value(&project).map_err(|e| {
+                    warn!(
+                        "Failed to serialize updated project '{}' to JSON: {}",
+                        repository_name, e
+                    );
+                    e
+                })?,
+            )),
             Ok(None) => Ok(create_json_error_response(&format!(
                 "Project '{}' not found",
                 repository_name
