@@ -1069,10 +1069,12 @@ impl QueueManager {
                     })?;
 
                     // Add dependency
+                    // Schema: parent_ticket_id (blocks) child_ticket_id
+                    // Meaning: child (ticket_id) depends on parent (dependency_id)
                     sqlx::query(
                         r#"
-                        INSERT INTO ticket_dependencies (ticket_id, depends_on_ticket_id)
-                        VALUES (?1, ?2)
+                        INSERT INTO ticket_dependencies (child_ticket_id, parent_ticket_id, dependency_type)
+                        VALUES (?1, ?2, 'blocks')
                         "#,
                     )
                     .bind(ticket_id)
