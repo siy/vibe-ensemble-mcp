@@ -22,6 +22,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **🔄 Worker Lifecycle**: Enhanced planning workflow with automatic ticket ID generation and subsystem assignment
 - **💾 Ticket ID Generation**: New ticket_id.rs module with prefix generation, subsystem inference, and sequence management
 - **🗃️ Project Schema**: Extended Project struct with project_prefix field for ticket ID generation
+- **✂️ Simplified Planning Template**: Replaced 677-line planning template with focused 228-line version emphasizing JSON output specification
 
 ### Fixed
 - **🔒 Transaction Support**: Added transaction-aware versions of ticket ID generation functions
