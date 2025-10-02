@@ -27,6 +27,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **🔒 Transaction Support**: Added transaction-aware versions of ticket ID generation functions
 - **🔗 Arc Reference Handling**: Fixed method signature for auto_enqueue_ticket to properly use Arc<Self>
 - **🎫 Coordinator Ticket IDs**: Fixed create_ticket MCP tool to use human-friendly IDs instead of UUIDs for consistency
+- **🗄️ SQL INSTR Error**: Fixed incorrect nested INSTR() usage in ticket number generation (SQLite only supports 2 arguments)
 
 ## [0.9.6] - 2025-09-30
 
