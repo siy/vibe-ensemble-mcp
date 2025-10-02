@@ -62,32 +62,33 @@ pub async fn get_next_ticket_number(
     project_id: &str,
     subsystem: &str,
 ) -> Result<u32> {
-    // Query explanation:
-    // 1. Find tickets matching pattern: PROJECT-SUBSYSTEM-NNN
-    // 2. Extract the number part after the second hyphen
-    // 3. Find the maximum number and add 1
-    let query = sqlx::query_scalar::<_, i64>(
+    // Simpler approach: fetch all matching tickets and parse in Rust
+    // This is more reliable than complex SQLite string manipulation
+    let pattern = format!("%-{subsystem}-%");
+
+    let ticket_ids: Vec<String> = sqlx::query_scalar(
         r#"
-        SELECT COALESCE(
-            MAX(
-                CAST(
-                    SUBSTR(
-                        ticket_id,
-                        LENGTH(ticket_id) - INSTR(REVERSE(ticket_id), '-') + 2
-                    ) AS INTEGER
-                )
-            ),
-            0
-        ) + 1
+        SELECT ticket_id
         FROM tickets
         WHERE project_id = ?1 AND ticket_id LIKE ?2
         "#,
     )
     .bind(project_id)
-    .bind(format!("%-{subsystem}-%"));
+    .bind(&pattern)
+    .fetch_all(db)
+    .await?;
 
-    let next_num = query.fetch_one(db).await?;
-    Ok(next_num as u32)
+    // Parse numbers from ticket IDs (format: PREFIX-SUBSYSTEM-NNN)
+    let max_num = ticket_ids
+        .iter()
+        .filter_map(|id| {
+            // Split by '-' and take the last part
+            id.split('-').next_back()?.parse::<u32>().ok()
+        })
+        .max()
+        .unwrap_or(0);
+
+    Ok(max_num + 1)
 }
 
 /// Get next ticket number for a given project and subsystem (transaction version)
@@ -96,32 +97,33 @@ pub async fn get_next_ticket_number_tx(
     project_id: &str,
     subsystem: &str,
 ) -> Result<u32> {
-    // Query explanation:
-    // 1. Find tickets matching pattern: PROJECT-SUBSYSTEM-NNN
-    // 2. Extract the number part after the second hyphen
-    // 3. Find the maximum number and add 1
-    let query = sqlx::query_scalar::<_, i64>(
+    // Simpler approach: fetch all matching tickets and parse in Rust
+    // This is more reliable than complex SQLite string manipulation
+    let pattern = format!("%-{subsystem}-%");
+
+    let ticket_ids: Vec<String> = sqlx::query_scalar(
         r#"
-        SELECT COALESCE(
-            MAX(
-                CAST(
-                    SUBSTR(
-                        ticket_id,
-                        LENGTH(ticket_id) - INSTR(REVERSE(ticket_id), '-') + 2
-                    ) AS INTEGER
-                )
-            ),
-            0
-        ) + 1
+        SELECT ticket_id
         FROM tickets
         WHERE project_id = ?1 AND ticket_id LIKE ?2
         "#,
     )
     .bind(project_id)
-    .bind(format!("%-{subsystem}-%"));
+    .bind(&pattern)
+    .fetch_all(&mut *tx)
+    .await?;
 
-    let next_num = query.fetch_one(&mut *tx).await?;
-    Ok(next_num as u32)
+    // Parse numbers from ticket IDs (format: PREFIX-SUBSYSTEM-NNN)
+    let max_num = ticket_ids
+        .iter()
+        .filter_map(|id| {
+            // Split by '-' and take the last part
+            id.split('-').next_back()?.parse::<u32>().ok()
+        })
+        .max()
+        .unwrap_or(0);
+
+    Ok(max_num + 1)
 }
 
 /// Generate a human-friendly ticket ID (pool version)
