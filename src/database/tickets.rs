@@ -368,11 +368,13 @@ impl Ticket {
     ) -> Result<Option<Ticket>> {
         let mut tx = pool.begin().await?;
 
-        // Update ticket status
+        // Update ticket status and set dependency_status to 'ready' since closed tickets
+        // have implicitly satisfied their dependencies
         let ticket = sqlx::query_as::<_, Ticket>(
             r#"
             UPDATE tickets
-            SET current_stage = ?1, state = ?2, updated_at = datetime('now'), closed_at = datetime('now')
+            SET current_stage = ?1, state = ?2, dependency_status = 'ready',
+                updated_at = datetime('now'), closed_at = datetime('now')
             WHERE ticket_id = ?3
             RETURNING ticket_id, project_id, title, execution_plan, current_stage, state, priority,
                      processing_worker_id, created_at, updated_at, closed_at,
