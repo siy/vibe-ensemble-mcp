@@ -80,7 +80,12 @@ impl WorkerConsumer {
         // We trust that the ticket is properly claimed and ready for processing
 
         // Create worker_id from raw ticket_id first (before validation) so guard can use it
-        let worker_id = format!("{}:{}:{}", self.project_id, self.stage, &task.ticket_id);
+        // Sanitize project_id by replacing invalid characters (e.g., '/' in repository names)
+        let sanitized_project_id = self.project_id.replace('/', "-");
+        let worker_id = format!(
+            "{}:{}:{}",
+            sanitized_project_id, self.stage, &task.ticket_id
+        );
 
         // Install cleanup guard BEFORE any fallible operations to avoid stuck claims
         let db_clone = self.db.clone();

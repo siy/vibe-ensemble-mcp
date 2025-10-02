@@ -30,6 +30,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **🗄️ Ticket Number Generation**: Replaced complex SQL string manipulation with Rust parsing (SQLite lacks REVERSE() function)
 - **🔢 Duplicate Ticket IDs**: Fixed LIKE pattern to include project prefix, preventing ticket ID collisions across projects
 - **📊 Database Error Logging**: Added comprehensive error logging to 115+ database operations across all modules for improved observability
+- **🆔 Worker ID Validation**: Sanitize project IDs in worker ID construction to handle repository-style names with forward slashes
 
 ## [0.9.6] - 2025-09-30
 
