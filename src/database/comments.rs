@@ -1,6 +1,7 @@
 use anyhow::Result;
 use serde::{Deserialize, Serialize};
 use sqlx::FromRow;
+use tracing::{error, warn};
 
 use super::DbPool;
 
@@ -46,7 +47,13 @@ impl Comment {
         .bind(stage_number)
         .bind(content)
         .fetch_one(pool)
-        .await?;
+        .await
+        .inspect_err(|e| {
+            error!(
+                "Failed to create comment for ticket '{}': {:?}",
+                ticket_id, e
+            )
+        })?;
 
         Ok(comment)
     }
@@ -65,7 +72,13 @@ impl Comment {
         .bind(req.stage_number)
         .bind(&req.content)
         .fetch_one(pool)
-        .await?;
+        .await
+        .inspect_err(|e| {
+            error!(
+                "Failed to create comment from request for ticket '{}': {:?}",
+                req.ticket_id, e
+            )
+        })?;
 
         Ok(comment)
     }
@@ -81,7 +94,13 @@ impl Comment {
         )
         .bind(ticket_id)
         .fetch_all(pool)
-        .await?;
+        .await
+        .inspect_err(|e| {
+            warn!(
+                "Failed to fetch comments for ticket '{}': {:?}",
+                ticket_id, e
+            )
+        })?;
 
         Ok(comments)
     }
@@ -91,7 +110,12 @@ impl Comment {
         req: CreateCommentRequest,
         new_stage: &str,
     ) -> Result<(Comment, bool)> {
-        let mut tx = pool.begin().await?;
+        let mut tx = pool.begin().await.inspect_err(|e| {
+            error!(
+                "Failed to begin transaction for comment with stage update for ticket '{}': {:?}",
+                req.ticket_id, e
+            )
+        })?;
 
         // Add comment
         let comment = sqlx::query_as::<_, Comment>(
@@ -107,12 +131,18 @@ impl Comment {
         .bind(req.stage_number)
         .bind(&req.content)
         .fetch_one(&mut *tx)
-        .await?;
+        .await
+        .inspect_err(|e| {
+            error!(
+                "Failed to insert comment for ticket '{}' in stage update: {:?}",
+                req.ticket_id, e
+            )
+        })?;
 
         // Update ticket stage
         let updated_rows = sqlx::query(
             r#"
-            UPDATE tickets 
+            UPDATE tickets
             SET current_stage = ?1, updated_at = datetime('now')
             WHERE ticket_id = ?2
         "#,
@@ -120,9 +150,20 @@ impl Comment {
         .bind(new_stage)
         .bind(&req.ticket_id)
         .execute(&mut *tx)
-        .await?;
+        .await
+        .inspect_err(|e| {
+            error!(
+                "Failed to update stage to '{}' for ticket '{}': {:?}",
+                new_stage, req.ticket_id, e
+            )
+        })?;
 
-        tx.commit().await?;
+        tx.commit().await.inspect_err(|e| {
+            error!(
+                "Failed to commit transaction for comment with stage update for ticket '{}': {:?}",
+                req.ticket_id, e
+            )
+        })?;
 
         Ok((comment, updated_rows.rows_affected() > 0))
     }

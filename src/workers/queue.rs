@@ -699,7 +699,14 @@ impl QueueManager {
         let project_id = ticket_with_comments.ticket.project_id.clone();
 
         // Close the ticket in the database
-        crate::database::tickets::Ticket::close_ticket(&self.db, ticket_id, resolution).await?;
+        crate::database::tickets::Ticket::close_ticket(&self.db, ticket_id, resolution)
+            .await
+            .inspect_err(|e| {
+                error!(
+                    "Failed to close ticket {} with resolution '{}': {}",
+                    ticket_id, resolution, e
+                )
+            })?;
 
         // Add closing comment
         crate::database::comments::Comment::create(
@@ -710,7 +717,13 @@ impl QueueManager {
             None,
             comment,
         )
-        .await?;
+        .await
+        .inspect_err(|e| {
+            error!(
+                "Failed to create closing comment for ticket {}: {}",
+                ticket_id, e
+            )
+        })?;
 
         // Emit ticket closed event with both DB and SSE
         let emitter = crate::events::emitter::EventEmitter::new(&self.db, &self.event_broadcaster);
@@ -761,7 +774,14 @@ impl QueueManager {
         // Get planning ticket to determine project
         let planning_ticket =
             crate::database::tickets::Ticket::get_by_id(&self.db, planning_ticket_id.as_str())
-                .await?
+                .await
+                .inspect_err(|e| {
+                    error!(
+                        "Failed to get planning ticket {}: {}",
+                        planning_ticket_id.as_str(),
+                        e
+                    )
+                })?
                 .ok_or_else(|| {
                     anyhow::anyhow!(
                         "Planning ticket '{}' not found",
@@ -773,7 +793,13 @@ impl QueueManager {
 
         // Get project to access project_prefix
         let project = crate::database::projects::Project::get_by_id(&self.db, project_id)
-            .await?
+            .await
+            .inspect_err(|e| {
+                error!(
+                    "Failed to get project {} for planning completion: {}",
+                    project_id, e
+                )
+            })?
             .ok_or_else(|| anyhow::anyhow!("Project '{}' not found", project_id))?;
 
         // Step 1: Create worker types if needed
@@ -804,7 +830,14 @@ impl QueueManager {
             planning_ticket_id.as_str(),
             "planning_complete",
         )
-        .await?;
+        .await
+        .inspect_err(|e| {
+            error!(
+                "Failed to close planning ticket {}: {}",
+                planning_ticket_id.as_str(),
+                e
+            )
+        })?;
 
         info!("Closed planning ticket {}", planning_ticket_id.as_str());
 
@@ -832,7 +865,13 @@ impl QueueManager {
             project_id,
             &worker_type_spec.worker_type,
         )
-        .await?;
+        .await
+        .inspect_err(|e| {
+            error!(
+                "Failed to check if worker type '{}' exists for project '{}': {}",
+                worker_type_spec.worker_type, project_id, e
+            )
+        })?;
 
         if existing.is_some() {
             info!(
@@ -849,6 +888,12 @@ impl QueueManager {
         );
         let template_content = tokio::fs::read_to_string(&template_path)
             .await
+            .inspect_err(|e| {
+                error!(
+                    "Failed to read worker template file '{}': {}",
+                    template_path, e
+                )
+            })
             .map_err(|e| {
                 anyhow::anyhow!("Failed to read worker template '{}': {}", template_path, e)
             })?;
@@ -861,7 +906,14 @@ impl QueueManager {
             system_prompt: template_content,
         };
 
-        crate::database::worker_types::WorkerType::create(&self.db, request).await?;
+        crate::database::worker_types::WorkerType::create(&self.db, request)
+            .await
+            .inspect_err(|e| {
+                error!(
+                    "Failed to create worker type '{}' for project '{}': {}",
+                    worker_type_spec.worker_type, project_id, e
+                )
+            })?;
 
         info!(
             "Created worker type '{}' for project '{}'",
@@ -886,7 +938,12 @@ impl QueueManager {
         let mut created_ticket_ids = Vec::new();
 
         // Start a transaction
-        let mut tx = self.db.begin().await?;
+        let mut tx = self.db.begin().await.inspect_err(|e| {
+            error!(
+                "Failed to begin transaction for creating child tickets for parent {}: {}",
+                parent_ticket_id, e
+            )
+        })?;
 
         // Create all tickets
         for ticket_spec in tickets_to_create {
@@ -903,7 +960,13 @@ impl QueueManager {
                 project_prefix,
                 &subsystem,
             )
-            .await?;
+            .await
+            .inspect_err(|e| {
+                error!(
+                    "Failed to generate ticket ID for subsystem {} in project {}: {}",
+                    subsystem, parent_ticket_id, e
+                )
+            })?;
 
             // Convert execution plan to JSON
             let execution_plan_json = serde_json::to_string(&ticket_spec.execution_plan)?;
@@ -927,7 +990,13 @@ impl QueueManager {
             .bind(&ticket_spec.execution_plan[0]) // First stage is current_stage
             .bind(ticket_spec.priority.as_deref().unwrap_or("medium"))
             .execute(&mut *tx)
-            .await?;
+            .await
+            .inspect_err(|e| {
+                error!(
+                    "Failed to insert child ticket '{}' for parent {}: {}",
+                    ticket_id, parent_ticket_id, e
+                )
+            })?;
 
             // Map temp_id to actual ticket_id
             temp_id_map.insert(ticket_spec.temp_id.clone(), ticket_id.clone());
@@ -961,7 +1030,13 @@ impl QueueManager {
                     .bind(ticket_id)
                     .bind(dependency_id)
                     .execute(&mut *tx)
-                    .await?;
+                    .await
+                    .inspect_err(|e| {
+                        error!(
+                            "Failed to insert dependency: ticket '{}' depends on '{}': {}",
+                            ticket_id, dependency_id, e
+                        )
+                    })?;
 
                     // Update dependency_status to 'blocked' for dependent ticket
                     sqlx::query(
@@ -973,7 +1048,13 @@ impl QueueManager {
                     )
                     .bind(ticket_id)
                     .execute(&mut *tx)
-                    .await?;
+                    .await
+                    .inspect_err(|e| {
+                        error!(
+                            "Failed to update ticket '{}' to blocked status: {}",
+                            ticket_id, e
+                        )
+                    })?;
 
                     info!(
                         "Added dependency: ticket '{}' depends on '{}'",
@@ -984,7 +1065,12 @@ impl QueueManager {
         }
 
         // Commit transaction
-        tx.commit().await?;
+        tx.commit().await.inspect_err(|e| {
+            error!(
+                "Failed to commit transaction for creating child tickets for parent {}: {}",
+                parent_ticket_id, e
+            )
+        })?;
 
         info!(
             "Successfully created {} tickets with dependencies in transaction",
@@ -999,7 +1085,14 @@ impl QueueManager {
         for ticket_id in ticket_ids {
             // Get ticket details
             let ticket_with_comments =
-                crate::database::tickets::Ticket::get_by_id(&self.db, ticket_id).await?;
+                crate::database::tickets::Ticket::get_by_id(&self.db, ticket_id)
+                    .await
+                    .inspect_err(|e| {
+                        warn!(
+                            "Failed to get child ticket {} for enqueuing: {}",
+                            ticket_id, e
+                        )
+                    })?;
 
             if let Some(ticket_with_comments) = ticket_with_comments {
                 let ticket = &ticket_with_comments.ticket;

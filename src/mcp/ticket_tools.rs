@@ -254,7 +254,12 @@ impl ToolHandler for GetTicketTool {
 
         let ticket_id: String = extract_param(&Some(args.clone()), "ticket_id")?;
 
-        let ticket = Ticket::get_by_id(&state.db, &ticket_id).await?;
+        let ticket = Ticket::get_by_id(&state.db, &ticket_id)
+            .await
+            .map_err(|e| {
+                warn!("Failed to get ticket {}: {}", ticket_id, e);
+                e
+            })?;
 
         match ticket {
             Some(ticket_with_comments) => Ok(create_json_success_response(json!({
@@ -307,7 +312,15 @@ impl ToolHandler for ListTicketsTool {
 
         // Get all tickets first
         let all_tickets =
-            Ticket::list_by_project(&state.db, project_id.as_deref(), status.as_deref()).await?;
+            Ticket::list_by_project(&state.db, project_id.as_deref(), status.as_deref())
+                .await
+                .map_err(|e| {
+                    warn!(
+                        "Failed to list tickets (project: {:?}, status: {:?}): {}",
+                        project_id, status, e
+                    );
+                    e
+                })?;
 
         // Apply pagination using helper
         let pagination_result = cursor.paginate(all_tickets);
@@ -383,7 +396,12 @@ impl ToolHandler for AddTicketCommentTool {
             content: content.clone(),
         };
 
-        let comment = Comment::create_from_request(&state.db, req).await?;
+        let comment = Comment::create_from_request(&state.db, req)
+            .await
+            .map_err(|e| {
+                warn!("Failed to create comment for ticket {}: {}", ticket_id, e);
+                e
+            })?;
 
         // Emit ticket_updated event for comment added
         if let Err(e) = state
@@ -535,7 +553,12 @@ impl ToolHandler for ResumeTicketProcessingTool {
         info!("Resuming processing for ticket {}", ticket_id);
 
         // First get the current ticket
-        let ticket = Ticket::get_by_id(&state.db, &ticket_id).await?;
+        let ticket = Ticket::get_by_id(&state.db, &ticket_id)
+            .await
+            .map_err(|e| {
+                warn!("Failed to get ticket {} for resume: {}", ticket_id, e);
+                e
+            })?;
 
         let ticket_data = match ticket {
             Some(t) => t.ticket,
@@ -583,7 +606,12 @@ impl ToolHandler for ResumeTicketProcessingTool {
                 "Updating ticket {} stage from {} to {}",
                 ticket_id, ticket_data.current_stage, target_stage
             );
-            Ticket::update_stage(&state.db, &ticket_id, &target_stage).await?;
+            Ticket::update_stage(&state.db, &ticket_id, &target_stage)
+                .await
+                .map_err(|e| {
+                    warn!("Failed to update stage for ticket {}: {}", ticket_id, e);
+                    e
+                })?;
         }
 
         // Update ticket state if different
@@ -592,7 +620,12 @@ impl ToolHandler for ResumeTicketProcessingTool {
                 "Updating ticket {} state from {} to {}",
                 ticket_id, ticket_data.state, target_state
             );
-            Ticket::update_state(&state.db, &ticket_id, &target_state).await?;
+            Ticket::update_state(&state.db, &ticket_id, &target_state)
+                .await
+                .map_err(|e| {
+                    warn!("Failed to update state for ticket {}: {}", ticket_id, e);
+                    e
+                })?;
         }
 
         // Release any worker claim to allow fresh processing
@@ -600,14 +633,21 @@ impl ToolHandler for ResumeTicketProcessingTool {
             info!("Releasing worker claim on ticket {}", ticket_id);
             sqlx::query(
                 r#"
-                UPDATE tickets 
+                UPDATE tickets
                 SET processing_worker_id = NULL, updated_at = datetime('now')
                 WHERE ticket_id = ?1
                 "#,
             )
             .bind(&ticket_id)
             .execute(&state.db)
-            .await?;
+            .await
+            .map_err(|e| {
+                warn!(
+                    "Failed to release worker claim for ticket {}: {}",
+                    ticket_id, e
+                );
+                e
+            })?;
         }
 
         // If state is Open, submit to queue for processing

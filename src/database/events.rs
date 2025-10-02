@@ -1,6 +1,7 @@
 use anyhow::Result;
 use serde::{Deserialize, Serialize};
 use sqlx::FromRow;
+use tracing::{error, warn};
 
 use super::DbPool;
 use crate::events::EventType;
@@ -40,7 +41,8 @@ impl Event {
         .bind(stage)
         .bind(reason)
         .fetch_one(pool)
-        .await?;
+        .await
+        .inspect_err(|e| error!("Failed to create event of type '{}': {:?}", event_type, e))?;
 
         Ok(event)
     }
@@ -105,7 +107,8 @@ impl Event {
         )
         .bind(limit)
         .fetch_all(pool)
-        .await?;
+        .await
+        .inspect_err(|e| warn!("Failed to fetch recent events: {:?}", e))?;
 
         Ok(events)
     }
@@ -120,7 +123,8 @@ impl Event {
         "#,
         )
         .fetch_all(pool)
-        .await?;
+        .await
+        .inspect_err(|e| warn!("Failed to fetch unprocessed events: {:?}", e))?;
 
         Ok(events)
     }
@@ -136,7 +140,8 @@ impl Event {
                 "#)
                 .bind(processed)
                 .fetch_all(pool)
-                .await?
+                .await
+                .inspect_err(|e| warn!("Failed to fetch all events with filter: {:?}", e))?
             }
             None => {
                 sqlx::query_as::<_, Event>(r#"
@@ -145,7 +150,8 @@ impl Event {
                     ORDER BY id ASC
                 "#)
                 .fetch_all(pool)
-                .await?
+                .await
+                .inspect_err(|e| warn!("Failed to fetch all events: {:?}", e))?
             }
         };
 
@@ -179,7 +185,10 @@ impl Event {
             query_builder = query_builder.bind(id);
         }
 
-        let events = query_builder.fetch_all(pool).await?;
+        let events = query_builder
+            .fetch_all(pool)
+            .await
+            .inspect_err(|e| warn!("Failed to fetch events by IDs: {:?}", e))?;
         Ok(events)
     }
 
@@ -209,7 +218,10 @@ impl Event {
             query_builder = query_builder.bind(id);
         }
 
-        let result = query_builder.execute(pool).await?;
+        let result = query_builder
+            .execute(pool)
+            .await
+            .inspect_err(|e| error!("Failed to mark events as processed: {:?}", e))?;
         Ok(result.rows_affected())
     }
 
@@ -228,7 +240,8 @@ impl Event {
         .bind(resolution_summary)
         .bind(event_id)
         .execute(pool)
-        .await?;
+        .await
+        .inspect_err(|e| error!("Failed to resolve event {}: {:?}", event_id, e))?;
 
         Ok(())
     }

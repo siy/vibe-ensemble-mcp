@@ -47,7 +47,14 @@ impl DependencyManager {
         )
         .bind(ticket_id.as_str())
         .fetch_all(db)
-        .await?;
+        .await
+        .inspect_err(|e| {
+            error!(
+                "Failed to fetch dependent tickets for {}: {}",
+                ticket_id.as_str(),
+                e
+            )
+        })?;
 
         for dependent_ticket in dependent_tickets {
             info!(
@@ -67,7 +74,13 @@ impl DependencyManager {
             )
             .bind(&dependent_ticket.ticket_id)
             .fetch_one(db)
-            .await?;
+            .await
+            .inspect_err(|e| {
+                warn!(
+                    "Failed to check blocking dependencies for ticket {}: {}",
+                    dependent_ticket.ticket_id, e
+                )
+            })?;
 
             if blocking_dependencies == 0 {
                 // All dependencies satisfied, unblock the ticket
@@ -81,7 +94,8 @@ impl DependencyManager {
                 )
                 .bind(&dependent_ticket.ticket_id)
                 .execute(db)
-                .await?;
+                .await
+                .inspect_err(|e| error!("Failed to update dependency status to 'ready' for ticket {}: {}", dependent_ticket.ticket_id, e))?;
 
                 // Resubmit to queue for processing
                 let ticket_id = match TicketId::new(dependent_ticket.ticket_id.clone()) {
@@ -145,7 +159,17 @@ impl DependencyManager {
         );
 
         // Verify ticket exists before resubmitting
-        if Ticket::get_by_id(db, ticket_id.as_str()).await?.is_none() {
+        if Ticket::get_by_id(db, ticket_id.as_str())
+            .await
+            .inspect_err(|e| {
+                warn!(
+                    "Failed to verify ticket {} exists for resubmission: {}",
+                    ticket_id.as_str(),
+                    e
+                )
+            })?
+            .is_none()
+        {
             warn!("Ticket {} not found when trying to resubmit", ticket_id);
             return Ok(());
         }

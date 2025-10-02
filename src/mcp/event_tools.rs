@@ -1,6 +1,6 @@
 use async_trait::async_trait;
 use serde_json::Value;
-use tracing::info;
+use tracing::{info, warn};
 
 use super::{
     pagination::extract_cursor,
@@ -37,13 +37,22 @@ impl ToolHandler for ListEventsTool {
 
         let events = if let Some(ref ids) = event_ids {
             // Get specific events by IDs (ignores processed filter when using specific IDs)
-            Event::get_by_ids(&state.db, ids).await?
+            Event::get_by_ids(&state.db, ids).await.map_err(|e| {
+                warn!("Failed to get events by IDs: {}", e);
+                e
+            })?
         } else if include_processed {
             // Get all events (processed and unprocessed)
-            Event::get_all(&state.db, None).await?
+            Event::get_all(&state.db, None).await.map_err(|e| {
+                warn!("Failed to get all events: {}", e);
+                e
+            })?
         } else {
             // Get only unprocessed events (default behavior)
-            Event::get_unprocessed(&state.db).await?
+            Event::get_unprocessed(&state.db).await.map_err(|e| {
+                warn!("Failed to get unprocessed events: {}", e);
+                e
+            })?
         };
 
         let mut sorted_events = events;
@@ -138,7 +147,12 @@ impl ToolHandler for ResolveEventTool {
             resolution_summary.len()
         );
 
-        Event::resolve_event(&state.db, event_id, &resolution_summary).await?;
+        Event::resolve_event(&state.db, event_id, &resolution_summary)
+            .await
+            .map_err(|e| {
+                warn!("Failed to resolve event {}: {}", event_id, e);
+                e
+            })?;
 
         Ok(create_success_response(&format!("Event {} resolved successfully. The event has been marked as processed and will no longer appear in unprocessed event listings.", event_id)))
     }
@@ -185,7 +199,12 @@ impl ToolHandler for GetTicketsByStageTool {
         info!("Getting tickets for stage: {}", stage);
 
         // Get all tickets with matching current_stage using database function
-        let all_tickets = Ticket::list_open_by_stage(&state.db, &stage).await?;
+        let all_tickets = Ticket::list_open_by_stage(&state.db, &stage)
+            .await
+            .map_err(|e| {
+                warn!("Failed to list tickets for stage '{}': {}", stage, e);
+                e
+            })?;
 
         // Apply pagination using helper
         let pagination_result = cursor.paginate(all_tickets);
