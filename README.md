@@ -579,26 +579,21 @@ Each template includes:
 
 Templates are designed to be **both powerful out-of-the-box and highly customizable** for specific project needs.
 
-## What's New in v0.9.3
+## What's New in v0.9.7
 
-- **🔧 Target Stage Removal**: Simplified worker output format by removing target_stage field
-- **📡 MCP Diagnostics Support**: Added getDiagnostics method for IDE integration with structured event responses
-- **📝 Enhanced Logging**: Expanded debug logging for WebSocket message delivery and processing pipeline
-- **🔗 Unified Endpoint**: Single "/" endpoint for all HTTP and WebSocket connections
-- **📋 Template Tools**: Added MCP tools for worker template management (list, load, ensure existence)
-- **🐛 Bug Fixes**: Fixed ticket closing logic and pipeline transition management
+- **🎫 Human-Friendly Ticket IDs**: New format PREFIX-SUBSYSTEM-NUMBER (e.g., TVR-FE-001) for better readability and organization
+- **📋 Declarative Planning Workflow**: Planning workers output complete ticket specifications instead of calling MCP tools
+- **⚛️ Atomic Ticket Creation**: Transaction-based ticket creation with dependency management for reliability
+- **🔍 Subsystem Inference**: Automatic subsystem detection from stage names (frontend_impl → FE, backend_api → BE)
+- **📊 Comprehensive Error Logging**: Added error logging to 115+ database operations across all modules for improved observability
+- **🆔 Worker ID Validation**: Sanitize project IDs in worker ID construction to handle repository-style names
+- **🔗 Dependency Status Consistency**: Automatic dependency_status updates when closing tickets
 
-## What's New in v0.9.0
+## What's New in v0.9.6
 
-- **🧠 Task Breakdown Sizing Methodology**: Intelligent task breakdown with optimal context-performance optimization (~120K token budget per stage)
-- **📐 Natural Boundary Detection**: Automatic task splitting along technology, functional, and expertise boundaries
-- **⚡ Enhanced Planning Workers**: Built-in token estimation and pipeline optimization with comprehensive validation
-- **📊 Real-Time SSE Integration**: Full Server-Sent Events protocol for live progress monitoring and event streaming
-- **🔧 Enhanced Worker Templates**: 8 highly customizable worker templates with live editing, runtime loading, and safe customization guidelines
-- **📋 Enhanced Coordinator Prompts**: Updated coordination with systematic task delegation and sizing guidance
-- **🛠️ Robust MCP Tools**: 28 MCP tools with enhanced project metadata and worker coordination
-- **📚 Comprehensive Documentation**: Complete SSE protocol implementation and task breakdown sizing methodology
-- **🔒 Enhanced Security**: Removed manual ticket manipulation tools to prevent pipeline stalls
+- **🔄 Automatic Update Tracking**: Built-in update checking and one-command upgrade system
+- **🛡️ Enhanced Validation**: Comprehensive input validation for worker spawning with automatic on-hold placement
+- **🐛 Critical Bug Fixes**: Fixed worker spawn race conditions, path validation, and review template enhancements
 
 ## WebSocket Infrastructure
 
