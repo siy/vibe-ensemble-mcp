@@ -28,6 +28,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **🔗 Arc Reference Handling**: Fixed method signature for auto_enqueue_ticket to properly use Arc<Self>
 - **🎫 Coordinator Ticket IDs**: Fixed create_ticket MCP tool to use human-friendly IDs instead of UUIDs for consistency
 - **🗄️ Ticket Number Generation**: Replaced complex SQL string manipulation with Rust parsing (SQLite lacks REVERSE() function)
+- **🔢 Duplicate Ticket IDs**: Fixed LIKE pattern to include project prefix, preventing ticket ID collisions across projects
 
 ## [0.9.6] - 2025-09-30
 
