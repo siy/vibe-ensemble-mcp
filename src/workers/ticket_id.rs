@@ -57,24 +57,29 @@ pub fn infer_subsystem_from_stages(execution_plan: &[String]) -> String {
 }
 
 /// Get next ticket number for a given project and subsystem (pool version)
+/// Note: project_id here is actually the project_prefix (e.g., "TVR", not "todo-vue-rust")
 pub async fn get_next_ticket_number(
     db: &crate::database::DbPool,
-    project_id: &str,
+    project_prefix: &str,
     subsystem: &str,
 ) -> Result<u32> {
     // Simpler approach: fetch all matching tickets and parse in Rust
     // This is more reliable than complex SQLite string manipulation
-    let pattern = format!("%-{subsystem}-%");
+    // Use specific pattern: PREFIX-SUBSYSTEM-% to avoid cross-project collisions
+    let pattern = format!(
+        "{}-{}-",
+        project_prefix.to_uppercase(),
+        subsystem.to_uppercase()
+    );
 
     let ticket_ids: Vec<String> = sqlx::query_scalar(
         r#"
         SELECT ticket_id
         FROM tickets
-        WHERE project_id = ?1 AND ticket_id LIKE ?2
+        WHERE ticket_id LIKE ?1
         "#,
     )
-    .bind(project_id)
-    .bind(&pattern)
+    .bind(format!("{}%", pattern))
     .fetch_all(db)
     .await?;
 
@@ -92,24 +97,29 @@ pub async fn get_next_ticket_number(
 }
 
 /// Get next ticket number for a given project and subsystem (transaction version)
+/// Note: project_id here is actually the project_prefix (e.g., "TVR", not "todo-vue-rust")
 pub async fn get_next_ticket_number_tx(
     tx: &mut sqlx::SqliteConnection,
-    project_id: &str,
+    project_prefix: &str,
     subsystem: &str,
 ) -> Result<u32> {
     // Simpler approach: fetch all matching tickets and parse in Rust
     // This is more reliable than complex SQLite string manipulation
-    let pattern = format!("%-{subsystem}-%");
+    // Use specific pattern: PREFIX-SUBSYSTEM-% to avoid cross-project collisions
+    let pattern = format!(
+        "{}-{}-",
+        project_prefix.to_uppercase(),
+        subsystem.to_uppercase()
+    );
 
     let ticket_ids: Vec<String> = sqlx::query_scalar(
         r#"
         SELECT ticket_id
         FROM tickets
-        WHERE project_id = ?1 AND ticket_id LIKE ?2
+        WHERE ticket_id LIKE ?1
         "#,
     )
-    .bind(project_id)
-    .bind(&pattern)
+    .bind(format!("{}%", pattern))
     .fetch_all(&mut *tx)
     .await?;
 
