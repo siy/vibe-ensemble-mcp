@@ -373,11 +373,11 @@ Documentation: ["docs_writing", "docs_testing"] // Documentation-only changes
 
 **If you realize you've designed conflicting stages:**
 
-1. **Stop**: Don't create tickets yet
+1. **Stop**: Don't specify tickets yet
 2. **Redesign**: Choose one of the three patterns consistently
 3. **Rename**: Ensure all stage names are unique
 4. **Validate**: Check the ownership matrix again
-5. **Proceed**: Only then create tickets with `create_ticket()`
+5. **Proceed**: Only then output ticket specifications in your JSON response
 
 ## PLANNING PROCESS
 1. **Requirement Analysis**: Thoroughly analyze the ticket description and context

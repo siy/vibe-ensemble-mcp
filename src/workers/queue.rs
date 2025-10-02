@@ -881,21 +881,38 @@ impl QueueManager {
             return Ok(());
         }
 
-        // Load template content
-        let template_path = format!(
-            "templates/worker-templates/{}.md",
-            worker_type_spec.template
-        );
+        // Validate template name to prevent path traversal attacks
+        let template_name = &worker_type_spec.template;
+        if !template_name
+            .chars()
+            .all(|c| c.is_alphanumeric() || c == '-' || c == '_')
+        {
+            return Err(anyhow::anyhow!(
+                "Invalid template name '{}': only alphanumeric characters, hyphens, and underscores are allowed",
+                template_name
+            ));
+        }
+
+        // Build safe template path using Path::join
+        let template_base = std::path::Path::new("templates/worker-templates");
+        let template_file = format!("{}.md", template_name);
+        let template_path = template_base.join(&template_file);
+
         let template_content = tokio::fs::read_to_string(&template_path)
             .await
             .inspect_err(|e| {
                 error!(
                     "Failed to read worker template file '{}': {}",
-                    template_path, e
+                    template_path.display(),
+                    e
                 )
             })
             .map_err(|e| {
-                anyhow::anyhow!("Failed to read worker template '{}': {}", template_path, e)
+                anyhow::anyhow!(
+                    "Failed to read worker template '{}': {}",
+                    template_path.display(),
+                    e
+                )
             })?;
 
         // Create worker type
@@ -938,6 +955,10 @@ impl QueueManager {
         let mut created_ticket_ids = Vec::new();
 
         // Start a transaction
+        // CONCURRENCY SAFETY: SQLite uses serializable transactions by default
+        // Even with deferred mode, the database ensures that ticket_id (PRIMARY KEY) uniqueness
+        // is enforced. In the rare case of concurrent ID generation collision, the INSERT will fail
+        // with a constraint violation, causing the transaction to roll back safely.
         let mut tx = self.db.begin().await.inspect_err(|e| {
             error!(
                 "Failed to begin transaction for creating child tickets for parent {}: {}",
@@ -971,21 +992,28 @@ impl QueueManager {
             // Convert execution plan to JSON
             let execution_plan_json = serde_json::to_string(&ticket_spec.execution_plan)?;
 
-            // Insert ticket
+            // Validate execution plan is not empty
+            if ticket_spec.execution_plan.is_empty() {
+                return Err(anyhow::anyhow!(
+                    "Execution plan cannot be empty for ticket '{}'",
+                    ticket_spec.title
+                ));
+            }
+
+            // Insert ticket (no description column in schema)
             sqlx::query(
                 r#"
                 INSERT INTO tickets (
-                    ticket_id, project_id, parent_ticket_id, title, description,
+                    ticket_id, project_id, parent_ticket_id, title,
                     execution_plan, current_stage, state, priority, dependency_status
                 )
-                VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, 'open', ?8, 'ready')
+                VALUES (?1, ?2, ?3, ?4, ?5, ?6, 'open', ?7, 'ready')
                 "#,
             )
             .bind(&ticket_id)
             .bind(project_id)
             .bind(parent_ticket_id)
             .bind(&ticket_spec.title)
-            .bind(&ticket_spec.description)
             .bind(&execution_plan_json)
             .bind(&ticket_spec.execution_plan[0]) // First stage is current_stage
             .bind(ticket_spec.priority.as_deref().unwrap_or("medium"))
@@ -997,6 +1025,26 @@ impl QueueManager {
                     ticket_id, parent_ticket_id, e
                 )
             })?;
+
+            // Store description in comments table as first comment
+            if !ticket_spec.description.is_empty() {
+                sqlx::query(
+                    r#"
+                    INSERT INTO comments (ticket_id, worker_type, worker_id, content)
+                    VALUES (?1, 'planning', 'system', ?2)
+                    "#,
+                )
+                .bind(&ticket_id)
+                .bind(&ticket_spec.description)
+                .execute(&mut *tx)
+                .await
+                .inspect_err(|e| {
+                    error!(
+                        "Failed to insert description comment for ticket '{}': {}",
+                        ticket_id, e
+                    )
+                })?;
+            }
 
             // Map temp_id to actual ticket_id
             temp_id_map.insert(ticket_spec.temp_id.clone(), ticket_id.clone());

@@ -1,6 +1,6 @@
 use async_trait::async_trait;
 use serde_json::Value;
-use tracing::{info, warn};
+use tracing::info;
 
 use super::{
     pagination::extract_cursor,
@@ -36,23 +36,14 @@ impl ToolHandler for ListEventsTool {
         let cursor = extract_cursor(&Some(args.clone()))?;
 
         let events = if let Some(ref ids) = event_ids {
-            // Get specific events by IDs (ignores processed filter when using specific IDs)
-            Event::get_by_ids(&state.db, ids).await.map_err(|e| {
-                warn!("Failed to get events by IDs: {}", e);
-                e
-            })?
+            // Get specific events by IDs (ignores event_type filter when using specific IDs)
+            Event::get_by_ids(&state.db, ids).await?
         } else if include_processed {
             // Get all events (processed and unprocessed)
-            Event::get_all(&state.db, None).await.map_err(|e| {
-                warn!("Failed to get all events: {}", e);
-                e
-            })?
+            Event::get_all(&state.db, None).await?
         } else {
             // Get only unprocessed events (default behavior)
-            Event::get_unprocessed(&state.db).await.map_err(|e| {
-                warn!("Failed to get unprocessed events: {}", e);
-                e
-            })?
+            Event::get_unprocessed(&state.db).await?
         };
 
         let mut sorted_events = events;
@@ -61,6 +52,10 @@ impl ToolHandler for ListEventsTool {
         let filtered_events: Vec<_> = sorted_events
             .into_iter()
             .filter(|event| {
+                // Skip event_type filter when specific event IDs were requested
+                if event_ids.is_some() {
+                    return true;
+                }
                 // Filter by event type if specified
                 if let Some(ref type_filter) = event_type {
                     &event.event_type == type_filter
@@ -147,12 +142,7 @@ impl ToolHandler for ResolveEventTool {
             resolution_summary.len()
         );
 
-        Event::resolve_event(&state.db, event_id, &resolution_summary)
-            .await
-            .map_err(|e| {
-                warn!("Failed to resolve event {}: {}", event_id, e);
-                e
-            })?;
+        Event::resolve_event(&state.db, event_id, &resolution_summary).await?;
 
         Ok(create_success_response(&format!("Event {} resolved successfully. The event has been marked as processed and will no longer appear in unprocessed event listings.", event_id)))
     }
@@ -199,12 +189,7 @@ impl ToolHandler for GetTicketsByStageTool {
         info!("Getting tickets for stage: {}", stage);
 
         // Get all tickets with matching current_stage using database function
-        let all_tickets = Ticket::list_open_by_stage(&state.db, &stage)
-            .await
-            .map_err(|e| {
-                warn!("Failed to list tickets for stage '{}': {}", stage, e);
-                e
-            })?;
+        let all_tickets = Ticket::list_open_by_stage(&state.db, &stage).await?;
 
         // Apply pagination using helper
         let pagination_result = cursor.paginate(all_tickets);

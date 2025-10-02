@@ -368,12 +368,20 @@ impl Ticket {
     ) -> Result<Option<Ticket>> {
         let mut tx = pool.begin().await?;
 
-        // Update ticket status and set dependency_status to 'ready' since closed tickets
-        // have implicitly satisfied their dependencies
+        // Determine dependency_status based on completion type
+        // - Completed tickets: 'ready' (dependents can proceed)
+        // - Stopped tickets: 'blocked' (dependents should not proceed)
+        let dep_status = if status == "Completed" {
+            "ready"
+        } else {
+            "blocked"
+        };
+
+        // Update ticket status with appropriate dependency_status
         let ticket = sqlx::query_as::<_, Ticket>(
             r#"
             UPDATE tickets
-            SET current_stage = ?1, state = ?2, dependency_status = 'ready',
+            SET current_stage = ?1, state = ?2, dependency_status = ?4,
                 updated_at = datetime('now'), closed_at = datetime('now')
             WHERE ticket_id = ?3
             RETURNING ticket_id, project_id, title, execution_plan, current_stage, state, priority,
@@ -385,6 +393,7 @@ impl Ticket {
         .bind(status)
         .bind(TicketState::Closed.as_sql_value())
         .bind(ticket_id)
+        .bind(dep_status)
         .fetch_optional(&mut *tx)
         .await?;
 

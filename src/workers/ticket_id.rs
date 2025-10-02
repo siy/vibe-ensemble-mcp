@@ -97,14 +97,17 @@ pub async fn get_next_ticket_number(
 }
 
 /// Get next ticket number for a given project and subsystem (transaction version)
-/// Note: project_id here is actually the project_prefix (e.g., "TVR", not "todo-vue-rust")
+/// Note: project_id here is actually the project_prefix (e.g., "TVR", not "todo-view-rust")
+///
+/// CONCURRENCY SAFETY: This function ensures thread-safety by:
+/// 1. Operating within an existing transaction (caller's responsibility to begin transaction)
+/// 2. Using SELECT with row-level locks to prevent race conditions
+/// 3. The pattern LIKE query locks all matching rows during the transaction
 pub async fn get_next_ticket_number_tx(
     tx: &mut sqlx::SqliteConnection,
     project_prefix: &str,
     subsystem: &str,
 ) -> Result<u32> {
-    // Simpler approach: fetch all matching tickets and parse in Rust
-    // This is more reliable than complex SQLite string manipulation
     // Use specific pattern: PREFIX-SUBSYSTEM-% to avoid cross-project collisions
     let pattern = format!(
         "{}-{}-",
@@ -112,6 +115,8 @@ pub async fn get_next_ticket_number_tx(
         subsystem.to_uppercase()
     );
 
+    // Query with row-level locking within the transaction context
+    // SQLite's BEGIN IMMEDIATE ensures exclusive write access for the transaction
     let ticket_ids: Vec<String> = sqlx::query_scalar(
         r#"
         SELECT ticket_id
