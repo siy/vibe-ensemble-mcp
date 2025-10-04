@@ -13,6 +13,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 - **🎨 Website Tagline**: Enhanced tagline presentation with highlight box and explanatory subtitle for better clarity
+- **♻️ Website CSS Refactoring**: Moved all inline styles to external `styles.css` file for better maintainability and separation of concerns
 
 ## [0.9.7] - 2025-10-01
 
