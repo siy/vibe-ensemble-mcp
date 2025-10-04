@@ -30,10 +30,11 @@ pub struct QueueManager {
     config: Config,
     event_broadcaster: EventBroadcaster,
     db: DbPool,
+    coordinator_directories: Arc<dashmap::DashMap<String, String>>,
 }
 
 // QueueManager intentionally does not implement Default to prevent misuse
-// Always use QueueManager::new(db, config, event_broadcaster) for proper initialization
+// Always use QueueManager::new(db, config, event_broadcaster, coordinator_directories) for proper initialization
 
 impl fmt::Debug for QueueManager {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
@@ -44,7 +45,12 @@ impl fmt::Debug for QueueManager {
 }
 
 impl QueueManager {
-    pub fn new(db: DbPool, config: Config, event_broadcaster: EventBroadcaster) -> Arc<Self> {
+    pub fn new(
+        db: DbPool,
+        config: Config,
+        event_broadcaster: EventBroadcaster,
+        coordinator_directories: Arc<dashmap::DashMap<String, String>>,
+    ) -> Arc<Self> {
         let (completion_sender, completion_receiver) = mpsc::channel(DEFAULT_CHANNEL_BUFFER_SIZE);
 
         let queue_manager = Arc::new(Self {
@@ -53,6 +59,7 @@ impl QueueManager {
             config,
             event_broadcaster,
             db,
+            coordinator_directories,
         });
 
         // Spawn the completion event processor thread internally
@@ -893,27 +900,24 @@ impl QueueManager {
             ));
         }
 
-        // Build safe template path using Path::join
-        let template_base = std::path::Path::new("templates/worker-templates");
-        let template_file = format!("{}.md", template_name);
-        let template_path = template_base.join(&template_file);
+        // Get coordinator working directory to resolve template path
+        let working_directory = self
+            .coordinator_directories
+            .get("coordinator")
+            .map(|entry| entry.value().clone());
 
-        let template_content = tokio::fs::read_to_string(&template_path)
-            .await
-            .inspect_err(|e| {
-                error!(
-                    "Failed to read worker template file '{}': {}",
-                    template_path.display(),
-                    e
-                )
-            })
-            .map_err(|e| {
-                anyhow::anyhow!(
-                    "Failed to read worker template '{}': {}",
-                    template_path.display(),
-                    e
-                )
-            })?;
+        // Load template using the configure module which handles path resolution
+        let template_content = crate::configure::load_worker_template_from_directory(
+            template_name,
+            working_directory.as_deref(),
+        )
+        .map_err(|e| {
+            anyhow::anyhow!(
+                "Failed to load worker template '{}': {}. Ensure ensure_worker_templates_exist() was called with coordinator working directory.",
+                template_name,
+                e
+            )
+        })?;
 
         // Create worker type
         let request = crate::database::worker_types::CreateWorkerTypeRequest {

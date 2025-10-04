@@ -53,6 +53,13 @@ impl ToolHandler for LoadWorkerTemplateTool {
             .get("coordinator")
             .map(|entry| entry.value().clone());
 
+        // Require working directory to be set
+        if working_directory.is_none() {
+            return Ok(create_json_error_response(
+                "Working directory not set. Please call ensure_worker_templates_exist(working_directory=\"/path/to/coordinator/dir\") first to register your coordinator's working directory."
+            ));
+        }
+
         // Ensure templates exist on disk first
         if let Err(e) =
             configure::ensure_worker_templates_exist_in_directory(working_directory.as_deref())
