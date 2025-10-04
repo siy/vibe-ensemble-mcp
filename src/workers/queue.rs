@@ -34,7 +34,7 @@ pub struct QueueManager {
 }
 
 // QueueManager intentionally does not implement Default to prevent misuse
-// Always use QueueManager::new(db, config, event_broadcaster) for proper initialization
+// Always use QueueManager::new(db, config, event_broadcaster, coordinator_directories) for proper initialization
 
 impl fmt::Debug for QueueManager {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
