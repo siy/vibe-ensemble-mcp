@@ -11,6 +11,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **🗂️ Template Path Resolution**: Fixed worker template loading to use coordinator's working directory instead of server directory. Templates are now correctly resolved from `{coordinator_working_dir}/.claude/worker-templates/` as documented.
 - **✅ Working Directory Validation**: Added requirement for `ensure_worker_templates_exist()` to be called with working directory before `load_worker_template()` can be used
 
+### Changed
+- **🎨 Website Tagline**: Enhanced tagline presentation with highlight box and explanatory subtitle for better clarity
+
 ## [0.9.7] - 2025-10-01
 
 ### Added
