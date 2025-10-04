@@ -53,8 +53,16 @@ pub async fn run_server(config: Config) -> Result<()> {
     // Initialize event broadcaster
     let event_broadcaster = EventBroadcaster::new();
 
+    // Initialize coordinator directories (shared across components)
+    let coordinator_directories = Arc::new(DashMap::new());
+
     // Initialize queue manager (spawns completion event processor internally)
-    let queue_manager = QueueManager::new(db.clone(), config.clone(), event_broadcaster.clone());
+    let queue_manager = QueueManager::new(
+        db.clone(),
+        config.clone(),
+        event_broadcaster.clone(),
+        coordinator_directories.clone(),
+    );
 
     // Initialize single MCP server instance with config-based tool registration
     let mcp_server = Arc::new(McpServer::new(&config));
@@ -77,7 +85,7 @@ pub async fn run_server(config: Config) -> Result<()> {
         websocket_manager,
         websocket_token: None, // Will be set after binding to port
         auth_manager: Arc::clone(&auth_manager),
-        coordinator_directories: Arc::new(DashMap::new()),
+        coordinator_directories,
     };
 
     // Respawn workers for unfinished tasks if enabled

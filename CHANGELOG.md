@@ -5,6 +5,12 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Fixed
+- **🗂️ Template Path Resolution**: Fixed worker template loading to use coordinator's working directory instead of server directory. Templates are now correctly resolved from `{coordinator_working_dir}/.claude/worker-templates/` as documented.
+- **✅ Working Directory Validation**: Added requirement for `ensure_worker_templates_exist()` to be called with working directory before `load_worker_template()` can be used
+
 ## [0.9.7] - 2025-10-01
 
 ### Added
