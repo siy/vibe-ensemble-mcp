@@ -225,6 +225,7 @@ impl WorkerConsumer {
             server_host: self.config.host.clone(),
             server_port: self.config.port,
             permission_mode: self.config.permission_mode,
+            model: self.config.model.clone(),
         };
 
         // Emit event for worker processing start with both DB and SSE

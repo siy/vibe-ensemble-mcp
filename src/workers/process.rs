@@ -339,8 +339,15 @@ impl ProcessManager {
             .arg("--mcp-config")
             .arg(&config_path)
             .arg("--output-format")
-            .arg("json")
-            .current_dir(&validated_path)
+            .arg("json");
+
+        // Add model parameter if specified
+        if let Some(ref model) = request.model {
+            info!("Using model: {}", model);
+            cmd.arg("--model").arg(model);
+        }
+
+        cmd.current_dir(&validated_path)
             .stdout(Stdio::piped())
             .stderr(Stdio::piped());
 

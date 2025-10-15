@@ -25,6 +25,7 @@ impl Default for McpServer {
             max_concurrent_client_requests: 50,
             update_check_interval_hours: 4,
             disable_update_checks: false,
+            model: None,
         };
         Self::new(&config)
     }

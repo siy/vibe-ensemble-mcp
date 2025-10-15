@@ -58,6 +58,8 @@ pub struct SpawnWorkerRequest {
     pub server_host: String,
     pub server_port: u16,
     pub permission_mode: PermissionMode,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub model: Option<String>,
 }
 
 pub type WorkerRegistry = RwLock<HashMap<String, WorkerProcess>>;
