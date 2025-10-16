@@ -180,21 +180,42 @@ impl ProcessManager {
     fn parse_worker_output_from_result(result_str: &str) -> Result<WorkerOutput> {
         debug!("Parsing worker output from result string: {}", result_str);
 
-        // Look for JSON code blocks (```json ... ```) in the result
-        if let Some(json_start) = result_str.find("```json") {
-            let search_start = json_start + 7; // Skip past "```json"
-            if let Some(json_end_relative) = result_str[search_start..].find("```") {
-                let json_end = search_start + json_end_relative;
-                let json_block = result_str[search_start..json_end].trim();
-                debug!("Found JSON in code block: {}", json_block);
-                return serde_json::from_str::<WorkerOutput>(json_block)
-                    .with_context(|| "Failed to parse WorkerOutput from JSON code block");
+        // Extract all JSON code blocks (```json ... ```) in the result
+        let mut json_blocks = Vec::new();
+        let mut search_pos = 0;
+
+        while let Some(json_start) = result_str[search_pos..].find("```json") {
+            let absolute_start = search_pos + json_start + 7; // Skip past "```json"
+            if let Some(json_end_relative) = result_str[absolute_start..].find("```") {
+                let absolute_end = absolute_start + json_end_relative;
+                let json_block = result_str[absolute_start..absolute_end].trim();
+                json_blocks.push(json_block);
+                search_pos = absolute_end + 3; // Move past the closing ```
+            } else {
+                break;
             }
         }
 
-        Err(anyhow::anyhow!(
-            "No valid JSON code block found in worker result. Workers must output JSON in ```json...``` blocks."
-        ))
+        if json_blocks.is_empty() {
+            return Err(anyhow::anyhow!(
+                "No valid JSON code block found in worker result. Workers must output JSON in ```json...``` blocks."
+            ));
+        }
+
+        debug!("Found {} JSON block(s) in worker output", json_blocks.len());
+        if json_blocks.len() > 1 {
+            info!(
+                "Worker output contains multiple JSON blocks ({}), using last one (worker self-correction)",
+                json_blocks.len()
+            );
+        }
+
+        // Use the last JSON block (most recent worker decision after self-correction)
+        let final_json = json_blocks.last().unwrap();
+        debug!("Using final JSON block: {}", final_json);
+
+        serde_json::from_str::<WorkerOutput>(final_json)
+            .with_context(|| "Failed to parse WorkerOutput from final JSON code block")
     }
 
     fn create_mcp_config(
