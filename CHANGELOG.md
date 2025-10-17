@@ -8,7 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Changed
-- **🎯 Planning Worker Model Selection**: Planning workers now always use the default (most capable) model, ignoring --model parameter to ensure optimal planning quality
+- **🎯 Analyzing Worker Model Selection**: Analyzing workers (planning, review, research, design) now always use the default (most capable) model, ignoring --model parameter to ensure optimal analysis quality. Producing workers (implementation, testing, documentation, deployment) can use lighter models for cost efficiency
 - **📏 Haiku Output Token Limit**: Increased CLAUDE_CODE_MAX_OUTPUT_TOKENS to 16384 for Haiku models to prevent workers from hitting the 8192 output token limit
 
 ### Fixed

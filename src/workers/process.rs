@@ -362,14 +362,21 @@ impl ProcessManager {
             .arg("--output-format")
             .arg("json");
 
-        // Planning workers always use default model (most capable)
-        // Other workers can use lighter models but get increased output token limit for haiku
-        let is_planning_worker = request.worker_type.to_lowercase().contains("planning");
+        // Analyzing workers (planning, review, research, design) always use default model (most capable)
+        // Producing workers (implementation, testing, documentation, deployment) can use lighter models
+        let worker_type_lower = request.worker_type.to_lowercase();
+        let is_analyzing_worker = worker_type_lower.contains("planning")
+            || worker_type_lower.contains("review")
+            || worker_type_lower.contains("research")
+            || worker_type_lower.contains("design");
 
-        if is_planning_worker {
-            info!("Planning worker: using default model (ignoring --model parameter)");
+        if is_analyzing_worker {
+            info!(
+                "Analyzing worker ({}): using default model (ignoring --model parameter)",
+                request.worker_type
+            );
         } else if let Some(ref model) = request.model {
-            info!("Using model: {}", model);
+            info!("Producing worker: using model {}", model);
             cmd.arg("--model").arg(model);
 
             // Increase output token limit for haiku models
