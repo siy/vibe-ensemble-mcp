@@ -360,7 +360,8 @@ impl ProcessManager {
             .arg("--mcp-config")
             .arg(&config_path)
             .arg("--output-format")
-            .arg("json");
+            .arg("json")
+            .env("CLAUDE_CODE_MAX_OUTPUT_TOKENS", "16384"); // Increase from default 8192
 
         // Add model parameter if specified
         if let Some(ref model) = request.model {

@@ -9,6 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 - **🧠 Worker Self-Correction**: Fixed parser to use last JSON block when workers output multiple blocks, allowing workers to think and self-correct their decisions before final output
+- **📏 Worker Output Token Limit**: Increased CLAUDE_CODE_MAX_OUTPUT_TOKENS to 16384 to prevent workers from hitting the 8192 output token limit during complex planning tasks
 
 ## [0.9.8] - 2025-10-04
 
