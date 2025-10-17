@@ -360,13 +360,23 @@ impl ProcessManager {
             .arg("--mcp-config")
             .arg(&config_path)
             .arg("--output-format")
-            .arg("json")
-            .env("CLAUDE_CODE_MAX_OUTPUT_TOKENS", "16384"); // Increase from default 8192
+            .arg("json");
 
-        // Add model parameter if specified
-        if let Some(ref model) = request.model {
+        // Planning workers always use default model (most capable)
+        // Other workers can use lighter models but get increased output token limit for haiku
+        let is_planning_worker = request.worker_type.to_lowercase().contains("planning");
+
+        if is_planning_worker {
+            info!("Planning worker: using default model (ignoring --model parameter)");
+        } else if let Some(ref model) = request.model {
             info!("Using model: {}", model);
             cmd.arg("--model").arg(model);
+
+            // Increase output token limit for haiku models
+            if model.to_lowercase().contains("haiku") {
+                info!("Haiku model detected: setting CLAUDE_CODE_MAX_OUTPUT_TOKENS to 16384");
+                cmd.env("CLAUDE_CODE_MAX_OUTPUT_TOKENS", "16384");
+            }
         }
 
         cmd.current_dir(&validated_path)
