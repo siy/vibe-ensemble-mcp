@@ -4,6 +4,7 @@ pub mod configure;
 pub mod database;
 pub mod error;
 pub mod events;
+pub mod jbct;
 pub mod lockfile;
 pub mod mcp;
 pub mod permissions;

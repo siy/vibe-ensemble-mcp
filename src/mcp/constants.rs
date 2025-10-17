@@ -195,6 +195,9 @@ pub fn get_all_mcp_tool_names() -> Vec<String> {
         "mcp__vibe-ensemble-mcp__list_worker_templates".to_string(),
         "mcp__vibe-ensemble-mcp__load_worker_template".to_string(),
         "mcp__vibe-ensemble-mcp__ensure_worker_templates_exist".to_string(),
+        // JBCT (Java Backend Coding Technology) integration tools
+        "mcp__vibe-ensemble-mcp__configure_jbct_for_project".to_string(),
+        "mcp__vibe-ensemble-mcp__check_jbct_updates".to_string(),
     ]
 }
 

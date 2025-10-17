@@ -7,6 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- **☕ JBCT Integration**: Added Java Backend Coding Technology (JBCT) integration for Java projects
+  - New MCP tools: `configure_jbct_for_project`, `check_jbct_updates`
+  - Automatically fetches jbct-coder.md from GitHub and applies as project rules/patterns
+  - Version tracking for JBCT updates
+  - Non-intrusive: only offered for NEW Java projects, never for existing ones
+  - Learn more at https://pragmatica.dev/
+- **📋 Git Workflow Configuration**: Added git workflow discussion during project creation
+  - Coordinator asks users about their preferred git workflow
+  - Default workflow: single-line conventional commits, no attribution, commit before stage completion
+  - Git workflow included in project rules for consistent worker behavior
+  - Customizable per project based on user preferences
+
 ### Changed
 - **🎯 Analyzing Worker Model Selection**: Analyzing workers (planning, review, research, design) now always use the default (most capable) model, ignoring --model parameter to ensure optimal analysis quality. Producing workers (implementation, testing, documentation, deployment) can use lighter models for cost efficiency
 - **📏 Haiku Output Token Limit**: Increased CLAUDE_CODE_MAX_OUTPUT_TOKENS to 16384 for Haiku models to prevent workers from hitting the 8192 output token limit

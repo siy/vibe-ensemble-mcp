@@ -19,6 +19,10 @@ pub struct Project {
     // New versioning fields for DAG support
     pub rules_version: Option<i32>,
     pub patterns_version: Option<i32>,
+    // JBCT integration fields
+    pub jbct_enabled: bool,
+    pub jbct_version: Option<String>,
+    pub jbct_url: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -36,6 +40,9 @@ pub struct UpdateProjectRequest {
     pub short_description: Option<String>,
     pub rules: Option<String>,
     pub patterns: Option<String>,
+    pub jbct_enabled: Option<bool>,
+    pub jbct_version: Option<String>,
+    pub jbct_url: Option<String>,
 }
 
 impl Project {
@@ -46,9 +53,9 @@ impl Project {
 
         let project = sqlx::query_as::<_, Project>(
             r#"
-            INSERT INTO projects (repository_name, project_prefix, path, short_description, rules, patterns, rules_version, patterns_version)
-            VALUES (?1, ?2, ?3, ?4, ?5, ?6, 1, 1)
-            RETURNING repository_name, project_prefix, path, short_description, created_at, updated_at, rules, patterns, rules_version, patterns_version
+            INSERT INTO projects (repository_name, project_prefix, path, short_description, rules, patterns, rules_version, patterns_version, jbct_enabled, jbct_version, jbct_url)
+            VALUES (?1, ?2, ?3, ?4, ?5, ?6, 1, 1, FALSE, NULL, NULL)
+            RETURNING repository_name, project_prefix, path, short_description, created_at, updated_at, rules, patterns, rules_version, patterns_version, jbct_enabled, jbct_version, jbct_url
         "#,
         )
         .bind(&req.repository_name)
@@ -66,7 +73,7 @@ impl Project {
     pub async fn get_by_name(pool: &DbPool, repository_name: &str) -> Result<Option<Project>> {
         let project = sqlx::query_as::<_, Project>(
             r#"
-            SELECT repository_name, project_prefix, path, short_description, rules, patterns, created_at, updated_at, rules_version, patterns_version
+            SELECT repository_name, project_prefix, path, short_description, rules, patterns, created_at, updated_at, rules_version, patterns_version, jbct_enabled, jbct_version, jbct_url
             FROM projects
             WHERE repository_name = ?1
         "#,
@@ -86,7 +93,7 @@ impl Project {
     pub async fn list_all(pool: &DbPool) -> Result<Vec<Project>> {
         let projects = sqlx::query_as::<_, Project>(
             r#"
-            SELECT repository_name, project_prefix, path, short_description, rules, patterns, created_at, updated_at, rules_version, patterns_version
+            SELECT repository_name, project_prefix, path, short_description, rules, patterns, created_at, updated_at, rules_version, patterns_version, jbct_enabled, jbct_version, jbct_url
             FROM projects
             ORDER BY created_at DESC
         "#,
@@ -107,6 +114,9 @@ impl Project {
             && req.short_description.is_none()
             && req.rules.is_none()
             && req.patterns.is_none()
+            && req.jbct_enabled.is_none()
+            && req.jbct_version.is_none()
+            && req.jbct_url.is_none()
         {
             return Self::get_by_name(pool, repository_name).await;
         }
@@ -149,6 +159,30 @@ impl Project {
             query_builder.push(", patterns_version = COALESCE(patterns_version, 0) + 1");
             has_field = true;
         }
+        if let Some(jbct_enabled) = req.jbct_enabled {
+            if has_field {
+                query_builder.push(", ");
+            }
+            query_builder.push("jbct_enabled = ");
+            query_builder.push_bind(jbct_enabled);
+            has_field = true;
+        }
+        if let Some(ref jbct_version) = req.jbct_version {
+            if has_field {
+                query_builder.push(", ");
+            }
+            query_builder.push("jbct_version = ");
+            query_builder.push_bind(jbct_version);
+            has_field = true;
+        }
+        if let Some(ref jbct_url) = req.jbct_url {
+            if has_field {
+                query_builder.push(", ");
+            }
+            query_builder.push("jbct_url = ");
+            query_builder.push_bind(jbct_url);
+            has_field = true;
+        }
 
         if has_field {
             query_builder.push(", ");
@@ -157,7 +191,7 @@ impl Project {
 
         query_builder.push(" WHERE repository_name = ");
         query_builder.push_bind(repository_name);
-        query_builder.push(" RETURNING repository_name, path, short_description, rules, patterns, created_at, updated_at, rules_version, patterns_version");
+        query_builder.push(" RETURNING repository_name, project_prefix, path, short_description, rules, patterns, created_at, updated_at, rules_version, patterns_version, jbct_enabled, jbct_version, jbct_url");
 
         let project = query_builder
             .build_query_as::<Project>()
