@@ -79,3 +79,7 @@ scopeguard = "1.2"
 
 # HTTP client for update checking
 reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls"] }
+
+# Static file embedding for dashboard
+rust-embed = "8.0"
+mime_guess = "2.0"

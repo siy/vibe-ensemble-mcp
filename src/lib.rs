@@ -1,6 +1,8 @@
+pub mod api;
 pub mod auth;
 pub mod config;
 pub mod configure;
+pub mod dashboard;
 pub mod database;
 pub mod error;
 pub mod events;
