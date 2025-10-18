@@ -36,7 +36,5 @@ Thumbs.db
 CLAUDE.md
 REFACTORING.md
 
-# Dashboard build artifacts
+# Dashboard dependencies
 dashboard/node_modules/
-dashboard/dist/*
-!dashboard/dist/.gitkeep
