@@ -123,11 +123,15 @@ pub async fn run_server(config: Config) -> Result<()> {
         .route("/health", get(health_check))
         .route("/mcp", post(mcp_handler))
         .route("/sse", get(sse_handler))
-        .route("/messages", post(sse_message_handler));
+        .route("/messages", post(sse_message_handler))
+        .nest("/api", crate::api::create_api_router())
+        .route("/dashboard", get(crate::dashboard::serve_dashboard))
+        .route("/dashboard/*path", get(crate::dashboard::serve_dashboard));
 
     // Add root route that handles both WebSocket upgrades and regular HTTP requests
     app = app.route("/", any(root_handler));
     info!("WebSocket support enabled at / (root path)");
+    info!("Dashboard available at /dashboard");
 
     let app = app
         .layer(RequestBodyLimitLayer::new(1024 * 1024)) // 1 MiB

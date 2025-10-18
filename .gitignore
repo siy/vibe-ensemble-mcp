@@ -35,3 +35,6 @@ Thumbs.db
 .claude/
 CLAUDE.md
 REFACTORING.md
+
+# Dashboard dependencies
+dashboard/node_modules/

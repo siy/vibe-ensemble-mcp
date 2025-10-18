@@ -6,7 +6,7 @@ use tokio::process::Command;
 use tokio::time::timeout;
 use tracing::{debug, error, info, warn};
 
-use super::completion_processor::WorkerOutput;
+use super::completion_processor::{WorkerOutcome, WorkerOutput};
 use super::types::SpawnWorkerRequest;
 use super::validation::WorkerInputValidator;
 use crate::permissions::{
@@ -176,25 +176,81 @@ impl ProcessManager {
         ))
     }
 
+    /// Validate and auto-correct planning worker output
+    /// Planning workers sometimes output "next_stage" instead of "planning_complete"
+    /// when they have tickets_to_create. This function auto-corrects that mistake.
+    fn validate_and_correct_planning_output(output: &mut WorkerOutput, worker_type: &str) {
+        // Check if this is a planning worker
+        let is_planning_worker = worker_type.to_lowercase().contains("planning");
+
+        if !is_planning_worker {
+            return;
+        }
+
+        // Check if worker has tickets to create but wrong outcome
+        if !output.tickets_to_create.is_empty() {
+            match output.outcome {
+                WorkerOutcome::NextStage => {
+                    warn!(
+                        "Planning worker output has tickets_to_create but outcome is 'next_stage'. Auto-correcting to 'planning_complete'."
+                    );
+                    output.outcome = WorkerOutcome::PlanningComplete;
+                }
+                WorkerOutcome::PlanningComplete => {
+                    // Correct outcome, no action needed
+                    debug!("Planning worker correctly used 'planning_complete' outcome");
+                }
+                _ => {
+                    warn!(
+                        "Planning worker has tickets_to_create but unexpected outcome: {:?}. Auto-correcting to 'planning_complete'.",
+                        output.outcome
+                    );
+                    output.outcome = WorkerOutcome::PlanningComplete;
+                }
+            }
+        }
+    }
+
     /// Parse worker JSON output from the result string within Claude CLI JSON wrapper
     fn parse_worker_output_from_result(result_str: &str) -> Result<WorkerOutput> {
         debug!("Parsing worker output from result string: {}", result_str);
 
-        // Look for JSON code blocks (```json ... ```) in the result
-        if let Some(json_start) = result_str.find("```json") {
-            let search_start = json_start + 7; // Skip past "```json"
-            if let Some(json_end_relative) = result_str[search_start..].find("```") {
-                let json_end = search_start + json_end_relative;
-                let json_block = result_str[search_start..json_end].trim();
-                debug!("Found JSON in code block: {}", json_block);
-                return serde_json::from_str::<WorkerOutput>(json_block)
-                    .with_context(|| "Failed to parse WorkerOutput from JSON code block");
+        // Extract all JSON code blocks (```json ... ```) in the result
+        let mut json_blocks = Vec::new();
+        let mut search_pos = 0;
+
+        while let Some(json_start) = result_str[search_pos..].find("```json") {
+            let absolute_start = search_pos + json_start + 7; // Skip past "```json"
+            if let Some(json_end_relative) = result_str[absolute_start..].find("```") {
+                let absolute_end = absolute_start + json_end_relative;
+                let json_block = result_str[absolute_start..absolute_end].trim();
+                json_blocks.push(json_block);
+                search_pos = absolute_end + 3; // Move past the closing ```
+            } else {
+                break;
             }
         }
 
-        Err(anyhow::anyhow!(
-            "No valid JSON code block found in worker result. Workers must output JSON in ```json...``` blocks."
-        ))
+        if json_blocks.is_empty() {
+            return Err(anyhow::anyhow!(
+                "No valid JSON code block found in worker result. Workers must output JSON in ```json...``` blocks."
+            ));
+        }
+
+        debug!("Found {} JSON block(s) in worker output", json_blocks.len());
+        if json_blocks.len() > 1 {
+            info!(
+                "Worker output contains multiple JSON blocks ({}), using last one (worker self-correction)",
+                json_blocks.len()
+            );
+        }
+
+        // Use the last JSON block (most recent worker decision after self-correction)
+        let final_json = json_blocks.last().unwrap();
+        debug!("Using final JSON block: {}", final_json);
+
+        serde_json::from_str::<WorkerOutput>(final_json)
+            .with_context(|| "Failed to parse WorkerOutput from final JSON code block")
     }
 
     fn create_mcp_config(
@@ -339,8 +395,33 @@ impl ProcessManager {
             .arg("--mcp-config")
             .arg(&config_path)
             .arg("--output-format")
-            .arg("json")
-            .current_dir(&validated_path)
+            .arg("json");
+
+        // Analyzing workers (planning, review, research, design) always use default model (most capable)
+        // Producing workers (implementation, testing, documentation, deployment) can use lighter models
+        let worker_type_lower = request.worker_type.to_lowercase();
+        let is_analyzing_worker = worker_type_lower.contains("planning")
+            || worker_type_lower.contains("review")
+            || worker_type_lower.contains("research")
+            || worker_type_lower.contains("design");
+
+        if is_analyzing_worker {
+            info!(
+                "Analyzing worker ({}): using default model (ignoring --model parameter)",
+                request.worker_type
+            );
+        } else if let Some(ref model) = request.model {
+            info!("Producing worker: using model {}", model);
+            cmd.arg("--model").arg(model);
+
+            // Increase output token limit for haiku models
+            if model.to_lowercase().contains("haiku") {
+                info!("Haiku model detected: setting CLAUDE_CODE_MAX_OUTPUT_TOKENS to 16384");
+                cmd.env("CLAUDE_CODE_MAX_OUTPUT_TOKENS", "16384");
+            }
+        }
+
+        cmd.current_dir(&validated_path)
             .stdout(Stdio::piped())
             .stderr(Stdio::piped());
 
@@ -442,11 +523,15 @@ impl ProcessManager {
         debug!("Worker stderr: {}", stderr_str);
 
         // Optimized parsing: try whole output first, then line-by-line fallback
-        if let Ok(parsed_output) = Self::try_parse_worker_output(&stdout_str) {
+        if let Ok(mut parsed_output) = Self::try_parse_worker_output(&stdout_str) {
             info!(
                 "Successfully parsed worker output for ticket {}",
                 request.ticket_id
             );
+
+            // Validate and auto-correct planning worker output
+            Self::validate_and_correct_planning_output(&mut parsed_output, &request.worker_type);
+
             // Clean up
             let _ = std::fs::remove_file(&config_path);
             return Ok(parsed_output);

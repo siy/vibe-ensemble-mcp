@@ -379,6 +379,9 @@ impl ToolHandler for UpdateProjectTool {
             short_description,
             rules,
             patterns,
+            jbct_enabled: None,
+            jbct_version: None,
+            jbct_url: None,
         };
 
         match Project::update(&state.db, &repository_name, request).await {

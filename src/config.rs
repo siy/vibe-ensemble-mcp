@@ -11,6 +11,7 @@ pub struct Config {
     pub max_concurrent_client_requests: usize,
     pub update_check_interval_hours: u64,
     pub disable_update_checks: bool,
+    pub model: Option<String>,
 }
 
 impl Config {

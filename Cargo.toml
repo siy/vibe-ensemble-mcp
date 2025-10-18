@@ -1,6 +1,6 @@
 [package]
 name = "vibe-ensemble-mcp"
-version = "0.9.8"
+version = "0.9.9"
 edition = "2021"
 description = "Multi-agent coordination MCP server for Claude Code"
 license = "Apache-2.0"
@@ -79,3 +79,7 @@ scopeguard = "1.2"
 
 # HTTP client for update checking
 reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls"] }
+
+# Static file embedding for dashboard
+rust-embed = "8.0"
+mime_guess = "2.0"

@@ -58,6 +58,10 @@ struct Args {
     /// Upgrade to the latest version
     #[arg(long)]
     upgrade: bool,
+
+    /// Model name to use for workers
+    #[arg(long)]
+    model: Option<String>,
 }
 
 #[tokio::main]
@@ -115,6 +119,7 @@ async fn main() -> Result<()> {
         max_concurrent_client_requests: args.max_concurrent_client_requests,
         update_check_interval_hours: args.update_check_interval_hours,
         disable_update_checks: args.disable_update_checks,
+        model: args.model,
     };
 
     run_server(config).await?;

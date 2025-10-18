@@ -3,8 +3,9 @@ use serde_json::Value;
 use tracing::{debug, error, info, trace, warn};
 
 use super::{
-    dependency_tools::*, event_tools::*, permission_tools::*, project_tools::*, template_tools::*,
-    ticket_tools::*, tools::ToolRegistry, types::*, worker_type_tools::*, MCP_PROTOCOL_VERSION,
+    dependency_tools::*, event_tools::*, jbct_tools::*, permission_tools::*, project_tools::*,
+    template_tools::*, ticket_tools::*, tools::ToolRegistry, types::*, worker_type_tools::*,
+    MCP_PROTOCOL_VERSION,
 };
 use crate::{config::Config, error::Result, server::AppState};
 
@@ -25,6 +26,7 @@ impl Default for McpServer {
             max_concurrent_client_requests: 50,
             update_check_interval_hours: 4,
             disable_update_checks: false,
+            model: None,
         };
         Self::new(&config)
     }
@@ -52,6 +54,9 @@ impl McpServer {
 
         // Register template management tools
         Self::register_template_tools(&mut tools);
+
+        // Register JBCT (Java Backend Coding Technology) integration tools
+        Self::register_jbct_tools(&mut tools);
 
         Self { tools }
     }
@@ -118,6 +123,11 @@ impl McpServer {
             LoadWorkerTemplateTool,
             EnsureWorkerTemplatesExistTool,
         );
+    }
+
+    /// Register JBCT integration tools
+    fn register_jbct_tools(tools: &mut ToolRegistry) {
+        register_tools!(tools, ConfigureJbctForProjectTool, CheckJbctUpdatesTool,);
     }
 
     pub async fn handle_request(
