@@ -67,14 +67,6 @@ function TicketList(props: TicketListProps) {
     return badges[state] || state;
   }
 
-  function getDependencyBadge(status: Ticket['dependency_status']) {
-    const badges = {
-      ready: '✅ Ready',
-      blocked: '🚫 Blocked',
-    };
-    return badges[status] || status;
-  }
-
   function getPriorityBadge(priority: Ticket['priority']) {
     const badges = {
       low: '🔵 Low',
