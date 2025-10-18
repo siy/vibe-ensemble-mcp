@@ -7,7 +7,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.0.0] - 2025-10-18
+
 ### Added
+- **🖥️ Web Dashboard**: Complete web-based monitoring dashboard for projects and tickets
+  - Solid.js SPA with Pico CSS styling and dark/light mode toggle
+  - Real-time updates via Server-Sent Events integration
+  - Project selector with detailed configuration view
+  - Full-width ticket table with sortable columns (ID, Title, Stage, State, Created)
+  - Expandable ticket details with execution plan and comment history
+  - Accessible at `http://localhost:3276/dashboard`
+- **🔧 Build Integration**: Automated dashboard build process integrated into cargo
+  - `cargo build` now automatically runs `npm install && npm run build`
+  - Smart file watching monitors all dashboard source files for changes
+  - Dashboard assets embedded into binary via rust-embed
+  - Single command deployment: `cargo build --release`
+- **🌐 REST API**: New HTTP endpoints for dashboard data access
+  - `GET /api/projects` - List all projects
+  - `GET /api/projects/:id` - Project details
+  - `GET /api/projects/:id/tickets` - Tickets for project
+  - `GET /api/projects/:id/tickets/:id` - Ticket with comments
+- **🎨 Favicon**: Added Vibe Ensemble branding to dashboard with favicon and SVG logo
 - **☕ JBCT Integration**: Added Java Backend Coding Technology (JBCT) integration for Java projects
   - New MCP tools: `configure_jbct_for_project`, `check_jbct_updates`
   - Automatically fetches jbct-coder.md from GitHub and applies as project rules/patterns

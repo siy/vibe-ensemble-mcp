@@ -1,4 +1,4 @@
-import { createSignal, onMount, Show, For } from 'solid-js';
+import { createSignal, createMemo, onMount, Show, For } from 'solid-js';
 import { fetchTicketWithComments, type Ticket, type Comment } from '../api';
 
 interface TicketDetailsProps {
@@ -9,6 +9,14 @@ interface TicketDetailsProps {
 function TicketDetails(props: TicketDetailsProps) {
   const [comments, setComments] = createSignal<Comment[]>([]);
   const [loading, setLoading] = createSignal(true);
+
+  const executionPlan = createMemo(() => {
+    try {
+      return JSON.parse(props.ticket.execution_plan) as string[];
+    } catch {
+      return [];
+    }
+  });
 
   onMount(async () => {
     try {
@@ -30,7 +38,7 @@ function TicketDetails(props: TicketDetailsProps) {
       <dl>
         <dt><strong>Execution Plan</strong></dt>
         <dd>
-          <For each={props.ticket.execution_plan}>
+          <For each={executionPlan()}>
             {(stage, index) => (
               <span>
                 <code
@@ -44,7 +52,7 @@ function TicketDetails(props: TicketDetailsProps) {
                 >
                   {stage}
                 </code>
-                {index() < props.ticket.execution_plan.length - 1 && ' → '}
+                {index() < executionPlan().length - 1 && ' → '}
               </span>
             )}
           </For>

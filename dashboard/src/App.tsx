@@ -112,24 +112,19 @@ function App() {
         />
 
         <Show when={selectedProject()}>
-          <div class="grid-2col">
-            <div>
-              <ProjectDetails project={selectedProject()!} />
-            </div>
-            <div>
-              <TicketList
-                tickets={tickets()}
-                projectId={selectedProjectId()!}
-                loading={loading()}
-              />
-            </div>
-          </div>
+          <ProjectDetails project={selectedProject()!} />
+
+          <TicketList
+            tickets={tickets()}
+            projectId={selectedProjectId()!}
+            loading={loading()}
+          />
         </Show>
       </Show>
 
       <footer>
         <small>
-          Vibe Ensemble MCP v0.9.9 | <a href="https://github.com/siy/vibe-ensemble-mcp" target="_blank">GitHub</a>
+          Vibe Ensemble MCP v1.0.0 | <a href="https://github.com/siy/vibe-ensemble-mcp" target="_blank">GitHub</a>
         </small>
       </footer>
     </div>

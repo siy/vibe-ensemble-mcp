@@ -1,4 +1,4 @@
-import { For, Show, createSignal } from 'solid-js';
+import { For, Show, createSignal, createMemo } from 'solid-js';
 import type { Ticket } from '../api';
 import TicketDetails from './TicketDetails';
 
@@ -8,12 +8,55 @@ interface TicketListProps {
   loading: boolean;
 }
 
+type SortColumn = 'id' | 'title' | 'stage' | 'state' | 'created';
+type SortDirection = 'asc' | 'desc';
+
 function TicketList(props: TicketListProps) {
   const [expandedTicketId, setExpandedTicketId] = createSignal<string | null>(null);
+  const [sortColumn, setSortColumn] = createSignal<SortColumn>('created');
+  const [sortDirection, setSortDirection] = createSignal<SortDirection>('desc');
 
   function toggleTicket(ticketId: string) {
     setExpandedTicketId(expandedTicketId() === ticketId ? null : ticketId);
   }
+
+  function handleSort(column: SortColumn) {
+    if (sortColumn() === column) {
+      setSortDirection(sortDirection() === 'asc' ? 'desc' : 'asc');
+    } else {
+      setSortColumn(column);
+      setSortDirection('asc');
+    }
+  }
+
+  const sortedTickets = createMemo(() => {
+    const tickets = [...props.tickets];
+    const direction = sortDirection() === 'asc' ? 1 : -1;
+
+    return tickets.sort((a, b) => {
+      let comparison = 0;
+
+      switch (sortColumn()) {
+        case 'id':
+          comparison = a.ticket_id.localeCompare(b.ticket_id);
+          break;
+        case 'title':
+          comparison = a.title.localeCompare(b.title);
+          break;
+        case 'stage':
+          comparison = a.current_stage.localeCompare(b.current_stage);
+          break;
+        case 'state':
+          comparison = a.state.localeCompare(b.state);
+          break;
+        case 'created':
+          comparison = new Date(a.created_at).getTime() - new Date(b.created_at).getTime();
+          break;
+      }
+
+      return comparison * direction;
+    });
+  });
 
   function getStateBadge(state: Ticket['state']) {
     const badges = {
@@ -22,14 +65,6 @@ function TicketList(props: TicketListProps) {
       on_hold: '⏸️  On Hold',
     };
     return badges[state] || state;
-  }
-
-  function getDependencyBadge(status: Ticket['dependency_status']) {
-    const badges = {
-      ready: '✅ Ready',
-      blocked: '🚫 Blocked',
-    };
-    return badges[status] || status;
   }
 
   function getPriorityBadge(priority: Ticket['priority']) {
@@ -60,16 +95,41 @@ function TicketList(props: TicketListProps) {
         <table>
           <thead>
             <tr>
-              <th>ID</th>
-              <th>Title</th>
-              <th>Stage</th>
-              <th>State</th>
-              <th>Status</th>
+              <th
+                onClick={() => handleSort('id')}
+                style={{ cursor: 'pointer', 'user-select': 'none' }}
+              >
+                ID {sortColumn() === 'id' && (sortDirection() === 'asc' ? '▲' : '▼')}
+              </th>
+              <th
+                onClick={() => handleSort('title')}
+                style={{ cursor: 'pointer', 'user-select': 'none' }}
+              >
+                Title {sortColumn() === 'title' && (sortDirection() === 'asc' ? '▲' : '▼')}
+              </th>
+              <th
+                onClick={() => handleSort('stage')}
+                style={{ cursor: 'pointer', 'user-select': 'none' }}
+              >
+                Stage {sortColumn() === 'stage' && (sortDirection() === 'asc' ? '▲' : '▼')}
+              </th>
+              <th
+                onClick={() => handleSort('state')}
+                style={{ cursor: 'pointer', 'user-select': 'none' }}
+              >
+                State {sortColumn() === 'state' && (sortDirection() === 'asc' ? '▲' : '▼')}
+              </th>
+              <th
+                onClick={() => handleSort('created')}
+                style={{ cursor: 'pointer', 'user-select': 'none' }}
+              >
+                Created {sortColumn() === 'created' && (sortDirection() === 'asc' ? '▲' : '▼')}
+              </th>
               <th>Priority</th>
             </tr>
           </thead>
           <tbody>
-            <For each={props.tickets}>
+            <For each={sortedTickets()}>
               {(ticket) => (
                 <>
                   <tr
@@ -90,7 +150,9 @@ function TicketList(props: TicketListProps) {
                       <code style="font-size: 0.85rem;">{ticket.current_stage}</code>
                     </td>
                     <td>{getStateBadge(ticket.state)}</td>
-                    <td>{getDependencyBadge(ticket.dependency_status)}</td>
+                    <td>
+                      <small>{new Date(ticket.created_at).toLocaleString()}</small>
+                    </td>
                     <td>{getPriorityBadge(ticket.priority)}</td>
                   </tr>
                   <Show when={expandedTicketId() === ticket.ticket_id}>

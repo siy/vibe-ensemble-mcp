@@ -13,9 +13,19 @@ struct DashboardAssets;
 pub async fn serve_dashboard(uri: Uri) -> impl IntoResponse {
     let path = uri.path().trim_start_matches('/');
 
+    // Determine the actual file path to serve
+    let file_path = if let Some(stripped) = path.strip_prefix("dashboard/") {
+        stripped.to_string()
+    } else if path == "dashboard" || path.is_empty() {
+        "index.html".to_string()
+    } else {
+        // For /assets/* routes, keep the full path
+        path.to_string()
+    };
+
     // Try to serve the requested file
-    if let Some(content) = DashboardAssets::get(path) {
-        return serve_file(path, content.data.into());
+    if let Some(content) = DashboardAssets::get(&file_path) {
+        return serve_file(&file_path, content.data.into());
     }
 
     // Try index.html for SPA routing (all unknown routes serve index.html)
