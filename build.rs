@@ -1,12 +1,40 @@
+use std::fs;
+use std::path::Path;
 use std::process::Command;
+
+fn register_dir_files(dir: &Path) {
+    if let Ok(entries) = fs::read_dir(dir) {
+        for entry in entries.flatten() {
+            let path = entry.path();
+            if path.is_file() {
+                println!("cargo:rerun-if-changed={}", path.display());
+            } else if path.is_dir() {
+                register_dir_files(&path);
+            }
+        }
+    }
+}
 
 fn main() {
     // Tell cargo to rerun if dashboard source files change
-    println!("cargo:rerun-if-changed=dashboard/src");
+    // Walk all files in dashboard/src and register them
+    if let Ok(entries) = fs::read_dir("dashboard/src") {
+        for entry in entries.flatten() {
+            let path = entry.path();
+            if path.is_file() {
+                println!("cargo:rerun-if-changed={}", path.display());
+            } else if path.is_dir() {
+                // Register all files in subdirectories (e.g., components/)
+                register_dir_files(&path);
+            }
+        }
+    }
+
     println!("cargo:rerun-if-changed=dashboard/package.json");
     println!("cargo:rerun-if-changed=dashboard/vite.config.ts");
     println!("cargo:rerun-if-changed=dashboard/tsconfig.json");
     println!("cargo:rerun-if-changed=dashboard/index.html");
+    println!("cargo:rerun-if-changed=dashboard/public");
 
     // Check if npm is available
     let npm_check = if cfg!(target_os = "windows") {
