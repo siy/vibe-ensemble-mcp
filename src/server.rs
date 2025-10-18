@@ -126,7 +126,8 @@ pub async fn run_server(config: Config) -> Result<()> {
         .route("/messages", post(sse_message_handler))
         .nest("/api", crate::api::create_api_router())
         .route("/dashboard", get(crate::dashboard::serve_dashboard))
-        .route("/dashboard/*path", get(crate::dashboard::serve_dashboard));
+        .route("/dashboard/*path", get(crate::dashboard::serve_dashboard))
+        .route("/assets/*path", get(crate::dashboard::serve_dashboard));
 
     // Add root route that handles both WebSocket upgrades and regular HTTP requests
     app = app.route("/", any(root_handler));
