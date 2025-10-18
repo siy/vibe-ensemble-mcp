@@ -6,7 +6,7 @@ use tokio::process::Command;
 use tokio::time::timeout;
 use tracing::{debug, error, info, warn};
 
-use super::completion_processor::WorkerOutput;
+use super::completion_processor::{WorkerOutcome, WorkerOutput};
 use super::types::SpawnWorkerRequest;
 use super::validation::WorkerInputValidator;
 use crate::permissions::{
@@ -174,6 +174,41 @@ impl ProcessManager {
         Err(anyhow::anyhow!(
             "Could not parse worker output using any strategy. Workers must output valid JSON."
         ))
+    }
+
+    /// Validate and auto-correct planning worker output
+    /// Planning workers sometimes output "next_stage" instead of "planning_complete"
+    /// when they have tickets_to_create. This function auto-corrects that mistake.
+    fn validate_and_correct_planning_output(output: &mut WorkerOutput, worker_type: &str) {
+        // Check if this is a planning worker
+        let is_planning_worker = worker_type.to_lowercase().contains("planning");
+
+        if !is_planning_worker {
+            return;
+        }
+
+        // Check if worker has tickets to create but wrong outcome
+        if !output.tickets_to_create.is_empty() {
+            match output.outcome {
+                WorkerOutcome::NextStage => {
+                    warn!(
+                        "Planning worker output has tickets_to_create but outcome is 'next_stage'. Auto-correcting to 'planning_complete'."
+                    );
+                    output.outcome = WorkerOutcome::PlanningComplete;
+                }
+                WorkerOutcome::PlanningComplete => {
+                    // Correct outcome, no action needed
+                    debug!("Planning worker correctly used 'planning_complete' outcome");
+                }
+                _ => {
+                    warn!(
+                        "Planning worker has tickets_to_create but unexpected outcome: {:?}. Auto-correcting to 'planning_complete'.",
+                        output.outcome
+                    );
+                    output.outcome = WorkerOutcome::PlanningComplete;
+                }
+            }
+        }
     }
 
     /// Parse worker JSON output from the result string within Claude CLI JSON wrapper
@@ -488,11 +523,15 @@ impl ProcessManager {
         debug!("Worker stderr: {}", stderr_str);
 
         // Optimized parsing: try whole output first, then line-by-line fallback
-        if let Ok(parsed_output) = Self::try_parse_worker_output(&stdout_str) {
+        if let Ok(mut parsed_output) = Self::try_parse_worker_output(&stdout_str) {
             info!(
                 "Successfully parsed worker output for ticket {}",
                 request.ticket_id
             );
+
+            // Validate and auto-correct planning worker output
+            Self::validate_and_correct_planning_output(&mut parsed_output, &request.worker_type);
+
             // Clean up
             let _ = std::fs::remove_file(&config_path);
             return Ok(parsed_output);

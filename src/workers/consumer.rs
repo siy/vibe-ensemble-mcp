@@ -249,38 +249,59 @@ impl WorkerConsumer {
                 let transition_manager = TicketTransitionManager::new(self.db.clone());
                 let command = match output.outcome {
                     crate::workers::completion_processor::WorkerOutcome::NextStage => {
-                        match transition_manager.get_next_stage(&task.ticket_id).await {
-                            Ok(Some(next_stage)) => {
-                                match crate::workers::domain::WorkerType::new(next_stage.clone()) {
-                                    Ok(wt) => {
-                                        crate::workers::domain::WorkerCommand::AdvanceToStage {
-                                            target_stage: wt,
+                        // Fallback handling: check if this is actually planning output with tickets_to_create
+                        // This handles cases where planning worker validation was skipped or failed
+                        if !output.tickets_to_create.is_empty() {
+                            warn!(
+                                "Worker output has NextStage outcome but contains tickets_to_create. Treating as PlanningComplete."
+                            );
+                            info!(
+                                ticket_id = %task.ticket_id,
+                                ticket_count = output.tickets_to_create.len(),
+                                worker_type_count = output.worker_types_needed.len(),
+                                "Planning complete with {} tickets to create (auto-detected)",
+                                output.tickets_to_create.len()
+                            );
+                            crate::workers::domain::WorkerCommand::CompletePlanning {
+                                tickets_to_create: output.tickets_to_create.clone(),
+                                worker_types_needed: output.worker_types_needed.clone(),
+                            }
+                        } else {
+                            match transition_manager.get_next_stage(&task.ticket_id).await {
+                                Ok(Some(next_stage)) => {
+                                    match crate::workers::domain::WorkerType::new(
+                                        next_stage.clone(),
+                                    ) {
+                                        Ok(wt) => {
+                                            crate::workers::domain::WorkerCommand::AdvanceToStage {
+                                                target_stage: wt,
+                                            }
                                         }
-                                    }
-                                    Err(e) => {
-                                        error!("Failed to create WorkerType: {}", e);
-                                        crate::workers::domain::WorkerCommand::RequestCoordinatorAttention {
-                                            reason: format!("Failed to create WorkerType for stage '{}': {}", next_stage, e),
+                                        Err(e) => {
+                                            error!("Failed to create WorkerType: {}", e);
+                                            crate::workers::domain::WorkerCommand::RequestCoordinatorAttention {
+                                                reason: format!("Failed to create WorkerType for stage '{}': {}", next_stage, e),
+                                            }
                                         }
                                     }
                                 }
-                            }
-                            Ok(None) => {
-                                info!(
-                                    "No next stage found for ticket {}, completing ticket",
-                                    task.ticket_id
-                                );
-                                crate::workers::domain::WorkerCommand::CompleteTicket {
-                                    resolution: "completed".to_string(),
+                                Ok(None) => {
+                                    info!(
+                                        "No next stage found for ticket {}, completing ticket",
+                                        task.ticket_id
+                                    );
+                                    crate::workers::domain::WorkerCommand::CompleteTicket {
+                                        resolution: "completed".to_string(),
+                                    }
                                 }
-                            }
-                            Err(e) => {
-                                error!(
-                                    "Failed to get next stage for ticket {}: {}",
-                                    task.ticket_id, e
-                                );
-                                crate::workers::domain::WorkerCommand::RequestCoordinatorAttention {
-                                    reason: format!("Failed to get next stage for ticket: {}", e),
+                                Err(e) => {
+                                    error!(
+                                        "Failed to get next stage for ticket {}: {}",
+                                        task.ticket_id, e
+                                    );
+                                    crate::workers::domain::WorkerCommand::RequestCoordinatorAttention {
+                                        reason: format!("Failed to get next stage for ticket: {}", e),
+                                    }
                                 }
                             }
                         }

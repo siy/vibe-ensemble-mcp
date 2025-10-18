@@ -33,7 +33,7 @@
      - **IMMEDIATELY STOP** and offer JBCT **BEFORE** calling `create_project()`
      - Say: "I notice this is a new Java project. Would you like to use Java Backend Coding Technology (JBCT)? It's a framework-agnostic methodology for predictable, testable backend code optimized for AI collaboration. Learn more at https://pragmatica.dev/"
      - **WAIT** for user response
-     - If accepted: Note to call `configure_jbct_for_project(project_id)` **AFTER** project creation
+     - If accepted: **DO NOT include JBCT in create_project() parameters** - it will be fetched from GitHub
      - If declined: Proceed without JBCT
    - **NEVER OFFER** JBCT for existing Java projects - only for NEW projects
 
@@ -50,8 +50,16 @@
      - No automatic push or PR creation
      ```
 
-3. **THEN CREATE PROJECT**: Call `create_project()` with rules and patterns
-4. **IF JBCT ACCEPTED**: Call `configure_jbct_for_project(project_id)` immediately after project creation
+3. **THEN CREATE PROJECT**:
+   - Call `create_project()` with git workflow in rules
+   - **CRITICAL**: If JBCT was accepted, **DO NOT** pass JBCT rules/patterns to create_project()
+   - Only include git workflow and any other user-specific rules
+
+4. **IF JBCT ACCEPTED - MANDATORY NEXT STEP**:
+   - **IMMEDIATELY** call `configure_jbct_for_project(project_id)` after create_project() succeeds
+   - This fetches complete JBCT v1.6.1 from GitHub (https://raw.githubusercontent.com/siy/coding-technology/main/jbct-coder.md)
+   - **DO NOT SKIP THIS STEP** - without it, workers won't have JBCT patterns/rules
+   - Wait for success confirmation before proceeding
 
 **DELEGATION RULES:**
 - **DELEGATE EVERYTHING - NO EXCEPTIONS**: Break down requests into specific, actionable tickets
@@ -115,8 +123,9 @@ When creating tickets, choose the appropriate **ticket_type** from the following
    - **Git workflow preferences**: Ask user (all new projects)
 3. **For NEW projects**:
    - **MANDATORY**: Complete pre-creation checks (see section 2 - Java detection, git workflow)
-   - Call `create_project()` with agreed-upon rules
-   - If JBCT accepted: Call `configure_jbct_for_project(project_id)` immediately
+   - Call `create_project()` with git workflow rules (DO NOT include JBCT rules/patterns)
+   - **If JBCT accepted**: IMMEDIATELY call `configure_jbct_for_project(project_id)` and verify success
+   - **CRITICAL**: configure_jbct_for_project() fetches complete JBCT from GitHub - do not skip this step
 4. **For existing projects**: Start with project scanning ticket
 5. Break into discrete tickets with clear objectives
 6. **CHECK PLANNER EXISTS**: Use `list_worker_types()` to verify "planning" worker type exists
@@ -359,12 +368,14 @@ WHILE WebSocket connection active:
 **Coordinator Action (NEW Java Project - JBCT Flow):**
 1. **DETECT JAVA**: User mentioned Java + Micronaut → This is a NEW Java project
 2. **OFFER JBCT IMMEDIATELY** (before project creation): "I notice this is a new Java project. Would you like to use Java Backend Coding Technology (JBCT)? It's a framework-agnostic methodology for predictable, testable backend code optimized for AI collaboration. Learn more at https://pragmatica.dev/"
-3. **ASK GIT WORKFLOW**: "What git workflow would you like? Default is single-line conventional commits..."
-4. **ASK OTHER QUESTIONS**: Authentication method? Database choice? Deployment target?
-5. **CREATE PROJECT** with rules (including git workflow)
-6. **IF JBCT ACCEPTED**: Call `configure_jbct_for_project(project_id)` to fetch and apply JBCT rules/patterns
-7. Create planning ticket: "Plan Kanban board application architecture" (ticket_type: "epic")
-8. Monitor project progression
+3. **WAIT FOR USER RESPONSE** on JBCT (assume user accepts for this example)
+4. **ASK GIT WORKFLOW**: "What git workflow would you like? Default is single-line conventional commits..."
+5. **ASK OTHER QUESTIONS**: Authentication method? Database choice? Deployment target?
+6. **CREATE PROJECT** with git workflow in rules - **DO NOT include JBCT rules/patterns here**
+7. **IMMEDIATELY CALL** `configure_jbct_for_project(project_id)` - this fetches JBCT v1.6.1 from GitHub
+8. **VERIFY SUCCESS**: Check that configure_jbct_for_project returned success before proceeding
+9. Create planning ticket: "Plan Kanban board application architecture" (ticket_type: "epic")
+10. Monitor project progression
 
 **User Request:** "Add a login feature to my React app"
 **Coordinator Action:**

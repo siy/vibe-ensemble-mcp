@@ -27,6 +27,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 - **🧠 Worker Self-Correction**: Fixed parser to use last JSON block when workers output multiple blocks, allowing workers to think and self-correct their decisions before final output
 - **☕ JBCT Detection Flow**: Restructured JBCT offering as mandatory pre-creation check in task delegation workflow instead of passive documentation. Coordinator now STOPS before `create_project()` to offer JBCT, ensuring it's never skipped. Added concrete Java project example to delegation examples.
+- **📋 Planning Worker Output Processing**: Fixed planning workers outputting incorrect `outcome: "next_stage"` instead of `outcome: "planning_complete"`. Added auto-correction in output processor and fallback handling in consumer to ensure tickets are created regardless of outcome field value.
+- **☕ JBCT Configuration Execution**: Fixed coordinator not calling `configure_jbct_for_project()` after project creation. Updated coordinator prompt to explicitly forbid passing JBCT rules/patterns to create_project() and mandate immediate configure_jbct_for_project() call to fetch complete JBCT v1.6.1 from GitHub.
 
 ## [0.9.8] - 2025-10-04
 
