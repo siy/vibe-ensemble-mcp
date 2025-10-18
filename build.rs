@@ -10,7 +10,9 @@ fn main() {
 
     // Check if npm is available
     let npm_check = if cfg!(target_os = "windows") {
-        Command::new("cmd").args(["/C", "npm", "--version"]).output()
+        Command::new("cmd")
+            .args(["/C", "npm", "--version"])
+            .output()
     } else {
         Command::new("npm").arg("--version").output()
     };

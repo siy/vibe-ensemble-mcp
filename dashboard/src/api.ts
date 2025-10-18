@@ -19,7 +19,7 @@ export interface Ticket {
   project_id: string;
   parent_ticket_id: string | null;
   title: string;
-  execution_plan: string[];
+  execution_plan: string; // JSON string from database
   current_stage: string;
   state: 'open' | 'closed' | 'on_hold';
   priority: 'low' | 'medium' | 'high' | 'urgent';
