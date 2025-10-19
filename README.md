@@ -13,12 +13,12 @@ Vibe-Ensemble allows you to break down complex projects into specialized stages,
 - **🎯 Smart Task Planning**: Automatically plan multi-stage workflows (architecture → development → testing → deployment)
 - **🤖 Specialized Workers**: Create custom AI workers with specific expertise (Rust developer, security reviewer, UI designer, etc.)
 - **📋 Automatic Progression**: Workers are auto-spawned by queues when needed and complete their stage, automatically handing off to the next worker
-- **👀 Progress Tracking**: Track progress through tickets, comments, and system events (live notifications WIP)
+- **👀 Real-Time Monitoring**: Web dashboard with live updates, sortable ticket views, and complete progress tracking
 - **🔄 Stage-Based Workflows**: Workers follow structured execution plans through defined stages
 - **💾 Persistent State**: All progress is saved, allowing you to pause and resume complex projects
 - **🎨 Live Customization**: Edit worker templates in real-time to adapt to your team's processes and coding standards
 - **🔄 Automatic Updates**: Built-in update checking and one-command upgrade system (`--upgrade`)
-- **🌐 WebSocket Infrastructure**: WebSocket server available for future real-time communication features
+- **🌐 REST API**: HTTP endpoints for programmatic access to projects, tickets, and progress data
 
 ## Installation
 
@@ -91,7 +91,9 @@ Once the server is running and Claude Code is configured, here's the typical wor
 
 1. **Start Claude Code**: Open Claude Code in your coordinator directory and run the `/vibe-ensemble` command to initialize as a coordinator
 2. **Create Project**: Write a prompt describing your intended project and answer the coordinator's questions about scope and requirements
-3. **Monitor Progress**: Use commands `/vibe-events`, `/vibe-poll` and `/vibe-status` to process events generated during project execution and check process status.
+3. **Monitor Progress**:
+   - **Web Dashboard**: Open `http://localhost:3276/dashboard` in your browser for real-time project and ticket monitoring
+   - **CLI Commands**: Use `/vibe-events`, `/vibe-poll` and `/vibe-status` to process events and check status within Claude Code
 
 The coordinator will break down your project into tickets, spawn appropriate workers for each stage, and manage the workflow automatically.
 
@@ -254,7 +256,17 @@ This ensures quality while allowing for iterative improvement.
 ### What You See as the User
 
 #### **Real-Time Monitoring**
-You can track progress using coordinator commands:
+Multiple ways to track progress:
+
+**Web Dashboard** (`http://localhost:3276/dashboard`):
+- Visual project selector and configuration viewer
+- Sortable ticket table (by ID, Title, Stage, State, Created date)
+- Expandable ticket details with execution plans
+- Complete comment history for each ticket
+- Real-time updates via Server-Sent Events
+- Dark/light mode support
+
+**CLI Commands** (within Claude Code):
 - **`/vibe-status`** - See overall project health and ticket progress
 - **`/vibe-events`** - Handle any issues or worker requests for guidance
 - **`/vibe-poll`** - Continuously monitor until all work is complete
@@ -295,7 +307,15 @@ This specialization means each piece of work gets expert attention while maintai
 
 ## MCP Tools
 
-Vibe-Ensemble provides 28 MCP tools organized into seven categories:
+Vibe-Ensemble provides MCP tools organized into seven categories:
+
+> **Note**: In addition to MCP tools, the dashboard provides a web interface for monitoring. Access the REST API directly at:
+> - `GET /api/projects` - List all projects
+> - `GET /api/projects/:id` - Project details
+> - `GET /api/projects/:id/tickets` - List tickets
+> - `GET /api/projects/:id/tickets/:id` - Ticket with comments
+> - `GET /sse` - Server-Sent Events stream
+> - `GET /dashboard` - Web dashboard interface
 
 ### Project Management
 - `create_project` - Create a new project with rules and patterns
@@ -579,21 +599,24 @@ Each template includes:
 
 Templates are designed to be **both powerful out-of-the-box and highly customizable** for specific project needs.
 
-## What's New in v0.9.7
+## What's New in v1.0.0
 
-- **🎫 Human-Friendly Ticket IDs**: New format PREFIX-SUBSYSTEM-NUMBER (e.g., TVR-FE-001) for better readability and organization
-- **📋 Declarative Planning Workflow**: Planning workers output complete ticket specifications instead of calling MCP tools
-- **⚛️ Atomic Ticket Creation**: Transaction-based ticket creation with dependency management for reliability
-- **🔍 Subsystem Inference**: Automatic subsystem detection from stage names (frontend_impl → FE, backend_api → BE)
-- **📊 Comprehensive Error Logging**: Added error logging to 115+ database operations across all modules for improved observability
-- **🆔 Worker ID Validation**: Sanitize project IDs in worker ID construction to handle repository-style names
-- **🔗 Dependency Status Consistency**: Automatic dependency_status updates when closing tickets
+**Major Milestone Release** - Full production-ready system with comprehensive monitoring capabilities:
 
-## What's New in v0.9.6
+- **🖥️ Web Dashboard**: Complete Solid.js SPA with real-time monitoring
+  - Project selector with detailed configuration views
+  - Sortable ticket table (ID, Title, Stage, State, Created)
+  - Expandable ticket details with execution plans and comment history
+  - Server-Sent Events for live updates
+  - Dark/light mode with system preference detection
+- **🔧 Integrated Build System**: Dashboard automatically builds with `cargo build`
+- **🌐 REST API**: HTTP endpoints for projects, tickets, and comments
+- **☕ JBCT Integration**: Java Backend Coding Technology support with automatic rule fetching
+- **📋 Git Workflow Configuration**: Customizable per-project git workflows
+- **🎯 Model Selection**: Analyzing workers always use the most capable model
+- **🧠 Worker Self-Correction**: Parser uses last JSON block for better decision-making
 
-- **🔄 Automatic Update Tracking**: Built-in update checking and one-command upgrade system
-- **🛡️ Enhanced Validation**: Comprehensive input validation for worker spawning with automatic on-hold placement
-- **🐛 Critical Bug Fixes**: Fixed worker spawn race conditions, path validation, and review template enhancements
+See the full [CHANGELOG](CHANGELOG.md) for complete details.
 
 ## WebSocket Infrastructure
 
