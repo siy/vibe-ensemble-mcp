@@ -309,7 +309,7 @@ This specialization means each piece of work gets expert attention while maintai
 
 Vibe-Ensemble provides MCP tools organized into seven categories:
 
-> **Note**: In addition to MCP tools, the dashboard provides a web interface for monitoring. Access the REST API directly at:
+> **Note**: In addition to MCP tools, the dashboard provides a web interface for monitoring. Use built-in Web UI at `http://localhost:3276/dashboard` or access the REST API directly at:
 > - `GET /api/projects` - List all projects
 > - `GET /api/projects/:id` - Project details
 > - `GET /api/projects/:id/tickets` - List tickets
